@@ -1,15 +1,15 @@
 {
-  "name": "prp-marketplace",
-  "description": "PRP (Product Requirement Prompt) workflow automation tools and methodology",
+  "name": "relay-marketplace",
+  "description": "relay — autonomous feature delivery plugin for Claude Code",
   "owner": {
-    "name": "Wirasm",
-    "email": "contact@wirasm.com"
+    "name": "Fabio Martins Barreto",
+    "email": "fabiobarreto208@gmail.com"
   },
   "plugins": [
     {
-      "name": "prp-core",
-      "source": "./plugins/prp-core",
-      "description": "Complete PRP workflow automation - create, execute, commit, and PR commands with orchestration scripts"
+      "name": "relay",
+      "source": "./plugins/relay",
+      "description": "Autonomous feature delivery: a single prompt drives the full cycle from PRD to PR via orchestrated writer/reviewer agent pairs and a Test Runner that closes the loop."
     }
   ]
 }
