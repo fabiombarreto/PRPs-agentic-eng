@@ -1,0 +1,42 @@
+# Knowledge Base (Tier 2 — TOC)
+
+Index of detailed documentation for the `relay` plugin.
+
+User-facing intro: see `README.md` at the repository root.
+
+---
+
+## Architecture & Development
+
+→ docs/architecture.md — developer-facing overview of how the plugin loads and evolves
+→ docs/development.md — how to add a skill/command/agent and smoke-test locally
+→ docs/api-reference.md — current and planned skills/commands/agents
+→ docs/troubleshooting.md — common setup issues (MCP Context7, prp-core confusion)
+
+## AI Governance
+
+→ docs/decision-gate.md — mandatory control mechanism activated before planning, coding, or review
+→ docs/decisions.md — stable technical decisions that must not be re-evaluated
+→ docs/anti-patterns.md — forbidden patterns and intentional restrictions
+
+## Project Context
+
+→ docs/context/architecture.md — plugin layout, phases, relationship to upstream prp-core
+→ docs/context/conventions.md — frontmatter, file naming, hook script conventions
+→ docs/context/integrations.md — Claude Code runtime, Context7 MCP (planned), Docker (planned)
+→ docs/context/constraints.md — early-stage status, graceful-degradation mandate
+→ docs/context/methodology.md — single source of truth for methodology declarations (TDD opt-in)
+→ docs/context/prd-template.md — canonical shape of every PRD the pipeline produces (fork of prp-core with relay adaptations)
+→ docs/context/settings-allowlist.md — catalog of allow/deny patterns the context-builder emits into `.claude/settings.json` for each target project
+→ docs/context/redaction-policy.md — catalog of patterns the Test Runner applies when writing reports, so secret values never reach a committed file
+
+## Domain
+
+→ docs/domain/glossary.md — agent, orchestrator, PRD, PRP, TDD, flakiness, worktree, and other recurring terms
+→ docs/domain/flows.md — init / implementation / approval pipelines in non-technical language
+→ docs/domain/areas/ — stub explaining why no traditional business areas exist (pipeline-based project)
+
+## Planning Sources
+
+→ docs/planning/dev_process_improvement_plan.html — three-pillar vision (init, implementation, approval) and five-phase rollout
+→ docs/planning/planejamento_fase_2.docx — detailed Phase 2 design: Test Runner, auto-correction loop, optional TDD track

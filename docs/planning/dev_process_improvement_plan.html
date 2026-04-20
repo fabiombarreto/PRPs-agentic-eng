@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plano de Melhorias — Processo de Desenvolvimento com IA</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;600;800&display=swap');
+
+  :root {
+    --bg: #0d0f14;
+    --surface: #13161e;
+    --surface2: #1a1e28;
+    --border: #252a38;
+    --teal-dim: #0d3d35;
+    --teal: #1a7a6a;
+    --teal-bright: #2dd4aa;
+    --purple-dim: #2a1f4a;
+    --purple: #6b4fbb;
+    --purple-bright: #a78bfa;
+    --blue-dim: #0f2a4a;
+    --blue: #2563a8;
+    --blue-bright: #60a5fa;
+    --amber-dim: #3a2a0a;
+    --amber: #b87d1a;
+    --amber-bright: #fbbf24;
+    --coral-dim: #3a1a14;
+    --coral: #a8432a;
+    --coral-bright: #fb7c5a;
+    --green-dim: #0f2e1a;
+    --green: #1a7a3a;
+    --green-bright: #4ade80;
+    --gray-dim: #1a1e28;
+    --gray: #4a5068;
+    --gray-bright: #9aa3be;
+    --text: #e8eaf0;
+    --text-muted: #6b7394;
+    --text-dim: #3a4060;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    padding: 48px 32px;
+    min-height: 100vh;
+  }
+
+  .page {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  header {
+    margin-bottom: 56px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .header-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--teal-bright);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  h1 {
+    font-size: 36px;
+    font-weight: 800;
+    line-height: 1.1;
+    color: var(--text);
+    margin-bottom: 16px;
+  }
+
+  h1 span {
+    color: var(--teal-bright);
+  }
+
+  .header-sub {
+    font-size: 14px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* PILLAR */
+  .pillar {
+    margin-bottom: 48px;
+  }
+
+  .pillar-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 20px;
+    border-radius: 10px 10px 0 0;
+    margin-bottom: 2px;
+  }
+
+  .pillar-number {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    opacity: 0.7;
+    letter-spacing: 0.1em;
+  }
+
+  .pillar-title {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+
+  .pillar-teal .pillar-header  { background: var(--teal-dim); border: 1px solid var(--teal); color: var(--teal-bright); }
+  .pillar-purple .pillar-header { background: var(--purple-dim); border: 1px solid var(--purple); color: var(--purple-bright); }
+  .pillar-blue .pillar-header   { background: var(--blue-dim); border: 1px solid var(--blue); color: var(--blue-bright); }
+
+  .pillar-body {
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    padding: 20px;
+    background: var(--surface);
+  }
+
+  .nodes-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .nodes-grid.single {
+    grid-template-columns: 1fr;
+  }
+
+  .node {
+    padding: 14px 16px;
+    border-radius: 8px;
+    border: 1px solid;
+    cursor: default;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+
+  .node:hover {
+    transform: translateY(-2px);
+  }
+
+  .node-title {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .node-sub {
+    font-size: 12px;
+    opacity: 0.65;
+    line-height: 1.4;
+  }
+
+  .node-teal   { background: var(--teal-dim);   border-color: var(--teal);   color: var(--teal-bright); }
+  .node-green  { background: var(--green-dim);  border-color: var(--green);  color: var(--green-bright); }
+  .node-purple { background: var(--purple-dim); border-color: var(--purple); color: var(--purple-bright); }
+  .node-amber  { background: var(--amber-dim);  border-color: var(--amber);  color: var(--amber-bright); }
+  .node-coral  { background: var(--coral-dim);  border-color: var(--coral);  color: var(--coral-bright); }
+  .node-blue   { background: var(--blue-dim);   border-color: var(--blue);   color: var(--blue-bright); }
+  .node-gray   { background: var(--gray-dim);   border-color: var(--gray);   color: var(--gray-bright); }
+
+  .arrow-down {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 28px;
+    color: var(--text-dim);
+    font-size: 18px;
+  }
+
+  /* IMPLEMENTATION SEQUENCE */
+  .sequence {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .seq-row {
+    display: grid;
+    grid-template-columns: 36px 1fr 1fr;
+    gap: 10px;
+    align-items: stretch;
+  }
+
+  .seq-num {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    padding-top: 14px;
+  }
+
+  /* PROBLEMS SECTION */
+  .problems {
+    margin-bottom: 48px;
+  }
+
+  .section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .problem-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .problem-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .problem-icon {
+    font-size: 13px;
+    font-family: 'JetBrains Mono', monospace;
+    flex-shrink: 0;
+    padding-top: 1px;
+  }
+
+  .problem-text {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .problem-text strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .solves {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--green-bright);
+    margin-top: 4px;
+    opacity: 0.8;
+  }
+
+  /* PHASES */
+  .phases {
+    margin-bottom: 48px;
+  }
+
+  .phase-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .phase-item {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 0;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+
+  .phase-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 14px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    text-align: center;
+    gap: 2px;
+  }
+
+  .phase-badge-num {
+    font-size: 20px;
+    font-weight: 800;
+    font-family: 'Syne', sans-serif;
+    line-height: 1;
+  }
+
+  .phase-content {
+    padding: 14px 16px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+  }
+
+  .phase-title {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 3px;
+  }
+
+  .phase-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.4;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .phase-1 .phase-badge { background: var(--green-dim);  color: var(--green-bright); }
+  .phase-2 .phase-badge { background: var(--amber-dim);  color: var(--amber-bright); }
+  .phase-3 .phase-badge { background: var(--purple-dim); color: var(--purple-bright); }
+  .phase-4 .phase-badge { background: var(--blue-dim);   color: var(--blue-bright); }
+  .phase-5 .phase-badge { background: var(--coral-dim);  color: var(--coral-bright); }
+
+  footer {
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .footer-note {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .footer-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--teal-bright);
+    opacity: 0.5;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="header-label">Processo de desenvolvimento com IA</div>
+    <h1>Plano de <span>melhorias</span></h1>
+    <div class="header-sub">context-builder · agentes especializados · ci/cd autônomo</div>
+  </header>
+
+  <!-- PILAR 1 -->
+  <div class="pillar pillar-teal">
+    <div class="pillar-header">
+      <span class="pillar-number">01</span>
+      <span class="pillar-title">Inicialização de projeto</span>
+    </div>
+    <div class="pillar-body">
+      <div class="nodes-grid">
+        <div class="node node-teal">
+          <div class="node-title">/context-builder v2</div>
+          <div class="node-sub">Cria /context, /domain, /libs automaticamente</div>
+        </div>
+        <div class="node node-teal">
+          <div class="node-title">decision-gate.md</div>
+          <div class="node-sub">Critérios obrigatórios de qualidade e aprovação</div>
+        </div>
+      </div>
+      <div class="nodes-grid">
+        <div class="node node-green">
+          <div class="node-title">Validação MCP Context7</div>
+          <div class="node-sub">Verifica instalação antes de iniciar</div>
+        </div>
+        <div class="node node-green">
+          <div class="node-title">Auto-geração /libs</div>
+          <div class="node-sub">MCP Context7 popula docs das bibliotecas</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PILAR 2 -->
+  <div class="pillar pillar-purple">
+    <div class="pillar-header">
+      <span class="pillar-number">02</span>
+      <span class="pillar-title">Implementação — comando único</span>
+    </div>
+    <div class="pillar-body">
+      <div class="nodes-grid">
+        <div class="node node-purple">
+          <div class="node-title">Agente: PRD Writer</div>
+          <div class="node-sub">Escreve PRD + casos de teste</div>
+        </div>
+        <div class="node node-purple">
+          <div class="node-title">Agente: PRD Reviewer</div>
+          <div class="node-sub">Revisa, reescreve, valida</div>
+        </div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="nodes-grid">
+        <div class="node node-purple">
+          <div class="node-title">Agente: Plan Writer</div>
+          <div class="node-sub">Plano + testes unitários/E2E</div>
+        </div>
+        <div class="node node-purple">
+          <div class="node-title">Agente: Plan Reviewer</div>
+          <div class="node-sub">Revisa, reescreve, valida</div>
+        </div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="nodes-grid single">
+        <div class="node node-gray">
+          <div class="node-title">Worktree + Branch automáticos</div>
+          <div class="node-sub">Cria arquivos isolados, copia libs</div>
+        </div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="nodes-grid">
+        <div class="node node-amber">
+          <div class="node-title">Agente: TDD Writer</div>
+          <div class="node-sub">Escreve testes antes do código</div>
+        </div>
+        <div class="node node-amber">
+          <div class="node-title">Agente: TDD Reviewer</div>
+          <div class="node-sub">Corrige, valida novamente</div>
+        </div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="nodes-grid">
+        <div class="node node-purple">
+          <div class="node-title">Agente: Implementador</div>
+          <div class="node-sub">Executa plano aprovado</div>
+        </div>
+        <div class="node node-purple">
+          <div class="node-title">Agente: Code Reviewer</div>
+          <div class="node-sub">Corrige, valida regras de negócio</div>
+        </div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="nodes-grid single">
+        <div class="node node-coral">
+          <div class="node-title">Agente: Test Runner (Container Isolado)</div>
+          <div class="node-sub">Sobe DB isolado + serviços + roda E2E · Auto-corrige até passar → revisão final</div>
+        </div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="nodes-grid single">
+        <div class="node node-gray">
+          <div class="node-title">Agente: Report + PR Creator</div>
+          <div class="node-sub">Relatório de execução + cria PR automaticamente</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PILAR 3 -->
+  <div class="pillar pillar-blue">
+    <div class="pillar-header">
+      <span class="pillar-number">03</span>
+      <span class="pillar-title">Aprovação de implementação</span>
+    </div>
+    <div class="pillar-body">
+      <div class="nodes-grid">
+        <div class="node node-blue">
+          <div class="node-title">/approve-implementation</div>
+          <div class="node-sub">Merge PR + deleta branch e worktree</div>
+        </div>
+        <div class="node node-blue">
+          <div class="node-title">Agente: Docs Updater</div>
+          <div class="node-sub">Atualiza e cria docs de contexto</div>
+        </div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="nodes-grid single">
+        <div class="node node-blue">
+          <div class="node-title">Agente: Docs Reviewer</div>
+          <div class="node-sub">Revisa docs atualizados + pergunta ao usuário sobre regras ambíguas</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROBLEMAS RESOLVIDOS -->
+  <div class="problems">
+    <div class="section-label">Problemas resolvidos</div>
+    <div class="problem-list">
+      <div class="problem-item">
+        <div class="problem-icon" style="color: var(--amber-bright)">01</div>
+        <div>
+          <div class="problem-text"><strong>Muita interação manual</strong> — cada etapa exige um comando e aprovação separados</div>
+          <div class="solves">→ resolvido pelo comando único de implementação + orquestrador de agentes</div>
+        </div>
+      </div>
+      <div class="problem-item">
+        <div class="problem-icon" style="color: var(--coral-bright)">02</div>
+        <div>
+          <div class="problem-text"><strong>Testes manuais E2E</strong> — maior gargalo atual do processo</div>
+          <div class="solves">→ resolvido pelo container isolado + Test Runner com auto-correção</div>
+        </div>
+      </div>
+      <div class="problem-item">
+        <div class="problem-icon" style="color: var(--teal-bright)">03</div>
+        <div>
+          <div class="problem-text"><strong>Regras de negócio ignoradas</strong> — não estão explícitas no prompt</div>
+          <div class="solves">→ resolvido pelo /domain/areas + decision-gate + Docs Updater pós-aprovação</div>
+        </div>
+      </div>
+      <div class="problem-item">
+        <div class="problem-icon" style="color: var(--purple-bright)">04</div>
+        <div>
+          <div class="problem-text"><strong>MCP Figma com contexto excessivo</strong> — confunde o que a IA deve implementar</div>
+          <div class="solves">→ resolvido pelo agente /figma-to-spec que filtra e produz spec.md antes do PRD</div>
+        </div>
+      </div>
+      <div class="problem-item">
+        <div class="problem-icon" style="color: var(--blue-bright)">05</div>
+        <div>
+          <div class="problem-text"><strong>30 permissões a cada sessão</strong> — interrupção constante no Claude Code</div>
+          <div class="solves">→ resolvido via .claude/settings.json com permissões pré-aprovadas (Fase 3)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FASES DE IMPLEMENTAÇÃO -->
+  <div class="phases">
+    <div class="section-label">Ordem de implementação</div>
+    <div class="phase-list">
+      <div class="phase-item phase-1">
+        <div class="phase-badge">
+          <span class="phase-badge-num">1</span>
+          <span>Fundação</span>
+        </div>
+        <div class="phase-content">
+          <div class="phase-title">Context-builder v2 + decision-gate.md</div>
+          <div class="phase-desc">/context-builder v2 · decision-gate.md · decisions.md · anti-patterns.md · validação MCP</div>
+        </div>
+      </div>
+      <div class="phase-item phase-2">
+        <div class="phase-badge">
+          <span class="phase-badge-num">2</span>
+          <span>Testes</span>
+        </div>
+        <div class="phase-content">
+          <div class="phase-title">Automação de testes E2E</div>
+          <div class="phase-desc">container isolado · Test Runner agent · auto-correção até passar</div>
+        </div>
+      </div>
+      <div class="phase-item phase-3">
+        <div class="phase-badge">
+          <span class="phase-badge-num">3</span>
+          <span>Agentes</span>
+        </div>
+        <div class="phase-content">
+          <div class="phase-title">Orquestrador de agentes</div>
+          <div class="phase-desc">comando único · PRD → Plan → TDD → Implement → Review → Test → PR</div>
+        </div>
+      </div>
+      <div class="phase-item phase-4">
+        <div class="phase-badge">
+          <span class="phase-badge-num">4</span>
+          <span>Aprovação</span>
+        </div>
+        <div class="phase-content">
+          <div class="phase-title">Ciclo de aprovação</div>
+          <div class="phase-desc">/approve-implementation · Docs Updater · Docs Reviewer</div>
+        </div>
+      </div>
+      <div class="phase-item phase-5">
+        <div class="phase-badge">
+          <span class="phase-badge-num">5</span>
+          <span>CI/CD</span>
+        </div>
+        <div class="phase-content">
+          <div class="phase-title">Pipeline contínuo completo</div>
+          <div class="phase-desc">integração de todas as fases · pipeline autônomo end-to-end</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="footer-note">gerado em sessão de planejamento · claude.ai</div>
+    <div class="footer-tag">dev-process-improvement-plan</div>
+  </footer>
+
+</div>
+</body>
+</html>

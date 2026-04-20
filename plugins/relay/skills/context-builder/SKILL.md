@@ -37,6 +37,7 @@ START
                   ├─ NO  → Warn user → Abort docs/libs generation → Continue without docs/libs
                   └─ YES → Continue
             └─ Phase 1: Scan project
+            └─ Phase 1.5: Generate .claude/settings.json (init only; update-aware in update mode)
             └─ CLAUDE.md exists?
                   ├─ YES → Read existing → Merge updates → Update Tier 2/3 + docs/context + docs/domain
                   └─ NO  → Phase 2: Create docs/context
@@ -76,6 +77,7 @@ START
     conventions.md         → naming, file structure, imports, error handling
     integrations.md        → external APIs and services (no secret values)
     constraints.md         → tech limitations, tech debt, what NOT to do
+    methodology.md         → declared methodology (TDD opt-in) — contract read by the orchestrator and TDD agents
   /domain
     glossary.md            → business terms with precise definitions
     flows.md               → main user flows in non-technical language
@@ -125,6 +127,84 @@ Read and analyze (if present):
 
 Identify: project type (app, lib, monorepo), tech stack, main domain areas, external integrations, existing test patterns.
 
+## Phase 1.5: Generate `.claude/settings.json` (init only)
+
+After the project scan but before creating docs/context, emit the target
+project's `.claude/settings.json` so the autonomous portion of the relay
+pipeline can run without per-command permission prompts.
+
+**Scope / exception:** `.claude/settings.json` is **setup
+configuration**, not a pipeline artifact. Writing it here is the only
+time context-builder (or any relay component) writes under `.claude/`.
+The autonomous pipeline never does. See `docs/anti-patterns.md` on the
+PRP artifact path rule.
+
+**Source of truth:** `docs/context/settings-allowlist.md` (in the relay
+plugin repo). The catalog there enumerates, per stack signal, which allow
+patterns to emit, and the invariant denylist that is emitted for every
+project regardless of stack.
+
+**Behavior:**
+
+1. Read the catalog at `docs/context/settings-allowlist.md`.
+2. For each stack signal detected in Phase 1 (`bun.lockb`,
+   `pnpm-lock.yaml`, `pyproject.toml`, `Cargo.toml`, Dockerfile,
+   `compose.test.yml`, etc.), emit the corresponding allow patterns from
+   the catalog into `permissions.allow`.
+3. Always emit the full invariant denylist into `permissions.deny`.
+4. Always emit the universal allow patterns (git non-destructive, gh CLI
+   read, read-only file ops, scoped worktree cleanup).
+5. Refuse to emit any pattern the catalog forbids (`Bash(*)`, `Bash(git *)`,
+   `Bash(docker *)`, `Bash(rm *)`, or any pattern ending in `*` at the
+   verb level).
+
+**Update mode (`*update`):** re-run stack detection; **add** missing
+allow entries; **never remove** existing allow entries (the human may
+have added them deliberately); replace the denylist wholesale from the
+catalog (invariant).
+
+**Graceful degradation:** if the scan finds no recognizable stack
+signals, emit only the universal allow patterns + denylist, and surface
+this clearly in the Final Report ("no test framework detected; pipeline
+will prompt for test commands until settings.json is extended").
+
+## Phase 1.75: Create `PRPs/redaction-extensions.txt` (init only)
+
+Always create the file `PRPs/redaction-extensions.txt` empty (with a
+header comment explaining the format) at the target-repo root. This is
+the per-project extensions layer described in
+`docs/context/redaction-policy.md` — teams add additional env var names
+or value regex here when their secrets don't match the invariant
+defaults.
+
+Create the `PRPs/` directory if it doesn't exist (it won't, on `*init`).
+
+Default content:
+
+```
+# PRPs/redaction-extensions.txt
+#
+# Per-project extensions to the Test Runner redaction policy.
+# Full catalog and semantics: docs/context/redaction-policy.md
+# (in the relay plugin repo).
+#
+# Format: one entry per line. Blank lines and `#` comments ignored.
+#
+# Env var names (exact match, or glob with *):
+#   PHOENIX_AUTH_PROXY_SECRET
+#   LEGACY_*_API
+#
+# Value regex — prefix with `regex:`:
+#   regex:phoenix-[a-f0-9]{32}
+#
+# Entries added here stack on top of Layer 1 invariants; they can
+# only add rules, never remove them.
+```
+
+**Update mode (`*update`):** if the file already exists, leave it alone.
+The team may have added project-specific entries that the context-builder
+has no way to preserve by re-generation.
+
 ## Phase 2: Create docs/context
 
 ### docs/context/architecture.md
@@ -153,6 +233,78 @@ For each external integration found:
 - Limitations identified in code (e.g. rate limits, payload size)
 - Patterns being actively avoided (anti-patterns present = implicit constraint)
 - Relevant TODO/FIXME/HACK items found
+
+### docs/context/methodology.md
+
+Mandatory. This file is the **single source of truth** consulted by the
+orchestrator and the TDD agents (B7 TDD Writer, B8 TDD Reviewer) to decide
+whether the TDD track is active. It must be created in every `*init` run,
+regardless of project size or perceived likelihood of TDD adoption, so
+downstream agents always have a predictable read target.
+
+**Format (YAML frontmatter + human-readable body):**
+
+```markdown
+---
+tdd: false                # true | false — the only key consulted by the TDD track
+tdd_evidence: null        # null | "<path-or-short-reason>" | "user-declared"
+test_frameworks: []       # array of frameworks detected in the scan (informative only)
+---
+
+# Methodology
+
+## TDD (Test-Driven Development)
+
+Current state: **not declared** (default).
+
+The TDD track (agents B7 and B8) activates only when `tdd: true` in the
+frontmatter above. Heuristics MUST NOT flip this value — only a human edit
+or an explicit user declaration during `*init` can.
+
+### Observed signals
+
+[List here any signals the scan found suggesting the team may practice TDD:
+CI coverage-first rules, test-before-code patterns in git history, mentions
+in CONTRIBUTING.md / README.md. None of these activate TDD on their own.]
+
+### How to activate
+
+1. Confirm with the team that TDD is the declared methodology.
+2. Change `tdd: false` to `tdd: true` above.
+3. Set `tdd_evidence` to `"user-declared"` or the path that records the
+   decision.
+4. Ensure `test_frameworks` lists frameworks the plugin should drive.
+```
+
+**Scanning behavior (mandatory):**
+
+- Default `tdd: false`. NEVER set `tdd: true` automatically, even when
+  signals are strong — this would violate the anti-pattern "heuristic TDD
+  activation" (`docs/anti-patterns.md`).
+- Populate `test_frameworks` with frameworks identified in Phase 1 (purely
+  informative; activation is still gated by `tdd`).
+- Collect TDD-suggestive signals (CI rules, commit patterns, docs
+  mentions) into the `Observed signals` body section so the human can
+  decide with full evidence.
+- If the human provided explicit TDD declaration in the `*init` prompt or
+  existing docs, set `tdd: true` and `tdd_evidence` to the source.
+
+**Reporting (mandatory):**
+
+- Phase 8 Final Report MUST include a "Methodology declaration" section
+  showing the current state and whether human validation is required.
+- If `tdd: false` but signals were observed, list the item under
+  "Items requiring human validation".
+- If `tdd: true` was set because of an explicit declaration, list it under
+  "Declared state" (no validation required).
+
+**Update behavior:**
+
+- In `*update` mode, NEVER overwrite an existing `methodology.md` without
+  explicit instruction. The file is validated human input after the first
+  run.
+- Newly detected signals in `*update` are appended to `Observed signals`,
+  never mutate the frontmatter.
 
 ## Phase 3: Create docs/domain
 
@@ -582,8 +734,14 @@ After completing all phases, print a structured report:
 ### Domain areas identified
 [list area names]
 
+### Methodology declaration
+[show docs/context/methodology.md state: `tdd: true|false`, `tdd_evidence`, `test_frameworks`. If signals were observed but `tdd: false`, explicitly prompt the human to confirm.]
+
+### Autonomous-pipeline permissions
+[show the stack signals detected and the resulting categories emitted into `.claude/settings.json` (e.g., "pnpm test execution allowed; docker compose allowed via compose.test.yml"). If no test framework was detected, explicitly warn: "no test commands pre-approved; pipeline will prompt until settings.json is extended".]
+
 ### Items requiring human validation
-[list all [INFERRED - VALIDATE] items grouped by file, including docs/decisions.md and docs/anti-patterns.md]
+[list all [INFERRED - VALIDATE] items grouped by file, including docs/decisions.md and docs/anti-patterns.md. Include methodology.md here when tdd is false and signals were observed.]
 
 ### Open questions
 [list all questions from domain/areas/*.md "Open Questions" sections]
@@ -609,6 +767,7 @@ Check limits (see 3-Tier table), no @ triggers, no ASCII trees, no [INFERRED - V
 | Code conventions | ❌ | 1-2 line summary | ❌ | Full in conventions.md | ❌ |
 | Integrations | ❌ | 1-2 line summary | ❌ | Full in integrations.md | ❌ |
 | Constraints | ❌ | 1-2 line summary | ❌ | Full in constraints.md | ❌ |
+| Methodology declaration | ❌ | 1-line summary | ❌ | Full in methodology.md | ❌ |
 | Business rules | ❌ | ❌ | ❌ | ❌ | Full in /areas/*.md |
 | Domain glossary | ❌ | 1-line summary | ❌ | ❌ | Full in glossary.md |
 | User flows | ❌ | 1-line summary | ❌ | ❌ | Full in flows.md |

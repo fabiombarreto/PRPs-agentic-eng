@@ -1,0 +1,290 @@
+# Decisions
+
+Decisões estáveis do projeto que não devem ser reavaliadas pela IA.
+Atualizado pelo Docs Updater após cada aprovação de implementação.
+
+---
+
+## [2026-04-19] Distribute via Claude Code marketplace (single-plugin repo)
+
+**Context:** The repository needs a way to be installed into Claude Code users' environments. [INFERRED - VALIDATE]
+**Decision:** Ship `relay` as the sole plugin of a marketplace declared at the repo root (`.claude-plugin/marketplace.json`). Plugin metadata lives at `plugins/relay/.claude-plugin/plugin.json`.
+**Reason:** Marketplace format is Claude Code's first-class distribution mechanism for plugins. [INFERRED - VALIDATE]
+**Areas affected:** installation, plugin packaging
+
+---
+
+## [2026-04-19] Keep upstream `prp-core` as reference, not as active relay code
+
+**Context:** The planning docs describe `relay` as incorporating and extending ideas from Wirasm's `prp-core` plugin. The repository keeps a full copy of `prp-core` under `plugins/`.
+**Decision:** `plugins/prp-core/` is treated as a read-only reference for file format and agent design; it is not merged into, extended inside, or imported by the `relay` plugin tree.
+**Reason:** Keeps upstream evolution independent from relay's own evolution, and lets relay own its prompts without forking. [INFERRED - VALIDATE]
+**Areas affected:** plugin structure, documentation scope
+
+---
+
+## [2026-04-19] Phased rollout driven by `docs/planning/dev_process_improvement_plan.html`
+
+**Context:** Building an end-to-end autonomous delivery pipeline in one step is infeasible.
+**Decision:** Ship in five ordered phases: (1) Foundation — context-builder + decision-gate, (2) Testing — Test Runner + self-correction loop, (3) Agents — single-command orchestrator, (4) Approval — merge + docs updater, (5) CI/CD integration.
+**Reason:** Each phase produces something verifiable and unlocks the next, avoiding a big-bang release. [INFERRED - VALIDATE] (this ordering is the explicit recommendation of the planning document)
+**Areas affected:** roadmap, scope of each release
+
+---
+
+## [2026-04-19] TDD activation is opt-in by explicit declaration only
+
+**Context:** Phase 2 includes an optional TDD Writer / TDD Reviewer pair (B7/B8) that runs between the Plan Reviewer and the Implementer.
+**Decision:** The TDD track is activated ONLY when the target project explicitly declares TDD in its context-builder output. Heuristics (e.g., existence of a test folder) MUST NOT activate the track.
+**Reason:** Explicit declaration prevents surprising projects that happen to have tests but do not practice TDD as a methodology. (explicitly stated in `docs/planning/planejamento_fase_2.docx`)
+**Areas affected:** orchestration, context-builder schema, TDD agents
+
+---
+
+## [2026-04-19] Test Runner auto-correction loop: `max_test_retries = 3`
+
+**Context:** Component B4 of Phase 2 (`docs/planning/planejamento_fase_2.docx`) is the auto-correction loop: run tests → classify failures → apply Implementer correction → re-run. The planning doc proposed `3` as a default without nailing down the exact semantics of the counter.
+**Decision:** The default is `max_test_retries: 3`, with the following explicit semantics:
+- The counter counts **correction attempts after the initial run**. The test suite therefore runs at most 4 times in a session: 1 initial + 3 retries.
+- A "retry" = one full round of (run suite → classify → correct → re-run).
+- Flakiness-driven retries (B3 detects non-deterministic failure via retry without code change) do NOT count against `max_test_retries`.
+- Oscillation detection (B4 Observações — a correction reverting files from an earlier correction) aborts the loop BEFORE exhausting the retry budget and signals conflict to the human.
+- Setting the value to `0` (disabling retries) is forbidden — it would defeat the purpose of the loop.
+**Reason:** 1–2 aborts prematurely on second-tier bugs where the first fix exposes another failure. 5+ wastes expensive E2E time when the loop is stuck on a requirement gap or weak test, not a bug the agent can solve. 3 matches literature on agentic correction loops (Ralph, SWE-Agent) and common CI retry policies. This default is a starting point — reassess after ~20 real runs in target projects; telemetry may justify lowering to 2 or stratifying by test tier.
+**Override guidance:**
+- Projects with expensive E2E (>5 min per run) → lower to 2.
+- Projects with fast unit-only suites → raise to 5.
+- Never set to 0.
+**Out of scope (deferred):** complementary time budget (`max_test_minutes`), per-tier retry counts (unit vs integration vs E2E), adaptive defaults based on suite duration. These are separate decisions when Phase 2 implementation surfaces the need.
+**Areas affected:** Test Runner (B1), auto-correction loop (B4), configuration schema of the plugin, override guidance for target projects
+
+---
+
+## [2026-04-19] Layered test execution: adaptive (auto-detect with opt-out)
+
+**Context:** Planning document §10 identifies "loop explode em projetos grandes" as Medium risk and proposes layered execution (unit → integration → E2E) as a mitigation alongside `max_test_minutes`. Layered execution runs fast tests first and skips subsequent layers when an earlier layer fails — preserving the time budget and matching natural "fail fast" intuition. The open question was whether this should be automatic (always on) or opt-in (always off until configured).
+
+**Decision:** Neither extreme — **adaptive**: the context-builder detects test-layer signals in Phase 1 and activates layered execution automatically when they are found. Flat execution (current default) when no signals are present. Override available via a future `.relay.yaml` at the target-repo root.
+
+**Detection signals** (any one suffices, all are inclusive):
+- Separate directories: `tests/unit/`, `tests/integration/`, `tests/e2e/`, or common equivalents (`test/features/`, `spec/system/`, etc.)
+- Separate test commands / scripts in manifests: `npm run test:unit` + `test:e2e`, `mix test.unit` + `mix test.e2e`, etc.
+- Framework markers: `@pytest.mark.unit`, `@pytest.mark.e2e`, `@Tag("unit")`, etc.
+- Framework conventions: phoenix `test/` vs `test/features/`; rspec `spec/` vs `spec/system/`.
+
+**Canonical layer order** (when detected): `unit → integration → e2e`. Per-project reordering or addition of intermediate layers (smoke, contract) via `.relay.yaml`.
+
+**Failure behavior:** Failure at layer N ⇒ **subsequent layers are skipped**. Report marks skipped layers as `SKIPPED_UPSTREAM_FAILURE` (distinct from other skips — not due to missing infra or missing framework, but due to an earlier-layer failure).
+
+**Auto-correction loop interaction:** Each retry re-runs **from layer 1**. A correction may have fixed unit but silently broken E2E; conservative re-run catches this. Unit is cheap enough that the cost is acceptable.
+
+**Time budget interaction:** Layered execution amplifies `max_test_minutes` (OQ #2) — failing fast in unit preserves budget for subsequent retries. No per-tier budgets in this decision; total `max_test_minutes: 30` remains the single budget. Per-tier budgets deferred until telemetry justifies them.
+
+**Reporting:** Report `layers:` section shows per-layer outcome + duration + tests_run. Example:
+```
+layers:
+  unit:        { outcome: PASSED, duration: 30s, tests_run: 142 }
+  integration: { outcome: FAILED, duration: 2min, tests_run: 28, failures: 3 }
+  e2e:         { outcome: SKIPPED_UPSTREAM_FAILURE }
+```
+
+**Activation transparency:** The first run of a project with layered execution active writes a one-line note into the report ("Layered execution enabled because X, Y, Z signals detected. Disable via `test_layers.enabled: false` in .relay.yaml"). Human sees immediately; can turn off if detection misfired.
+
+**Reason:** Pure automatic is unsafe — false positives (integration test classified as unit) lead to wrong abort decisions. Pure opt-in leaves benefit on the table for teams that would use it but don't know it exists. Adaptive is honest: activate when there's strong signal; report the reason; let the team override in either direction.
+
+**Out of scope (deferred):**
+- `.relay.yaml` schema in full — this decision mentions it as override location without designing it.
+- Per-tier time budgets (`max_unit_minutes`, `max_e2e_minutes`).
+- Custom layer names beyond unit/integration/e2e.
+- Skip-from-layer-N in retries (optimization — the Implementer signaling "only touched E2E" to skip earlier layers).
+- Parallel execution of layers (explicit Won't in the Test Runner PRD).
+
+**Areas affected:** Test Runner auto-correction loop (B4), report schema (B6), context-builder scan (Phase 1 — detect layer signals), future `.relay.yaml` config surface
+
+---
+
+## [2026-04-19] Test Runner time budget: `max_test_minutes = 30`
+
+**Context:** `max_test_retries = 3` bounds the number of correction attempts but not the wall-clock time a session can consume. A project with slow E2E (15 min per run) hits `4 × 15min + 3 × correction = ~67min` before a retry-exhausted abort — far longer than a developer is willing to walk away for. The planning document §10 calls this out as a Medium-severity risk and proposes a configurable time budget as the complementary stop condition.
+
+**Decision:** `max_test_minutes: 30` default, covering **total session wall-clock** from `/relay-test` invocation to final outcome. Semantics:
+
+- Counts all phases: Docker setup, each suite execution, Implementer correction time, post-green review time. No "pausing" for thinking time — total wall-clock is simpler and matches the developer's actual wait.
+- **Independent of `max_test_retries`** — whichever budget exhausts first wins. Outcome codes are distinct:
+  - `FAILED_AFTER_N_RETRIES` — retry budget exhausted; loop tried `max_test_retries` corrections and none converged.
+  - `FAILED_TIME_BUDGET_EXCEEDED` — time budget hit; may or may not have been on a retry.
+- Value `0` is forbidden — disabling the budget defeats its purpose.
+- Per-project override via the future `.relay.yaml` (same mechanism as `max_test_retries`).
+- Reports include `time_breakdown` by phase (`infra_setup`, `attempt_N_suite`, `attempt_N_correction`, `postgreen_review`) so humans know where the budget went.
+
+**Override guidance:**
+- Fast-feedback projects (unit only, no Docker) → lower to 15 min.
+- E2E-heavy projects (>10 min per run) → raise to 60–90 min and strongly consider layered execution (OQ #3 in Test Runner PRD) so that unit tests fail fast before E2E burns the budget.
+- Projects with suites >30 min per run → case-by-case; likely signal that feature scope should be smaller or the suite needs splitting.
+
+**Reason:** 30 min covers typical medium projects with ~2x headroom (Docker setup + 4 suite runs + 3 corrections ≈ 14 min for a 3-min suite) while forcing heavy-E2E projects to consciously opt into a larger budget. 20 min is too aggressive — aborts legitimate second-retry convergence. 60 min is too generous — loops stuck on requirement gaps waste 2x the time before aborting, which is precisely what the budget exists to prevent.
+
+**Reassess trigger:** after ~20 real runs in phoenix (the first dogfood target per `PRPs/prds/test-runner.prd.md`), check the actual distribution of session durations. If the median converged session is far from 30 min in either direction, revise.
+
+**Out of scope (deferred):**
+- Per-tier budgets (`max_unit_minutes`, `max_integration_minutes`, `max_e2e_minutes`) — tied to layered execution decision (OQ #3 in Test Runner PRD).
+- Fine-grained accounting inside phases (breakdown of "infra setup" into pull / build / wait).
+
+**Areas affected:** Test Runner auto-correction loop (B4), report schema (B6), future `.relay.yaml` config surface
+
+---
+
+## [2026-04-19] Secret redaction policy for Test Runner reports
+
+**Context:** Test Runner captures stdout/stderr during test execution and writes it to versioned reports under `PRPs/reports/<feature>/`. Those reports travel with the PR description. Without explicit redaction, any test that inadvertently logs an env var value (via `print`, error messages, fixture dumps) leaks that secret to every reviewer of the PR, including in open-source contexts. The planning document §7.1 A4 mandates an explicit redaction policy; the exact pattern list was left open.
+
+**Decision:** Three-layer redaction policy, canonical list in `docs/context/redaction-policy.md`.
+
+1. **Layer 1 (invariant defaults):** env var names matching case-insensitive wildcards (`*KEY*`, `*TOKEN*`, `*SECRET*`, `*PASSWORD*`, `*PASSWD*`, `*CREDENTIAL*`, `*PRIVATE*`, `*SIGNING*`, `*AUTH*`); exact-match env names carrying connection URIs (`DATABASE_URL`, `DB_URL`, `REDIS_URL`, `MONGODB_URI`, `KAFKA_BROKERS`, `AMQP_URL`, `GOOGLE_APPLICATION_CREDENTIALS`); value regex for well-known secret formats (AWS, Stripe, GitHub PAT, JWT, PEM, OpenAI, Anthropic, Google API key / OAuth2 access token / OAuth2 client secret).
+2. **Layer 2 (per-project extensions):** `PRPs/redaction-extensions.txt` (created empty by context-builder on `*init`); team adds project-specific env names or value regex; versioned in git alongside other config.
+3. **Layer 3 (documented non-redacted):** values that are semi-sensitive but left alone by default (service-account non-key fields, git hashes) — teams can opt into redaction via Layer 2.
+
+**Implementation mechanics:** runtime redaction table built from env vars at the start of a run; replace values in every captured line before writing to any file under `PRPs/reports/<feature>/`. After execution, a second pass applies value regex to catch secrets leaked outside env contexts. Report footer always carries a `secrets_redacted` block with count + category breakdown, even when count is 0.
+
+**URL handling:** connection strings replaced integrally with `[REDACTED_URL]`. No parse-and-partial redaction — URL parsers fail on passwords with special characters and a parse failure that emits the raw URL is a leak. Going integral is the safe default.
+
+**Reason:** Name-pattern + exact-match + value-regex together cover the common cases (env vars that follow naming conventions, exceptions that don't, and secrets that leak outside env vars entirely) without requiring the team to audit every possible leak surface. Per-project extensions handle the long tail. Integrally-redacted URLs trade debuggability for safety — a legitimate debugging need can be served by running the suite manually outside the autonomous pipeline.
+
+**Out of scope (deferred to A4/B6 implementation):**
+- Regex library choice and streaming vs batch redaction.
+- Multi-line value handling (PEM blocks span lines).
+- Whether to also redact in `attempts.jsonl` individual fix attempts (expected: yes; same policy, test separately).
+- Pre-commit secret scanning integration (complementary, different tool category).
+
+**Areas affected:** Test Runner infra (A4), Report generator (B6), context-builder (creates the extensions file at `*init`), every `PRPs/reports/<feature>/` ever produced
+
+---
+
+## [2026-04-19] `.claude/settings.json` allowlist: narrow patterns, invariant denylist, generated by context-builder
+
+**Context:** Component C1 of Phase 2 (`docs/planning/planejamento_fase_2.docx` §7.3) requires `.claude/settings.json` to carry pre-approved permissions so the autonomous portion of the pipeline does not stall on per-command prompts. The planning doc says "allowlist estrita por comando (não por ferramenta)" but left the exact scope open.
+
+**Decision:** Three interlocking choices:
+
+1. **Narrow patterns, never broad.** The allowlist contains patterns specific to detected commands (e.g., `Bash(pnpm test *)`, `Bash(docker compose -f compose.test.yml up -d*)`). Catch-all patterns like `Bash(*)`, `Bash(git *)`, `Bash(docker *)`, `Bash(rm *)` are forbidden in the allowlist; they defeat the security purpose. If a stack signal would require such a pattern, the detection logic needs more granularity.
+
+2. **Invariant denylist applied to every project.** Destructive operations always require human confirmation regardless of project: `git push --force*`, `git reset --hard*`, `rm -rf /*` and `rm -rf ..*` (only the scoped `.worktrees/*` form is allowed), `sudo`, global package installs (`npm install -g *`, `pip install --user *`), `curl * | sh*`, `docker system prune*`, `docker volume rm *`, writes to system directories, GitHub API mutations (`gh api -X DELETE/PUT *`, `gh repo delete *`). Full catalog in `docs/context/settings-allowlist.md`.
+
+3. **Generated by the context-builder, not by the pipeline.** The context-builder skill extends `*init` to emit `.claude/settings.json` based on Phase 1 stack detection. `*update` mode re-runs detection and adds missing allow entries but never removes human-added ones; the denylist is replaced wholesale each run because it is invariant.
+
+**Reason:** Narrow patterns + invariant denylist together mean the pipeline can run autonomously without the user approving every bash call, while destructive operations still require explicit consent. Generating the file from detected stack signals means the allowlist fits the project (no bloat, no gaps) and is auditable in git diff on the `settings.json` commit. Letting the pipeline itself maintain this file would be a security regression — the thing being authorized shouldn't author its own authorization.
+
+**Exception to the "no writes to `.claude/`" rule:** `.claude/settings.json` is **setup configuration**, not a pipeline artifact. The context-builder writes it once during `*init`, interactively (user's Claude Code asks once to write to `.claude/` at setup time — acceptable UX). The autonomous pipeline only reads it, never writes under `.claude/`. This does not contradict the earlier decision on PRP artifact paths — pipeline-produced artifacts still go under `PRPs/`.
+
+**Out of scope (deferred to C1 implementation):**
+- Exact Claude Code `permissions` schema syntax (verifying `Bash(pattern)` vs other form at implementation time).
+- Per-OS differences (Windows path conventions, `cmd.exe` vs `bash`).
+- `.claude/settings.local.json` (git-ignored, per-user overrides) — not generated; user-maintained.
+
+**Areas affected:** context-builder skill (gains a generation phase), anti-patterns doc (exception clarified), every target project's `.claude/settings.json`, security posture of the autonomous pipeline
+
+---
+
+## [2026-04-19] Command surface: one command per stage, writer and reviewer split
+
+**Context:** With the interactivity boundary decided (PRD interactive, downstream autonomous), the remaining question was how many commands to expose. Two extremes were considered: a single `/relay-run` that does everything (collapses the boundary into one invocation) vs one command per agent (maximum granularity). The goals that drove the answer: (a) every pipeline stage must be individually invokable — for isolated testing and for human intervention between stages; (b) the orchestrator must compose them seamlessly when the user wants the full flow; (c) naming must be semantically clean — a "review" command shouldn't be nested inside a "test" command; (d) reuse prp-core naming conventions where they exist (`/prp-implement` is familiar).
+
+**Decision:** Ship 12 commands plus 1 placeholder for Pillar 3, organized by role (writer / reviewer / infra / executor / orchestrator). Writers produce artifacts; reviewers validate existing artifacts (including hand-edited ones). The orchestrator invokes them in a fixed order and loops writer→reviewer pairs on `CHANGES_REQUESTED` until approved or retry budget exhausted.
+
+| Command | Role | Input | Output |
+|---------|------|-------|--------|
+| `/relay-prd <description \| draft-path>` | interactive writer+reviewer (special: both dialog with user) | description or draft | PRD `APPROVED` |
+| `/relay-plan <prd-path>` | writer | PRD `APPROVED` | plan `DRAFT` |
+| `/relay-plan-review <plan-path>` | reviewer | plan `DRAFT` (or hand-edited) | `APPROVED` or `CHANGES_REQUESTED` |
+| `/relay-worktree <feature-name>` | infra | feature name | worktree at `.worktrees/<feature>/` + branch |
+| `/relay-tdd <plan-path>` | writer (opt-in) | plan `APPROVED` | test suite `DRAFT`; silently self-skips if `tdd: false` |
+| `/relay-tdd-review <suite-path>` | reviewer (opt-in) | test suite `DRAFT` | `APPROVED` or `CHANGES_REQUESTED`; silently self-skips if `tdd: false` |
+| `/relay-implement <plan-path>` | writer (matches `prp-implement` convention) | plan `APPROVED` (+ TDD suite if present) | implementation committed to worktree |
+| `/relay-code-review <worktree>` | reviewer | worktree diff | `APPROVED` or `CHANGES_REQUESTED` |
+| `/relay-test <worktree>` | executor (B1–B4: run, classify, auto-correct loop) | worktree with code | green test state or `FAILED_AFTER_N_RETRIES` |
+| `/relay-test-review <worktree>` | reviewer (B5 post-green) | green test state | `APPROVED` or `CHANGES_REQUESTED` (weakened tests, coverage drop) |
+| `/relay-pr <feature-name>` | creator | worktree green + all reviews `APPROVED` | PR opened + `PRPs/reports/<feature>/final-report.md` |
+| `/relay-execute <prd-path>` | orchestrator | PRD `APPROVED` | PR opened (composes everything above in order) |
+| `/relay-approve <pr>` *(Pillar 3, exact name TBD)* | merge + docs | PR number or URL | merge + docs updated |
+
+**Orchestrator execution order** (`/relay-execute`):
+
+```
+/relay-plan → /relay-plan-review
+  ↓ (loop back to writer on CHANGES_REQUESTED; max retries configurable)
+/relay-worktree
+  ↓
+/relay-tdd → /relay-tdd-review         (silently skip if tdd: false)
+  ↓
+/relay-implement → /relay-code-review
+  ↓
+/relay-test → /relay-test-review
+  ↓
+/relay-pr
+```
+
+**Preconditions** (each command fails loud if unmet):
+- Review commands require the artifact file to exist with expected status in frontmatter.
+- `/relay-implement` requires plan `APPROVED` + worktree checked out.
+- `/relay-test` requires worktree with pending commits.
+- `/relay-pr` requires last `/relay-test-review` returned `APPROVED`.
+
+**Reason:** Split reviewers enable the manual flow the user asked for — edit an artifact by hand, then re-run only the reviewer to validate. Writer/reviewer as independent commands also means each can be tested in isolation before the orchestrator is built (important for Phase 2 validation). `/relay-implement` (not `/relay-code`) was chosen for the code-writing step because it matches the `prp-implement` name users are already familiar with; the orchestrator takes `/relay-execute` instead of `/relay-implement` to avoid collision. `/relay-test-review` mirrors the other review splits — B5 is semantically a review, not an execution, and users may want to re-run it after hand-editing.
+
+**Out of scope (deferred):**
+- Per-stage retry budgets (analogous to `max_test_retries`): e.g., `max_plan_review_retries`, `max_code_review_retries`. Values settle when Phase 2 config design happens.
+- `/relay-approve` exact naming: settles when Pillar 3 is designed.
+- Flags for review-only / write-only modes on writer commands: defer to implementation time if needed.
+
+**Areas affected:** every Phase 2/3 agent, orchestrator, plugin config schema, `docs/api-reference.md`, README.
+
+---
+
+## [2026-04-19] Interactivity boundary: PRD interactive, downstream autonomous
+
+**Context:** The original framing of `relay` was "one prompt → PR" — fully autonomous end-to-end. In practice, the highest-leverage moment to catch scope drift, unclear requirements, and user misunderstanding is during PRD authoring. Fixing those issues later (after plan, tests, and code have been produced) cascades rework across every stage.
+**Decision:** The pipeline has an explicit **interactivity boundary** at PRD approval. Up to and including PRD Writer and PRD Reviewer, the flow is interactive — the PRD Writer runs the full 6-phase Q&A loop (inherited from `prp-core/commands/prp-prd.md`), and the PRD Reviewer can loop with the user until the PRD is approved. From PRD approval onward — Plan Writer, Plan Reviewer, TDD Writer/Reviewer (when active), Implementer, Code Reviewer, Test Runner with auto-correction loop, Report + PR Creator — the pipeline runs autonomously and only interrupts the user when an agent exhausts its recovery strategies.
+**Reason:** The cost of resolving an ambiguity during PRD authoring is minutes of conversation. The same ambiguity caught after implementation costs hours or days of compounded rework. Trading up-front dialogue for autonomy guarantees is a net win on confidence and total time-to-PR.
+**Areas affected:** PRD Writer agent, PRD Reviewer agent, orchestrator, all downstream agents, command surface
+
+---
+
+## [2026-04-19] PRD template is a fork of `prp-core/commands/prp-prd.md`
+
+**Context:** Relay needs a canonical PRD shape that (a) downstream agents can rely on, (b) humans can reason about, (c) carries relay-specific contracts (Decision Gate evidence, TDD routing).
+**Decision:** Adopt a fork of the `prp-core/commands/prp-prd.md` output template as the canonical relay PRD shape. The full interactive 6-phase flow (Initiate → Foundation → Grounding → Deep Dive → Grounding → Decisions → Generate) is preserved. Relay adds three mandatory extensions: (1) Decision Gate evidence block as the PRD header, (2) Acceptance Criteria (test scenarios) section, (3) TDD routing note stating whether the TDD track will run. The fork lives at `docs/context/prd-template.md`.
+**Reason:** Reusing a proven template avoids reinventing structure that upstream already refined. Forking (not linking) prevents upstream changes from silently altering relay's contract. The three extensions encode relay-specific invariants the upstream template does not cover.
+**Areas affected:** PRD Writer agent, PRD Reviewer agent, Plan Writer (consumes the PRD), TDD agents (consume Acceptance Criteria)
+
+---
+
+## [2026-04-19] PRP artifacts live under `PRPs/` at the repository root, never under `.claude/`
+
+**Context:** The upstream `prp-core` convention writes PRDs, plans, and reports under `.claude/PRPs/`. Claude Code applies hardcoded permission prompts on writes to `.claude/`. These prompts interrupt any agent attempting to write there, which is incompatible with the autonomous portion of the relay pipeline (Plan Writer, TDD Writer, Test Runner reports, Docs Updater outputs).
+**Decision:** All pipeline artifacts — PRDs, implementation plans, Test Runner reports, TDD initial suites, observability logs — are written under `PRPs/` at the target repository root, with the substructure `PRPs/prds/<feature>.prd.md`, `PRPs/plans/<feature>.plan.md`, `PRPs/reports/<feature>/`. Nothing pipeline-produced goes under `.claude/`.
+**Reason:** Claude Code's permission guards on `.claude/` are intentional and have no bypass. Using a sibling folder keeps artifacts versionable, auditable, and writable by the autonomous loop without per-file consent prompts.
+**Areas affected:** every agent that writes an artifact (PRD Writer, Plan Writer, TDD Writer, Implementer reports, Test Runner B6, Observability C4, Docs Updater), orchestrator, `.gitignore` policy
+
+---
+
+## [2026-04-19] Methodology declaration lives in `docs/context/methodology.md`
+
+**Context:** The previous decision mandates explicit TDD declaration but left the storage location, field name, and format open (Open Question #1 of the initial context-builder run). Downstream agents (orchestrator, B7, B8) need a predictable read target across every project the plugin processes.
+**Decision:** Every project initialized by the `context-builder` skill receives a `docs/context/methodology.md` file with YAML frontmatter as the **single source of truth** for methodology declarations. The TDD track reads exactly one key: `tdd: true | false`. Additional methodologies (BDD, pair-review, branching policy) may be added as new frontmatter keys in the future without breaking the `tdd` contract.
+**Reason:** A dedicated file is unambiguous for agents to parse (`test -f` + frontmatter read), survives prose rewrites that could eat an embedded section, and scales to other methodology declarations as they emerge. File is created in every `*init` run so its absence signals a setup bug rather than "TDD off". The skill MUST default `tdd: false` and MUST NOT flip it by heuristic.
+**Areas affected:** context-builder skill, orchestrator, TDD agents (B7, B8), every future target project
+
+---
+
+---
+
+<!-- Template for future entries:
+
+## [YYYY-MM-DD] Title of the decision
+
+**Context:** Why this decision was needed.
+**Decision:** What was decided.
+**Reason:** Why this option was chosen over alternatives.
+**Areas affected:** [list domain areas]
+
+-->
