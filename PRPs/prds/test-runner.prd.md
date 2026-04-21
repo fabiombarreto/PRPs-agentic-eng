@@ -355,7 +355,7 @@ something observable and testable; no big-bang integration at the end.
 
 | # | Phase | Description | Status | Parallel | Depends | PRP Plan |
 |---|-------|-------------|--------|----------|---------|----------|
-| 1 | Infra A1–A2 | Docker Compose test stack for phoenix + bootstrap (migrations, seeds, service wait) reaching a known state via a single command | pending | - | context-builder run against phoenix | - |
+| 1 | Infra A1–A2 | Docker Compose test stack for phoenix + bootstrap (migrations, seeds, service wait) reaching a known state via a single command | complete | - | context-builder run against phoenix | (no plan — infra work, see phoenix commit) |
 | 2 | Infra A3–A4 | Run isolation strategy (ephemeral containers or transactional reset) + secret injection via env allowlist with redaction policy | pending | - | 1 | - |
 | 3 | B2 Structured output | Configure phoenix's test tooling to emit JUnit/JSON; normalize into relay's canonical failure JSON schema | pending | - | 1 | - |
 | 4 | B1 + B3 agent | Test Runner agent file + failure classifier with initial heuristic table (4 categories) | pending | - | 3 | - |
@@ -367,10 +367,11 @@ something observable and testable; no big-bang integration at the end.
 
 ### Phase Details
 
-**Phase 1: Infra A1–A2**
+**Phase 1: Infra A1–A2** *(completed 2026-04-21)*
 - **Goal:** One command (`make test-bootstrap` or equivalent) brings phoenix's test environment up deterministically.
 - **Scope:** `compose.test.yml` (or phoenix's existing test compose), migration + seed scripts, readiness wait. No Test Runner logic yet.
 - **Success signal:** Fresh clone of phoenix → context-builder run → `make test-bootstrap` → all services green; `mix test` (or equivalent) executes.
+- **Outcome:** phoenix already had A1 (compose.test.yml with tmpfs-backed PostgreSQL 16, fsync off, healthchecks, two profiles — pytest and playwright) and A2 (docker-entrypoint.sh: wait-for-db + migrate + loaddata initial + e2e_seed). What was missing was the single-command entry point the PRD success signal requires. Added a `Makefile` at phoenix root with `make test-bootstrap | test-pytest | test-playwright | test-e2e | test-down`. Updated phoenix `CLAUDE.md` commands section to surface the Make targets as the preferred entry points (raw docker commands kept as reference). No changes to compose, entrypoint, or fixtures — the existing deterministic setup is preserved intact.
 
 **Phase 2: Infra A3–A4**
 - **Goal:** Between-run determinism and redaction-safe secret injection.
