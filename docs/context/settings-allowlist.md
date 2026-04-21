@@ -104,6 +104,19 @@ entries). When invoked directly:
 - `Bash(pwd)`
 - `Bash(env)` — read env vars (values may be sensitive but read-only)
 
+### relay plugin scripts (always)
+
+Agents invoke the plugin's helper scripts via `node`. Each script has
+a narrow allow pattern so only the relay-shipped scripts run, never
+arbitrary node invocations. The universal allowlist includes:
+
+- `Bash(node */plugins/relay/scripts/normalize-test-output.mjs *)` — normalize JUnit XML (B2)
+- `Bash(node */plugins/relay/scripts/generate-final-report.mjs *)` — produce final-report.md (B6)
+
+The `*` before `/plugins/` tolerates the variable prefix that
+resolves `${CLAUDE_PLUGIN_ROOT}`. A bare `Bash(node *)` is NOT
+emitted — it would be verb-terminal-wildcard and defeat the purpose.
+
 ### Worktree cleanup (scoped)
 
 - `Bash(rm -rf .worktrees/*)` — **only inside the `.worktrees/` folder**

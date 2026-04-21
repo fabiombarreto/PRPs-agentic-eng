@@ -12,10 +12,12 @@ before the Test Runner consumes it. Consumed by:
   weakening.
 - **B6 Report** — embeds the record into `final-report.md`.
 
-Produced by `${CLAUDE_PLUGIN_ROOT}/scripts/normalize-test-output.py`,
+Produced by `${CLAUDE_PLUGIN_ROOT}/scripts/normalize-test-output.mjs`,
 which reads framework-native output (JUnit XML for pytest, Playwright,
 Vitest) plus optional coverage / trace paths, and emits the schema
-below on stdout.
+below on stdout. Written in Node.js without npm dependencies — Claude
+Code ships Node, so the script runs in every relay target regardless
+of the target's own language stack.
 
 ---
 
@@ -154,3 +156,59 @@ When evolving the schema:
 
 The normalizer accepts any path via `--junit`; the table above is the
 convention, not a hardcoded expectation.
+
+---
+
+## Observability directory layout (component C4)
+
+Every Test Runner session writes artifacts under
+`<worktree>/PRPs/reports/<feature>/` in the following canonical
+structure:
+
+```
+PRPs/reports/<feature>/
+├── run.json                 # B4 command state: session-level summary, attempts[] index, time_breakdown
+├── test-review.json         # B5 verdict (APPROVED | CHANGES_REQUESTED) + concerns list
+├── final-report.md          # B6 PR-embeddable markdown (produced by generate-final-report.mjs)
+├── coverage-baseline.json   # OPTIONAL, team-committed: baseline for coverage-drop detection (see B5)
+└── attempts/
+    ├── 1/
+    │   ├── record.json      # B2 normalized output (this schema) + B3 categories filled in
+    │   ├── stdout.log       # redacted execution log (secrets replaced per docs/context/redaction-policy.md)
+    │   └── diff.patch       # git diff applied by the Implementer for this attempt; empty on attempt 1
+    └── 2/
+        └── ...
+```
+
+Producers:
+
+- `run.json` — written by the `/relay-test` command (Phase 6 / B4 loop state).
+- `test-review.json` — written by the `/relay-test-review` command (Phase 7 / B5).
+- `final-report.md` — written by `${CLAUDE_PLUGIN_ROOT}/scripts/generate-final-report.mjs`, typically invoked by `/relay-pr` (future; Phase 8 of the overall pipeline, not of this PRD) or manually for audit.
+- `coverage-baseline.json` — manually committed by the team. When present, the post-green reviewer compares current coverage against it; when absent, a note explains the limitation without blocking approval.
+- `attempts/<N>/record.json` — written by the `test-runner` agent (B1 + B3) after invoking the normalizer.
+- `attempts/<N>/stdout.log` — written by the `test-runner` agent, always after redaction.
+- `attempts/<N>/diff.patch` — written by the `/relay-test` command when the Implementer applies a fix; empty or absent on attempt 1.
+
+The report generator is tolerant: missing files are handled gracefully
+(the corresponding section notes "not run" or is skipped).
+
+---
+
+## Report generator — `generate-final-report.mjs`
+
+Canonical invocation:
+
+```
+node ${CLAUDE_PLUGIN_ROOT}/scripts/generate-final-report.mjs \
+    <worktree>/PRPs/reports/<feature>/ [--out <path>]
+```
+
+Reads every file listed above; produces `final-report.md` in the same
+directory (or at `--out`). AC-10 compliant: includes outcome,
+duration, time_breakdown, attempt-by-attempt detail with failures
+table, failure classification histogram, post-green review verdict
+with concerns, secrets redaction summary, skipped components, and a
+TDD-track section when `tdd_mode: true`.
+
+Like the normalizer, written in Node.js without npm deps.

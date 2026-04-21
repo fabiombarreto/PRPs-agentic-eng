@@ -111,7 +111,7 @@ where `<feature>` is inferred from the current branch name (`feature/<name>` →
 Run the normalizer script:
 
 ```
-python ${CLAUDE_PLUGIN_ROOT}/scripts/normalize-test-output.py \
+node ${CLAUDE_PLUGIN_ROOT}/scripts/normalize-test-output.mjs \
     --framework <detected> \
     --junit <path-to-junit.xml> \
     --tier <tier-or-unit> \
@@ -120,6 +120,9 @@ python ${CLAUDE_PLUGIN_ROOT}/scripts/normalize-test-output.py \
     [--coverage <path>] \
     [--trace <path>]
 ```
+
+(Node.js runtime, not Python — Claude Code bundles Node, so every relay
+target has it without extra prerequisites.)
 
 Capture the normalized JSON; write it to:
 
