@@ -9,8 +9,8 @@ Early development. The first skill (`context-builder`) is in place. Commands, ag
 ## Structure
 
 - `skills/` — agent skills. Currently: `context-builder` (project documentation initializer).
-- `commands/` — `/relay-*` slash commands. *(to be added)*
-- `agents/` — specialized agents. *(to be added)*
+- `commands/` — `/relay-*` slash commands. Currently: `relay-test` (run test suite with auto-correction loop).
+- `agents/` — specialized agents. Currently: `test-runner` (per-attempt suite execution + failure classification).
 - `hooks/` — pipeline hooks. *(to be added)*
 
 ## Installation

@@ -54,7 +54,7 @@ cycle.
 | Command | Input | Output |
 |---------|-------|--------|
 | `/relay-worktree <feature-name>` | feature name | worktree at `.worktrees/<feature>/` + branch `feature/<name>` |
-| `/relay-test <worktree>` | worktree with code | green state or `FAILED_AFTER_N_RETRIES`. Encapsulates B1–B4: suite execution, failure classification, auto-correction loop (see `docs/decisions.md` on `max_test_retries`) |
+| `/relay-test <worktree>` ✅ **implemented** | worktree with code | green state or `FAILED_AFTER_N_RETRIES` / `FAILED_TIME_BUDGET_EXCEEDED` / `FAILED_OSCILLATION` / `FAILED_INFRA_UNRECOVERABLE`. Encapsulates B1–B4: suite execution, failure classification, auto-correction loop (see `docs/decisions.md` on `max_test_retries`, `max_test_minutes`). Delegates per-attempt work to the `test-runner` agent (`plugins/relay/agents/test-runner.md`). Produces `PRPs/reports/<feature>/run.json` plus per-attempt `record.json` and `stdout.log`. |
 | `/relay-pr <feature-name>` | worktree with green tests + all reviews `APPROVED` | PR opened + `PRPs/reports/<feature>/final-report.md` |
 
 #### Orchestrator
@@ -95,11 +95,24 @@ All command outputs land under `PRPs/` at the target-repo root (NEVER under
 
 Worktrees live at `.worktrees/<feature>/` relative to the target repo root.
 
-## Agents (planned)
+## Agents
 
 Relay's agents correspond one-to-one with the commands above (each writer
-and reviewer pair is an agent pair). Exact agent names, models, and prompts
-are designed during Phase 2/3 implementation.
+and reviewer pair is an agent pair). Exact agent names, models, and
+prompts are designed during Phase 2/3 implementation.
+
+### Implemented
+
+| Agent | Path | Invoked by | Role |
+|-------|------|------------|------|
+| `test-runner` ✅ | `plugins/relay/agents/test-runner.md` | `/relay-test` command | Per-attempt: run the suite, normalize output via `scripts/normalize-test-output.py`, classify failures (B3: `infra` / `flaky` / `legitimate`), return a structured verdict (`GREEN` / `RETRY_NEEDED` / `RETRY_FLAKY` / `ABORT_INFRA` / `ABORT_TIME`). Never loops, never edits code. |
+
+### Planned
+
+PRD Writer, PRD Reviewer, Plan Writer, Plan Reviewer, TDD Writer
+(B7), TDD Reviewer (B8), Implementer, Code Reviewer, Post-green
+Reviewer (B5), Report + PR Creator, Docs Updater, Docs Reviewer —
+all to be written during their corresponding phases.
 
 ## Hooks (planned)
 
