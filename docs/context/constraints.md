@@ -48,8 +48,9 @@ interactive permission prompts during autonomous runs, no treating
 
 From `docs/planning/planejamento_fase_2.docx` §12:
 
-- Produce the PRD for the Test Runner agent (B1) — this is the first feature
-  that should go through the plugin's own workflow (dogfooding).
+- ~~Produce the PRD for the Test Runner agent (B1) — dogfooding target~~
+  **Done 2026-04-19:** `PRPs/prds/test-runner.prd.md` approved. Next step
+  is Phase 1 (A1–A2 infra) against the phoenix project.
 - Design the Phase 2 project-level config surface (likely `.relay.yaml` at
   target-repo root): where projects override plugin defaults like
   `max_test_retries`, declare test frameworks, etc. Until this is designed,
