@@ -356,8 +356,8 @@ something observable and testable; no big-bang integration at the end.
 | # | Phase | Description | Status | Parallel | Depends | PRP Plan |
 |---|-------|-------------|--------|----------|---------|----------|
 | 1 | Infra A1–A2 | Docker Compose test stack for phoenix + bootstrap (migrations, seeds, service wait) reaching a known state via a single command | complete | - | context-builder run against phoenix | (no plan — infra work, see phoenix commit) |
-| 2 | Infra A3–A4 | Run isolation strategy (ephemeral containers or transactional reset) + secret injection via env allowlist with redaction policy | pending | - | 1 | - |
-| 3 | B2 Structured output | Configure phoenix's test tooling to emit JUnit/JSON; normalize into relay's canonical failure JSON schema | pending | - | 1 | - |
+| 2 | Infra A3–A4 | Run isolation strategy (ephemeral containers or transactional reset) + secret injection via env allowlist with redaction policy | complete | - | 1 | (no plan — governance work, see phoenix commit) |
+| 3 | B2 Structured output | Configure phoenix's test tooling to emit JUnit/JSON; normalize into relay's canonical failure JSON schema | complete | - | 1 | (no plan — schema + normalizer script, see relay commit) |
 | 4 | B1 + B3 agent | Test Runner agent file + failure classifier with initial heuristic table (4 categories) | pending | - | 3 | - |
 | 5 | C1 Permissions | `.claude/settings.json` for phoenix populated by context-builder from the allowlist catalog | pending | with 4 | - | - |
 | 6 | B4 Auto-correction loop | State machine with `max_test_retries=3`, oscillation detection, feedback format to Implementer | pending | - | 4, 5 | - |
@@ -373,15 +373,17 @@ something observable and testable; no big-bang integration at the end.
 - **Success signal:** Fresh clone of phoenix → context-builder run → `make test-bootstrap` → all services green; `mix test` (or equivalent) executes.
 - **Outcome:** phoenix already had A1 (compose.test.yml with tmpfs-backed PostgreSQL 16, fsync off, healthchecks, two profiles — pytest and playwright) and A2 (docker-entrypoint.sh: wait-for-db + migrate + loaddata initial + e2e_seed). What was missing was the single-command entry point the PRD success signal requires. Added a `Makefile` at phoenix root with `make test-bootstrap | test-pytest | test-playwright | test-e2e | test-down`. Updated phoenix `CLAUDE.md` commands section to surface the Make targets as the preferred entry points (raw docker commands kept as reference). No changes to compose, entrypoint, or fixtures — the existing deterministic setup is preserved intact.
 
-**Phase 2: Infra A3–A4**
+**Phase 2: Infra A3–A4** *(completed 2026-04-21)*
 - **Goal:** Between-run determinism and redaction-safe secret injection.
 - **Scope:** Choose and implement ephemeral-containers OR transactional reset; produce the env var allowlist; test redaction on known sensitive env names.
 - **Success signal:** Ten consecutive `make test-bootstrap && mix test` runs produce identical output; logs audited, no secret value present.
+- **Outcome:** phoenix already had the isolation strategy (tmpfs-backed PostgreSQL with fsync off — containers discard DB state between runs automatically) and the provisioning mechanism (test-only env vars hardcoded in docker-compose.test.yml: `SECRET_KEY: "e2e-test-only-not-a-real-secret"`, `POSTGRES_PASSWORD: phoenix_test`). This phase formalized both as decisions in `phoenix/docs/decisions.md` (2026-04-21 entry on tmpfs isolation) and added an anti-pattern preventing real production credentials from entering the test environment. Redaction implementation itself is deferred to Phase 4 when the Test Runner agent is built — it is the agent that captures stdout/stderr and writes reports, so redaction must live there; the contract (three-layer policy in `docs/context/redaction-policy.md` + `PRPs/redaction-extensions.txt`) is already in place from the earlier context-builder migration. Validating "10 consecutive runs produce identical output" requires running the Test Runner, which is Phase 9's dogfood; this phase's exit criterion was formalizing the decisions.
 
-**Phase 3: B2 Structured output**
+**Phase 3: B2 Structured output** *(completed 2026-04-21)*
 - **Goal:** Every test execution emits parseable JSON with `{passed, failed, skipped, failures: [...], duration, coverage?}`.
 - **Scope:** Config phoenix's test runner to emit JUnit XML; write the normalizer that converts framework-specific output into relay's canonical schema.
 - **Success signal:** Given a known-failing change, the normalizer produces correct failure records matching the suite, test, file, line, and message.
+- **Outcome:** canonical schema documented in `docs/context/test-output-schema.md` of the relay plugin (v1 fields: `run_id`, `attempt`, `tier`, `framework`, `outcome`, `duration_ms`, `counts`, `failures[]`, `coverage`, `artifacts`, `generated_at`). Normalizer script at `scripts/normalize-test-output.py` accepts `--framework pytest|playwright|vitest --junit <path>` plus optional `--tier / --coverage / --trace / --run-id / --attempt`, emits the schema on stdout. Phoenix coverage: pytest already emitted JUnit XML (`--junitxml=/app/reports/results.xml`), Playwright already emitted JUnit (`reporter: [['junit', { outputFile: '/reports/playwright-junit.xml' }]]`), Vitest was missing — `frontend/vitest.config.ts` updated with `reporters: ['default', ['junit', { outputFile: './reports/vitest-junit.xml' }]]` and a dedicated `reportsDirectory` for v8 coverage. Normalizer validated against a sample JUnit XML (3 testcases, 1 failure) — produces the expected record (outcome: FAILED, counts correct, failure extracted with suite/test/message, category left null for B3 to fill).
 
 **Phase 4: B1 + B3 agent**
 - **Goal:** Agent that executes the bootstrap, invokes the framework, consumes the normalized JSON, and labels each failure.

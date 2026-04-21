@@ -29,6 +29,7 @@ User-facing intro: see `README.md` at the repository root.
 → docs/context/prd-template.md — canonical shape of every PRD the pipeline produces (fork of prp-core with relay adaptations)
 → docs/context/settings-allowlist.md — catalog of allow/deny patterns the context-builder emits into `.claude/settings.json` for each target project
 → docs/context/redaction-policy.md — catalog of patterns the Test Runner applies when writing reports, so secret values never reach a committed file
+→ docs/context/test-output-schema.md — canonical JSON schema every test framework output is normalized into (consumed by B3/B4/B5/B6 of the Test Runner)
 
 ## Domain
 
