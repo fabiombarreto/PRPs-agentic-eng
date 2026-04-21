@@ -71,7 +71,7 @@ not emitted.
 - `Bash(gh pr list *)`
 - `Bash(gh issue view *)`
 - `Bash(gh issue list *)`
-- `Bash(gh api)` — default is GET; mutations (`-X POST/PUT/DELETE/PATCH`) not allowed by this pattern
+- `Bash(gh api *)` — default method is GET; emit denies below for `-X POST/PUT/DELETE/PATCH` so mutations still require human confirmation
 
 ### Package managers (install / add; never global)
 
@@ -170,6 +170,8 @@ Hardcoded. Emitted in every generated `settings.json` regardless of stack.
 
 - `Bash(gh api -X DELETE *)`
 - `Bash(gh api -X PUT *)`
+- `Bash(gh api -X POST *)`
+- `Bash(gh api -X PATCH *)`
 - `Bash(gh repo delete *)`
 
 ---

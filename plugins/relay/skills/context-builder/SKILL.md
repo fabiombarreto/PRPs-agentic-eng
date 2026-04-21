@@ -548,11 +548,21 @@ Compare the detected manifest against existing `docs/libs/`:
 - **New lib** in manifest, no existing file → fetch via Context7, create
   file.
 - **Existing lib, version unchanged** → preserve the existing file.
-- **Existing lib, version changed** → re-fetch via Context7; overwrite
-  the file. The version bump is a signal that content is stale; team can
-  diff against git history if they had hand-edited notes.
+- **Existing lib, version changed** → check for human-edit markers
+  before deciding:
+  - If the file contains a `## Team notes` section, a `## Project-specific usage`
+    section, or any heading outside the Context7-default set (version,
+    use cases, patterns, gotchas) → **preserve the file** and report the
+    version bump as drift in the Final Report so the team can decide
+    whether to manually reconcile.
+  - If the file matches the Context7-default shape (no custom sections) →
+    re-fetch and overwrite; the version bump signals the content is
+    stale.
 - **Lib removed from manifest** → preserve the file. Report in the Final
   Report so the team can delete it manually.
+
+This protects hand-curated notes ("we hit bug X with forwardRef before
+React 19.1") from being silently overwritten by a version bump.
 
 ### Graceful degradation
 
@@ -958,7 +968,10 @@ Must include entries for:
 - `docs/domain/` — entries for `glossary.md`, `flows.md`, and one entry
   per `docs/domain/areas/*.md` file
 - `docs/libs/` folder — one collective entry
-- Root `README.md` pointer (when present) — one short entry
+- Root `README.md` pointer (when present) — one short entry, placed at
+  the top of the KB under an `## Intro` section before the
+  Architecture & Development section, so humans reading top-down see
+  the user-facing doc first
 
 ### Init behavior
 
@@ -1064,6 +1077,33 @@ confirm nothing was silently touched]
 
 ### Skipped
 [list anything skipped and why, e.g. /libs skipped: Context7 unavailable; lib X preserved (lib removed from manifest, file still on disk)]
+
+### .gitignore follow-ups (init mode and first-run update)
+If `.claude/settings.json` was created or will be tracked for the first
+time, the team MUST verify `.gitignore` meets these requirements:
+
+1. Ignore the rest of `.claude/` using the **`.claude/*` form, NOT
+   `.claude/`** — the directory form prevents git from traversing
+   inside, making any `!.claude/settings.json` negation a no-op.
+2. Immediately below, `!.claude/settings.json` to re-include the
+   committed permissions file.
+3. Add `.worktrees/` to ignore per-feature ephemeral worktrees the
+   relay pipeline creates.
+
+Exact lines to add (copy/paste):
+```
+# Claude — ignore session/cache/local artifacts, but commit project-wide settings
+.claude/*
+!.claude/settings.json
+
+# relay — per-feature worktrees (ephemeral)
+.worktrees/
+```
+
+The context-builder does NOT modify `.gitignore` automatically — it is
+project-controlled and the team may have conventions of its own. List
+this in the Report for every `*init` run and for `*update` runs that
+create `.claude/settings.json` for the first time.
 ```
 
 **Do not ask questions during execution.** Run every phase, then present
