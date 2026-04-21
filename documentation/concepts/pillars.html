@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>The three pillars — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Concepts</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>The three pillars</span>
+      </div>
+
+      <h1>The three pillars</h1>
+      <p class="page-subtitle">relay's pipeline is organized in three pillars. Each has a distinct responsibility, a clear input and output, and a clear handoff to the next. This page explains what each pillar does and why the split exists.</p>
+
+      <h2 id="overview">Overview</h2>
+
+      <div class="pipeline">
+        <div class="pipeline__row pipeline__row--interactive">
+          <div class="pipeline__label">Pillar 1</div>
+          <div class="pipeline__text"><strong>Initialization</strong> — document the project for the AI so agents can operate autonomously. Produces <code>docs/</code>, <code>PRPs/redaction-extensions.txt</code>, <code>.claude/settings.json</code>, and <code>methodology.md</code>.</div>
+        </div>
+        <div class="pipeline__arrow">↓</div>
+        <div class="pipeline__row pipeline__row--autonomous">
+          <div class="pipeline__label">Pillar 2</div>
+          <div class="pipeline__text"><strong>Implementation</strong> — take a feature from PRD to opened PR. Interactive up to PRD approval; autonomous from there.</div>
+        </div>
+        <div class="pipeline__arrow">↓</div>
+        <div class="pipeline__row pipeline__row--manual">
+          <div class="pipeline__label">Pillar 3</div>
+          <div class="pipeline__text"><strong>Approval</strong> — merge the PR, clean up the branch and worktree, update <code>docs/</code> to reflect what was built, and flag ambiguous new rules for human confirmation.</div>
+        </div>
+      </div>
+
+      <h2 id="pillar-1-initialization">Pillar 1 — Initialization</h2>
+
+      <h3 id="purpose-1">Purpose</h3>
+
+      <p>Before relay can run a pipeline against a project, the project needs to be <strong>documented for the AI</strong>. Stack, conventions, domain rules, past decisions, methodology choices, and permitted commands — all of it has to be in a predictable place where every agent can find it.</p>
+
+      <p>Pillar 1 delivers that documentation via a single skill: <code>context-builder</code>. The skill scans the project, infers what it can, and produces the canonical file layout the rest of relay depends on.</p>
+
+      <h3 id="what-it-produces">What it produces</h3>
+
+      <pre><code class="language-bash"># in the target project's repository
+CLAUDE.md                                 # Tier 1: essentials, always loaded
+docs/
+├── KNOWLEDGE_BASE.md                     # Tier 2: TOC pointing at everything below
+├── decision-gate.md                      # mandatory AI control mechanism
+├── decisions.md                          # stable decisions the AI must not re-evaluate
+├── anti-patterns.md                      # patterns the AI must not implement
+├── context/
+│   ├── architecture.md                   # stack, folder structure, inviolable rules
+│   ├── conventions.md                    # naming, file layout, imports
+│   ├── integrations.md                   # external services (no secret values)
+│   ├── constraints.md                    # runtime versions, tech debt, what NOT to do
+│   └── methodology.md                    # TDD opt-in frontmatter
+├── domain/
+│   ├── glossary.md                       # business terms
+│   ├── flows.md                          # main user journeys
+│   └── areas/                            # one file per business area
+└── libs/                                 # lib docs fetched via Context7 MCP
+
+.claude/
+└── settings.json                         # permission allowlist + invariant denylist
+
+PRPs/
+└── redaction-extensions.txt              # per-project secret-redaction rules</code></pre>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Why two tiers plus details</div>
+        <p>Tier 1 (<code>CLAUDE.md</code>) is always loaded at session start, so it stays small (&lt; 2000 tokens). Tier 2 (<code>KNOWLEDGE_BASE.md</code>) is a table of contents pointing at the detailed Tier 3 files in <code>docs/</code>. Agents load only what they need. This keeps token cost manageable in long sessions.</p>
+      </div>
+
+      <h3 id="when-it-runs">When it runs</h3>
+
+      <ul>
+        <li><strong>Once at adoption time</strong> — <code>*init</code> mode scans the project and produces the full tree with items marked <code>[INFERRED - VALIDATE]</code> where the skill couldn't be confident. You review those and either confirm or correct.</li>
+        <li><strong>Periodically as the project evolves</strong> — <code>*update</code> mode re-scans, adds missing artifacts, and flags drift, but never overwrites human-validated content.</li>
+        <li><strong>Targeted modes</strong> — <code>*domain</code>, <code>*libs</code>, <code>*gate</code> refresh individual subtrees.</li>
+      </ul>
+
+      <h3 id="outputs-that-the-rest-of-the-pipeline-depends-on">Outputs that the rest of the pipeline depends on</h3>
+
+      <table>
+        <thead>
+          <tr><th>Artifact</th><th>Consumed by</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>docs/context/methodology.md</code></td><td>The TDD Writer/Reviewer agents (Pillar 2) — activated only when <code>tdd: true</code></td></tr>
+          <tr><td><code>docs/decisions.md</code> + <code>docs/anti-patterns.md</code></td><td>Every agent via the Decision Gate before planning or coding</td></tr>
+          <tr><td><code>docs/domain/areas/*.md</code></td><td>Writers and reviewers when the task touches the corresponding area</td></tr>
+          <tr><td><code>.claude/settings.json</code></td><td>Claude Code itself — prevents permission prompts during the autonomous run</td></tr>
+          <tr><td><code>PRPs/redaction-extensions.txt</code></td><td>The Test Runner (B1) at runtime, when redacting captured stdout before writing reports</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="pillar-2-implementation">Pillar 2 — Implementation</h2>
+
+      <h3 id="purpose-2">Purpose</h3>
+
+      <p>Take a feature described in a short prompt and deliver a merged-ready pull request. This is where most of the work happens, and it's where relay's biggest bet is concentrated: <strong>the human participates only at PRD authoring</strong>. From PRD approval onward, the pipeline runs autonomously.</p>
+
+      <h3 id="boundary">The interactivity boundary</h3>
+
+      <p>The single most important design choice in Pillar 2 is the boundary between the interactive PRD stage and the autonomous rest of the pipeline. <a href="interactivity-boundary.html">The interactivity boundary</a> page explains the rationale; the short version is: resolving ambiguity during PRD authoring costs minutes, resolving it after implementation cascades into plan, test, and code rework costing hours or days.</p>
+
+      <h3 id="the-agents">The agents</h3>
+
+      <p>Pillar 2 is a chain of writer/reviewer pairs plus a Test Runner:</p>
+
+      <ul>
+        <li><strong>PRD Writer &amp; PRD Reviewer</strong> — interactive 6-phase Q&amp;A; produces an approved PRD in <code>PRPs/prds/</code></li>
+        <li><strong>Plan Writer &amp; Plan Reviewer</strong> — autonomous; produces an approved plan in <code>PRPs/plans/</code></li>
+        <li><strong>Worktree creation</strong> — isolated branch and working copy for the run</li>
+        <li><strong>TDD Writer &amp; TDD Reviewer</strong> — opt-in; active only when <code>methodology.md</code> declares <code>tdd: true</code></li>
+        <li><strong>Implementer &amp; Code Reviewer</strong> — writes the production code; looped with the Test Runner until tests pass or budget exhausts</li>
+        <li><strong>Test Runner</strong> — runs the suite, classifies failures, coordinates auto-correction, produces the execution report (see <a href="../reference/agents.html">Agents</a>)</li>
+        <li><strong>Post-green Reviewer</strong> — after green, validates tests weren't weakened to reach there</li>
+        <li><strong>Report + PR Creator</strong> — assembles the final Markdown report and opens the pull request</li>
+      </ul>
+
+      <h3 id="budgets">Built-in budgets</h3>
+
+      <p>The autonomous portion has two hard limits that prevent runaway sessions:</p>
+
+      <div class="kv">
+        <dt>max_test_retries</dt>
+        <dd>Default <code>3</code>. One initial run plus up to 3 correction retries. Value <code>0</code> is forbidden.</dd>
+        <dt>max_test_minutes</dt>
+        <dd>Default <code>30</code>. Total wall-clock of the Test Runner loop. Value <code>0</code> is forbidden.</dd>
+      </div>
+
+      <p>Whichever budget exhausts first wins, with a distinct outcome code (<code>FAILED_AFTER_N_RETRIES</code> vs <code>FAILED_TIME_BUDGET_EXCEEDED</code>) so the human knows why the run stopped. See <a href="../reference/commands.html">Commands reference</a> for more.</p>
+
+      <h2 id="pillar-3-approval">Pillar 3 — Approval</h2>
+
+      <h3 id="purpose-3">Purpose</h3>
+
+      <p>Once Pillar 2 has opened a PR, the remaining work is: <strong>merge it, clean up, update docs.</strong> Pillar 3 wraps that work into a single command (<code>/relay-approve</code>) so merging a relay-produced PR stays as low-friction as possible while guaranteeing the project's documentation stays in sync with reality.</p>
+
+      <h3 id="what-it-does">What it does</h3>
+
+      <ol>
+        <li><strong>Merges the PR</strong> and deletes the feature branch and the worktree.</li>
+        <li><strong>Invokes the Docs Updater agent</strong> — reads the merged changes, compares against <code>docs/context/</code> and <code>docs/domain/</code>, and proposes updates where the docs no longer reflect reality (e.g., a new domain area, a renamed convention, a new integration).</li>
+        <li><strong>Invokes the Docs Reviewer agent</strong> — reviews the proposed doc updates and asks the human about ambiguities (new business rules that the code introduces but don't belong to a clearly-defined area, etc.).</li>
+      </ol>
+
+      <h3 id="feedback-loop">Why it matters</h3>
+
+      <p>The governance files (<code>decisions.md</code>, <code>anti-patterns.md</code>, <code>docs/domain/areas/*.md</code>) are what make Pillar 2 reliable over time. If they drift, every subsequent Pillar 2 run gets worse. Pillar 3 is the feedback loop that keeps them fresh.</p>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Status</div>
+        <p>Pillar 3 is planned. As of now, Pillar 1 is delivered (<code>context-builder</code> skill) and most of Pillar 2 is delivered at the plugin surface (Test Runner, Post-green reviewer, settings.json generation). The orchestrator that composes Pillar 2 end-to-end is the next deliverable. See <a href="../roadmap/status.html">Phase status</a> for the current state.</p>
+      </div>
+
+      <h2 id="why-three">Why three pillars, not two or four?</h2>
+
+      <p><strong>Why not two (init + implement)?</strong> Because doc drift is the silent killer. If implementation lands without a feedback step that refreshes the governance files, the project's documented reality diverges from its actual reality — and the next run uses stale rules. Pillar 3 is the correction.</p>
+
+      <p><strong>Why not four (split init from config, for example)?</strong> Because <code>context-builder</code> already handles both documentation scaffolding and config emission (<code>.claude/settings.json</code>, <code>redaction-extensions.txt</code>). Splitting them would create artificial boundaries without adding clarity.</p>
+
+      <p><strong>Why clear pillar boundaries at all?</strong> Because each pillar has a different user interaction model:</p>
+      <ul>
+        <li>Pillar 1 runs once or periodically; the human reviews inferred items.</li>
+        <li>Pillar 2 runs many times; the human is interactive only at PRD.</li>
+        <li>Pillar 3 runs once per merge; the human approves doc changes.</li>
+      </ul>
+      <p>Having the three as separable commands (<code>*init</code> / <code>/relay-execute</code> / <code>/relay-approve</code>) lets you run them at different cadences and inspect them independently.</p>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

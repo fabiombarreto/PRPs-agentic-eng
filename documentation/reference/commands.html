@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Commands — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Reference</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Commands</span>
+      </div>
+
+      <h1>Commands</h1>
+      <p class="page-subtitle">The full slash-command surface of the relay plugin. Twelve commands plus one Pillar 3 placeholder, organized by role (writer / reviewer / infra / orchestrator). Each command is invocable on its own for testing or manual intervention; the orchestrator (<code>/relay-execute</code>) composes them into a full run.</p>
+
+      <h2 id="happy-path">The happy path</h2>
+
+      <p>Day-to-day feature delivery only uses three commands:</p>
+
+      <pre><code class="language-bash">/relay-prd     "a short description of the feature"   # interactive — produces approved PRD
+/relay-execute PRPs/prds/&lt;feature&gt;.prd.md              # autonomous — drives PRD to PR
+# ...review the PR, then:
+/relay-approve &lt;pr-number&gt;                              # merge + docs update</code></pre>
+
+      <p>Everything else exists for <strong>granular invocation</strong> — running a single stage for debugging, re-running a reviewer on a hand-edited artifact, or composing a custom flow.</p>
+
+      <h2 id="writers">Writers</h2>
+
+      <p>Produce an artifact. Each writer has a corresponding reviewer (below) except <code>/relay-prd</code>, which merges writer and reviewer into one interactive flow.</p>
+
+      <h3 id="relay-prd"><code>/relay-prd</code> — interactive PRD authoring</h3>
+
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>A short description of the feature, OR a path to a draft PRD markdown to refine.</dd>
+        <dt>Output</dt>
+        <dd><code>PRPs/prds/&lt;feature&gt;.prd.md</code> with status <code>APPROVED</code>.</dd>
+        <dt>Mode</dt>
+        <dd>Interactive. Runs the 6-phase Q&amp;A (Initiate → Foundation → Grounding → Deep dive → Technical grounding → Decisions).</dd>
+        <dt>Notes</dt>
+        <dd>The only command on the interactive side of the <a href="../concepts/interactivity-boundary.html">interactivity boundary</a>. Always runs the PRD Reviewer at the end; the PRD is not persisted as <code>APPROVED</code> until the reviewer signs off.</dd>
+      </div>
+
+      <h3 id="relay-plan"><code>/relay-plan &lt;prd-path&gt;</code></h3>
+
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>A PRD file with status <code>APPROVED</code>.</dd>
+        <dt>Output</dt>
+        <dd><code>PRPs/plans/&lt;feature&gt;.plan.md</code> with status <code>DRAFT</code> (awaiting <code>/relay-plan-review</code>).</dd>
+        <dt>Mode</dt>
+        <dd>Autonomous.</dd>
+      </div>
+
+      <h3 id="relay-tdd"><code>/relay-tdd &lt;plan-path&gt;</code> <span class="badge badge--info">opt-in</span></h3>
+
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>An approved plan.</dd>
+        <dt>Output</dt>
+        <dd>Test files committed to the worktree (framework-native). The suite is red at this stage — the Implementer hasn't written the production code yet.</dd>
+        <dt>Mode</dt>
+        <dd>Autonomous, opt-in. Activated only when <code>docs/context/methodology.md</code> declares <code>tdd: true</code>. When <code>tdd: false</code>, silently self-skips.</dd>
+        <dt>Notes</dt>
+        <dd>Reads the PRD's Acceptance Criteria section to derive tests. Never writes production code.</dd>
+      </div>
+
+      <h3 id="relay-implement"><code>/relay-implement &lt;plan-path&gt;</code></h3>
+
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>An approved plan. When TDD is active, also the TDD Writer's test suite is present in the worktree.</dd>
+        <dt>Output</dt>
+        <dd>Implementation commits in the worktree.</dd>
+        <dt>Mode</dt>
+        <dd>Autonomous.</dd>
+        <dt>Notes</dt>
+        <dd>Name chosen to match <code>prp-implement</code> from the upstream prp-core plugin. Uses the Agent tool to delegate writer/reviewer loops internally.</dd>
+      </div>
+
+      <h2 id="reviewers">Reviewers</h2>
+
+      <p>Validate an existing artifact. Reviewers accept <strong>hand-edited artifacts</strong> — if you edit a plan manually and want to re-validate, <code>/relay-plan-review</code> is the right tool. Reviewers never modify the artifact; they emit <code>APPROVED</code> or <code>CHANGES_REQUESTED</code> with an actionable list.</p>
+
+      <h3 id="relay-plan-review"><code>/relay-plan-review &lt;plan-path&gt;</code></h3>
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>A plan in <code>DRAFT</code> status (from <code>/relay-plan</code> or hand-edited).</dd>
+        <dt>Output</dt>
+        <dd>Plan status flipped to <code>APPROVED</code>, or <code>CHANGES_REQUESTED</code> with a list of concerns.</dd>
+      </div>
+
+      <h3 id="relay-tdd-review"><code>/relay-tdd-review &lt;suite-path&gt;</code> <span class="badge badge--info">opt-in</span></h3>
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>A TDD suite in <code>DRAFT</code>.</dd>
+        <dt>Output</dt>
+        <dd><code>APPROVED</code> or <code>CHANGES_REQUESTED</code>. Self-skips when <code>tdd: false</code>.</dd>
+        <dt>Notes</dt>
+        <dd>Specifically looks for tests that mirror imagined implementation, mocks that hide behavior, trivial asserts, and gaps against the PRD's Acceptance Criteria.</dd>
+      </div>
+
+      <h3 id="relay-code-review"><code>/relay-code-review &lt;worktree&gt;</code></h3>
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>A worktree with the Implementer's diff.</dd>
+        <dt>Output</dt>
+        <dd><code>APPROVED</code> or <code>CHANGES_REQUESTED</code>.</dd>
+        <dt>Notes</dt>
+        <dd>Reviews against the <code>decisions.md</code>, <code>anti-patterns.md</code>, and relevant domain-area files via the <a href="../governance/decision-gate.html">Decision Gate</a>.</dd>
+      </div>
+
+      <h3 id="relay-test-review"><code>/relay-test-review &lt;worktree&gt;</code> <span class="badge badge--done">implemented</span></h3>
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>A worktree with a green test state (requires <code>run.json</code> with <code>outcome: GREEN</code>).</dd>
+        <dt>Output</dt>
+        <dd><code>PRPs/reports/&lt;feature&gt;/test-review.json</code> with verdict (<code>APPROVED</code> or <code>CHANGES_REQUESTED</code>) and concerns list.</dd>
+        <dt>Detects</dt>
+        <dd>Removed test functions, newly-added skip markers, trivial assertion downgrades, coverage drops &gt; 5% when baseline is available.</dd>
+        <dt>Flags</dt>
+        <dd><code>--base &lt;branch&gt;</code> — base branch to diff against (default <code>main</code> or <code>master</code>).</dd>
+      </div>
+
+      <h2 id="infra-execution">Infra &amp; execution</h2>
+
+      <h3 id="relay-worktree"><code>/relay-worktree &lt;feature-name&gt;</code></h3>
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>Feature name.</dd>
+        <dt>Output</dt>
+        <dd>Worktree at <code>.worktrees/&lt;feature&gt;/</code> + branch <code>feature/&lt;name&gt;</code>.</dd>
+      </div>
+
+      <h3 id="relay-test"><code>/relay-test &lt;worktree&gt;</code> <span class="badge badge--done">implemented</span></h3>
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>A worktree with pending code changes.</dd>
+        <dt>Output</dt>
+        <dd>
+          Green state, or one of: <code>FAILED_AFTER_N_RETRIES</code>, <code>FAILED_TIME_BUDGET_EXCEEDED</code>, <code>FAILED_OSCILLATION</code>, <code>FAILED_INFRA_UNRECOVERABLE</code>.
+          <br />Produces <code>PRPs/reports/&lt;feature&gt;/run.json</code> plus per-attempt <code>record.json</code> and <code>stdout.log</code>.
+        </dd>
+        <dt>Encapsulates</dt>
+        <dd>B1 (Test Runner agent), B2 (structured output), B3 (failure classification), B4 (auto-correction loop with retry and oscillation detection).</dd>
+        <dt>Flags</dt>
+        <dd>
+          <code>--max-retries N</code> override retry budget (default 3).
+          <br /><code>--max-minutes M</code> override time budget (default 30).
+          <br /><code>--tier unit|integration|e2e</code> force a layer.
+          <br /><code>--feature &lt;name&gt;</code> override feature slug (defaults to current branch).
+        </dd>
+        <dt>Agent</dt>
+        <dd>Delegates per-attempt execution to the <a href="agents.html"><code>test-runner</code> agent</a>.</dd>
+      </div>
+
+      <h3 id="relay-pr"><code>/relay-pr &lt;feature-name&gt;</code></h3>
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>A worktree with green tests and all reviews <code>APPROVED</code>.</dd>
+        <dt>Output</dt>
+        <dd>Pull request opened on GitHub. <code>PRPs/reports/&lt;feature&gt;/final-report.md</code> embedded as the PR description.</dd>
+        <dt>Notes</dt>
+        <dd>Invokes <code>scripts/generate-final-report.mjs</code> to produce the report Markdown. Uses <code>gh</code> CLI under the hood.</dd>
+      </div>
+
+      <h2 id="orchestrator">Orchestrator</h2>
+
+      <h3 id="relay-execute"><code>/relay-execute &lt;prd-path&gt;</code></h3>
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>An approved PRD.</dd>
+        <dt>Output</dt>
+        <dd>Opened PR, or a clean abort with diagnostic.</dd>
+        <dt>Composes</dt>
+        <dd>
+          <code>/relay-plan</code> → <code>/relay-plan-review</code> → <code>/relay-worktree</code> → <code>/relay-tdd</code> → <code>/relay-tdd-review</code> → <code>/relay-implement</code> → <code>/relay-code-review</code> → <code>/relay-test</code> → <code>/relay-test-review</code> → <code>/relay-pr</code>.
+        </dd>
+        <dt>Loop behavior</dt>
+        <dd>Each writer/reviewer pair loops on <code>CHANGES_REQUESTED</code> until approved or the stage's retry budget is exhausted. Any unrecoverable abort is surfaced with the underlying command's exit reason.</dd>
+        <dt>Notes</dt>
+        <dd>Name deliberately distinct from <code>/relay-implement</code> (which is the code-writing stage) to avoid collision.</dd>
+      </div>
+
+      <h2 id="approval">Pillar 3 — Approval</h2>
+
+      <h3 id="relay-approve"><code>/relay-approve &lt;pr&gt;</code></h3>
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>PR number or URL.</dd>
+        <dt>Output</dt>
+        <dd>PR merged, branch + worktree deleted, <code>docs/context/</code> and <code>docs/domain/</code> updated by the Docs Updater, ambiguities flagged by the Docs Reviewer.</dd>
+        <dt>Status</dt>
+        <dd>Placeholder — not yet implemented. Name is subject to change when Pillar 3 lands.</dd>
+      </div>
+
+      <h2 id="preconditions">Preconditions (every command)</h2>
+
+      <p>Every command validates its input at entry and halts loud with an actionable message if something is missing — never silent failure.</p>
+
+      <ul>
+        <li>Review commands require the target artifact to exist with the expected status in its frontmatter or structure.</li>
+        <li><code>/relay-implement</code> requires plan <code>APPROVED</code> and a checked-out worktree.</li>
+        <li><code>/relay-test</code> requires worktree commits plus <code>.claude/settings.json</code> with the allowlist (otherwise the autonomous run would hit permission prompts).</li>
+        <li><code>/relay-pr</code> requires the last <code>/relay-test-review</code> verdict to be <code>APPROVED</code>.</li>
+        <li><code>/relay-test-review</code> requires a <code>run.json</code> with <code>outcome: GREEN</code> — running the post-green review on a non-green state is meaningless.</li>
+      </ul>
+
+      <h2 id="artifact-paths">Artifact paths (always)</h2>
+
+      <p>All command outputs land under <code>PRPs/</code> at the target-repo root:</p>
+
+      <pre><code class="language-bash">PRPs/
+├── prds/&lt;feature&gt;.prd.md
+├── plans/&lt;feature&gt;.plan.md
+└── reports/&lt;feature&gt;/
+    ├── run.json
+    ├── test-review.json
+    ├── final-report.md
+    └── attempts/&lt;N&gt;/
+        ├── record.json
+        ├── stdout.log
+        └── diff.patch</code></pre>
+
+      <p>Worktrees live at <code>.worktrees/&lt;feature&gt;/</code> relative to the target-repo root.</p>
+
+      <p><strong>Never under <code>.claude/</code>.</strong> Claude Code enforces hardcoded permission prompts there; writing pipeline artifacts into that directory would break the autonomous loop. See <a href="../concepts/prp-artifacts.html">PRP artifact paths</a> for the full reasoning.</p>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

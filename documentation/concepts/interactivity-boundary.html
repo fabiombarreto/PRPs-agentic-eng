@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Interactivity boundary — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Concepts</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Interactivity boundary</span>
+      </div>
+
+      <h1>The interactivity boundary</h1>
+      <p class="page-subtitle">The single most important design choice in Pillar 2. This page explains what it is, why it exists, where the line runs, and how each stage behaves on each side of the line.</p>
+
+      <h2 id="what-it-is">What it is</h2>
+
+      <p>
+        Pillar 2 (Implementation) is <strong>interactive up to PRD approval</strong> and <strong>autonomous from there on</strong>. This split is not an accident of implementation — it's the deliberate answer to a question every AI pipeline faces: <em>at what moment does human judgment create the most value?</em>
+      </p>
+
+      <div class="pipeline">
+        <div class="pipeline__row pipeline__row--interactive">
+          <div class="pipeline__label">Interactive</div>
+          <div class="pipeline__text">PRD Writer runs a 6-phase Q&amp;A with you. PRD Reviewer can loop back with you until the PRD is approved.</div>
+        </div>
+        <div class="pipeline__arrow">↓</div>
+        <div class="pipeline__row pipeline__row--autonomous">
+          <div class="pipeline__label">Autonomous</div>
+          <div class="pipeline__text">Plan → Worktree → TDD (opt-in) → Implementer → Code Review → Test Runner → Post-green Review → PR. You come back to an open PR (or a clear abort).</div>
+        </div>
+      </div>
+
+      <h2 id="why-the-split">Why the split exists</h2>
+
+      <h3 id="cost-of-misunderstanding">The cost of misunderstanding scales with how late it's caught</h3>
+
+      <p>
+        Consider a feature described ambiguously. The AI guesses one interpretation; the guess propagates through the plan, the tests, and the code. The cost to fix the ambiguity depends entirely on when you catch it:
+      </p>
+
+      <div class="kv">
+        <dt>at PRD stage</dt>
+        <dd>A 30-second clarifying question. You type two sentences. The PRD Writer revises. Total cost: <strong>minutes</strong>.</dd>
+        <dt>at plan stage</dt>
+        <dd>The plan is wrong; regenerate. The tests may also need rewriting. Cost: <strong>tens of minutes</strong>, plus your time context-switching back in.</dd>
+        <dt>at implementation stage</dt>
+        <dd>Code was written against the wrong understanding. Tests were written against the wrong understanding. Now both need revision. Cost: <strong>hours</strong>, and you have to re-review a bigger diff.</dd>
+        <dt>at test stage (green on wrong behavior)</dt>
+        <dd>Silent wrong. Ships. Caught by users or by QA weeks later. Cost: <strong>incident-level</strong>.</dd>
+      </div>
+
+      <p>
+        The interactivity boundary puts the human exactly where catching misunderstanding is cheapest — the PRD — and frees the human from being a scheduler for the rest of the stages where LLM judgment is reliable <em>given</em> a good PRD.
+      </p>
+
+      <h3 id="interaction-is-expensive">Interaction is expensive when it's cheap</h3>
+
+      <p>
+        The opposite failure mode is over-interacting. Asking the human to approve every intermediate step feels safe but wastes their attention on things where they can't actually add value — "Do you approve this Plan?" is answerable only by re-reading the PRD, and if the PRD was right, the Plan is almost certainly right too.
+      </p>
+      <p>
+        The AI asking unnecessary questions trains the human to stop paying attention, and then real questions get rubber-stamped too. The boundary design is: <strong>ask only where the answer unlocks information the AI actually needs</strong>. PRD stage qualifies. Plan-approval-step-N does not.
+      </p>
+
+      <h2 id="where-the-line-runs">Where the line runs</h2>
+
+      <h3 id="interactive-side">On the interactive side</h3>
+
+      <p><code>/relay-prd &lt;description&gt;</code> runs the PRD Writer, which drives a six-phase Q&amp;A based on the inherited prp-core flow:</p>
+
+      <ol>
+        <li><strong>Initiate</strong> — confirm the AI understood the feature request.</li>
+        <li><strong>Foundation</strong> — who has this problem, what is it, why now, how do we measure success.</li>
+        <li><strong>Grounding</strong> — market + codebase research (via specialized sub-agents).</li>
+        <li><strong>Deep dive</strong> — vision, primary user, job to be done, non-users, constraints.</li>
+        <li><strong>Technical grounding</strong> — feasibility, existing infrastructure, risks.</li>
+        <li><strong>Decisions</strong> — MVP, must-haves, hypothesis, out-of-scope.</li>
+      </ol>
+
+      <p>After the PRD is generated, the PRD Reviewer can loop back with you if it finds issues. The boundary closes only when the PRD status flips from <code>DRAFT</code> to <code>APPROVED</code>.</p>
+
+      <h3 id="autonomous-side">On the autonomous side</h3>
+
+      <p>From PRD approval onward, <code>/relay-execute &lt;prd-path&gt;</code> runs the full chain without interaction. Each writer/reviewer pair loops internally on <code>CHANGES_REQUESTED</code> with a retry budget; each can also abort with a structured reason.</p>
+
+      <p>The pipeline interrupts the human only in two cases:</p>
+
+      <ul>
+        <li><strong>An agent exhausted its retries without converging.</strong> Example: the Test Runner hit <code>max_test_retries</code> with the same legitimate failure across attempts. The pipeline writes a diagnostic and stops; you decide whether to raise the budget, change the PRD, or fix manually.</li>
+        <li><strong>An unrecoverable infra issue.</strong> Example: Docker not running, test framework missing, <code>settings.json</code> absent. The pipeline writes a clear abort reason; you fix the environment and re-run.</li>
+      </ul>
+
+      <p>It does <em>not</em> interrupt for "approval" of intermediate outputs. Those are captured in the artifact tree (<code>PRPs/reports/&lt;feature&gt;/</code>) for post-run audit, not for mid-run approval.</p>
+
+      <h2 id="implications">Implications</h2>
+
+      <h3 id="the-prd-is-the-contract">The PRD becomes the contract</h3>
+
+      <p>
+        Because everything downstream is autonomous, the PRD has to be unambiguous enough that any downstream agent reading it can act correctly. That's why relay's PRD template (see <code>docs/context/prd-template.md</code> in the plugin repo) has a mandatory <strong>Acceptance Criteria</strong> section — concrete observable scenarios, phrased as "given X, when Y, then Z". When TDD is active, these scenarios become the input to the TDD Writer. When TDD is inactive, they still serve as the contract that the Implementer's tests verify.
+      </p>
+
+      <h3 id="abort-is-a-feature">Abort is a feature, not a failure</h3>
+
+      <p>
+        A good autonomous pipeline knows when to stop. relay's autonomous portion has five specific outcome codes the Test Runner can emit, each with a distinct recovery path:
+      </p>
+
+      <div class="kv">
+        <dt>GREEN</dt>
+        <dd>Suite passes. Proceeds to post-green review.</dd>
+        <dt>FAILED_AFTER_N_RETRIES</dt>
+        <dd>The correction loop exhausted <code>max_test_retries</code>. The failure is persistent — the human decides whether to dig in or revise the PRD.</dd>
+        <dt>FAILED_TIME_BUDGET_EXCEEDED</dt>
+        <dd>The run hit <code>max_test_minutes</code> while still making progress. Raise the budget or shrink the feature.</dd>
+        <dt>FAILED_OSCILLATION</dt>
+        <dd>The Implementer's fix for attempt N reverted lines the Implementer wrote in attempt K. Signals a PRD-level conflict: the code can't satisfy two requirements simultaneously.</dd>
+        <dt>FAILED_INFRA_UNRECOVERABLE</dt>
+        <dd>Docker down, framework missing, settings.json absent. Fix the environment and re-run.</dd>
+      </div>
+
+      <p>
+        Each of these is a precise handoff back to the human with enough context to decide what to do. None of them require the human to understand <em>why</em> a specific test failed — just to decide <em>which recovery</em> applies.
+      </p>
+
+      <h3 id="pillar-3-is-also-on-the-manual-side">Pillar 3 is explicitly triggered</h3>
+
+      <p>
+        The boundary applies within Pillar 2 (Implementation). Pillar 3 (Approval) is a separate concern with its own boundary: <code>/relay-approve &lt;pr&gt;</code> is triggered manually — you decided the PR is good. Once triggered, its internal steps (merge, Docs Updater, Docs Reviewer) run autonomously, but Pillar 3 as a whole is a conscious human act.
+      </p>
+
+      <h2 id="consequences-for-tooling">Consequences for the tooling</h2>
+
+      <ul>
+        <li><strong>Two slash commands, not one.</strong> <code>/relay-prd</code> is interactive; <code>/relay-execute</code> is autonomous. Mixing them into one would collapse the boundary and invite confusion.</li>
+        <li><strong>Approved PRD is a persisted artifact.</strong> Status <code>APPROVED</code> in the PRD file is the signal that the interactivity boundary has been crossed. A PRD with <code>DRAFT</code> cannot be fed to <code>/relay-execute</code>.</li>
+        <li><strong>Every autonomous stage writes its artifact before handing off.</strong> Plans in <code>PRPs/plans/</code>, Test Runner records in <code>PRPs/reports/</code>. The audit trail is real, not abstract — you can reconstruct any run from disk.</li>
+        <li><strong>No silent state.</strong> Every abort writes a reason. Every retry writes a record. If the human has to come back in, they find a full trail of what was attempted and why it stopped.</li>
+      </ul>
+
+      <h2 id="compared-to">How this compares to other approaches</h2>
+
+      <div class="callout callout--note">
+        <div class="callout__title">vs. fully interactive (prp-core and similar)</div>
+        <p>Every stage requires a command. The human is always the scheduler. Good for learning and auditing; bad for shipping volume.</p>
+      </div>
+      <div class="callout callout--note">
+        <div class="callout__title">vs. fully autonomous (AutoGPT-style)</div>
+        <p>The AI picks everything including the PRD. Great demos, but ambiguity compounds across stages and the human has no natural place to correct course. Risky in production.</p>
+      </div>
+      <div class="callout callout--success">
+        <div class="callout__title">relay's boundary</div>
+        <p>Human owns the "what" (PRD). AI owns the "how" (plan through PR). The hand-off happens once, at the natural choke point where a few minutes of dialog saves hours of downstream rework.</p>
+      </div>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

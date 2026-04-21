@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Phase status — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Roadmap</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Phase status</span>
+      </div>
+
+      <h1>Phase status</h1>
+      <p class="page-subtitle">Where relay is today. Two levels of tracking: the five project-level phases (Foundation → CI/CD) that structure the overall rollout, and the per-PRD phase tables inside each feature's PRD. This page covers both.</p>
+
+      <h2 id="legend">Legend</h2>
+
+      <ul>
+        <li><span class="badge badge--done">done</span> — artifact delivered, validated as working</li>
+        <li><span class="badge badge--partial">partial</span> — artifact delivered; some aspect (usually a runtime signal) still pending validation</li>
+        <li><span class="badge badge--pending">pending</span> — not started or explicitly deferred</li>
+      </ul>
+
+      <h2 id="project-phases">Project-level phases</h2>
+
+      <p>relay's overall delivery follows five ordered phases from the planning document:</p>
+
+      <table>
+        <thead>
+          <tr><th>#</th><th>Phase</th><th>Scope</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td><strong>Foundation</strong></td>
+            <td>Context-builder skill + decision-gate + decisions.md + anti-patterns.md + MCP validation</td>
+            <td><span class="badge badge--done">done</span></td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td><strong>Testing</strong></td>
+            <td>Isolated container, Test Runner agent, auto-correction loop, post-green review, reports</td>
+            <td><span class="badge badge--done">done</span> (artifacts)</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td><strong>Agents</strong></td>
+            <td>Orchestrator — single <code>/relay-execute</code> command driving the full pipeline from approved PRD to PR</td>
+            <td><span class="badge badge--pending">pending</span></td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td><strong>Approval</strong></td>
+            <td><code>/relay-approve</code> + Docs Updater + Docs Reviewer</td>
+            <td><span class="badge badge--pending">pending</span></td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td><strong>CI/CD</strong></td>
+            <td>Full end-to-end autonomous pipeline integrated with CI</td>
+            <td><span class="badge badge--pending">pending</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 id="test-runner-prd">Test Runner PRD phases</h2>
+
+      <p>The Test Runner is the first feature dogfooded through relay's own workflow. Its PRD (at <code>PRPs/prds/test-runner.prd.md</code> in the plugin repo) has nine implementation phases. Status as of 2026-04-21:</p>
+
+      <table>
+        <thead>
+          <tr><th>#</th><th>Phase</th><th>Deliverable</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>A1 + A2 Infra</td>
+            <td>Docker Compose test stack + deterministic bootstrap, single-command entry via Makefile</td>
+            <td><span class="badge badge--done">done</span></td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>A3 + A4 Isolation + Secrets</td>
+            <td>tmpfs-backed PostgreSQL for isolation; test-only env vars + anti-pattern for production creds</td>
+            <td><span class="badge badge--done">done</span></td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>B2 Structured output</td>
+            <td>Canonical JSON schema v1 + <code>normalize-test-output.mjs</code> (Node.js)</td>
+            <td><span class="badge badge--done">done</span></td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>B1 + B3 Agent + Classifier</td>
+            <td><code>test-runner</code> agent with inline heuristic classifier (infra / flaky / legitimate)</td>
+            <td><span class="badge badge--done">done</span></td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td>C1 Permissions</td>
+            <td><code>.claude/settings.json</code> populated by context-builder from the allowlist catalog</td>
+            <td><span class="badge badge--partial">partial</span> (artifact done; no-prompts run signal validates in Phase 9 full)</td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td>B4 Auto-correction loop</td>
+            <td><code>/relay-test</code> command: state machine with retry + time budgets, oscillation detection, graceful degradation</td>
+            <td><span class="badge badge--done">done</span></td>
+          </tr>
+          <tr>
+            <td>7</td>
+            <td>B5 Post-green review</td>
+            <td><code>post-green-reviewer</code> agent + <code>/relay-test-review</code> command</td>
+            <td><span class="badge badge--done">done</span></td>
+          </tr>
+          <tr>
+            <td>8</td>
+            <td>B6 + C4 Report + Observability</td>
+            <td><code>generate-final-report.mjs</code> script + canonical observability directory layout</td>
+            <td><span class="badge badge--done">done</span></td>
+          </tr>
+          <tr>
+            <td>9</td>
+            <td>Dogfood integration</td>
+            <td>Run end-to-end against phoenix and tune heuristics from real data</td>
+            <td><span class="badge badge--partial">partial</span> (MVP done; full pending orchestrator)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 id="whats-shipped">What's shipped, concretely</h2>
+
+      <h3 id="plugin-artifacts">Plugin artifacts</h3>
+
+      <p>In <code>plugins/relay/</code>:</p>
+
+      <ul>
+        <li><strong>Skill:</strong> <code>skills/context-builder/SKILL.md</code> — initializes / updates the documentation tree for any target project</li>
+        <li><strong>Agents:</strong> <code>agents/test-runner.md</code>, <code>agents/post-green-reviewer.md</code></li>
+        <li><strong>Commands:</strong> <code>commands/relay-test.md</code>, <code>commands/relay-test-review.md</code></li>
+      </ul>
+
+      <p>Other agents and commands from the 12-command surface (<a href="../reference/commands.html">Commands</a>) are <span class="badge badge--pending">pending</span>; their implementations are the main deliverables of project phases 3 and 4.</p>
+
+      <h3 id="shared-scripts">Shared scripts</h3>
+
+      <p>In <code>scripts/</code> at the plugin repo root:</p>
+
+      <ul>
+        <li><code>normalize-test-output.mjs</code> — parses JUnit XML (pytest, Playwright, Vitest) into the canonical schema</li>
+        <li><code>generate-final-report.mjs</code> — assembles the AC-10 compliant final-report.md from run.json + test-review.json + per-attempt records</li>
+      </ul>
+
+      <p>Both are Node.js with no npm dependencies. Claude Code ships with Node, so these work on every host running relay regardless of the target project's own language stack.</p>
+
+      <h3 id="governance-artifacts">Governance artifacts</h3>
+
+      <p>In <code>docs/</code> at the plugin repo root:</p>
+
+      <ul>
+        <li><code>decisions.md</code> — 14 stable decisions (see <a href="../governance/decisions.html">Decisions</a>)</li>
+        <li><code>anti-patterns.md</code> — 7 forbidden patterns (see <a href="../governance/anti-patterns.html">Anti-patterns</a>)</li>
+        <li><code>decision-gate.md</code> — the mandatory control mechanism</li>
+        <li><code>context/architecture.md</code>, <code>conventions.md</code>, <code>constraints.md</code>, <code>integrations.md</code>, <code>methodology.md</code></li>
+        <li><code>context/prd-template.md</code> — canonical PRD shape</li>
+        <li><code>context/settings-allowlist.md</code> — catalog of allow/deny patterns</li>
+        <li><code>context/redaction-policy.md</code> — three-layer secret redaction policy</li>
+        <li><code>context/test-output-schema.md</code> — schema + observability layout</li>
+      </ul>
+
+      <h2 id="whats-next">What's next</h2>
+
+      <h3 id="next-phase-3">Phase 3 (Agents — Orchestrator)</h3>
+
+      <p>The big one. Covers the remaining 10 commands and their agents:</p>
+
+      <ul>
+        <li><code>/relay-prd</code> + <code>/relay-plan</code> + <code>/relay-plan-review</code></li>
+        <li><code>/relay-worktree</code></li>
+        <li><code>/relay-tdd</code> + <code>/relay-tdd-review</code> (opt-in)</li>
+        <li><code>/relay-implement</code> + <code>/relay-code-review</code></li>
+        <li><code>/relay-pr</code></li>
+        <li><code>/relay-execute</code> — the actual orchestrator</li>
+      </ul>
+
+      <p>When Phase 3 lands, Phase 5 of the Test Runner PRD (no-prompts autonomous run) and AC-2/3/4 (auto-correction succeeds / budget exhausted / oscillation) become validatable, closing out the remaining Test Runner ACs.</p>
+
+      <h3 id="next-phase-4">Phase 4 (Approval cycle)</h3>
+
+      <p><code>/relay-approve &lt;pr&gt;</code> plus Docs Updater and Docs Reviewer agents. Closes the feedback loop so documentation stays in sync with what was merged.</p>
+
+      <h3 id="next-phase-5">Phase 5 (CI/CD)</h3>
+
+      <p>Integration with real CI: GitHub Actions workflows that invoke relay, external-service gating, automated merge rules. Last phase, furthest out.</p>
+
+      <h2 id="dogfood-status">Dogfood status</h2>
+
+      <p>The <strong>phoenix</strong> project (Django + React SaaS for MEC higher-education assessments) is relay's first target. Status as of 2026-04-21:</p>
+
+      <ul>
+        <li><span class="badge badge--done">done</span> Context-builder run: <code>docs/</code>, <code>docs/context/methodology.md</code>, <code>.claude/settings.json</code>, <code>PRPs/redaction-extensions.txt</code> all produced. Team edits preserved on <code>*update</code>.</li>
+        <li><span class="badge badge--done">done</span> Infra formalized: <code>Makefile</code> with <code>make test-bootstrap / test-pytest / test-playwright / test-e2e / test-down</code>. Existing docker-compose.test.yml was 90% of Phase 1 already.</li>
+        <li><span class="badge badge--done">done</span> Governance additions: tmpfs isolation decision, "no production creds in test env" anti-pattern.</li>
+        <li><span class="badge badge--done">done</span> Vitest configured to emit JUnit XML (pytest and Playwright already did).</li>
+        <li><span class="badge badge--partial">partial</span> Phase 9 dogfood MVP: synthetic run exercised the real normalizer + report generator end-to-end. Artifacts at <code>phoenix/PRPs/reports/dogfood-2026-04-21/</code>. Remaining validations (AC-2/3/4, real "no prompts" signal, 20-session Success Metric measurement) wait for the orchestrator.</li>
+      </ul>
+
+      <p>See <a href="../examples/phoenix-dogfood.html">Phoenix dogfood</a> for the detailed report.</p>
+
+      <h2 id="known-gaps">Known gaps</h2>
+
+      <p>Honest list of things documented but not yet realized:</p>
+
+      <div class="callout callout--warn">
+        <div class="callout__title">/relay-implement gap</div>
+        <p>
+          The <code>/relay-test</code> command's auto-correction loop, when it hits <code>RETRY_NEEDED</code>, is designed to invoke the Implementer. The Implementer agent is part of Phase 3 (Orchestrator), not yet implemented. Until it lands, <code>/relay-test</code> HALTS on first <code>RETRY_NEEDED</code> with a clear message and writes failure feedback to disk. Users apply the fix manually and re-run. This is documented behavior, not a bug.
+        </p>
+      </div>
+
+      <div class="callout callout--warn">
+        <div class="callout__title">Coverage baseline</div>
+        <p>
+          The post-green reviewer detects coverage drops &gt;5% <em>when a baseline file exists</em> at <code>PRPs/reports/coverage-baseline.json</code>. The baseline is team-committed (opt-in); no automatic generation yet. When baseline is missing, the reviewer notes the limitation in its verdict and proceeds with structural checks only.
+        </p>
+      </div>
+
+      <div class="callout callout--warn">
+        <div class="callout__title">Weak-test detection</div>
+        <p>
+          B3 classifier intentionally skips the <code>weak_test</code> category for MVP. Detecting a poorly-written test requires reading the test's source code; the heuristic surface is too small to catch most cases. B5 (post-green review) is the actual guard — it catches tests that were <em>removed</em> or <em>skipped</em>, which covers the common weakening patterns.
+        </p>
+      </div>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

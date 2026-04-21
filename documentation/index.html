@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>relay — Autonomous feature delivery for Claude Code</title>
+  <meta name="description" content="relay is a Claude Code plugin for autonomous feature delivery: a single prompt drives the full cycle from PRD to merged PR via orchestrated writer/reviewer agent pairs and a Test Runner that closes the loop." />
+  <link rel="stylesheet" href="assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <section class="hero">
+        <div class="hero__eyebrow">Introduction</div>
+        <h1 class="hero__title">Autonomous feature delivery for Claude Code</h1>
+        <p class="hero__sub">
+          <strong>relay</strong> is a Claude Code plugin that takes a feature from PRD to merged PR without supervision between stages. Writer/reviewer agent pairs produce the plan, write the code, run the tests, fix failures, and open the PR — the human stays in the loop only where human judgment actually matters.
+        </p>
+      </section>
+
+      <h2 id="at-a-glance">At a glance</h2>
+
+      <div class="card-grid">
+        <a class="card" href="concepts/pillars.html">
+          <div class="card__title">🏛 Three pillars</div>
+          <div class="card__desc">Initialization → Implementation → Approval. Each pillar has a clear boundary between interactive and autonomous work.</div>
+        </a>
+        <a class="card" href="concepts/interactivity-boundary.html">
+          <div class="card__title">🤝 Interactive at the right moment</div>
+          <div class="card__desc">Dialog happens at PRD authoring, where catching misunderstanding is cheapest. Everything after PRD approval runs autonomously.</div>
+        </a>
+        <a class="card" href="concepts/pipeline.html">
+          <div class="card__title">🔁 Self-correcting Test Runner</div>
+          <div class="card__desc">A classifier separates legitimate bugs from infra and flakiness; a loop retries with the Implementer until green or budget exhausted.</div>
+        </a>
+        <a class="card" href="concepts/tdd-track.html">
+          <div class="card__title">🧪 Optional TDD track</div>
+          <div class="card__desc">Explicit opt-in via methodology.md. When active, tests are written before implementation and become the acceptance contract.</div>
+        </a>
+        <a class="card" href="reference/commands.html">
+          <div class="card__title">⌨ Command surface</div>
+          <div class="card__desc">Twelve commands, one per stage. Each invocable in isolation or composed by the orchestrator into a full run.</div>
+        </a>
+        <a class="card" href="roadmap/status.html">
+          <div class="card__title">🚦 Current status</div>
+          <div class="card__desc">Phase 1 (Foundation) and the Test Runner PRD are implemented. The orchestrator across Pillar 2 is next.</div>
+        </a>
+      </div>
+
+      <h2 id="what-it-is">What it is, concretely</h2>
+
+      <p>
+        Most teams using AI-assisted development today write a PRD, then a plan, then some code, then run the tests, interpret the failures, ask the AI to fix them, re-run, and repeat. Each hand-off is a separate command and a separate approval. The developer spends more time orchestrating than creating.
+      </p>
+      <p>
+        relay moves the orchestration into the plugin. You describe the feature; relay writes the PRD with you (this is the <em>only</em> interactive stage), then goes off and builds it. When you come back, there's either a pull request waiting to be merged or a clear diagnostic for the one decision the AI couldn't make on its own.
+      </p>
+
+      <h2 id="the-pipeline">The pipeline</h2>
+
+      <div class="pipeline">
+        <div class="pipeline__row pipeline__row--interactive">
+          <div class="pipeline__label">Interactive</div>
+          <div class="pipeline__text"><strong>PRD Writer + PRD Reviewer</strong> — six-phase Q&amp;A with the user; loops until the PRD is approved.</div>
+        </div>
+        <div class="pipeline__arrow">↓</div>
+        <div class="pipeline__row pipeline__row--autonomous">
+          <div class="pipeline__label">Autonomous</div>
+          <div class="pipeline__text"><strong>Plan Writer + Plan Reviewer</strong> — produce and validate the implementation plan.</div>
+        </div>
+        <div class="pipeline__arrow">↓</div>
+        <div class="pipeline__row pipeline__row--autonomous">
+          <div class="pipeline__label">Autonomous</div>
+          <div class="pipeline__text"><strong>Worktree</strong> — isolated branch + worktree created for the run.</div>
+        </div>
+        <div class="pipeline__arrow">↓</div>
+        <div class="pipeline__row pipeline__row--autonomous">
+          <div class="pipeline__label">Opt-in</div>
+          <div class="pipeline__text"><strong>TDD Writer + TDD Reviewer</strong> — initial test suite when <code>methodology.md</code> has <code>tdd: true</code>. Silently skipped otherwise.</div>
+        </div>
+        <div class="pipeline__arrow">↓</div>
+        <div class="pipeline__row pipeline__row--autonomous">
+          <div class="pipeline__label">Autonomous</div>
+          <div class="pipeline__text"><strong>Implementer + Code Reviewer</strong> — code is written and reviewed; loops back on <code>CHANGES_REQUESTED</code>.</div>
+        </div>
+        <div class="pipeline__arrow">↓</div>
+        <div class="pipeline__row pipeline__row--autonomous">
+          <div class="pipeline__label">Autonomous</div>
+          <div class="pipeline__text"><strong>Test Runner + Post-green Reviewer</strong> — runs the suite with auto-correction; B5 verifies tests weren't weakened.</div>
+        </div>
+        <div class="pipeline__arrow">↓</div>
+        <div class="pipeline__row pipeline__row--autonomous">
+          <div class="pipeline__label">Autonomous</div>
+          <div class="pipeline__text"><strong>Report + PR Creator</strong> — final report and pull request.</div>
+        </div>
+        <div class="pipeline__arrow">↓</div>
+        <div class="pipeline__row pipeline__row--manual">
+          <div class="pipeline__label">Manual</div>
+          <div class="pipeline__text"><strong>/relay-approve</strong> — you inspect the PR, approve, merge. The plugin then updates the project docs to reflect what was built.</div>
+        </div>
+      </div>
+
+      <p class="page-subtitle">
+        The legend: <span class="badge badge--info">Interactive</span> means you're part of the loop; <span class="badge badge--done">Autonomous</span> means the pipeline runs without asking you anything (unless something is genuinely unrecoverable); <span class="badge badge--pending">Manual</span> means the step is triggered by you explicitly but runs autonomously once started.
+      </p>
+
+      <h2 id="why-relay">Why it exists</h2>
+
+      <p>Every team shipping AI-assisted features hits the same three problems:</p>
+
+      <ol>
+        <li><strong>Too many manual hand-offs.</strong> A PRD command. A plan command. An implementation command. A review command. A commit command. A PR command. The human approves each one, spending most of their time as a scheduler.</li>
+        <li><strong>Testing is a bottleneck.</strong> E2E tests are rarely run in the loop because setting them up and interpreting the output takes more effort than the fix itself. Bugs ship.</li>
+        <li><strong>Business rules are ignored.</strong> The AI doesn't know about the decisions the team already made. Each session reinvents patterns that were intentionally rejected months ago.</li>
+      </ol>
+
+      <p>relay addresses all three:</p>
+
+      <ul>
+        <li>One command drives the whole thing after the PRD is approved. The pipeline is orchestrated, not scheduled.</li>
+        <li>Tests run in an isolated Docker environment with an auto-correction loop. The Test Runner distinguishes real failures from infra issues and flakiness; it never deletes tests to reach green, and a post-green reviewer enforces that.</li>
+        <li>A <code>docs/</code> tree produced by a <strong>context-builder</strong> skill encodes the project's stack, conventions, domain rules, and past decisions. Every agent consults it before acting. The <a href="governance/decision-gate.html">Decision Gate</a> makes that consultation mandatory.</li>
+      </ul>
+
+      <h2 id="who-its-for">Who it's for</h2>
+
+      <ul>
+        <li><strong>Teams using Claude Code for real feature work</strong> — not experiments, not toys. The plugin assumes you have tests, Docker, and a PR workflow.</li>
+        <li><strong>Projects with non-trivial domain rules.</strong> relay's governance layer (decisions, anti-patterns, domain areas) is overkill for a weekend script but lifesaving for a production codebase.</li>
+        <li><strong>Engineers who want to stay in the loop at the right moment.</strong> If you want to approve every generated line, relay is not for you. If you want to approve the <em>intent</em> and let the plugin handle the mechanical rest, it is.</li>
+      </ul>
+
+      <h2 id="next-steps">Where to go next</h2>
+
+      <div class="card-grid">
+        <a class="card" href="concepts/pillars.html">
+          <div class="card__title">Understand the design →</div>
+          <div class="card__desc">Start with the three pillars, then the interactivity boundary and pipeline stages.</div>
+        </a>
+        <a class="card" href="guide/installation.html">
+          <div class="card__title">Install relay →</div>
+          <div class="card__desc">Enable the marketplace, run the context-builder against your project, and run your first feature.</div>
+        </a>
+        <a class="card" href="reference/commands.html">
+          <div class="card__title">Command reference →</div>
+          <div class="card__desc">Every slash command, what it does, what it reads, what it writes, and what invokes it.</div>
+        </a>
+        <a class="card" href="roadmap/status.html">
+          <div class="card__title">What's shipped →</div>
+          <div class="card__desc">Current phase status, open questions, and what lands next.</div>
+        </a>
+      </div>
+
+      <div class="page-footer"></div>
+
+    </main>
+    <aside class="toc"></aside>
+  </div>
+
+  <script src="assets/js/app.js"></script>
+</body>
+</html>

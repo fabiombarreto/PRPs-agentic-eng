@@ -1,0 +1,92 @@
+[
+  {
+    "title": "Introduction",
+    "path": "index.html",
+    "category": "Getting started",
+    "excerpt": "Relay is a Claude Code plugin for autonomous feature delivery: a single prompt drives the full cycle from PRD to merged PR via orchestrated writer/reviewer agent pairs and a Test Runner that closes the loop."
+  },
+  {
+    "title": "The three pillars",
+    "path": "concepts/pillars.html",
+    "category": "Concepts",
+    "excerpt": "Relay's pipeline is organized in three pillars: Initialization (context-builder), Implementation (PRD to PR), and Approval (merge and docs update). Each pillar has a clear boundary."
+  },
+  {
+    "title": "Interactivity boundary",
+    "path": "concepts/interactivity-boundary.html",
+    "category": "Concepts",
+    "excerpt": "The pipeline is interactive up to PRD approval and autonomous from there on. Catching misunderstanding at PRD time costs minutes; fixing it after implementation costs hours."
+  },
+  {
+    "title": "TDD opt-in",
+    "path": "concepts/tdd-track.html",
+    "category": "Concepts",
+    "excerpt": "TDD is an explicit opt-in via docs/context/methodology.md with tdd: true. Heuristic activation is forbidden — explicit declaration only."
+  },
+  {
+    "title": "PRP artifact paths",
+    "path": "concepts/prp-artifacts.html",
+    "category": "Concepts",
+    "excerpt": "Pipeline artifacts (PRDs, plans, reports, reviews) live under PRPs/ at the repo root, never under .claude/. The only .claude/ write is settings.json during context-builder setup."
+  },
+  {
+    "title": "Commands",
+    "path": "reference/commands.html",
+    "category": "Reference",
+    "excerpt": "Twelve commands plus one placeholder: /relay-prd (interactive PRD), /relay-execute (orchestrator), /relay-test, /relay-test-review, /relay-implement, and writer/reviewer pairs for each pipeline stage."
+  },
+  {
+    "title": "Agents",
+    "path": "reference/agents.html",
+    "category": "Reference",
+    "excerpt": "Specialized Claude Code agents invoked by commands. Currently implemented: test-runner (B1 + B3 failure classifier) and post-green-reviewer (B5)."
+  },
+  {
+    "title": "Test output schema",
+    "path": "reference/test-output-schema.html",
+    "category": "Reference",
+    "excerpt": "Canonical JSON schema v1 every test framework output is normalized into. Produced by normalize-test-output.mjs; consumed by B3 classifier and B4 auto-correction loop."
+  },
+  {
+    "title": "Settings allowlist",
+    "path": "reference/settings-allowlist.html",
+    "category": "Reference",
+    "excerpt": "Narrow permission patterns per stack signal plus an invariant denylist. Emitted by context-builder into the target project's .claude/settings.json."
+  },
+  {
+    "title": "Redaction policy",
+    "path": "reference/redaction-policy.html",
+    "category": "Reference",
+    "excerpt": "Three-layer secret redaction: invariant defaults (env name wildcards + exact URL vars + value regex), per-project extensions in PRPs/redaction-extensions.txt, and documented non-redacted values."
+  },
+  {
+    "title": "Decisions",
+    "path": "governance/decisions.html",
+    "category": "Governance",
+    "excerpt": "Stable technical decisions that must not be re-evaluated by the AI. Each entry includes context, decision, reason, and affected areas."
+  },
+  {
+    "title": "Anti-patterns",
+    "path": "governance/anti-patterns.html",
+    "category": "Governance",
+    "excerpt": "Forbidden patterns and intentional restrictions. The AI must not implement anything listed here, even when it seems correct."
+  },
+  {
+    "title": "Decision Gate",
+    "path": "governance/decision-gate.html",
+    "category": "Governance",
+    "excerpt": "Mandatory cognitive control mechanism activated before planning, coding, or review. Forces consultation of decisions.md, anti-patterns.md, and architecture."
+  },
+  {
+    "title": "Phase status",
+    "path": "roadmap/status.html",
+    "category": "Roadmap",
+    "excerpt": "Overall rollout across 5 phases: Foundation, Testing, Agents, Approval, CI/CD. Plus per-PRD phase status for the Test Runner."
+  },
+  {
+    "title": "Phoenix dogfood",
+    "path": "examples/phoenix-dogfood.html",
+    "category": "Examples",
+    "excerpt": "First target project used to validate the plugin end-to-end. Synthetic JUnit XML run against the real normalizer and report generator; what validated vs what was deferred."
+  }
+]
