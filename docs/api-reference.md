@@ -47,7 +47,7 @@ cycle.
 | `/relay-plan-review <plan-path>` | plan `DRAFT` (generated or hand-edited) | status flipped to `APPROVED`, or `CHANGES_REQUESTED` with actionable list |
 | `/relay-tdd-review <suite-path>` | TDD suite `DRAFT` | `APPROVED` or `CHANGES_REQUESTED`; silently self-skips when `tdd: false` |
 | `/relay-code-review <worktree>` | worktree diff | `APPROVED` or `CHANGES_REQUESTED` |
-| `/relay-test-review <worktree>` | worktree with green test state (B5 post-green review) | `APPROVED` or `CHANGES_REQUESTED` (weakened tests, coverage drop, mocks hiding behavior) |
+| `/relay-test-review <worktree>` ✅ **implemented** | worktree with green test state (B5 post-green review) | `APPROVED` or `CHANGES_REQUESTED` (removed tests / added skips / trivial assertions / coverage drop >5%). Delegates to the `post-green-reviewer` agent; writes `PRPs/reports/<feature>/test-review.json`. Preconditions: `run.json` exists with `outcome=GREEN`. Base branch defaults to `main`/`master` or can be overridden with `--base`. |
 
 #### Infrastructure / execution
 
@@ -106,6 +106,7 @@ prompts are designed during Phase 2/3 implementation.
 | Agent | Path | Invoked by | Role |
 |-------|------|------------|------|
 | `test-runner` ✅ | `plugins/relay/agents/test-runner.md` | `/relay-test` command | Per-attempt: run the suite, normalize output via `scripts/normalize-test-output.py`, classify failures (B3: `infra` / `flaky` / `legitimate`), return a structured verdict (`GREEN` / `RETRY_NEEDED` / `RETRY_FLAKY` / `ABORT_INFRA` / `ABORT_TIME`). Never loops, never edits code. |
+| `post-green-reviewer` ✅ | `plugins/relay/agents/post-green-reviewer.md` | `/relay-test-review` command | Given a GREEN `run.json`, diffs changed test files against the base branch and flags weakening: removed tests, added skips, trivial assertions, coverage drop >5% (when baseline is available). Returns `APPROVED` or `CHANGES_REQUESTED` with concerns. Never modifies code, never re-runs tests. |
 
 ### Planned
 
