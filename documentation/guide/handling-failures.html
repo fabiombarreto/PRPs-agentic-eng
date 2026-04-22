@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Handling failures — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Guide</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Handling failures</span>
+      </div>
+
+      <h1>Handling failures</h1>
+      <p class="page-subtitle">What to do when the autonomous pipeline stops short of a PR. Each abort type has a specific recovery path — this page walks through all of them with concrete diagnostic steps.</p>
+
+      <h2 id="read-run-json">Always start with <code>run.json</code></h2>
+
+      <p>
+        Every <code>/relay-test</code> or <code>/relay-execute</code> run produces <code>PRPs/reports/&lt;feature&gt;/run.json</code>. When the run aborts, this file tells you why in one line:
+      </p>
+
+      <pre><code class="language-json">{
+  "run_id": "...",
+  "outcome": "FAILED_OSCILLATION",
+  "abort_reason": "attempt 3 reverted files from attempt 2",
+  "attempts": [...]
+}</code></pre>
+
+      <p>
+        The <code>outcome</code> field is the primary signal. Each known outcome has a dedicated section below.
+      </p>
+
+      <h2 id="failed-n-retries">FAILED_AFTER_N_RETRIES</h2>
+
+      <p>
+        The retry budget exhausted with failures still present. Something isn't converging.
+      </p>
+
+      <h3 id="diagnose-retries">Diagnose</h3>
+
+      <p>Open each attempt's <code>record.json</code> and look at the <code>failures[]</code>:</p>
+
+      <ul>
+        <li>Are the <strong>same tests failing across attempts</strong>? → likely a requirement gap or weak test. Same failure, same location, repeatedly: the Implementer doesn't have enough info to fix it.</li>
+        <li>Are <strong>different tests failing each attempt</strong>? → the Implementer is thrashing. Each fix breaks something else. This is closer to <code>FAILED_OSCILLATION</code> but didn't trip the file-set reversion detector.</li>
+        <li>Are the <strong>failures getting progressively closer</strong> to passing (e.g., expected 3, got 2 → expected 3, got 2.5 → expected 3, got 2.9)? → the Implementer is making progress but needs more attempts. Raise <code>--max-retries</code>.</li>
+      </ul>
+
+      <h3 id="recover-retries">Recover</h3>
+
+      <div class="kv">
+        <dt>Same failure, every attempt</dt>
+        <dd>Go back to the PRD. Is the affected AC concrete enough? Is there a contradictory AC elsewhere? Fix the PRD (re-run <code>/relay-prd</code> in update mode if major; edit directly if minor), then re-run.</dd>
+        <dt>Progressive convergence stopped by budget</dt>
+        <dd><code>/relay-test &lt;worktree&gt; --max-retries 5</code>. Don't go higher than 5 without investigating — at that point something's likely wrong beyond budget.</dd>
+        <dt>Weak test</dt>
+        <dd>The test itself is broken (asserting the wrong thing, relying on timing, using wrong mocks). Fix the test manually, then re-run.</dd>
+      </div>
+
+      <h2 id="failed-time">FAILED_TIME_BUDGET_EXCEEDED</h2>
+
+      <h3 id="diagnose-time">Diagnose</h3>
+
+      <p>Open <code>run.json.time_breakdown</code>:</p>
+
+      <pre><code class="language-json">{
+  "time_breakdown": {
+    "infra_setup_ms": 28000,
+    "attempt_1_suite_ms": 480000,
+    "attempt_2_suite_ms": 470000,
+    "attempt_3_suite_ms": 490000
+  }
+}</code></pre>
+
+      <p>Which phase dominated?</p>
+
+      <ul>
+        <li><strong>infra_setup_ms &gt; 60000</strong> — Docker cold start or image build is slow. Solution: pre-warm the images with <code>make test-bootstrap</code> before invoking <code>/relay-test</code>; Docker caches the layers.</li>
+        <li><strong>attempt_N_suite_ms &gt; 120000 each</strong> — the suite itself is slow. Solution: enable layered execution (the unit tier fails fast, saves E2E time) or lower suite scope via <code>--tier unit</code> for the first pass.</li>
+        <li><strong>attempt_N_correction_ms &gt; 60000</strong> — the Implementer is spending a lot of time on each fix. Sometimes unavoidable for complex features; sometimes the PRD is unclear. Check the Implementer's reasoning in the attempt's stdout.</li>
+      </ul>
+
+      <h3 id="recover-time">Recover</h3>
+
+      <div class="kv">
+        <dt>Heavy E2E project</dt>
+        <dd>Permanently raise the default in <code>.relay.yaml</code>: <code>max_test_minutes: 60</code>.</dd>
+        <dt>One-off long run</dt>
+        <dd><code>/relay-test &lt;worktree&gt; --max-minutes 60</code> for this invocation only.</dd>
+        <dt>Unit tier sufficient for this PR</dt>
+        <dd><code>/relay-test &lt;worktree&gt; --tier unit</code> for fast-feedback loops; re-run without the flag before merging.</dd>
+      </div>
+
+      <h2 id="failed-oscillation">FAILED_OSCILLATION</h2>
+
+      <p>
+        The Implementer's fix in attempt N+1 reverted files the Implementer changed in attempt N. Detected via file-set intersection + content reversion check.
+      </p>
+
+      <h3 id="diagnose-oscillation">Diagnose</h3>
+
+      <p>Open the two conflicting attempts' diffs:</p>
+
+      <pre><code class="language-bash">cat PRPs/reports/&lt;feature&gt;/attempts/2/diff.patch
+cat PRPs/reports/&lt;feature&gt;/attempts/3/diff.patch</code></pre>
+
+      <p>
+        Compare them. The pattern is almost always: attempt 2 made change X to satisfy test A; attempt 3 reverted X to satisfy test B. Tests A and B are asking for mutually-exclusive things.
+      </p>
+
+      <h3 id="recover-oscillation">Recover</h3>
+
+      <p>
+        This is a PRD-level conflict, not a code bug. The fix happens in the PRD:
+      </p>
+
+      <ol>
+        <li>Identify which two ACs correspond to tests A and B (from the failures in the respective attempts).</li>
+        <li>Reconcile them in the PRD. Usually one of three:
+          <ul>
+            <li>One AC is wrong — delete it.</li>
+            <li>The ACs are both right but need a conditional (given state X, behavior A; given state Y, behavior B).</li>
+            <li>The feature as specified is impossible — reshape the PRD.</li>
+          </ul>
+        </li>
+        <li>Re-run the pipeline from <code>/relay-plan</code> or <code>/relay-execute</code>.</li>
+      </ol>
+
+      <h2 id="failed-infra">FAILED_INFRA_UNRECOVERABLE</h2>
+
+      <p>The <code>abort_reason</code> in <code>run.json</code> tells you which subcause. Each has a specific fix:</p>
+
+      <h3 id="missing-settings">missing_settings_json</h3>
+
+      <p>The Test Runner expected <code>.claude/settings.json</code> to exist but didn't find it. The project hasn't been through the context-builder, or the file was accidentally deleted.</p>
+
+      <p><strong>Fix:</strong> run <code>*update</code> in the target project. The skill (re)generates <code>settings.json</code> from current stack signals.</p>
+
+      <h3 id="docker-not-running">docker_not_running</h3>
+
+      <p>Docker Desktop or the Docker daemon isn't reachable.</p>
+
+      <p><strong>Fix:</strong></p>
+
+      <ol>
+        <li>Start Docker Desktop (or the daemon).</li>
+        <li>Verify: <code>docker ps</code> should return a list (empty is fine).</li>
+        <li>Re-run <code>/relay-test</code>.</li>
+      </ol>
+
+      <h3 id="db-unreachable">db_unreachable</h3>
+
+      <p>The DB service in the test compose didn't come up or isn't reachable from the app container.</p>
+
+      <p><strong>Fix:</strong></p>
+
+      <ol>
+        <li>Tear down any leftover containers: <code>make test-down</code>.</li>
+        <li>Check port conflicts: the compose typically exposes DB on a non-default port. If another service on your machine uses that port, the test DB won't bind.</li>
+        <li>Bring up fresh: <code>make test-bootstrap</code>.</li>
+        <li>Tail the DB container: <code>docker compose -f docker-compose.test.yml logs db</code>. Look for startup errors.</li>
+      </ol>
+
+      <h3 id="normalizer-failure">normalizer_failure</h3>
+
+      <p>The test framework produced output the normalizer couldn't parse. Usually: the framework didn't emit JUnit XML at all.</p>
+
+      <p><strong>Fix:</strong></p>
+
+      <ul>
+        <li><strong>pytest</strong>: add <code>--junitxml=/app/reports/results.xml</code> to the pytest command (usually in <code>docker-compose.test.yml</code> or <code>setup.cfg</code>).</li>
+        <li><strong>Playwright</strong>: set <code>reporter: [['junit', { outputFile: '/reports/playwright-junit.xml' }]]</code> in <code>playwright.config.ts</code>.</li>
+        <li><strong>Vitest</strong>: set <code>reporters: [['junit', { outputFile: './reports/vitest-junit.xml' }]]</code> in <code>vitest.config.ts</code>.</li>
+      </ul>
+
+      <p>Verify by running the suite directly and checking the file exists.</p>
+
+      <h3 id="no-runner-detected">no_runner_detected</h3>
+
+      <p>The Test Runner couldn't figure out which command to invoke for the suite. Phoenix projects usually have a Makefile with <code>make test-pytest</code>; Node projects use <code>npm run test</code>. If neither is detected, the command gives up.</p>
+
+      <p><strong>Fix:</strong> add a Makefile target or npm script the Test Runner can find. Re-run <code>*update</code> to refresh <code>.claude/settings.json</code> allow patterns if needed.</p>
+
+      <h3 id="no-test-framework">no_test_framework</h3>
+
+      <p>The project has no pytest, no Vitest, no Playwright, no Go test — nothing detectable.</p>
+
+      <p><strong>Not a bug.</strong> The Test Runner exits cleanly and the final report marks the PR as "not verified by tests." If you want test coverage, add a test framework first.</p>
+
+      <h2 id="halted-retry-needed">HALTED on <code>RETRY_NEEDED</code> (known gap)</h2>
+
+      <p>
+        Currently — until <code>/relay-implement</code> lands — the <code>/relay-test</code> command halts the first time the verdict is <code>RETRY_NEEDED</code>. It writes <code>PRPs/reports/&lt;feature&gt;/attempts/&lt;N&gt;/implementer-feedback.json</code> and stops.
+      </p>
+
+      <h3 id="recover-retry-needed">Recover</h3>
+
+      <ol>
+        <li>Open the feedback JSON.</li>
+        <li>It lists the failing tests with hints. Apply the fix manually.</li>
+        <li>Commit the fix in the worktree.</li>
+        <li>Re-run <code>/relay-test &lt;worktree&gt;</code>.</li>
+      </ol>
+
+      <p>The loop picks up with attempt N+1. If the fix was correct, you get GREEN; if not, another <code>RETRY_NEEDED</code> with updated feedback.</p>
+
+      <h2 id="nothing-matches">When nothing matches</h2>
+
+      <p>If <code>run.json.outcome</code> is something not listed above, check the <code>troubleshooting</code> page and the GitHub issues. File a report with <code>run.json</code> + the last attempt's <code>stdout.log</code> (already redacted).</p>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

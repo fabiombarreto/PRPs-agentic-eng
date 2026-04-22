@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Installation — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Getting started</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Installation</span>
+      </div>
+
+      <h1>Installation</h1>
+      <p class="page-subtitle">How to get relay running on your machine and enabled in Claude Code. No npm install, no build step — the plugin is markdown + JSON + a couple of Node.js scripts.</p>
+
+      <h2 id="prerequisites">Prerequisites</h2>
+
+      <div class="kv">
+        <dt>Claude Code</dt>
+        <dd>Any recent version that supports the plugin marketplace format. Installed on the machine you run <code>/relay-*</code> commands from.</dd>
+        <dt>Node.js ≥ 18</dt>
+        <dd>Bundled with Claude Code, so it's already available if Claude Code runs. The relay scripts (<code>normalize-test-output.mjs</code>, <code>generate-final-report.mjs</code>) need it.</dd>
+        <dt>Git</dt>
+        <dd>For cloning the plugin repo and for the worktree management commands.</dd>
+        <dt>Docker (recommended, not required)</dt>
+        <dd>Needed for the Test Runner's isolated test environment. Without Docker, tests fall back to local execution with a warning — see <a href="../concepts/graceful-degradation.html">graceful degradation</a>.</dd>
+        <dt>GitHub CLI (<code>gh</code>)</dt>
+        <dd>Needed for the final <code>/relay-pr</code> step to open pull requests. Without it, the report is still generated and you open the PR by hand.</dd>
+        <dt>Context7 MCP (optional)</dt>
+        <dd>If available, the context-builder auto-generates <code>docs/libs/</code> with version-specific library docs. Without it, the skill skips that phase gracefully.</dd>
+      </div>
+
+      <h2 id="clone">Step 1 — Clone the repo</h2>
+
+      <p>relay is distributed as a Claude Code plugin marketplace. Clone the repo anywhere on your machine:</p>
+
+      <pre><code class="language-bash">git clone https://github.com/&lt;your-org&gt;/PRPs-agentic-eng.git
+cd PRPs-agentic-eng</code></pre>
+
+      <p>The repo contains the marketplace manifest at the root (<code>.claude-plugin/marketplace.json</code>) and the relay plugin at <code>plugins/relay/</code>.</p>
+
+      <h2 id="enable-marketplace">Step 2 — Enable the marketplace in Claude Code</h2>
+
+      <p>Open Claude Code and point it at the marketplace manifest:</p>
+
+      <ol>
+        <li>In Claude Code, open the plugin settings panel.</li>
+        <li>Add a new marketplace; when prompted for the path, select the <code>.claude-plugin/marketplace.json</code> file at the repo root.</li>
+        <li>Claude Code will show the relay plugin in the marketplace list — toggle it on.</li>
+      </ol>
+
+      <p>
+        After enabling, the skills, agents, and commands from <code>plugins/relay/</code> become available in every Claude Code session where the marketplace is active.
+      </p>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Local-only install</div>
+        <p>Until the plugin is published to a public marketplace, you're running it from a local clone. Pull latest periodically to get new agents and fixes; no uninstall/reinstall needed.</p>
+      </div>
+
+      <h2 id="verify">Step 3 — Verify it's working</h2>
+
+      <p>Open a Claude Code session in any project directory and type <code>*help</code> in the context-builder skill. If the skill responds with its command list, relay is installed correctly:</p>
+
+      <pre><code class="language-default">*help
+
+→ context-builder skill loaded
+  commands:
+    *init      full setup
+    *update    preserve + add missing
+    *validate  check limits only
+    *domain    rebuild docs/domain
+    *libs      refetch library docs
+    *gate      regenerate decision-gate
+    *help      this message
+    *exit      exit persona</code></pre>
+
+      <p>If you get nothing, the marketplace isn't enabled — double-check Step 2.</p>
+
+      <h2 id="per-project-setup">Step 4 — Initialize a target project</h2>
+
+      <p>
+        Every project you want to drive with relay needs to go through the context-builder once. This produces the <code>docs/</code> tree, <code>.claude/settings.json</code>, <code>methodology.md</code>, and the redaction extensions file.
+      </p>
+
+      <p>
+        Open Claude Code in the project directory and run:
+      </p>
+
+      <pre><code class="language-default">*init</code></pre>
+
+      <p>
+        Follow the <a href="first-run.html">First run</a> guide for a walkthrough of what happens and what you need to review.
+      </p>
+
+      <h2 id="updating">Updating relay</h2>
+
+      <p>To pull in new agents, fixes, or refactors:</p>
+
+      <pre><code class="language-bash">cd PRPs-agentic-eng
+git pull</code></pre>
+
+      <p>
+        Next Claude Code session picks up the changes automatically — the marketplace reads from disk on each session start.
+      </p>
+
+      <p>
+        <strong>If the update changes the <code>.claude/settings.json</code> catalog</strong> (new allowed commands, new denies), re-run <code>*update</code> in each target project to sync the per-project settings with the new catalog. Existing human-added entries are preserved.
+      </p>
+
+      <h2 id="uninstalling">Uninstalling</h2>
+
+      <ol>
+        <li>In Claude Code's plugin settings, disable the marketplace.</li>
+        <li>Delete the cloned repo (<code>rm -rf PRPs-agentic-eng</code>).</li>
+        <li>Optionally, in target projects, remove the generated artifacts (<code>CLAUDE.md</code>, <code>docs/</code>, <code>.claude/settings.json</code>, <code>PRPs/</code>). They're plain Markdown / JSON and harmless if left in place; you just stop updating them.</li>
+      </ol>
+
+      <h2 id="troubleshooting-install">Common installation issues</h2>
+
+      <div class="callout callout--warn">
+        <div class="callout__title">Skill doesn't appear after enabling</div>
+        <p>Restart Claude Code. The marketplace is read at session start; a running session won't pick up a newly-enabled marketplace until reload.</p>
+      </div>
+
+      <div class="callout callout--warn">
+        <div class="callout__title"><code>${CLAUDE_PLUGIN_ROOT}</code> doesn't resolve</div>
+        <p>This variable is set by Claude Code for plugin-internal file references (used by hooks and the skill's catalog reads). If your Claude Code version is older than the variable's introduction, upgrade. See the <a href="troubleshooting.html">troubleshooting guide</a>.</p>
+      </div>
+
+      <div class="callout callout--warn">
+        <div class="callout__title">Node scripts fail with "command not found"</div>
+        <p>Ensure <code>node</code> is in your PATH. Claude Code bundles Node but the scripts are invoked via the Bash tool, which uses the shell's PATH. <code>which node</code> should print a path; if it doesn't, add Node's binary directory to PATH.</p>
+      </div>
+
+      <h2 id="next">Next steps</h2>
+
+      <ul>
+        <li><a href="first-run.html">First run</a> — walk through initializing your first target project.</li>
+        <li><a href="../concepts/pillars.html">The three pillars</a> — understand what relay is doing on your behalf.</li>
+        <li><a href="../reference/commands.html">Command reference</a> — every command you can invoke.</li>
+      </ul>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

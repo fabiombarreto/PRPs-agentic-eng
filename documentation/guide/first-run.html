@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>First run — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Getting started</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>First run</span>
+      </div>
+
+      <h1>First run</h1>
+      <p class="page-subtitle">Walking through the first invocation of the <code>context-builder</code> skill against a new project. What it does, what you need to review, and what you end up with after the first commit.</p>
+
+      <h2 id="when">When to run this</h2>
+
+      <p>
+        Run the context-builder <strong>once</strong> per project, at the moment you decide to adopt relay. The skill produces the documentation tree every downstream agent depends on — no other relay command will work correctly without it.
+      </p>
+
+      <p>Run it again in <code>*update</code> mode:</p>
+
+      <ul>
+        <li>When major dependencies change (new framework, major version bumps)</li>
+        <li>When you add a new business area / Django app / module</li>
+        <li>Periodically (monthly-ish) to catch drift between the documented state and reality</li>
+      </ul>
+
+      <h2 id="invocation">Step 1 — Invoke it</h2>
+
+      <p>Open Claude Code in the target project's root directory. Type:</p>
+
+      <pre><code class="language-default">*init</code></pre>
+
+      <p>
+        The skill announces which mode it's entering and starts Phase 0. If the project already has <code>docs/</code> or <code>.claude/</code> artifacts, you'll be prompted:
+      </p>
+
+      <pre><code class="language-default">Found existing docs/context, docs/domain, docs/libs. Choose:
+  [R] Recreate from scratch    — data-destructive, will overwrite
+  [U] Switch to update mode    — preserve what's there, add missing
+  [S] Skip and abort           — do nothing, exit</code></pre>
+
+      <p>
+        For a first run on a fresh project, there's no prompt — it just proceeds. For adopting relay on an existing project with docs, <strong>choose [U]</strong> unless you're certain you want to overwrite.
+      </p>
+
+      <h2 id="phases">Step 2 — Watch the phases run</h2>
+
+      <p>
+        The skill announces each phase and what it's producing. In a typical run:
+      </p>
+
+      <div class="kv">
+        <dt>Phase 0</dt>
+        <dd>MCP Context7 availability check. If absent, <code>docs/libs/</code> generation is skipped with a warning (proceeds otherwise).</dd>
+        <dt>Phase 1</dt>
+        <dd>Project scan — reads manifests, README, folder structure, representative code files. Prints detected stack.</dd>
+        <dt>Phase 1.5</dt>
+        <dd>Generates <code>.claude/settings.json</code> from the stack signals.</dd>
+        <dt>Phase 1.75</dt>
+        <dd>Creates <code>PRPs/redaction-extensions.txt</code> empty (with a header comment).</dd>
+        <dt>Phase 2</dt>
+        <dd>Creates <code>docs/context/</code> files — architecture, conventions, constraints, integrations, methodology.</dd>
+        <dt>Phase 3</dt>
+        <dd>Creates <code>docs/domain/</code> — glossary, flows, one file per detected business area.</dd>
+        <dt>Phase 4</dt>
+        <dd>Creates <code>docs/libs/</code> via Context7 (when available).</dd>
+        <dt>Phase 4.5</dt>
+        <dd>Creates <code>docs/decision-gate.md</code>, <code>decisions.md</code>, <code>anti-patterns.md</code>.</dd>
+        <dt>Phase 5</dt>
+        <dd>Creates Tier 3 developer docs (<code>docs/architecture.md</code>, <code>development.md</code>, etc.).</dd>
+        <dt>Phase 6</dt>
+        <dd>Creates <code>docs/KNOWLEDGE_BASE.md</code> — the TOC.</dd>
+        <dt>Phase 7</dt>
+        <dd>Creates <code>CLAUDE.md</code> — Tier 1.</dd>
+        <dt>Phase 8</dt>
+        <dd>Prints the final report.</dd>
+      </div>
+
+      <p>Total time: 2–10 minutes for a medium-sized project, most of it in Phase 3 (domain inference) and Phase 4 (Context7 fetches).</p>
+
+      <h2 id="final-report">Step 3 — Read the final report</h2>
+
+      <p>The skill's final report is where you spend the most attention. It's structured like this:</p>
+
+      <pre><code class="language-default">## Context Builder — Report
+
+### Mode
+init
+
+### Files created
+[15-30 files listed with relative paths]
+
+### Domain areas identified
+accounts
+billing
+catalog
+...
+
+### Methodology declaration
+docs/context/methodology.md created with tdd: false
+Test frameworks detected: pytest, vitest, playwright
+Observed signals: 3 entries in body
+
+### Autonomous-pipeline permissions
+Emitted 28 allow patterns across: pytest, npm scripts, docker compose,
+git non-destructive, gh CLI read, python manage.py, pip install -r,
+linters (ruff, black, eslint, prettier, tsc), relay plugin scripts.
+Denylist: 32 invariant patterns.
+
+### Items requiring human validation
+[all [INFERRED - VALIDATE] items grouped by file]
+
+### Open questions
+[from domain/areas/*.md "Open Questions" sections]
+
+### .gitignore follow-ups (init mode)
+Add these lines to .gitignore:
+
+  # Claude — ignore session/cache/local artifacts, but commit project-wide settings
+  .claude/*
+  !.claude/settings.json
+
+  # relay — per-feature worktrees (ephemeral)
+  .worktrees/
+
+### Skipped
+/libs skipped: Context7 unavailable</code></pre>
+
+      <p>Don't skim this. The two critical sections are <strong>Items requiring human validation</strong> and <strong>Open questions</strong> — they're where the skill honestly admits what it couldn't figure out on its own.</p>
+
+      <h2 id="validate">Step 4 — Validate the inferred items</h2>
+
+      <p>
+        The skill marks every uncertain inference with <code>[INFERRED - VALIDATE]</code>. These appear in <code>docs/decisions.md</code>, <code>docs/anti-patterns.md</code>, and most domain area files.
+      </p>
+
+      <p>Go through them one by one:</p>
+
+      <ol>
+        <li>Open the flagged file.</li>
+        <li>Search for <code>[INFERRED - VALIDATE]</code>.</li>
+        <li>For each occurrence: is the inference correct?
+          <ul>
+            <li><strong>Yes</strong> → remove the <code>[INFERRED - VALIDATE]</code> marker. The decision/anti-pattern/rule is now validated.</li>
+            <li><strong>Partially</strong> → fix the wording, then remove the marker.</li>
+            <li><strong>No</strong> → delete the entry entirely, or rewrite from scratch.</li>
+          </ul>
+        </li>
+      </ol>
+
+      <p>Don't leave <code>[INFERRED - VALIDATE]</code> markers in place long-term. They signal to downstream agents (via the Decision Gate) that the rule isn't trusted yet — if they stay forever, the Gate's value erodes.</p>
+
+      <h2 id="answer-open-questions">Step 5 — Answer the open questions</h2>
+
+      <p>
+        Each <code>docs/domain/areas/*.md</code> has an <strong>Open Questions</strong> section at the bottom with the things the skill couldn't figure out. These are typically business rule ambiguities:
+      </p>
+
+      <pre><code class="language-default">## Open Questions
+
+- What happens when payment fails a second time? Does the subscription downgrade immediately?
+- Is there a grace period before access is blocked?
+- Does the team's `active_institution` election persist across logout/login?</code></pre>
+
+      <p>
+        For each question: get the answer from whoever knows (product manager, tech lead, the PR author who originally wrote that module). Then either:
+      </p>
+
+      <ul>
+        <li>Add the answer as a rule to the area file's main body (above the Open Questions section).</li>
+        <li>Record it as a decision in <code>docs/decisions.md</code> if it's a cross-cutting choice.</li>
+        <li>Record it as an anti-pattern if it's a rule about what <strong>not</strong> to do.</li>
+      </ul>
+
+      <p>Then delete the bullet from the Open Questions section. The list should shrink to zero over time.</p>
+
+      <h2 id="gitignore">Step 6 — Update <code>.gitignore</code></h2>
+
+      <p>
+        The skill tells you in the final report exactly what to add. Copy it verbatim into your project's <code>.gitignore</code>:
+      </p>
+
+      <pre><code class="language-default"># Claude — ignore session/cache/local artifacts, but commit project-wide settings
+# Use /* (not /) so git still traverses the directory and honors the negation below
+.claude/*
+!.claude/settings.json
+
+# relay — per-feature worktrees (ephemeral)
+.worktrees/</code></pre>
+
+      <div class="callout callout--warn">
+        <div class="callout__title">Don't use <code>.claude/</code> — use <code>.claude/*</code></div>
+        <p>
+          The leading-slash trailing-slash form (<code>.claude/</code>) ignores the whole directory, which makes git skip traversal entirely — the <code>!.claude/settings.json</code> negation then has no effect. The form with the star (<code>.claude/*</code>) ignores each file inside, letting the negation work as expected. See <a href="../concepts/prp-artifacts.html">PRP artifact paths</a> for the full gotcha.
+        </p>
+      </div>
+
+      <h2 id="commit">Step 7 — Commit everything</h2>
+
+      <p>At this point you have a fair number of new files. A single commit with all of them works fine:</p>
+
+      <pre><code class="language-bash">git add CLAUDE.md docs/ PRPs/redaction-extensions.txt .claude/settings.json .gitignore
+git commit -m "chore(context): initialize relay context tree"</code></pre>
+
+      <p>This is your project's first relay commit. All subsequent agent activity will consult the files this commit added.</p>
+
+      <h2 id="next">Next steps</h2>
+
+      <p>With the context tree in place, you're ready to run a feature through the pipeline:</p>
+
+      <ul>
+        <li><a href="writing-a-prd.html">Writing a PRD</a> — the interactive first step of any feature.</li>
+        <li><a href="running-tests.html">Running tests</a> — use <code>/relay-test</code> in isolation to validate the infrastructure.</li>
+        <li><a href="../reference/commands.html">Command reference</a> — the full command surface.</li>
+      </ul>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

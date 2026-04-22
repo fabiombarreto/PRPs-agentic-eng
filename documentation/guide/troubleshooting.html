@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Troubleshooting — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Guide</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Troubleshooting</span>
+      </div>
+
+      <h1>Troubleshooting</h1>
+      <p class="page-subtitle">Known issues, common pitfalls, and concrete fixes. When a run behaves unexpectedly, check here first — most problems fall into one of these categories.</p>
+
+      <h2 id="installation">Installation issues</h2>
+
+      <h3 id="plugin-not-visible">Plugin doesn't appear in Claude Code</h3>
+
+      <div class="kv">
+        <dt>Symptom</dt>
+        <dd>After enabling the marketplace, <code>*init</code> does nothing; no slash commands work.</dd>
+        <dt>Cause</dt>
+        <dd>The running session didn't pick up the newly-enabled marketplace. Claude Code reads the marketplace list at session start.</dd>
+        <dt>Fix</dt>
+        <dd>Close and reopen Claude Code. In the new session, the plugin is loaded.</dd>
+      </div>
+
+      <h3 id="claude-plugin-root">
+        <code>${CLAUDE_PLUGIN_ROOT}</code> doesn't resolve
+      </h3>
+
+      <div class="kv">
+        <dt>Symptom</dt>
+        <dd>Agents fail trying to read files under <code>${CLAUDE_PLUGIN_ROOT}/docs/context/</code> or <code>${CLAUDE_PLUGIN_ROOT}/scripts/</code>; bash commands show the literal string instead of expanding it.</dd>
+        <dt>Cause</dt>
+        <dd>Your Claude Code version predates the variable's introduction, or the variable isn't passed to the Bash tool's shell environment.</dd>
+        <dt>Fix</dt>
+        <dd>Upgrade Claude Code to the latest version. If the issue persists, file a report — this is infrastructure relay depends on.</dd>
+      </div>
+
+      <h3 id="node-not-found">Node.js scripts fail with "command not found"</h3>
+
+      <div class="kv">
+        <dt>Symptom</dt>
+        <dd><code>node: command not found</code> when the Test Runner invokes <code>normalize-test-output.mjs</code>.</dd>
+        <dt>Cause</dt>
+        <dd>Claude Code bundles Node but the Bash tool uses the shell's PATH. If Node isn't in your shell PATH, it's invisible.</dd>
+        <dt>Fix</dt>
+        <dd>
+          Add Node's binary directory to PATH in your shell config. Verify: <code>which node</code> should print a path. On Windows, check that the Node installer added itself to the system PATH; on macOS/Linux, check your <code>.zshrc</code> / <code>.bashrc</code>.
+        </dd>
+      </div>
+
+      <h2 id="context-builder">Context-builder issues</h2>
+
+      <h3 id="existing-artifacts">
+        "Found existing artifacts" prompt is confusing
+      </h3>
+
+      <div class="kv">
+        <dt>Context</dt>
+        <dd>Running <code>*init</code> on a project that already has <code>docs/context/</code> or <code>docs/domain/</code>.</dd>
+        <dt>What to choose</dt>
+        <dd>
+          <strong>[U] Switch to update mode</strong> unless you explicitly want to throw away existing docs. [U] is the same as running <code>*update</code> directly and will preserve human-validated content, adding only missing files.
+          <br /><br />
+          [R] is data-destructive — pick it only when you want a clean slate.
+          <br /><br />
+          [S] aborts the run. Useful if you hit the prompt by accident.
+        </dd>
+      </div>
+
+      <h3 id="inferred-validate">Too many <code>[INFERRED - VALIDATE]</code> markers</h3>
+
+      <div class="kv">
+        <dt>Symptom</dt>
+        <dd>The final report lists dozens of items requiring validation.</dd>
+        <dt>Cause</dt>
+        <dd>The skill is being honest: most of what it wrote is inferred from code scan rather than explicit evidence. This is normal for the first <code>*init</code> on a project with substantial code.</dd>
+        <dt>Fix</dt>
+        <dd>
+          Work through them incrementally. Start with <code>docs/decisions.md</code> and <code>docs/anti-patterns.md</code> (these drive the Decision Gate). Then the domain area files. The <code>[INFERRED - VALIDATE]</code> markers are reminders that the AI should not treat these as settled yet — once you validate, remove the marker.
+        </dd>
+      </div>
+
+      <h3 id="domain-areas-wrong">Domain areas detected incorrectly</h3>
+
+      <div class="kv">
+        <dt>Symptom</dt>
+        <dd>The skill created <code>docs/domain/areas/foo.md</code> when <code>foo</code> isn't a real business area; or split something that should be one area into two.</dd>
+        <dt>Fix</dt>
+        <dd>
+          Edit the files directly. Merge two area files into one by concatenating. Delete a file that shouldn't exist and remove its entries from <code>docs/KNOWLEDGE_BASE.md</code> and <code>CLAUDE.md</code>. The next <code>*update</code> run preserves your edits.
+        </dd>
+      </div>
+
+      <h2 id="permissions">Permission and settings issues</h2>
+
+      <h3 id="permission-prompts">Permission prompts interrupt the pipeline</h3>
+
+      <div class="kv">
+        <dt>Symptom</dt>
+        <dd>Running <code>/relay-test</code>, Claude Code prompts for approval on every bash command. Completely defeats autonomous operation.</dd>
+        <dt>Cause</dt>
+        <dd><code>.claude/settings.json</code> is missing, incomplete, or not recognized.</dd>
+        <dt>Fix</dt>
+        <dd>
+          <ol>
+            <li>Verify the file exists: <code>cat .claude/settings.json</code>.</li>
+            <li>Check it has an <code>allow</code> array with the patterns your stack needs (pytest, docker compose, etc.) — see <a href="../reference/settings-allowlist.html">Settings allowlist</a>.</li>
+            <li>If absent or incomplete, run <code>*update</code> in the target project to regenerate from the current catalog.</li>
+          </ol>
+        </dd>
+      </div>
+
+      <h3 id="settings-not-commitable">
+        <code>.claude/settings.json</code> isn't tracked by git
+      </h3>
+
+      <div class="kv">
+        <dt>Symptom</dt>
+        <dd><code>git status</code> doesn't show <code>.claude/settings.json</code> after creating it; <code>git add .claude/settings.json</code> says "ignored by one of your .gitignore files."</dd>
+        <dt>Cause</dt>
+        <dd>Your <code>.gitignore</code> has a bare <code>.claude/</code> rule (without the star). Git refuses to traverse an ignored directory, so the <code>!.claude/settings.json</code> negation doesn't work.</dd>
+        <dt>Fix</dt>
+        <dd>
+          Change <code>.claude/</code> to <code>.claude/*</code>:
+          <pre><code class="language-default"># Before (broken):
+.claude/
+!.claude/settings.json
+
+# After (correct):
+.claude/*
+!.claude/settings.json</code></pre>
+          Then <code>git add .claude/settings.json</code> works as expected.
+        </dd>
+      </div>
+
+      <h2 id="test-runner">Test Runner issues</h2>
+
+      <h3 id="normalizer-fails">Normalizer can't parse JUnit XML</h3>
+
+      <p>
+        Addressed in <a href="handling-failures.html#normalizer-failure">handling failures: normalizer_failure</a>. Verify the framework is configured to emit JUnit XML, and the output file exists at the expected path.
+      </p>
+
+      <h3 id="b3-wrong-category">
+        Classifier picks the wrong category (<code>infra</code> instead of <code>legitimate</code>, etc.)
+      </h3>
+
+      <div class="kv">
+        <dt>Symptom</dt>
+        <dd>A real bug is labeled <code>infra</code> and triggers a recovery attempt instead of being sent to the Implementer.</dd>
+        <dt>Cause</dt>
+        <dd>The failure message accidentally matched one of the infra regexes — e.g., your test prints "connection refused" as part of a legitimate assertion.</dd>
+        <dt>Fix</dt>
+        <dd>
+          <ol>
+            <li>Rephrase the test message to avoid infra keywords when asserting on non-infra behavior.</li>
+            <li>If the pattern is genuinely ambiguous, the classifier heuristics in <code>plugins/relay/agents/test-runner.md</code> need refinement. File an issue with the false-positive example.</li>
+          </ol>
+        </dd>
+      </div>
+
+      <h3 id="flaky-not-detected">Flakiness not detected</h3>
+
+      <div class="kv">
+        <dt>Symptom</dt>
+        <dd>A test that passes on retry-without-change is being treated as legitimate and sent to the Implementer.</dd>
+        <dt>Cause</dt>
+        <dd>The B3 classifier's flakiness detection requires the same failure to appear across attempts with the test file unchanged. If the Implementer modifies the test file between attempts (even unrelated changes), flakiness detection fails.</dd>
+        <dt>Fix</dt>
+        <dd>The Implementer shouldn't be modifying test files (that's an anti-pattern). If it is, investigate why — usually the PRD is unclear about whether tests should change.</dd>
+      </div>
+
+      <h2 id="post-green">Post-green review issues</h2>
+
+      <h3 id="false-positive-removed">
+        <code>test_removed</code> false-positive on a rename
+      </h3>
+
+      <div class="kv">
+        <dt>Symptom</dt>
+        <dd>You renamed a test file; the reviewer reports all its tests as removed.</dd>
+        <dt>Cause</dt>
+        <dd>The reviewer diffs file-by-file. A rename appears as "all tests deleted from old file" + "all tests added in new file." The in-file offset only tolerates renames within the same file.</dd>
+        <dt>Fix</dt>
+        <dd>
+          <ol>
+            <li>Verify the rename is legitimate (file was moved, not its contents dropped).</li>
+            <li>If legitimate, manually flip the verdict in <code>test-review.json</code> to <code>APPROVED</code> and document the rename in the PR description. Or: use <code>git mv</code> so the rename is clearer in history.</li>
+          </ol>
+        </dd>
+      </div>
+
+      <h3 id="coverage-baseline-stale">Coverage baseline drift</h3>
+
+      <div class="kv">
+        <dt>Symptom</dt>
+        <dd>Every PR triggers a <code>coverage_drop</code> concern even when the PR adds tests.</dd>
+        <dt>Cause</dt>
+        <dd>The baseline is stale. Main has moved forward since the baseline was captured; your PR's coverage is being compared against an old number.</dd>
+        <dt>Fix</dt>
+        <dd>
+          Re-capture the baseline on current main: run the full suite with coverage, write the result to <code>PRPs/reports/coverage-baseline.json</code>, commit to main as a separate chore. Not in a feature PR — that would hide real regressions.
+        </dd>
+      </div>
+
+      <h2 id="docker">Docker-related issues</h2>
+
+      <h3 id="docker-slow">First Docker run takes forever</h3>
+
+      <div class="kv">
+        <dt>Symptom</dt>
+        <dd><code>make test-bootstrap</code> takes 3+ minutes the first time.</dd>
+        <dt>Cause</dt>
+        <dd>Image builds (backend + Playwright) download layers on first run.</dd>
+        <dt>Fix</dt>
+        <dd>
+          This is one-time cost. Subsequent runs hit the cache and complete in under 30 seconds. If it's happening every time, your Docker cache is being cleared — check for <code>docker system prune</code> in CI or elsewhere.
+        </dd>
+      </div>
+
+      <h3 id="port-conflict">DB port conflict</h3>
+
+      <div class="kv">
+        <dt>Symptom</dt>
+        <dd><code>make test-bootstrap</code> fails with "port is already allocated."</dd>
+        <dt>Cause</dt>
+        <dd>Another service on your machine uses the port the test DB wants to expose.</dd>
+        <dt>Fix</dt>
+        <dd>
+          Either stop the conflicting service, or change the port in <code>docker-compose.test.yml</code> (the ports section maps host:container — change the host side).
+        </dd>
+      </div>
+
+      <h2 id="artifacts">Artifact / reporting issues</h2>
+
+      <h3 id="prps-gitignored">
+        <code>PRPs/</code> artifacts are being gitignored
+      </h3>
+
+      <div class="kv">
+        <dt>Symptom</dt>
+        <dd><code>PRPs/reports/&lt;feature&gt;/</code> doesn't show up in <code>git status</code> after a run.</dd>
+        <dt>Cause</dt>
+        <dd>Your <code>.gitignore</code> has an unqualified <code>reports/</code> rule (common in Django/Rails projects for local test output) that matches <code>PRPs/reports/</code> too.</dd>
+        <dt>Fix</dt>
+        <dd>
+          Scope the rule to the root:
+          <pre><code class="language-default"># Before:
+reports/
+
+# After:
+/reports/</code></pre>
+          The leading slash restricts the pattern to the repo root, leaving <code>PRPs/reports/</code> alone.
+        </dd>
+      </div>
+
+      <h3 id="secrets-leaked">A secret leaked into a report</h3>
+
+      <div class="kv">
+        <dt>Symptom</dt>
+        <dd>You notice a credential value in a committed <code>stdout.log</code> or <code>final-report.md</code>.</dd>
+        <dt>Cause</dt>
+        <dd>The secret wasn't matched by Layer 1 (name pattern, exact env match, or value regex) or by Layer 2 (per-project extensions).</dd>
+        <dt>Fix</dt>
+        <dd>
+          <ol>
+            <li><strong>Immediate:</strong> rotate the leaked secret. Don't try to rewrite git history; the secret is already out.</li>
+            <li>Add a pattern to <code>PRPs/redaction-extensions.txt</code> so the same secret format won't leak again.</li>
+            <li>If the format is likely to affect other projects (e.g., a new cloud provider's key format), contribute it to <code>docs/context/redaction-policy.md</code> in the plugin repo so it becomes Layer 1.</li>
+          </ol>
+        </dd>
+      </div>
+
+      <h2 id="nothing-matches-here">When nothing here matches</h2>
+
+      <ul>
+        <li>Re-read <code>run.json</code> — <code>outcome</code> and <code>abort_reason</code> usually narrow the problem space.</li>
+        <li>Check <a href="handling-failures.html">handling failures</a> for per-outcome recovery.</li>
+        <li>Check <a href="../governance/anti-patterns.html">anti-patterns</a> — some "issues" are the Decision Gate working as designed.</li>
+        <li>File a GitHub issue with <code>run.json</code> and the last attempt's <code>stdout.log</code> attached. Both are redacted; safe to share.</li>
+      </ul>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

@@ -6,6 +6,18 @@
     "excerpt": "Relay is a Claude Code plugin for autonomous feature delivery: a single prompt drives the full cycle from PRD to merged PR via orchestrated writer/reviewer agent pairs and a Test Runner that closes the loop."
   },
   {
+    "title": "Installation",
+    "path": "guide/installation.html",
+    "category": "Getting started",
+    "excerpt": "Clone the repo, enable the marketplace in Claude Code, verify the skill loads. No npm install, no build step. Prerequisites: Claude Code, Node 18+, Git. Docker and gh CLI recommended."
+  },
+  {
+    "title": "First run",
+    "path": "guide/first-run.html",
+    "category": "Getting started",
+    "excerpt": "Walk through invoking the context-builder for the first time: the nine phases it runs, the final report to read, validating [INFERRED - VALIDATE] items, answering open questions, required .gitignore entries."
+  },
+  {
     "title": "The three pillars",
     "path": "concepts/pillars.html",
     "category": "Concepts",
@@ -40,6 +52,36 @@
     "path": "concepts/graceful-degradation.html",
     "category": "Concepts",
     "excerpt": "Every component detects its preconditions at start. Missing infrastructure results in a clear skip with a reason — never a silent failure, never a crash. No Docker, no tests, no GitHub — each case has defined behavior."
+  },
+  {
+    "title": "Writing a PRD",
+    "path": "guide/writing-a-prd.html",
+    "category": "Guide",
+    "excerpt": "Walkthrough of the /relay-prd interactive flow: when to write one, the 6-phase Q&A (initiate, foundation, grounding, deep dive, technical, decisions), writing good acceptance criteria, the reviewer loop, status approval."
+  },
+  {
+    "title": "Running tests",
+    "path": "guide/running-tests.html",
+    "category": "Guide",
+    "excerpt": "How to use /relay-test directly — standalone Test Runner with auto-correction. Invocation flags, interpreting verdict codes (GREEN, FAILED_*), reading the report, the current /relay-implement gap."
+  },
+  {
+    "title": "Handling failures",
+    "path": "guide/handling-failures.html",
+    "category": "Guide",
+    "excerpt": "What to do when the pipeline aborts. Per-outcome recovery: retry exhaustion, time budget, oscillation, unrecoverable infra (missing settings.json, Docker down, DB unreachable, normalizer failure, no test framework)."
+  },
+  {
+    "title": "Post-green review",
+    "path": "guide/post-green-review.html",
+    "category": "Guide",
+    "excerpt": "After GREEN, run /relay-test-review to verify tests weren't weakened. Four concern types: removed tests, added skips, trivial assertions, coverage drops. How to set up the optional coverage baseline."
+  },
+  {
+    "title": "Troubleshooting",
+    "path": "guide/troubleshooting.html",
+    "category": "Guide",
+    "excerpt": "Known issues and concrete fixes: installation (plugin not visible, node not found, CLAUDE_PLUGIN_ROOT), context-builder (inferred items, domain areas), permissions (prompts, gitignore), Docker, reporting, secrets."
   },
   {
     "title": "Commands",

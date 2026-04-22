@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Running tests — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Guide</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Running tests</span>
+      </div>
+
+      <h1>Running tests</h1>
+      <p class="page-subtitle">How to use <code>/relay-test</code> directly — as a standalone Test Runner with auto-correction, without adopting the rest of the pipeline. Useful for teams piloting relay, for iterating on flaky tests, and for understanding what the autonomous pipeline will see when it reaches your suite.</p>
+
+      <h2 id="when">When to invoke <code>/relay-test</code> manually</h2>
+
+      <ul>
+        <li><strong>Piloting relay on a real project.</strong> Running <code>/relay-test</code> against a branch validates that <code>.claude/settings.json</code>, the redaction policy, and the framework integration all work — before you commit to the full orchestrator.</li>
+        <li><strong>Debugging flakiness.</strong> The classifier (B3) labels each failure and the report surfaces oscillation patterns. Running the command against a branch that's been flaky in CI often tells you where to focus.</li>
+        <li><strong>Iterating on tests.</strong> If you're editing test code and want to re-validate without re-running the whole pipeline.</li>
+        <li><strong>Inside the orchestrator.</strong> <code>/relay-execute</code> invokes <code>/relay-test</code> internally — understanding what it does in isolation is the clearest way to debug orchestrator failures.</li>
+      </ul>
+
+      <h2 id="invoking">Step 1 — Invoke it</h2>
+
+      <pre><code class="language-default">/relay-test &lt;worktree-path&gt; [--max-retries N] [--max-minutes M] [--tier unit|integration|e2e] [--feature &lt;name&gt;]</code></pre>
+
+      <p>Typical minimal invocation:</p>
+
+      <pre><code class="language-default">/relay-test .</code></pre>
+
+      <p>Runs against the current working tree, default budgets (3 retries, 30 minutes), auto-detected tier and feature name (from current branch).</p>
+
+      <h3 id="overrides">Common overrides</h3>
+
+      <ul>
+        <li><code>--max-retries 2</code> — tighter budget if your suite is slow and you want to fail fast</li>
+        <li><code>--max-minutes 60</code> — looser budget for heavy E2E</li>
+        <li><code>--tier unit</code> — skip integration/E2E, run only unit tier (forces layered execution off if not detected)</li>
+        <li><code>--feature my-branch</code> — override the feature slug (the command derives from git branch by default)</li>
+      </ul>
+
+      <h2 id="what-happens">Step 2 — What happens</h2>
+
+      <p>The command runs the <a href="../concepts/pipeline.html#stage-6">Test Runner loop (stage 6)</a>:</p>
+
+      <ol>
+        <li>Precondition checks — worktree valid, <code>.claude/settings.json</code> present, <code>methodology.md</code> readable, <code>PRPs/</code> writable. HALTs loud if anything's missing.</li>
+        <li>Initialize loop state — new <code>run_id</code>, start timestamp, deadline from <code>max_test_minutes</code>.</li>
+        <li>For each attempt (up to <code>max_test_retries + 1</code>):
+          <ol>
+            <li>Invoke the <code>test-runner</code> agent with the attempt number and previous records.</li>
+            <li>Agent runs the suite (<code>make test-pytest</code> or the detected equivalent), normalizes JUnit XML, classifies failures.</li>
+            <li>Agent returns a verdict (<code>GREEN</code>, <code>RETRY_NEEDED</code>, <code>RETRY_FLAKY</code>, <code>ABORT_INFRA</code>, <code>ABORT_TIME</code>).</li>
+            <li>Command dispatches:
+              <ul>
+                <li><code>GREEN</code> → exit successfully.</li>
+                <li><code>RETRY_NEEDED</code> → invoke Implementer with feedback, then loop. <em>(Currently HALTS if the Implementer isn't yet implemented — see below.)</em></li>
+                <li><code>RETRY_FLAKY</code> → rerun without changes.</li>
+                <li><code>ABORT_INFRA</code> → attempt one recovery (<code>make test-down &amp;&amp; make test-bootstrap</code>). If still failing, exit with <code>FAILED_INFRA_UNRECOVERABLE</code>.</li>
+                <li><code>ABORT_TIME</code> → exit with <code>FAILED_TIME_BUDGET_EXCEEDED</code>.</li>
+              </ul>
+            </li>
+          </ol>
+        </li>
+        <li>Write <code>PRPs/reports/&lt;feature&gt;/run.json</code> with full session state.</li>
+      </ol>
+
+      <div class="callout callout--warn">
+        <div class="callout__title">Current gap: <code>/relay-implement</code></div>
+        <p>
+          When a failure is classified as <code>legitimate</code>, the loop tries to invoke <code>/relay-implement</code> with the feedback. That command isn't yet implemented (it's part of Pillar 2's upcoming orchestrator). Until it lands, <code>/relay-test</code> HALTS on the first <code>RETRY_NEEDED</code> and writes the failure feedback to <code>PRPs/reports/&lt;feature&gt;/attempts/&lt;N&gt;/implementer-feedback.json</code> so you can apply the fix manually.
+          <br /><br />
+          This is documented behavior, not a bug. You do the fix, re-run <code>/relay-test</code>, and the loop proceeds.
+        </p>
+      </div>
+
+      <h2 id="outputs">Step 3 — Read the outputs</h2>
+
+      <p>Every run produces a directory:</p>
+
+      <pre><code class="language-bash">PRPs/reports/&lt;feature&gt;/
+├── run.json                  # session state, budgets, outcome
+└── attempts/
+    ├── 1/
+    │   ├── record.json       # normalized + classified failures
+    │   ├── stdout.log        # redacted execution log
+    │   └── diff.patch        # git diff (empty on attempt 1)
+    └── 2/
+        └── ...</code></pre>
+
+      <p>
+        <code>run.json</code> is the summary. Open it to see: final outcome, elapsed time, budget state at exit, per-attempt verdicts, <code>secrets_redacted</code> counts, <code>skipped</code> components.
+      </p>
+
+      <p>
+        For each attempt, <code>record.json</code> is the authoritative state — normalized per the <a href="../reference/test-output-schema.html">schema v1</a>, with <code>failures[].category</code> filled in by the B3 classifier.
+      </p>
+
+      <p>
+        <code>stdout.log</code> has the raw test output with secret values already replaced by <code>[REDACTED]</code> / <code>[REDACTED_URL]</code>. Safe to commit, safe to paste into PR comments, safe to share.
+      </p>
+
+      <h2 id="verdict-codes">Interpreting the verdict codes</h2>
+
+      <h3 id="green">GREEN <span class="badge badge--done">success</span></h3>
+
+      <p>All tests passed (or all failures were flaky-retry-resolved). Next step: run <code>/relay-test-review</code> to verify nothing was weakened to reach green. See <a href="post-green-review.html">Post-green review guide</a>.</p>
+
+      <h3 id="failed-n-retries">FAILED_AFTER_N_RETRIES</h3>
+
+      <p>
+        The retry budget exhausted with the same legitimate failure persisting. Three typical causes:
+      </p>
+
+      <ul>
+        <li><strong>Requirement gap</strong> — the PRD is ambiguous or contradictory; the Implementer can't converge. Clarify the PRD and rerun.</li>
+        <li><strong>Weak test</strong> — the test itself is broken, blocking progress. Fix the test.</li>
+        <li><strong>Too-tight budget</strong> — the fix needs more iterations than the budget allows. Rerun with <code>--max-retries 5</code>.</li>
+      </ul>
+
+      <h3 id="failed-time">FAILED_TIME_BUDGET_EXCEEDED</h3>
+
+      <p>
+        Wall-clock exhausted. Usually means E2E is slow. Options:
+      </p>
+
+      <ul>
+        <li>Rerun with <code>--max-minutes 60</code> or higher.</li>
+        <li>Check <code>run.json.time_breakdown</code> to see which phase consumed the budget. If infra_setup is the culprit, Docker cold start is the issue.</li>
+        <li>Enable layered execution — if the unit tier fails, E2E gets skipped, saving time.</li>
+      </ul>
+
+      <h3 id="failed-oscillation">FAILED_OSCILLATION</h3>
+
+      <p>
+        The Implementer's fix in attempt N+1 reverted files from attempt N. Signals a PRD-level conflict — the code can't satisfy two ACs simultaneously. Look at the two attempts' diffs (attempts/N/diff.patch and attempts/N+1/diff.patch); the conflict usually maps to a specific requirement pair.
+      </p>
+
+      <h3 id="failed-infra">FAILED_INFRA_UNRECOVERABLE</h3>
+
+      <p>Common subcauses (reported in <code>run.json.abort_reason</code>):</p>
+
+      <ul>
+        <li><code>missing_settings_json</code> — re-run <code>*update</code> of the context-builder skill.</li>
+        <li><code>docker_not_running</code> — start Docker Desktop, then rerun.</li>
+        <li><code>db_unreachable</code> — check <code>docker-compose.test.yml</code>; usually a port conflict or a stale container.</li>
+        <li><code>normalizer_failure</code> — the test framework didn't produce JUnit XML. Verify the framework config (pytest <code>--junitxml</code>, Playwright <code>reporter: junit</code>, Vitest <code>reporters: junit</code>).</li>
+        <li><code>no_test_framework</code> — the project has no test framework relay could detect. Not a bug — document it in the final report.</li>
+      </ul>
+
+      <h2 id="running-against-orchestrator">Running inside the orchestrator</h2>
+
+      <p>
+        When you invoke <code>/relay-execute &lt;prd&gt;</code>, the Test Runner runs the same way it would standalone — same budgets, same verdicts, same reports. The only difference: on <code>RETRY_NEEDED</code>, the orchestrator has the Implementer available and loops automatically.
+      </p>
+
+      <p>This means iterating on the Test Runner in isolation is a safe way to validate the integration before handing off.</p>
+
+      <h2 id="next">Next</h2>
+
+      <ul>
+        <li><a href="handling-failures.html">Handling failures</a> — deeper dive on each abort type and recovery strategy.</li>
+        <li><a href="post-green-review.html">Post-green review</a> — after GREEN, validate tests weren't weakened.</li>
+        <li><a href="../reference/commands.html#relay-test"><code>/relay-test</code> reference</a> — all flags and preconditions.</li>
+      </ul>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Post-green review — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Guide</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Post-green review</span>
+      </div>
+
+      <h1>Post-green review</h1>
+      <p class="page-subtitle">After the Test Runner reaches GREEN, you run <code>/relay-test-review</code> to verify the green wasn't achieved by weakening the tests. This page explains why that matters, how the command works, what each concern type means, and how to set up the optional coverage baseline.</p>
+
+      <h2 id="why">Why this step exists</h2>
+
+      <p>
+        The auto-correction loop optimizes for "all tests pass." Without a guardrail, an agent might "pass" tests by deleting them, or by marking them <code>@skip</code>, or by replacing assertions with <code>assert True</code>. The resulting GREEN is meaningless — the code isn't validated, it just avoided being tested.
+      </p>
+
+      <p>
+        Post-green review catches the three most common forms of this weakening:
+      </p>
+
+      <ol>
+        <li><strong>Removed tests</strong> — test functions deleted from the suite.</li>
+        <li><strong>Added skips</strong> — tests marked <code>@pytest.mark.skip</code>, <code>.skip()</code>, <code>xit()</code>, etc.</li>
+        <li><strong>Trivial assertion downgrades</strong> — <code>expect(true).toBe(true)</code>, <code>assert True</code>, etc.</li>
+      </ol>
+
+      <p>
+        Plus an optional fourth: <strong>coverage drops</strong> greater than 5% when a baseline is available.
+      </p>
+
+      <h2 id="when">When to invoke</h2>
+
+      <p>Always invoke <code>/relay-test-review</code> <strong>after</strong> a GREEN <code>/relay-test</code> run, before opening the PR. Either:</p>
+
+      <ul>
+        <li>Manually, right after you see <code>outcome: GREEN</code> in <code>run.json</code>.</li>
+        <li>Automatically, as part of <code>/relay-execute</code> which invokes it as the penultimate step (before <code>/relay-pr</code>).</li>
+      </ul>
+
+      <h2 id="invoking">Step 1 — Invoke it</h2>
+
+      <pre><code class="language-default">/relay-test-review &lt;worktree-path&gt; [--base &lt;branch&gt;] [--feature &lt;name&gt;]</code></pre>
+
+      <p>Defaults: base branch is <code>main</code>, falling back to <code>master</code>; feature name is derived from the current git branch.</p>
+
+      <h2 id="preconditions">Step 2 — Preconditions check</h2>
+
+      <p>The command halts loud if any of these aren't satisfied:</p>
+
+      <ul>
+        <li>The worktree path exists and is a git worktree.</li>
+        <li>The base branch resolves (<code>git rev-parse --verify</code> succeeds).</li>
+        <li><code>PRPs/reports/&lt;feature&gt;/run.json</code> exists.</li>
+        <li><code>run.json</code>'s <code>outcome</code> field is <code>GREEN</code>.</li>
+      </ul>
+
+      <p>If the last precondition fails (e.g., outcome is <code>FAILED_AFTER_N_RETRIES</code>), the message tells you: <em>"post-green review requires a GREEN outcome; got <code>FAILED_AFTER_N_RETRIES</code>. Either re-run <code>/relay-test</code> until it passes, or fix the underlying failure."</em></p>
+
+      <h2 id="what-happens">Step 3 — What the reviewer does</h2>
+
+      <p>The <code>post-green-reviewer</code> agent:</p>
+
+      <ol>
+        <li>Runs <code>git diff --name-only &lt;base&gt;..HEAD -- &lt;test-file-patterns&gt;</code> to find changed test files.</li>
+        <li>For each changed test file, gets the diff and scans the <code>+</code> and <code>-</code> lines for per-language heuristics.</li>
+        <li>Checks for coverage drop if <code>PRPs/reports/coverage-baseline.json</code> exists.</li>
+        <li>Emits a verdict JSON.</li>
+      </ol>
+
+      <p>The review is <strong>read-only</strong>. It never modifies code or tests; it just reports what it found.</p>
+
+      <h2 id="verdicts">Step 4 — Read the verdict</h2>
+
+      <p>Two outcomes, written to <code>PRPs/reports/&lt;feature&gt;/test-review.json</code>:</p>
+
+      <h3 id="approved">APPROVED</h3>
+
+      <pre><code class="language-json">{
+  "verdict": "APPROVED",
+  "run_id": "...",
+  "analyzed_files": 7,
+  "concerns": [],
+  "notes": [
+    "coverage baseline unavailable (no PRPs/reports/coverage-baseline.json)"
+  ]
+}</code></pre>
+
+      <p>The green is trustworthy — no structural weakening detected. Safe to proceed to <code>/relay-pr</code>.</p>
+
+      <h3 id="changes-requested">CHANGES_REQUESTED</h3>
+
+      <pre><code class="language-json">{
+  "verdict": "CHANGES_REQUESTED",
+  "run_id": "...",
+  "analyzed_files": 7,
+  "concerns": [
+    {
+      "type": "test_removed",
+      "file": "frontend/tests/e2e/assessment-list.spec.ts",
+      "net_removed": 2,
+      "evidence": ["- it('filters by institution', async () => {",
+                   "- it('filters by date', async () => {"]
+    },
+    {
+      "type": "test_skipped",
+      "file": "backend/tests/e2e/test_public_review.py",
+      "net_added": 1,
+      "evidence": ["+ @pytest.mark.skip(reason='flaky in CI')"]
+    }
+  ],
+  "notes": []
+}</code></pre>
+
+      <p>The green is <strong>not</strong> trustworthy — something was weakened. Fix the concerns before opening the PR.</p>
+
+      <h2 id="concern-types">Understanding the four concern types</h2>
+
+      <h3 id="test-removed">test_removed</h3>
+
+      <p>
+        A test function was deleted from a file, net of renames. The evidence is the removed <code>-</code> lines showing the test signatures.
+      </p>
+
+      <div class="kv">
+        <dt>Legitimate case</dt>
+        <dd>You intentionally removed a test because the feature it tested was removed. If that's the case, the test removal should be part of a broader cleanup — document it.</dd>
+        <dt>Illegitimate case</dt>
+        <dd>The test was removed because it was inconvenient. Re-add it. If it was truly broken, fix it instead of removing.</dd>
+      </div>
+
+      <h3 id="test-skipped">test_skipped</h3>
+
+      <p>A test was marked as skipped (<code>@pytest.mark.skip</code>, <code>.skip()</code>, <code>xit()</code>, etc.), net of unskips.</p>
+
+      <div class="kv">
+        <dt>Legitimate case</dt>
+        <dd>A test is genuinely flaky in CI and being skipped pending investigation. This should have an issue link in the skip reason: <code>@pytest.mark.skip(reason='GH-1234 investigating intermittent failure')</code>.</dd>
+        <dt>Illegitimate case</dt>
+        <dd>Skipping was a shortcut to green. Remove the skip; fix the underlying issue.</dd>
+      </div>
+
+      <h3 id="trivial-assertion">trivial_assertion</h3>
+
+      <p>Best-effort detection of crystal-clear no-op assertions: <code>expect(true).toBe(true)</code>, <code>assertTrue(True)</code>, <code>assert True</code>. The reviewer doesn't over-fire — it only flags when the pattern is unambiguous.</p>
+
+      <div class="kv">
+        <dt>Legitimate case</dt>
+        <dd>Rare. Possibly a placeholder test that was supposed to be filled in but was committed early.</dd>
+        <dt>Illegitimate case</dt>
+        <dd>Almost always illegitimate. Replace the assertion with an actual behavioral check.</dd>
+      </div>
+
+      <h3 id="coverage-drop">coverage_drop</h3>
+
+      <p>
+        Only flagged when <code>PRPs/reports/coverage-baseline.json</code> exists. The reviewer compares current coverage to the baseline; absolute drop greater than 5% (e.g., 78% → 72%) is a concern.
+      </p>
+
+      <div class="kv">
+        <dt>Legitimate case</dt>
+        <dd>The new feature added significant code that's untested relative to baseline. If the feature is small and the uncovered code is trivial, probably fine — but should be documented.</dd>
+        <dt>Illegitimate case</dt>
+        <dd>Tests were removed without replacement, or new code skipped testing entirely. Add tests.</dd>
+      </div>
+
+      <h2 id="coverage-baseline">Setting up the coverage baseline (opt-in)</h2>
+
+      <p>
+        Coverage drop detection is off by default — if <code>PRPs/reports/coverage-baseline.json</code> doesn't exist, the reviewer just notes "coverage baseline unavailable" and proceeds with structural checks only.
+      </p>
+
+      <p>To enable:</p>
+
+      <ol>
+        <li>Run the test suite on <code>main</code> (or your baseline branch) with coverage enabled.</li>
+        <li>Capture the coverage result into the standard format:
+          <pre><code class="language-json">{
+  "lines_pct": 78.4,
+  "branches_pct": 65.1,
+  "measured_at": "2026-04-21T17:00:00Z",
+  "source": "pytest --cov on main"
+}</code></pre>
+        </li>
+        <li>Commit the file at <code>PRPs/reports/coverage-baseline.json</code>.</li>
+      </ol>
+
+      <p>
+        Update the baseline periodically (every few weeks, or after major test-adding PRs) by re-running coverage on main and overwriting the file. Don't update it as part of a feature PR — that would hide coverage drops.
+      </p>
+
+      <h2 id="fixing-concerns">Step 5 — Fix CHANGES_REQUESTED concerns</h2>
+
+      <ol>
+        <li>Read each concern's evidence to understand what changed.</li>
+        <li>For each concern, decide: legitimate or illegitimate? (See categories above.)</li>
+        <li>Fix illegitimate concerns:
+          <ul>
+            <li>Re-add removed tests.</li>
+            <li>Remove the skip markers (or add issue references justifying them).</li>
+            <li>Replace trivial assertions with real ones.</li>
+          </ul>
+        </li>
+        <li>Re-run <code>/relay-test</code> to confirm still green after the fixes.</li>
+        <li>Re-run <code>/relay-test-review</code> — it should APPROVE now.</li>
+      </ol>
+
+      <h2 id="downstream">What consumes the verdict</h2>
+
+      <p>
+        <code>test-review.json</code> is read by <code>/relay-pr</code> (when it lands) to decide whether to open the PR at all. A <code>CHANGES_REQUESTED</code> verdict blocks PR creation; the report in the PR description flags what was wrong.
+      </p>
+
+      <p>
+        The orchestrator (<code>/relay-execute</code>) loops back to the Implementer with the concerns as feedback when <code>CHANGES_REQUESTED</code> comes from the post-green reviewer. The Implementer treats them like any other set of failures — restore the removed tests, remove the skips, fix the assertions — then the loop continues.
+      </p>
+
+      <h2 id="next">Next</h2>
+
+      <ul>
+        <li><a href="../reference/commands.html#relay-test-review">/relay-test-review reference</a> — all flags and output format</li>
+        <li><a href="../reference/agents.html#post-green-reviewer">post-green-reviewer agent reference</a> — detection heuristics in detail</li>
+        <li><a href="../governance/anti-patterns.html">Anti-patterns</a> — see "Weakening tests to make the loop turn green"</li>
+      </ul>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Writing a PRD — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Guide</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Writing a PRD</span>
+      </div>
+
+      <h1>Writing a PRD</h1>
+      <p class="page-subtitle">The PRD (Product Requirement Document) is the <strong>only</strong> interactive stage of the relay pipeline. Everything downstream runs autonomously against an approved PRD, so the PRD is effectively the contract — you want it concrete and unambiguous before the pipeline starts.</p>
+
+      <h2 id="when">When to write a PRD</h2>
+
+      <p>
+        A PRD is the entry point for any non-trivial feature. If the work takes more than a few hours and touches more than one file, start with a PRD. Examples:
+      </p>
+
+      <ul>
+        <li>New API endpoint with a data model</li>
+        <li>New page with associated routes and business logic</li>
+        <li>Non-trivial refactor crossing module boundaries</li>
+        <li>Bug fix requiring changes in tests + source + docs</li>
+      </ul>
+
+      <p>A PRD is overkill for:</p>
+
+      <ul>
+        <li>Typo fixes, label changes</li>
+        <li>Bumping a dependency version with no API change</li>
+        <li>Single-file cleanup that touches nothing external</li>
+      </ul>
+
+      <p>(Those are exempt from the <a href="../governance/decision-gate.html">Decision Gate</a> entirely, so you can do them with any normal tool.)</p>
+
+      <h2 id="invoking">Step 1 — Invoke <code>/relay-prd</code></h2>
+
+      <p>Two forms, depending on what you have to start with:</p>
+
+      <h3 id="from-description">Starting from a description</h3>
+
+      <pre><code class="language-default">/relay-prd "add a weekly digest email for every active user summarizing their completed assessments in the last 7 days"</code></pre>
+
+      <p>Short is fine. A paragraph is also fine. The PRD Writer expands it during the Q&amp;A.</p>
+
+      <h3 id="from-draft">Starting from a draft</h3>
+
+      <pre><code class="language-default">/relay-prd PRPs/prds/digest-email-draft.md</code></pre>
+
+      <p>If you've already written something in Markdown, point at it. The PRD Writer reads it first, then asks targeted questions about ambiguous parts.</p>
+
+      <h2 id="six-phases">Step 2 — Work through the 6-phase Q&amp;A</h2>
+
+      <p>The PRD Writer doesn't generate the document and then ask you to review it. It <strong>dialogs</strong> with you in six phases, each a clear gate. You can't skip phases.</p>
+
+      <h3 id="phase-1-initiate">Phase 1 — Initiate</h3>
+
+      <p>The writer restates what it understood from your initial description:</p>
+
+      <div class="callout callout--info">
+        <div class="callout__title">Agent</div>
+        <p>I understand you want to build: a scheduled weekly email to active users with their last-7-days assessment activity. Is this correct, or should I adjust my understanding?</p>
+      </div>
+
+      <p>Short answer. "Correct" or "not quite — it's about X instead." Don't type paragraphs here.</p>
+
+      <h3 id="phase-2-foundation">Phase 2 — Foundation</h3>
+
+      <p>Five questions in one block:</p>
+
+      <ol>
+        <li><strong>Who</strong> has this problem? Specific role, not "users".</li>
+        <li><strong>What</strong> problem are they facing? Observable pain, not assumed need.</li>
+        <li><strong>Why</strong> can't they solve it today? What alternatives exist and why do they fail?</li>
+        <li><strong>Why now?</strong> What changed?</li>
+        <li><strong>How</strong> will you know if you solved it? Success signal.</li>
+      </ol>
+
+      <p>Answer all five. This is where most ambiguity gets flushed out. Be honest — "we don't have data on this yet, it's a hypothesis" is a valid answer and gets the PRD tagged accordingly.</p>
+
+      <h3 id="phase-3-grounding">Phase 3 — Market / codebase grounding</h3>
+
+      <p>
+        The writer dispatches research sub-agents (a web researcher and a codebase explorer). It returns with findings:
+      </p>
+
+      <div class="callout callout--info">
+        <div class="callout__title">Agent</div>
+        <p>
+          What I found:
+          <br />— Competitors X and Y send similar digests weekly; Z abandoned the feature after low open rates.
+          <br />— Your codebase has a <code>NotificationsService</code> in <code>apps/notifications/</code> with existing templated-email infrastructure. The digest could reuse it rather than build parallel.
+          <br />— Known pattern: scheduled tasks use Celery beat (see <code>apps/scheduling/</code>).
+          <br />Does this change or refine your thinking?
+        </p>
+      </div>
+
+      <p>A single answer: "continue" if the findings don't change your approach; "adjust — let's use NotificationsService instead of a new service" if they do.</p>
+
+      <h3 id="phase-4-deep-dive">Phase 4 — Vision &amp; users</h3>
+
+      <p>Five more questions:</p>
+
+      <ol>
+        <li><strong>Vision</strong> in one sentence — ideal end state if this wildly succeeds.</li>
+        <li><strong>Primary user</strong> — specific description, context, what triggers the need.</li>
+        <li><strong>Job to Be Done</strong> — "When [situation], I want to [motivation], so I can [outcome]."</li>
+        <li><strong>Non-users</strong> — who is explicitly NOT the target?</li>
+        <li><strong>Constraints</strong> — time, budget, technical, regulatory.</li>
+      </ol>
+
+      <h3 id="phase-5-technical-grounding">Phase 5 — Technical feasibility</h3>
+
+      <p>
+        The writer dispatches the codebase-analyst sub-agent for a deeper technical read. Returns with feasibility rating, what you can leverage, and the main technical risk. One answer: "any technical constraints I should know about?"
+      </p>
+
+      <h3 id="phase-6-decisions">Phase 6 — Decisions</h3>
+
+      <p>Five final questions before generating:</p>
+
+      <ol>
+        <li><strong>MVP definition</strong> — absolute minimum to validate the idea.</li>
+        <li><strong>Must-have vs nice-to-have</strong> — what MUST be in v1? What can wait?</li>
+        <li><strong>Key hypothesis</strong> — "We believe X will Y for Z. We'll know we're right when [measurable outcome]."</li>
+        <li><strong>Out of scope</strong> — what are you explicitly NOT building?</li>
+        <li><strong>Open questions</strong> — uncertainties that could change the approach.</li>
+      </ol>
+
+      <p>Don't skip the "out of scope" — it's the single best tool for preventing feature creep during implementation.</p>
+
+      <h2 id="generation">Step 3 — The PRD is generated</h2>
+
+      <p>
+        The PRD Writer produces <code>PRPs/prds/&lt;feature&gt;.prd.md</code> with status <code>DRAFT</code>. Structure:
+      </p>
+
+      <ul>
+        <li><strong>Decision Gate evidence</strong> block at the top (the writer consulted <code>docs/decisions.md</code>, <code>docs/anti-patterns.md</code>, <code>docs/context/architecture.md</code>).</li>
+        <li><strong>Problem Statement</strong>, <strong>Evidence</strong>, <strong>Proposed Solution</strong>, <strong>Key Hypothesis</strong>, <strong>What We're NOT Building</strong>, <strong>Success Metrics</strong>.</li>
+        <li><strong>Acceptance Criteria (test scenarios)</strong> — the concrete <code>given ... when ... then</code> behaviors the implementation must satisfy.</li>
+        <li><strong>Users &amp; Context</strong>, <strong>Solution Detail (MoSCoW)</strong>, <strong>MVP Scope</strong>, <strong>User Flow</strong>.</li>
+        <li><strong>Technical Approach</strong> (feasibility, architecture notes, TDD routing, technical risks).</li>
+        <li><strong>Implementation Phases</strong> — a table with phase number, name, description, status, parallelism hints, dependencies.</li>
+        <li><strong>Decisions Log</strong>, <strong>Research Summary</strong>.</li>
+      </ul>
+
+      <h2 id="review">Step 4 — The PRD Reviewer runs</h2>
+
+      <p>
+        Once the draft is produced, the PRD Reviewer reads it against the project's governance files and checks for:
+      </p>
+
+      <ul>
+        <li>Decision Gate evidence block present and referencing real entries</li>
+        <li>Acceptance Criteria are concrete scenarios, not vague goals</li>
+        <li>Hypothesis is testable with a measurable outcome</li>
+        <li>Out-of-scope is explicit</li>
+        <li>No violation of existing decisions or anti-patterns</li>
+      </ul>
+
+      <p>If any of those fail, the reviewer loops back with specific issues:</p>
+
+      <div class="callout callout--warn">
+        <div class="callout__title">Reviewer</div>
+        <p>
+          Issues:
+          <br />— AC-3 says "the email should be fast" — that's not measurable. What p95 delivery latency target?
+          <br />— The hypothesis lacks a measurable success condition. "Engagement increases" how much, measured how?
+          <br />— <code>docs/decisions.md</code> says all scheduled tasks must run via Celery beat; the draft proposes a cron in Docker. Which is it?
+        </p>
+      </div>
+
+      <p>Address each issue (edit the PRD or clarify with the reviewer in chat) and the reviewer re-reads. Loop until approved.</p>
+
+      <h2 id="approval">Step 5 — Status flips to APPROVED</h2>
+
+      <p>
+        When the reviewer is satisfied, the PRD's status line at the bottom flips from <code>DRAFT</code> to <code>APPROVED</code>. This is the signal that the <a href="../concepts/interactivity-boundary.html">interactivity boundary</a> has been crossed — you can now hand off to the autonomous pipeline.
+      </p>
+
+      <h2 id="good-acs">Writing good Acceptance Criteria</h2>
+
+      <p>
+        The AC section is the most important part of the PRD because it's what the downstream agents consume as a contract. A vague AC leads to vague implementation and ineffective tests.
+      </p>
+
+      <h3 id="ac-bad">Bad</h3>
+      <ul>
+        <li>"The digest email looks good."</li>
+        <li>"Users can unsubscribe."</li>
+        <li>"The email is performant."</li>
+      </ul>
+
+      <h3 id="ac-good">Good</h3>
+      <ul>
+        <li>"AC-1 <strong>Active user with activity</strong>: Given a user with <code>is_active=true</code> and at least one completed assessment in the last 7 days, when the weekly job runs, then an email is sent within 60 seconds containing their assessment count and the top 3 by completion time."</li>
+        <li>"AC-2 <strong>Unsubscribe</strong>: Given a user clicks the unsubscribe link in a digest email, when they confirm on the landing page, then <code>user.receives_digest</code> is set to false and subsequent weekly jobs exclude them."</li>
+        <li>"AC-3 <strong>Delivery latency</strong>: The weekly job completes for a cohort of 10k users within p95 latency of 120 seconds."</li>
+      </ul>
+
+      <p>
+        Pattern: <strong>given [precondition] → when [action] → then [observable outcome]</strong>. Include concrete numbers (latencies, counts) when applicable.
+      </p>
+
+      <div class="callout callout--success">
+        <div class="callout__title">Tip</div>
+        <p>When TDD is active, the ACs become the TDD Writer's input directly — each AC ends up as one or more tests. When TDD is not active, the ACs still drive the Implementer's tests. Either way, the more concrete the AC, the more useful the tests.</p>
+      </div>
+
+      <h2 id="next-step">Next step</h2>
+
+      <p>With an approved PRD in hand, you have two options:</p>
+
+      <ul>
+        <li><strong>Run the whole pipeline</strong> — <code>/relay-execute PRPs/prds/&lt;feature&gt;.prd.md</code>. The orchestrator takes the PRD through plan, implementation, tests, review, and PR autonomously. Walk away; come back to a PR or a clear abort.</li>
+        <li><strong>Run stages individually</strong> — <code>/relay-plan</code>, <code>/relay-implement</code>, <code>/relay-test</code>, etc. Useful when you want to inspect each stage's output before moving on.</li>
+      </ul>
+
+      <p>See <a href="../reference/commands.html">command reference</a> for the full command surface.</p>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>
