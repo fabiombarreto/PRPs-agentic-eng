@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Changelog — relay</title>
+  <link rel="stylesheet" href="assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Meta</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Changelog</span>
+      </div>
+
+      <h1>Changelog</h1>
+      <p class="page-subtitle">History of every user-visible change to the documentation site. Versioning is independent of the relay plugin version (see <a href="AGENTS.md">AGENTS.md §7</a> for the rules). Entries follow the <a href="https://keepachangelog.com/">Keep a Changelog</a> convention: Added / Changed / Deprecated / Removed / Fixed.</p>
+
+      <div class="callout callout--note">
+        <div class="callout__title">How to read</div>
+        <p>Newest at the top. An <code>Unreleased</code> block accumulates in-flight changes; when a release is cut, it is renamed to the new version with the release date. All dates in ISO format (YYYY-MM-DD).</p>
+      </div>
+
+      <h2 id="unreleased">Unreleased</h2>
+
+      <p><em>No unreleased changes at the moment.</em></p>
+
+      <h2 id="v0-5-0">0.5.0 — 2026-04-22</h2>
+
+      <p>Doc site evolution contract + changelog infrastructure.</p>
+
+      <h3 id="v0-5-0-added">Added</h3>
+
+      <ul>
+        <li><strong><code>documentation/AGENTS.md</code></strong> — binding contract for any AI agent asked to modify the site. Covers invariants (no build step, no CDN, no emojis, no new asset files), canonical page template, CSS vocabulary reference, three-file registration rule (NAV + search index + changelog), workflows for add / modify / delete, and halt conditions.</li>
+        <li><strong><code>documentation/changelog.html</code></strong> — this page. Retroactive entries for releases 0.1 through 0.4, plus the current 0.5 release.</li>
+        <li><strong>NAV section "Meta"</strong> — new sidebar group hosting the changelog (and future meta pages: about, contributors, etc.).</li>
+        <li>Two-line pointer in the repo-root <code>CLAUDE.md</code> directing agents to <code>documentation/AGENTS.md</code> before editing <code>documentation/</code>.</li>
+      </ul>
+
+      <h3 id="v0-5-0-fixed">Fixed</h3>
+
+      <ul>
+        <li>Two Part-4 pages (<code>roadmap/test-runner-prd.html</code>, <code>examples/phoenix-dogfood.html</code>) used <code>badge--ok</code>, which does not exist in <code>app.css</code>. Replaced with <code>badge--done</code>. The affected badges now actually render with green styling instead of default text color.</li>
+      </ul>
+
+      <h2 id="v0-4-0">0.4.0 — 2026-04-22 (Part 4 — final content drop)</h2>
+
+      <p>Governance + Roadmap + Examples pages. Completes the initial content surface.</p>
+
+      <h3 id="v0-4-0-added">Added</h3>
+
+      <ul>
+        <li><strong><code>governance/anti-patterns.html</code></strong> — 8 forbidden patterns (weakening tests to turn green, TDD tests mirroring implementation, secrets in reports, heuristic TDD activation, interactive permission prompts, injecting plugin defaults into target <code>decisions.md</code>, writing artifacts under <code>.claude/</code>, treating <code>plugins/prp-core/</code> as active relay code). Each entry uses the <code>callout--error</code> block with the four-field pattern: What it is / Why it's forbidden / What to do instead / Areas affected.</li>
+        <li><strong><code>governance/decision-gate.html</code></strong> — the mandatory consultation ritual: when it activates, which sources must be consulted (<code>decisions.md</code>, <code>anti-patterns.md</code>, <code>architecture.md</code>, <code>constraints.md</code>, <code>methodology.md</code>, <code>domain/areas/*</code>), evidence block format with a full example, halt conditions, the micro-change exemption, and current soft-enforcement posture.</li>
+        <li><strong><code>roadmap/test-runner-prd.html</code></strong> — 9-phase deep dive of the Test Runner PRD with per-phase goals, deliverables, and acceptance criteria. Components mapped to the A1–A4 / B1–B8 inventory. Rolled-up PRD-level ACs at the bottom.</li>
+        <li><strong><code>examples/phoenix-dogfood.html</code></strong> — end-to-end walkthrough of the 2026-04-21 dogfood run: target project context, setup artifacts, invocation command, the four artifact layers (<code>run.json</code>, per-attempt <code>record.json</code>, <code>test-review.json</code>, <code>final-report.md</code>), four issues surfaced and their fixes, what was deferred, lessons learned, replay instructions.</li>
+      </ul>
+
+      <h3 id="v0-4-0-changed">Changed</h3>
+
+      <ul>
+        <li>Search index (<code>assets/data/search-index.json</code>) grew from 26 to 27 entries with the addition of the Test Runner PRD page (the other three already had placeholder entries from Part 3).</li>
+      </ul>
+
+      <h2 id="v0-3-0">0.3.0 — 2026-04-22 (Part 3 — Guide pages)</h2>
+
+      <p>The how-to surface: 6 task-oriented pages covering install → first run → day-to-day operation.</p>
+
+      <h3 id="v0-3-0-added">Added</h3>
+
+      <ul>
+        <li><strong><code>guide/installation.html</code></strong> — prerequisites, repo-clone + marketplace-enable flow, verification check, recommended optional tools.</li>
+        <li><strong><code>guide/first-run.html</code></strong> — walkthrough of invoking <code>*init</code>, the context-builder's 9 phases, validating <code>[INFERRED - VALIDATE]</code> items, answering open questions, required <code>.gitignore</code> entries.</li>
+        <li><strong><code>guide/writing-a-prd.html</code></strong> — the <code>/relay-prd</code> interactive flow in depth: 6-phase Q&amp;A, what makes a good AC, the reviewer loop, status-field semantics.</li>
+        <li><strong><code>guide/running-tests.html</code></strong> — standalone <code>/relay-test</code> usage, flags reference, interpreting verdict codes, reading the run report, the <code>/relay-implement</code> gap.</li>
+        <li><strong><code>guide/handling-failures.html</code></strong> — per-outcome recovery playbook: retry exhaustion, time budget, oscillation, five infra subcauses, <code>RETRY_NEEDED</code> halt.</li>
+        <li><strong><code>guide/post-green-review.html</code></strong> — <code>/relay-test-review</code> usage, the four concern types, coverage baseline opt-in, fix loop.</li>
+        <li><strong><code>guide/troubleshooting.html</code></strong> — known issues grouped by area (install, context-builder, permissions, Docker, reporting, secrets) with concrete fixes.</li>
+      </ul>
+
+      <h2 id="v0-2-0">0.2.0 — 2026-04-21 (Part 2 — Concepts + Reference)</h2>
+
+      <p>The conceptual + technical reference surface: 10 pages.</p>
+
+      <h3 id="v0-2-0-added">Added</h3>
+
+      <ul>
+        <li><strong><code>concepts/pipeline.html</code></strong> — writer/reviewer pairs plus the Test Runner; 8 stages with per-stage inputs, outputs, retry budgets.</li>
+        <li><strong><code>concepts/tdd-track.html</code></strong> — explicit opt-in rules, why heuristic activation is forbidden, what B7/B8 do when enabled.</li>
+        <li><strong><code>concepts/prp-artifacts.html</code></strong> — the <code>PRPs/</code> convention, why <code>.claude/</code> is off-limits for pipeline artifacts, the settings.json exception.</li>
+        <li><strong><code>concepts/graceful-degradation.html</code></strong> — precondition detection, clear-skip protocol, per-component fallback semantics.</li>
+        <li><strong><code>reference/agents.html</code></strong> — per-agent reference for <code>test-runner</code> and <code>post-green-reviewer</code>, prompts, tool allowlists, output structures.</li>
+        <li><strong><code>reference/skills.html</code></strong> — <code>context-builder</code> skill reference.</li>
+        <li><strong><code>reference/scripts.html</code></strong> — Node.js helper scripts (<code>normalize-test-output.mjs</code>, <code>generate-final-report.mjs</code>), zero npm dependencies.</li>
+        <li><strong><code>reference/test-output-schema.html</code></strong> — canonical v1 schema emitted by the normalizer, field-by-field, with framework mappings.</li>
+        <li><strong><code>reference/settings-allowlist.html</code></strong> — narrow permission patterns per stack signal, invariant denylist.</li>
+        <li><strong><code>reference/redaction-policy.html</code></strong> — three-layer secret redaction (invariants, per-project extensions, documented non-redacted values).</li>
+      </ul>
+
+      <h2 id="v0-1-0">0.1.0 — 2026-04-21 (Part 1 — initial drop)</h2>
+
+      <p>Initial doc site infrastructure + 7 launch pages. Established the site's architecture and visual language.</p>
+
+      <h3 id="v0-1-0-added">Added</h3>
+
+      <ul>
+        <li><strong>Site infrastructure</strong> — <code>assets/css/app.css</code> (full theme + component library), <code>assets/js/app.js</code> (runtime: NAV, theme, search, TOC scrollspy, syntax highlight, copy buttons, prev/next), <code>assets/data/search-index.json</code> (client-side search index).</li>
+        <li><strong>Dark / light theme</strong> via CSS custom properties. Dark default, persisted choice in <code>localStorage</code>.</li>
+        <li><strong>Offline-first architecture</strong> — works from <code>file://</code> with no CDN, no server, no build step.</li>
+        <li><strong><code>index.html</code></strong> — landing page with hero, pipeline visualization, design rationale, card-grid to sections.</li>
+        <li><strong><code>concepts/pillars.html</code></strong> — three pillars (Initialization / Implementation / Approval).</li>
+        <li><strong><code>concepts/interactivity-boundary.html</code></strong> — the PRD-approval cutover between interactive and autonomous.</li>
+        <li><strong><code>reference/commands.html</code></strong> — full command surface reference (12 commands + 1 placeholder).</li>
+        <li><strong><code>governance/decisions.html</code></strong> — 14 stable decisions with context / decision / reason / affected-areas.</li>
+        <li><strong><code>roadmap/status.html</code></strong> — rollout across 5 program phases + per-PRD phase status.</li>
+        <li><strong><code>README.md</code></strong> — human-facing reading guide.</li>
+      </ul>
+
+      <h2 id="format-notes">Format notes</h2>
+
+      <p>
+        The site follows its own semver independent of the relay plugin (per <a href="AGENTS.md">AGENTS.md §7.1</a>):
+      </p>
+
+      <ul>
+        <li><strong>Patch (0.x.Y)</strong> — typo fixes, wording, broken-link repair. No structural change.</li>
+        <li><strong>Minor (0.X.0)</strong> — new pages, new sections, new NAV entries, new CSS components. No breaking change to existing content.</li>
+        <li><strong>Major (X.0.0)</strong> — breaking restructure: renamed folders, removed pages, overhauled theme. Migration notes accompany the entry.</li>
+      </ul>
+
+      <p>
+        Pre-1.0 cadence: minor bumps frequently, major bumps rarely, patch bumps whenever a single fix goes in alone. After 1.0 the site is considered externally stable and removal of any page triggers a major bump.
+      </p>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>

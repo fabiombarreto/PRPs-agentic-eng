@@ -38,3 +38,16 @@ Domain areas:
   pipeline stages serve that role (documented in architecture.md and flows.md)
 
 Full index: docs/KNOWLEDGE_BASE.md
+
+## Documentation site
+
+The `documentation/` folder is a rendered HTML+CSS+JS site that mirrors and
+explains the canonical Markdown in `docs/`. It is the team-facing and
+external-facing surface.
+
+When asked to modify anything inside `documentation/` (add pages, edit
+pages, adjust structure, introduce new sections): **read `documentation/AGENTS.md` first**.
+It is the binding contract — site invariants, page template, CSS vocabulary,
+the three-file registration rule (NAV + search index + changelog),
+per-workflow checklists, and halt conditions. Every change to `documentation/`
+must include an entry in `documentation/changelog.html`.

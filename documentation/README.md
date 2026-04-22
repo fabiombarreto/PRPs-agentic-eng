@@ -5,6 +5,11 @@ Self-contained interactive documentation for the `relay` plugin. Open
 step required. All assets are loaded via relative paths so `file://`
 access works.
 
+> **Modifying this site?** Read [`AGENTS.md`](AGENTS.md) first — it is the
+> binding contract for structure, CSS vocabulary, NAV/search/changelog
+> registration, and forbidden changes. Applies to humans and AI agents alike.
+> Every change must include an entry in [`changelog.html`](changelog.html).
+
 ## Reading the docs locally
 
 ```bash

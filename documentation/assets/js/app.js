@@ -82,6 +82,12 @@
         { title: "Phoenix dogfood",         path: "examples/phoenix-dogfood.html" },
       ],
     },
+    {
+      heading: "Meta",
+      items: [
+        { title: "Changelog",               path: "changelog.html" },
+      ],
+    },
   ];
 
   // Flatten for prev/next and search
@@ -131,7 +137,7 @@
       <a class="topbar__brand" href="${prefix}index.html">
         <span class="topbar__brand-dot"></span>
         <span>relay</span>
-        <span class="topbar__version">0.1 · docs</span>
+        <span class="topbar__version">0.5 · docs</span>
       </a>
       <div class="topbar__actions">
         <div class="search-wrap">

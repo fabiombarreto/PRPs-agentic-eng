@@ -75,7 +75,7 @@
           </ul>
         </dd>
         <dt>Exit criteria</dt><dd>Downstream phases can cite stable paths without guessing.</dd>
-        <dt>Status</dt><dd><span class="badge badge--ok">Complete</span></dd>
+        <dt>Status</dt><dd><span class="badge badge--done">Complete</span></dd>
       </div>
 
       <h3 id="phase-1">Phase 1 — Infra primitives (A1)</h3>
@@ -98,7 +98,7 @@
             <li>AC3: Missing Docker produces a single-line diagnostic, not a Python traceback.</li>
           </ul>
         </dd>
-        <dt>Status</dt><dd><span class="badge badge--ok">Complete</span></dd>
+        <dt>Status</dt><dd><span class="badge badge--done">Complete</span></dd>
       </div>
 
       <h3 id="phase-2">Phase 2 — Normalizer (A2)</h3>
@@ -121,7 +121,7 @@
             <li>AC3: Mixed-framework suite (pytest + Playwright) → merged canonical output.</li>
           </ul>
         </dd>
-        <dt>Status</dt><dd><span class="badge badge--ok">Complete</span></dd>
+        <dt>Status</dt><dd><span class="badge badge--done">Complete</span></dd>
       </div>
 
       <h3 id="phase-3">Phase 3 — Classifier (B3)</h3>
@@ -143,7 +143,7 @@
             <li>AC3: Subcause exhaustively covers the common infra failures observed in dogfood.</li>
           </ul>
         </dd>
-        <dt>Status</dt><dd><span class="badge badge--ok">Complete</span></dd>
+        <dt>Status</dt><dd><span class="badge badge--done">Complete</span></dd>
       </div>
 
       <h3 id="phase-4">Phase 4 — Auto-correction loop (B4)</h3>
@@ -169,7 +169,7 @@
           </ul>
         </dd>
         <dt>Known gap</dt><dd>Until <code>/relay-implement</code> lands, the loop halts on the first <code>RETRY_NEEDED</code> and writes <code>implementer-feedback.json</code> for human consumption. See <a href="../guide/handling-failures.html#halted-retry-needed">Handling failures</a>.</dd>
-        <dt>Status</dt><dd><span class="badge badge--ok">Complete (with known gap)</span></dd>
+        <dt>Status</dt><dd><span class="badge badge--done">Complete (with known gap)</span></dd>
       </div>
 
       <h3 id="phase-5">Phase 5 — Post-green reviewer (B5)</h3>
@@ -195,7 +195,7 @@
             <li>AC4: Baseline absent → <code>notes: ["coverage baseline unavailable..."]</code>, no false flag.</li>
           </ul>
         </dd>
-        <dt>Status</dt><dd><span class="badge badge--ok">Complete</span></dd>
+        <dt>Status</dt><dd><span class="badge badge--done">Complete</span></dd>
       </div>
 
       <h3 id="phase-6">Phase 6 — Run report (B6)</h3>
@@ -218,7 +218,7 @@
             <li>AC3: Report is &lt; 50KB (PR description limit safe).</li>
           </ul>
         </dd>
-        <dt>Status</dt><dd><span class="badge badge--ok">Complete</span></dd>
+        <dt>Status</dt><dd><span class="badge badge--done">Complete</span></dd>
       </div>
 
       <h3 id="phase-7">Phase 7 — TDD track (B7 + B8)</h3>
@@ -242,7 +242,7 @@
             <li>AC4: PRD has no concrete AC → B7 halts and asks for clarification rather than inventing behavior.</li>
           </ul>
         </dd>
-        <dt>Status</dt><dd><span class="badge badge--ok">Complete</span></dd>
+        <dt>Status</dt><dd><span class="badge badge--done">Complete</span></dd>
       </div>
 
       <h3 id="phase-8">Phase 8 — Dogfood + hardening</h3>
@@ -265,7 +265,7 @@
             <li>AC3: Artifacts committed for future reference.</li>
           </ul>
         </dd>
-        <dt>Status</dt><dd><span class="badge badge--ok">Complete</span></dd>
+        <dt>Status</dt><dd><span class="badge badge--done">Complete</span></dd>
       </div>
 
       <h2 id="rolled-up-ac">Rolled-up acceptance criteria (PRD-level)</h2>

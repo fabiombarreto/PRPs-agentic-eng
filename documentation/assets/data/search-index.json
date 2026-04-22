@@ -160,5 +160,11 @@
     "path": "examples/phoenix-dogfood.html",
     "category": "Examples",
     "excerpt": "First target project used to validate the plugin end-to-end on 2026-04-21. Synthetic JUnit XML run against the real normalizer and report generator. Artifacts walkthrough (run.json, record.json, test-review.json, final-report.md), four issues surfaced and fixed."
+  },
+  {
+    "title": "Changelog",
+    "path": "changelog.html",
+    "category": "Meta",
+    "excerpt": "History of every user-visible change to the documentation site. Independent semver from the relay plugin. Entries follow Keep a Changelog: Added / Changed / Deprecated / Removed / Fixed. Retroactive entries for releases 0.1 through 0.5."
   }
 ]
