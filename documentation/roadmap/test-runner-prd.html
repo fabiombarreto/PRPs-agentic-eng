@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Test Runner PRD — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Roadmap</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Test Runner PRD</span>
+      </div>
+
+      <h1>Test Runner PRD — deep dive</h1>
+      <p class="page-subtitle">The Test Runner is the closed-loop component that turns a candidate implementation into a GREEN outcome (or a well-classified abort). This page walks through the 9-phase PRD that drove its delivery, with per-phase outcomes, acceptance criteria, and the artifacts each phase produced. It complements the high-level <a href="status.html">phase status</a> page with the full detail a reviewer needs.</p>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Source</div>
+        <p>Canonical PRD at <code>PRPs/prds/test-runner.prd.md</code> in the plugin repo. The per-phase plans are under <code>PRPs/plans/test-runner/phase-&lt;N&gt;.md</code>. Artifacts from the dogfood run are in <code>PRPs/reports/dogfood-2026-04-21/</code>.</p>
+      </div>
+
+      <h2 id="scope">Scope at a glance</h2>
+
+      <p>
+        The Test Runner stage (B1-B8 in the component inventory) is bounded by three guarantees:
+      </p>
+
+      <ol>
+        <li><strong>Deterministic verdict.</strong> Every invocation ends with one of: <code>GREEN</code>, <code>FAILED_AFTER_N_RETRIES</code>, <code>FAILED_TIME_BUDGET_EXCEEDED</code>, <code>FAILED_OSCILLATION</code>, or <code>FAILED_INFRA_UNRECOVERABLE</code>. No silent failures.</li>
+        <li><strong>Bounded work.</strong> <code>max_test_retries = 3</code> attempts; <code>max_test_minutes = 30</code> wall clock. Configurable via <code>.relay.yaml</code> or CLI flags but never unbounded.</li>
+        <li><strong>Read-only against tests.</strong> The loop may only modify implementation files. Editing, skipping, or deleting tests to achieve green is an anti-pattern enforced by the post-green reviewer.</li>
+      </ol>
+
+      <h2 id="components">Component map</h2>
+
+      <p>The PRD carved the work into 8 plugin components and 4 infra components:</p>
+
+      <div class="kv">
+        <dt>A1 — Compose primitives</dt><dd><code>docker-compose.test.yml</code> per target + <code>make test-bootstrap</code>/<code>make test-down</code>.</dd>
+        <dt>A2 — Test output normalizer</dt><dd><code>normalize-test-output.mjs</code>: JUnit XML → canonical schema v1.</dd>
+        <dt>A3 — Report generator</dt><dd><code>generate-final-report.mjs</code>: run.json + attempts → <code>final-report.md</code>.</dd>
+        <dt>A4 — Redaction filter</dt><dd>Three-layer policy applied on every captured stream.</dd>
+        <dt>B1 — Test Runner agent</dt><dd>Orchestrates one attempt: boot infra, run suite, capture output.</dd>
+        <dt>B2 — Output capture</dt><dd>stdout/stderr/JUnit → per-attempt <code>record.json</code>.</dd>
+        <dt>B3 — Failure classifier</dt><dd>Canonical JSON → verdict: <code>GREEN</code>, <code>RETRY_NEEDED</code>, <code>INFRA_UNRECOVERABLE</code>.</dd>
+        <dt>B4 — Auto-correction loop</dt><dd>On <code>RETRY_NEEDED</code>, routes feedback to Implementer; on next commit, re-runs B1.</dd>
+        <dt>B5 — Post-green reviewer</dt><dd>After <code>GREEN</code>, checks for weakened/removed/skipped tests.</dd>
+        <dt>B6 — Run report</dt><dd>Synthesizes final run artifact for the PR description.</dd>
+        <dt>B7 — TDD Writer</dt><dd>Generates test suite from PRD AC (TDD track only).</dd>
+        <dt>B8 — TDD Reviewer</dt><dd>Rejects suites that leak implementation or use excess mocks.</dd>
+      </div>
+
+      <h2 id="phases">The 9 phases</h2>
+
+      <h3 id="phase-0">Phase 0 — Foundations</h3>
+
+      <div class="kv">
+        <dt>Goal</dt><dd>Establish the repository conventions the rest of the PRD depends on: artifact paths, decision log, anti-patterns, command surface.</dd>
+        <dt>Deliverables</dt>
+        <dd>
+          <ul>
+            <li><code>docs/decisions.md</code> seeded with 6 entries</li>
+            <li><code>docs/anti-patterns.md</code> seeded with 4 patterns</li>
+            <li><code>docs/context/{architecture,conventions,constraints,methodology}.md</code></li>
+            <li><code>PRPs/</code> artifact root convention</li>
+          </ul>
+        </dd>
+        <dt>Exit criteria</dt><dd>Downstream phases can cite stable paths without guessing.</dd>
+        <dt>Status</dt><dd><span class="badge badge--ok">Complete</span></dd>
+      </div>
+
+      <h3 id="phase-1">Phase 1 — Infra primitives (A1)</h3>
+
+      <div class="kv">
+        <dt>Goal</dt><dd>Standardize the boot/teardown surface so B1 can assume Docker Compose semantics regardless of stack.</dd>
+        <dt>Deliverables</dt>
+        <dd>
+          <ul>
+            <li><code>docker-compose.test.yml</code> template shipped via context-builder</li>
+            <li><code>make test-bootstrap</code> / <code>make test-down</code> targets</li>
+            <li>Graceful fallback when Docker is absent (verdict: <code>FAILED_INFRA_UNRECOVERABLE / docker_not_running</code>)</li>
+          </ul>
+        </dd>
+        <dt>Acceptance criteria</dt>
+        <dd>
+          <ul>
+            <li>AC1: <code>make test-bootstrap</code> returns 0 in &lt; 60s on warm cache.</li>
+            <li>AC2: <code>make test-down</code> is idempotent.</li>
+            <li>AC3: Missing Docker produces a single-line diagnostic, not a Python traceback.</li>
+          </ul>
+        </dd>
+        <dt>Status</dt><dd><span class="badge badge--ok">Complete</span></dd>
+      </div>
+
+      <h3 id="phase-2">Phase 2 — Normalizer (A2)</h3>
+
+      <div class="kv">
+        <dt>Goal</dt><dd>Produce one canonical JSON schema that every framework-specific JUnit XML is mapped into. B3's classifier reads the canonical form only.</dd>
+        <dt>Deliverables</dt>
+        <dd>
+          <ul>
+            <li><code>plugins/relay/scripts/normalize-test-output.mjs</code></li>
+            <li><code>docs/schema/test-output-v1.json</code></li>
+            <li>Framework mappings: pytest, Vitest, Playwright, Jest, Go test</li>
+          </ul>
+        </dd>
+        <dt>Acceptance criteria</dt>
+        <dd>
+          <ul>
+            <li>AC1: Unknown framework → clear error, not a crash.</li>
+            <li>AC2: Missing XML file → verdict <code>normalizer_failure</code> with the expected path.</li>
+            <li>AC3: Mixed-framework suite (pytest + Playwright) → merged canonical output.</li>
+          </ul>
+        </dd>
+        <dt>Status</dt><dd><span class="badge badge--ok">Complete</span></dd>
+      </div>
+
+      <h3 id="phase-3">Phase 3 — Classifier (B3)</h3>
+
+      <div class="kv">
+        <dt>Goal</dt><dd>Turn canonical JSON into a verdict: <code>GREEN</code>, <code>RETRY_NEEDED</code> (with implementer-feedback.json), or <code>INFRA_UNRECOVERABLE</code> (with subcause).</dd>
+        <dt>Deliverables</dt>
+        <dd>
+          <ul>
+            <li><code>classifier</code> logic inside the <code>test-runner</code> agent</li>
+            <li>Subcause inventory: <code>missing_settings_json</code>, <code>docker_not_running</code>, <code>db_unreachable</code>, <code>normalizer_failure</code>, <code>no_runner_detected</code>, <code>no_test_framework</code></li>
+          </ul>
+        </dd>
+        <dt>Acceptance criteria</dt>
+        <dd>
+          <ul>
+            <li>AC1: All-pass canonical → <code>GREEN</code>.</li>
+            <li>AC2: Any failure with valid infra → <code>RETRY_NEEDED</code> + structured feedback.</li>
+            <li>AC3: Subcause exhaustively covers the common infra failures observed in dogfood.</li>
+          </ul>
+        </dd>
+        <dt>Status</dt><dd><span class="badge badge--ok">Complete</span></dd>
+      </div>
+
+      <h3 id="phase-4">Phase 4 — Auto-correction loop (B4)</h3>
+
+      <div class="kv">
+        <dt>Goal</dt><dd>Wire B3's <code>RETRY_NEEDED</code> verdict back to the Implementer, then re-invoke B1 on its next commit. Bound by <code>max_test_retries</code>.</dd>
+        <dt>Deliverables</dt>
+        <dd>
+          <ul>
+            <li>Loop driver inside <code>/relay-test</code> command</li>
+            <li>Per-attempt subdirectory convention <code>PRPs/reports/&lt;feature&gt;/attempts/&lt;N&gt;/</code></li>
+            <li>Oscillation detector: file-set intersection + content-reversion check</li>
+            <li><code>run.json</code> with <code>outcome</code>, <code>attempts[]</code>, <code>time_breakdown</code></li>
+          </ul>
+        </dd>
+        <dt>Acceptance criteria</dt>
+        <dd>
+          <ul>
+            <li>AC1: Loop terminates on first <code>GREEN</code>.</li>
+            <li>AC2: <code>max_test_retries</code> exhausted → <code>FAILED_AFTER_N_RETRIES</code>.</li>
+            <li>AC3: Wall-clock budget exceeded → <code>FAILED_TIME_BUDGET_EXCEEDED</code>.</li>
+            <li>AC4: Attempt N+1 reverts files from attempt N → <code>FAILED_OSCILLATION</code>.</li>
+          </ul>
+        </dd>
+        <dt>Known gap</dt><dd>Until <code>/relay-implement</code> lands, the loop halts on the first <code>RETRY_NEEDED</code> and writes <code>implementer-feedback.json</code> for human consumption. See <a href="../guide/handling-failures.html#halted-retry-needed">Handling failures</a>.</dd>
+        <dt>Status</dt><dd><span class="badge badge--ok">Complete (with known gap)</span></dd>
+      </div>
+
+      <h3 id="phase-5">Phase 5 — Post-green reviewer (B5)</h3>
+
+      <div class="kv">
+        <dt>Goal</dt><dd>After <code>GREEN</code>, verify the green wasn't achieved by weakening tests. Detect removed tests, added skips, trivial assertions, coverage drops.</dd>
+        <dt>Deliverables</dt>
+        <dd>
+          <ul>
+            <li><code>post-green-reviewer</code> agent</li>
+            <li><code>/relay-test-review</code> command</li>
+            <li>Per-language heuristics for test deletion / skip / trivial assertions</li>
+            <li>Coverage baseline opt-in at <code>PRPs/reports/coverage-baseline.json</code></li>
+            <li><code>test-review.json</code> verdict: <code>APPROVED</code> | <code>CHANGES_REQUESTED</code></li>
+          </ul>
+        </dd>
+        <dt>Acceptance criteria</dt>
+        <dd>
+          <ul>
+            <li>AC1: Pure implementation diff → <code>APPROVED</code>, <code>concerns: []</code>.</li>
+            <li>AC2: Diff deletes a test function → <code>CHANGES_REQUESTED</code> with <code>type: test_removed</code>.</li>
+            <li>AC3: Diff adds <code>@skip</code> → <code>CHANGES_REQUESTED</code> with <code>type: test_skipped</code>.</li>
+            <li>AC4: Baseline absent → <code>notes: ["coverage baseline unavailable..."]</code>, no false flag.</li>
+          </ul>
+        </dd>
+        <dt>Status</dt><dd><span class="badge badge--ok">Complete</span></dd>
+      </div>
+
+      <h3 id="phase-6">Phase 6 — Run report (B6)</h3>
+
+      <div class="kv">
+        <dt>Goal</dt><dd>Generate the single markdown report that goes into the PR description: outcome, attempt count, time breakdown, classified failures, redaction summary.</dd>
+        <dt>Deliverables</dt>
+        <dd>
+          <ul>
+            <li><code>plugins/relay/scripts/generate-final-report.mjs</code></li>
+            <li>Markdown template pinned to <code>docs/schema/final-report-v1.md</code></li>
+            <li>Secret redaction integrated via A4 filter</li>
+          </ul>
+        </dd>
+        <dt>Acceptance criteria</dt>
+        <dd>
+          <ul>
+            <li>AC1: All sections present regardless of outcome.</li>
+            <li>AC2: Redacted values appear as <code>[REDACTED:&lt;category&gt;]</code>, never raw.</li>
+            <li>AC3: Report is &lt; 50KB (PR description limit safe).</li>
+          </ul>
+        </dd>
+        <dt>Status</dt><dd><span class="badge badge--ok">Complete</span></dd>
+      </div>
+
+      <h3 id="phase-7">Phase 7 — TDD track (B7 + B8)</h3>
+
+      <div class="kv">
+        <dt>Goal</dt><dd>For projects with <code>tdd: true</code>, generate the test suite <strong>before</strong> the implementer runs, and reject suites that leak implementation details.</dd>
+        <dt>Deliverables</dt>
+        <dd>
+          <ul>
+            <li>TDD Writer agent (B7) with PRD-AC → test prompt</li>
+            <li>TDD Reviewer agent (B8) with rejection heuristics for excess mocks, trivial asserts, implementation-specific fixtures</li>
+            <li><code>/relay-tdd-write</code> + <code>/relay-tdd-review</code> commands</li>
+          </ul>
+        </dd>
+        <dt>Acceptance criteria</dt>
+        <dd>
+          <ul>
+            <li>AC1: <code>tdd: false</code> or missing → skill silently skips B7/B8.</li>
+            <li>AC2: Suite with &gt; 50% mocked collaborators → <code>CHANGES_REQUESTED</code>.</li>
+            <li>AC3: Suite with trivial asserts → <code>CHANGES_REQUESTED</code>.</li>
+            <li>AC4: PRD has no concrete AC → B7 halts and asks for clarification rather than inventing behavior.</li>
+          </ul>
+        </dd>
+        <dt>Status</dt><dd><span class="badge badge--ok">Complete</span></dd>
+      </div>
+
+      <h3 id="phase-8">Phase 8 — Dogfood + hardening</h3>
+
+      <div class="kv">
+        <dt>Goal</dt><dd>Run the full pipeline against a real target project (Phoenix) and fix whatever breaks. Capture artifacts as reference for future debugging.</dd>
+        <dt>Deliverables</dt>
+        <dd>
+          <ul>
+            <li>Dogfood artifacts at <code>PRPs/reports/dogfood-2026-04-21/</code></li>
+            <li>Fixes emerging from the run (gitignore pattern, oscillation detector edge case, redaction regex tuning)</li>
+            <li><a href="../examples/phoenix-dogfood.html">Phoenix dogfood walkthrough</a></li>
+          </ul>
+        </dd>
+        <dt>Acceptance criteria</dt>
+        <dd>
+          <ul>
+            <li>AC1: End-to-end synthetic run terminates with a well-formed <code>run.json</code>.</li>
+            <li>AC2: Every issue found during dogfood either fixed, documented as a known gap, or converted to a decision entry.</li>
+            <li>AC3: Artifacts committed for future reference.</li>
+          </ul>
+        </dd>
+        <dt>Status</dt><dd><span class="badge badge--ok">Complete</span></dd>
+      </div>
+
+      <h2 id="rolled-up-ac">Rolled-up acceptance criteria (PRD-level)</h2>
+
+      <p>The PRD-level ACs that the 9 phases collectively satisfied:</p>
+
+      <ol>
+        <li>A single <code>/relay-test &lt;worktree&gt;</code> invocation terminates with a structured outcome in every documented scenario.</li>
+        <li>The outcome distinguishes infra failure, convergence failure, time budget exhaustion, and oscillation — no generic "failed."</li>
+        <li>The loop never modifies test files. Proven by post-green reviewer running on every GREEN.</li>
+        <li>Every artifact produced by the Test Runner lives under <code>PRPs/reports/&lt;feature&gt;/</code>. Never under <code>.claude/</code>.</li>
+        <li>Captured output is redacted before being written to disk. Three-layer policy applied.</li>
+        <li>TDD track is opt-in by explicit declaration. Heuristic activation is forbidden.</li>
+        <li>A missing or broken infra surfaces a single diagnostic line, not a traceback.</li>
+        <li>The PR description embeds the full run report in &lt; 50KB markdown.</li>
+      </ol>
+
+      <h2 id="next-phases">What's next</h2>
+
+      <p>The Test Runner PRD is done. The broader rollout continues along the 5-phase program (Foundation / Testing / Agents / Approval / CI/CD):</p>
+
+      <ul>
+        <li><strong>Phase 3 — Agents:</strong> <code>/relay-implement</code> to close the auto-correction loop without human intervention.</li>
+        <li><strong>Phase 4 — Approval:</strong> <code>/relay-pr</code> + Docs Updater so a PR reaches "ready for review" autonomously.</li>
+        <li><strong>Phase 5 — CI/CD:</strong> GitHub Actions wiring, settings lint, Decision Gate enforcement hooks.</li>
+      </ul>
+
+      <p>See <a href="status.html">Phase status</a> for the current position in that program.</p>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

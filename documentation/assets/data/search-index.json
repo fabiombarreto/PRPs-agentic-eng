@@ -141,7 +141,7 @@
     "title": "Decision Gate",
     "path": "governance/decision-gate.html",
     "category": "Governance",
-    "excerpt": "Mandatory cognitive control mechanism activated before planning, coding, or review. Forces consultation of decisions.md, anti-patterns.md, and architecture."
+    "excerpt": "Mandatory cognitive control mechanism activated before planning, coding, or review. Forces consultation of decisions.md, anti-patterns.md, architecture, constraints, methodology, and domain areas. Evidence block, halt conditions, exemptions."
   },
   {
     "title": "Phase status",
@@ -150,9 +150,15 @@
     "excerpt": "Overall rollout across 5 phases: Foundation, Testing, Agents, Approval, CI/CD. Plus per-PRD phase status for the Test Runner — 8 of 9 phases complete."
   },
   {
+    "title": "Test Runner PRD",
+    "path": "roadmap/test-runner-prd.html",
+    "category": "Roadmap",
+    "excerpt": "Deep dive into the 9-phase PRD that delivered the Test Runner: foundations, infra primitives, normalizer, classifier, auto-correction loop, post-green reviewer, report, TDD track, dogfood. Per-phase acceptance criteria."
+  },
+  {
     "title": "Phoenix dogfood",
     "path": "examples/phoenix-dogfood.html",
     "category": "Examples",
-    "excerpt": "First target project used to validate the plugin end-to-end. Synthetic JUnit XML run against the real normalizer and report generator; what validated vs what was deferred."
+    "excerpt": "First target project used to validate the plugin end-to-end on 2026-04-21. Synthetic JUnit XML run against the real normalizer and report generator. Artifacts walkthrough (run.json, record.json, test-review.json, final-report.md), four issues surfaced and fixed."
   }
 ]

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Anti-patterns — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Governance</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Anti-patterns</span>
+      </div>
+
+      <h1>Anti-patterns</h1>
+      <p class="page-subtitle">Patterns that look correct from a local perspective but are forbidden at the project level. The AI must not implement anything listed here — even when the generated code or suggested approach seems reasonable. Anti-patterns are consulted via the <a href="decision-gate.html">Decision Gate</a> before every planning or implementation step.</p>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Canonical source</div>
+        <p>This page mirrors <code>docs/anti-patterns.md</code> in the relay plugin repo. Markdown is authoritative; this HTML is the rendered reference for humans.</p>
+      </div>
+
+      <h2 id="index">Index</h2>
+
+      <ol>
+        <li><a href="#weakening-tests">Weakening or deleting tests to make the loop turn green</a></li>
+        <li><a href="#tdd-mirroring">Writing TDD tests that mirror imagined implementation</a></li>
+        <li><a href="#secrets-in-reports">Emitting secret values in run reports or logs</a></li>
+        <li><a href="#heuristic-tdd">Activating the TDD track by heuristic</a></li>
+        <li><a href="#interactive-prompts">Relying on interactive permission prompts in the autonomous loop</a></li>
+        <li><a href="#inject-defaults">Injecting plugin defaults into the target project's decisions.md</a></li>
+        <li><a href="#writing-claude">Writing pipeline artifacts under <code>.claude/</code></a></li>
+        <li><a href="#prp-core-active">Treating <code>plugins/prp-core/</code> as active relay code</a></li>
+      </ol>
+
+      <h2 id="weakening-tests">1. Weakening or deleting tests to make the loop turn green</h2>
+
+      <div class="callout callout--error">
+        <div class="callout__title">Anti-pattern</div>
+        <p><strong>What it is:</strong> An agent edits, skips, or removes failing tests in order to satisfy the "all tests pass" exit condition of the Test Runner loop.</p>
+        <p><strong>Why it's forbidden:</strong> Optimizes for "verde" instead of "correto". The loop is supposed to fix the implementation, not the contract. The post-green reviewer (B5) exists precisely to catch this.</p>
+        <p><strong>What to do instead:</strong> Fix the implementation, or — if the failure exposes a real requirement gap — abort and surface the conflict to the human.</p>
+        <p><strong>Areas affected:</strong> Test Runner (B1–B5), auto-correction loop (B4).</p>
+      </div>
+
+      <h2 id="tdd-mirroring">2. Writing TDD tests that mirror imagined implementation</h2>
+
+      <div class="callout callout--error">
+        <div class="callout__title">Anti-pattern</div>
+        <p><strong>What it is:</strong> In TDD mode, the TDD Writer (B7) produces tests that encode specific implementation choices (internal method names, private data shapes, mocked collaborators that presuppose a design) instead of requirements from the PRD.</p>
+        <p><strong>Why it's forbidden:</strong> Tests and implementation then "nascem acoplados" and exert no design pressure on the code — the core failure mode of AI-driven TDD called out by the planning document.</p>
+        <p><strong>What to do instead:</strong> TDD Writer derives tests from PRD Acceptance Criteria and observable behavior. TDD Reviewer (B8) rejects suites that leak implementation details, rely on excessive mocks, or contain trivial asserts.</p>
+        <p><strong>Areas affected:</strong> TDD track (B7, B8).</p>
+      </div>
+
+      <h2 id="secrets-in-reports">3. Emitting secret values in run reports or logs</h2>
+
+      <div class="callout callout--error">
+        <div class="callout__title">Anti-pattern</div>
+        <p><strong>What it is:</strong> Test Runner captures stdout/stderr that contains API keys, tokens, or other credentials and writes them verbatim into the execution report or PR body.</p>
+        <p><strong>Why it's forbidden:</strong> Reports can end up in public PRs; any leak is an incident. The A4 component mandates redaction; B6 (report) must apply the filter.</p>
+        <p><strong>What to do instead:</strong> Indicate only presence/absence of credentials. Redact values known to be secret at the source using the three-layer <a href="../reference/redaction-policy.html">redaction policy</a>.</p>
+        <p><strong>Areas affected:</strong> Test Runner infra (A4), report generator (B6).</p>
+      </div>
+
+      <h2 id="heuristic-tdd">4. Activating the TDD track by heuristic</h2>
+
+      <div class="callout callout--error">
+        <div class="callout__title">Anti-pattern</div>
+        <p><strong>What it is:</strong> Inferring that a project "does TDD" from the existence of a test folder, a high test count, or a CI job, and enabling B7/B8 automatically.</p>
+        <p><strong>Why it's forbidden:</strong> TDD is a methodology, not a side effect of having tests. Activating it silently surprises teams that test a lot without practicing TDD.</p>
+        <p><strong>What to do instead:</strong> Read <code>docs/context/methodology.md</code> and check exactly one key: <code>tdd: true | false</code>. No declaration file, <code>tdd: false</code>, or missing frontmatter → skip B7/B8 silently. The context-builder skill MUST create this file in every <code>*init</code> run with <code>tdd: false</code> as the default.</p>
+        <p><strong>Areas affected:</strong> orchestrator activation, context-builder skill, TDD agents (B7, B8).</p>
+      </div>
+
+      <h2 id="interactive-prompts">5. Relying on interactive permission prompts in the autonomous loop</h2>
+
+      <div class="callout callout--error">
+        <div class="callout__title">Anti-pattern</div>
+        <p><strong>What it is:</strong> Shipping pipeline steps that require per-command confirmation in Claude Code, breaking the "single prompt → PR" promise.</p>
+        <p><strong>Why it's forbidden:</strong> Component C1 of the Phase 2 plan mandates <code>.claude/settings.json</code> with an explicit allowlist; without it, the auto-correction loop halts on its first bash command.</p>
+        <p><strong>What to do instead:</strong> Declare all required commands in the plugin's versioned <a href="../reference/settings-allowlist.html">settings allowlist</a>. Never rely on the human to approve individual tools during an autonomous run.</p>
+        <p><strong>Areas affected:</strong> permissions (C1), orchestrator autonomy.</p>
+      </div>
+
+      <h2 id="inject-defaults">6. Injecting plugin defaults into the target project's <code>decisions.md</code></h2>
+
+      <div class="callout callout--error">
+        <div class="callout__title">Anti-pattern</div>
+        <p><strong>What it is:</strong> The context-builder skill (or any future agent) writes plugin-level defaults — <code>max_test_retries: 3</code>, <code>tdd: false</code> default, PRP root path, etc. — into the target project's <code>docs/decisions.md</code> as if they were decisions the project made.</p>
+        <p><strong>Why it's forbidden:</strong> Conflates two different purposes. <code>decisions.md</code> records <strong>project decisions</strong> that the AI must not re-evaluate; plugin defaults are <strong>relay's own contracts</strong> and live in relay's repo. Copying them into every target project creates drift — when relay updates a default (e.g., after telemetry), target projects keep the stale value, and <code>*update</code> mode correctly refuses to overwrite human-validated content.</p>
+        <p><strong>What to do instead:</strong> Plugin defaults stay in the plugin (hardcoded in agent prompts or in a future plugin config file). Target projects record in their <code>decisions.md</code> ONLY when they explicitly override a default, with the rationale. Visibility of inherited defaults is a separate concern — deferred to the Phase 2 config design (<code>.relay.yaml</code> or equivalent).</p>
+        <p><strong>Areas affected:</strong> context-builder skill, future Docs Updater, future plugin-config generators.</p>
+      </div>
+
+      <h2 id="writing-claude">7. Writing pipeline artifacts under <code>.claude/</code></h2>
+
+      <div class="callout callout--error">
+        <div class="callout__title">Anti-pattern</div>
+        <p><strong>What it is:</strong> An agent writes a PRD, plan, Test Runner report, TDD suite, or any other pipeline artifact somewhere under <code>.claude/</code> (e.g., <code>.claude/PRPs/prds/foo.prd.md</code>).</p>
+        <p><strong>Why it's forbidden:</strong> Claude Code enforces hardcoded permission prompts on writes to <code>.claude/</code>. Each prompt interrupts the autonomous portion of the pipeline. The permission guards are intentional and have no bypass.</p>
+        <p><strong>What to do instead:</strong> Write to <code>PRPs/</code> at the target repository root: <code>PRPs/prds/</code>, <code>PRPs/plans/</code>, <code>PRPs/reports/&lt;feature&gt;/</code>. Every agent that produces an artifact MUST use this root.</p>
+        <p><strong>Scope / exception:</strong> This rule applies to <strong>pipeline artifacts</strong> — things produced during an autonomous run. It does NOT apply to <code>.claude/settings.json</code>, which is <strong>setup configuration</strong> written once by the context-builder during <code>*init</code>. See <a href="../concepts/prp-artifacts.html">PRP artifact paths</a>.</p>
+        <p><strong>Areas affected:</strong> PRD Writer, Plan Writer, TDD Writer, Test Runner report (B6), observability (C4), Docs Updater, orchestrator.</p>
+      </div>
+
+      <h2 id="prp-core-active">8. Treating <code>plugins/prp-core/</code> as active relay code</h2>
+
+      <div class="callout callout--error">
+        <div class="callout__title">Anti-pattern</div>
+        <p><strong>What it is:</strong> Extending, importing from, or documenting <code>plugins/prp-core/</code> as if it were part of the relay plugin surface — e.g., generating domain areas from it, referencing its <code>/prp-*</code> commands as relay features, or editing its files as part of relay development.</p>
+        <p><strong>Why it's forbidden:</strong> <code>prp-core</code> is the upstream Wirasm plugin kept on disk as a format reference. Mixing it into relay couples relay to upstream evolution and blurs ownership. See <code>docs/decisions.md</code>.</p>
+        <p><strong>What to do instead:</strong> Read prp-core files when you need to see how a Claude Code skill/command/agent/hook is structured. Never cite or import them as part of relay.</p>
+        <p><strong>Areas affected:</strong> plugin scope, documentation scope.</p>
+      </div>
+
+      <h2 id="how-to-add">Adding a new anti-pattern</h2>
+
+      <p>When review identifies a pattern that should be permanently forbidden:</p>
+
+      <ol>
+        <li>Edit <code>docs/anti-patterns.md</code> in the plugin repo following the template at the bottom.</li>
+        <li>Each entry: <strong>What it is</strong>, <strong>Why it's forbidden</strong>, <strong>What to do instead</strong>, <strong>Areas affected</strong>.</li>
+        <li>Mark <code>[INFERRED - VALIDATE]</code> if the rule is implied by consistency or comments rather than explicitly documented.</li>
+        <li>If a counterpart decision exists (the positive rule), also add it to <code>docs/decisions.md</code>.</li>
+        <li>Update this HTML page with a link to the new entry.</li>
+      </ol>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Decision Gate enforcement</div>
+        <p>Every agent consulting the Decision Gate must read this file. A forbidden pattern in an agent's plan is a HALT — the agent must flag the conflict rather than proceed.</p>
+      </div>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

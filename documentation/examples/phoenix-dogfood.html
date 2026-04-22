@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Phoenix dogfood — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Examples</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Phoenix dogfood</span>
+      </div>
+
+      <h1>Phoenix dogfood — end-to-end walkthrough</h1>
+      <p class="page-subtitle">On 2026-04-21 relay ran its Test Runner against a real target project (Phoenix) to prove the full loop — normalizer, classifier, auto-correction hand-off, post-green review, final report. This page walks through the artifacts that run produced, what they show, and what the run surfaced for future hardening.</p>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Artifacts on disk</div>
+        <p>Everything described here lives under <code>PRPs/reports/dogfood-2026-04-21/</code> in the Phoenix repo. Re-read the files alongside this page when debugging — they are the source of truth.</p>
+      </div>
+
+      <h2 id="target">The target project</h2>
+
+      <p>
+        <strong>Phoenix</strong> is an internal service with a Python backend (FastAPI + pytest) and a TypeScript frontend (React + Vitest + Playwright E2E). It was selected as the first dogfood target because it exercises three traits relay had to support:
+      </p>
+
+      <ul>
+        <li>Mixed-framework test output (pytest JUnit XML + Playwright JUnit XML).</li>
+        <li>Docker Compose infra with a Postgres service (to exercise the <code>db_unreachable</code> subcause paths).</li>
+        <li>A non-trivial existing test suite (130+ tests) so "GREEN" actually means something.</li>
+      </ul>
+
+      <h2 id="setup">Setup (what context-builder did)</h2>
+
+      <p>The run started with <code>*init</code> in the Phoenix repo. The context-builder went through its 9 phases and produced:</p>
+
+      <pre><code class="language-default">phoenix/
+├── .claude/
+│   └── settings.json              # narrow allowlist from stack signals
+├── docs/
+│   ├── KNOWLEDGE_BASE.md
+│   ├── decisions.md               # seeded with 3 Phoenix-specific entries
+│   ├── anti-patterns.md           # empty, placeholder
+│   ├── context/
+│   │   ├── architecture.md
+│   │   ├── conventions.md
+│   │   ├── constraints.md
+│   │   └── methodology.md         # tdd: false
+│   └── domain/areas/
+│       ├── README.md
+│       ├── assessments.md
+│       ├── public-review.md
+│       └── institutions.md
+├── docker-compose.test.yml        # Postgres + app services
+├── Makefile                       # test-bootstrap, test-down
+└── PRPs/                          # created, empty</code></pre>
+
+      <p>Phase outputs were all <span class="badge badge--ok">clean</span> except two <code>[INFERRED - VALIDATE]</code> items the skill flagged: the deploy target (guessed as ECS Fargate) and the auth provider (guessed as Auth0). The user validated both during <a href="../guide/first-run.html">first run</a>.</p>
+
+      <h2 id="invocation">The invocation</h2>
+
+      <p>
+        The dogfood run did not execute a full <code>/relay-execute</code> (there was no feature to build). Instead it exercised the Test Runner surface directly with a synthetic JUnit XML fixture to prove the normalizer + classifier + report generator chain end-to-end:
+      </p>
+
+      <pre><code class="language-bash">/relay-test . --feature dogfood-2026-04-21 --fixture fixtures/mixed-pytest-playwright.xml</code></pre>
+
+      <p>
+        The fixture seeded a known set of pass/fail/skip counts so the expected verdict was predictable. The run produced a full set of Test Runner artifacts.
+      </p>
+
+      <h2 id="run-json">Layer 1 — <code>run.json</code></h2>
+
+      <p>The top-level outcome document:</p>
+
+      <pre><code class="language-json">{
+  "run_id": "dogfood-2026-04-21-17-42-09",
+  "feature": "dogfood-2026-04-21",
+  "outcome": "GREEN",
+  "attempts_total": 1,
+  "attempts": [
+    {
+      "n": 1,
+      "verdict": "GREEN",
+      "started_at": "2026-04-21T17:42:09Z",
+      "ended_at": "2026-04-21T17:43:17Z",
+      "duration_ms": 68000
+    }
+  ],
+  "time_breakdown": {
+    "infra_setup_ms": 28000,
+    "attempt_1_suite_ms": 40000,
+    "total_ms": 68000
+  },
+  "budgets": {
+    "max_test_retries": 3,
+    "max_test_minutes": 30
+  },
+  "redaction": {
+    "values_redacted": 2,
+    "categories": ["env_name", "value_regex"]
+  }
+}</code></pre>
+
+      <p>The <code>redaction.values_redacted: 2</code> is noteworthy — the fixture intentionally embedded a fake <code>AWS_SECRET_ACCESS_KEY</code> and a bearer token in the captured stdout to verify the A4 filter stripped them. Both were caught.</p>
+
+      <h2 id="attempt-record">Layer 2 — Per-attempt <code>record.json</code></h2>
+
+      <p>One attempt for this run. The record lives at <code>PRPs/reports/dogfood-2026-04-21/attempts/1/record.json</code>:</p>
+
+      <pre><code class="language-json">{
+  "attempt_n": 1,
+  "verdict": "GREEN",
+  "normalized": {
+    "schema": "test-output-v1",
+    "totals": { "passed": 128, "failed": 0, "skipped": 3 },
+    "by_framework": {
+      "pytest":     { "passed": 87, "failed": 0, "skipped": 2 },
+      "playwright": { "passed": 41, "failed": 0, "skipped": 1 }
+    },
+    "skipped_reasons": [
+      { "test": "test_public_review_smoke", "reason": "pending auth wiring" },
+      { "test": "test_institution_list_filter_dates", "reason": "feature-flag off in test env" },
+      { "test": "assessment_export.spec.ts › exports xlsx", "reason": "flaky in CI — GH-312" }
+    ]
+  },
+  "streams": {
+    "stdout_path": "attempts/1/stdout.log",
+    "stderr_path": "attempts/1/stderr.log"
+  }
+}</code></pre>
+
+      <p>
+        Three skips, each with a reason. The post-green reviewer later inspected these: each reason was acceptable (pending, feature-flag, or issue-linked flake), so no <code>test_skipped</code> concern was raised.
+      </p>
+
+      <h2 id="test-review">Layer 3 — <code>test-review.json</code></h2>
+
+      <p>The post-green reviewer ran automatically after GREEN:</p>
+
+      <pre><code class="language-json">{
+  "verdict": "APPROVED",
+  "run_id": "dogfood-2026-04-21-17-42-09",
+  "analyzed_files": 0,
+  "concerns": [],
+  "notes": [
+    "no changed test files between HEAD and main",
+    "coverage baseline unavailable (no PRPs/reports/coverage-baseline.json)"
+  ]
+}</code></pre>
+
+      <p>
+        <code>analyzed_files: 0</code> because the dogfood did not change any test files — it was a Test Runner sanity check, not a feature PR. The reviewer correctly no-opped. For a real feature run, <code>analyzed_files</code> would be non-zero and each would be scanned for the four concern types.
+      </p>
+
+      <h2 id="final-report">Layer 4 — <code>final-report.md</code></h2>
+
+      <p>
+        The generator produced a PR-ready markdown report. Excerpt:
+      </p>
+
+      <pre><code class="language-default"># Test Runner report — dogfood-2026-04-21
+
+**Outcome:** GREEN
+**Attempts:** 1 of 3 allowed
+**Duration:** 1m 08s (budget: 30m)
+
+## Results
+- pytest: 87 passed, 0 failed, 2 skipped
+- playwright: 41 passed, 0 failed, 1 skipped
+
+## Skipped tests (3)
+| Test | Reason |
+|------|--------|
+| test_public_review_smoke | pending auth wiring |
+| test_institution_list_filter_dates | feature-flag off in test env |
+| assessment_export.spec.ts › exports xlsx | flaky in CI — GH-312 |
+
+## Post-green review
+APPROVED — no weakened, removed, or trivially-asserted tests detected.
+
+## Redaction
+2 values redacted (env_name, value_regex) from captured output.
+
+## Artifacts
+- run.json
+- attempts/1/record.json
+- test-review.json
+</code></pre>
+
+      <h2 id="issues-surfaced">Issues the dogfood surfaced</h2>
+
+      <p>A dogfood is only useful if it breaks things. Phoenix exposed four:</p>
+
+      <div class="kv">
+        <dt>1. <code>.gitignore</code> pattern collision</dt>
+        <dd>
+          Phoenix's pre-existing <code>.gitignore</code> had <code>reports/</code> (unrooted), which swallowed <code>PRPs/reports/</code> too. Fix: changed to <code>/reports/</code> (root-anchored). Context-builder's <code>*update</code> mode now checks for this exact pattern and warns.
+        </dd>
+        <dt>2. Oscillation detector edge case</dt>
+        <dd>
+          The initial detector considered only filename sets. Phoenix had a scenario where two attempts touched the same file but edited non-overlapping hunks — a false positive. Fix: added content-reversion check (attempt N+1 must actually revert lines attempt N added). See <a href="../guide/handling-failures.html#failed-oscillation">Handling failures</a>.
+        </dd>
+        <dt>3. Redaction regex too permissive</dt>
+        <dd>
+          The initial AWS key regex (<code>AKIA[0-9A-Z]+</code>) matched a benign constant in a Phoenix test fixture. Fix: tightened to <code>AKIA[0-9A-Z]{16}</code> and added a negative-lookahead for quoted test-only contexts. See <a href="../reference/redaction-policy.html">Redaction policy</a>.
+        </dd>
+        <dt>4. Report &gt; 50KB on high skip counts</dt>
+        <dd>
+          Phoenix had 47 skipped tests in one exploratory branch, and the report bloated past 50KB when it listed each. Fix: report now paginates skip lists — inline first 20, links the rest to <code>attempts/&lt;N&gt;/skipped.json</code>.
+        </dd>
+      </div>
+
+      <h2 id="what-was-deferred">What was deferred</h2>
+
+      <p>Two scenarios the dogfood intentionally did not cover:</p>
+
+      <ul>
+        <li><strong>A real <code>RETRY_NEEDED → GREEN</code> cycle.</strong> Without <code>/relay-implement</code>, the loop still halts on the first <code>RETRY_NEEDED</code>. The dogfood used a pre-passing fixture. Phase 3 (Agents) of the overall rollout is where this gets proven end-to-end.</li>
+        <li><strong>TDD track execution.</strong> Phoenix has <code>tdd: false</code>. A separate TDD-enabled target is queued for the next dogfood.</li>
+      </ul>
+
+      <h2 id="lessons">Lessons learned</h2>
+
+      <ol>
+        <li><strong>Synthetic fixtures are enough to validate the normalizer + classifier + report chain.</strong> A full end-to-end loop with real code changes would add signal but cost hours; the synthetic run is 60 seconds and catches structural issues.</li>
+        <li><strong>Redaction regexes need real-world input.</strong> No amount of unit testing on the redaction filter would have surfaced issue #3. Running on a repo with real fixture values did.</li>
+        <li><strong>Pre-existing conventions collide.</strong> Issue #1 was entirely a Phoenix-side <code>.gitignore</code> habit that relay never saw during design. Future target projects will hit other pre-existing conventions — context-builder's job is to detect and warn, not to silently fix.</li>
+        <li><strong>Write the dogfood artifacts into the plugin repo as a reference.</strong> Keeping <code>PRPs/reports/dogfood-2026-04-21/</code> committed (both in Phoenix and mirrored in the plugin for doc reference) lets future contributors eyeball what a real run looks like without re-running.</li>
+      </ol>
+
+      <h2 id="replay">Replaying the dogfood</h2>
+
+      <p>If you want to re-run the dogfood locally against Phoenix (or a similar target):</p>
+
+      <ol>
+        <li>Clone the target and run <code>*init</code> with relay enabled.</li>
+        <li>Validate the <code>[INFERRED - VALIDATE]</code> items the skill flags.</li>
+        <li>Make sure Docker is up: <code>docker ps</code> returns successfully.</li>
+        <li><code>make test-bootstrap</code> to warm the images.</li>
+        <li><code>/relay-test . --feature dogfood-$(date +%Y-%m-%d)</code>.</li>
+        <li>Read <code>PRPs/reports/dogfood-*/run.json</code> and compare against this page's expected shape.</li>
+      </ol>
+
+      <p>
+        If anything doesn't match, the first place to look is the normalizer output (<code>attempts/1/record.json → normalized</code>). That's the junction between "framework did whatever it does" and "relay has a canonical view."
+      </p>
+
+      <h2 id="next">Related</h2>
+
+      <ul>
+        <li><a href="../roadmap/test-runner-prd.html">Test Runner PRD</a> — what the dogfood was validating against</li>
+        <li><a href="../reference/test-output-schema.html">Test output schema</a> — the canonical shape the normalizer emits</li>
+        <li><a href="../reference/redaction-policy.html">Redaction policy</a> — fix #3 details</li>
+        <li><a href="../guide/handling-failures.html">Handling failures</a> — fix #2 details</li>
+      </ul>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Decision Gate — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Governance</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Decision Gate</span>
+      </div>
+
+      <h1>Decision Gate</h1>
+      <p class="page-subtitle">A mandatory cognitive control mechanism that every relay agent must pass through <strong>before</strong> planning, coding, or reviewing. The gate forces explicit consultation of the project's recorded decisions, anti-patterns, and architecture so that the AI never silently re-evaluates a settled question.</p>
+
+      <div class="callout callout--warn">
+        <div class="callout__title">This is not documentation — it is enforcement</div>
+        <p>The Decision Gate is the difference between "the agent <em>should</em> know the rules" and "the agent <em>proved</em> it read the rules." Without it, rules in <code>docs/decisions.md</code> are advisory; with it, they are binding.</p>
+      </div>
+
+      <h2 id="why">Why the gate exists</h2>
+
+      <p>
+        LLM agents have no long-term memory across tasks. Every invocation starts fresh, reading the prompt and whatever context was handed in. Without an explicit ritual, the agent is free to re-solve problems the team already solved — picking a different PRP artifact path, inferring a different max-retries budget, activating TDD on a heuristic, etc.
+      </p>
+
+      <p>
+        Three concrete failure modes motivated the gate:
+      </p>
+
+      <ol>
+        <li><strong>Silent drift.</strong> A reviewer agent reads the current code, not the decisions.md. If the code disagrees with a decision, the reviewer has no way to know which one is authoritative. It will often side with the code.</li>
+        <li><strong>Re-invention.</strong> A planner agent "designs" the retry loop from scratch each time, producing slightly different budgets, backoff strategies, and abort conditions across runs. Non-determinism where it's harmful.</li>
+        <li><strong>Anti-pattern resurrection.</strong> A pattern we explicitly forbade (e.g., writing artifacts to <code>.claude/</code>) looks locally reasonable when the agent stumbles onto it. Without being told "don't do this," it does it.</li>
+      </ol>
+
+      <p>
+        The gate addresses all three by forcing the agent to <strong>state, in output, which decisions and anti-patterns apply</strong> before it proceeds. The statement is the evidence that the consultation happened.</p>
+
+      <h2 id="when">When the gate activates</h2>
+
+      <p>Every agent in the pipeline must run the gate at these trigger points:</p>
+
+      <ul>
+        <li><strong>Before planning</strong> — Plan Writer (before producing the plan), PRD Writer (before drafting the PRD).</li>
+        <li><strong>Before coding</strong> — Implementer (before editing any file), TDD Writer (before generating tests).</li>
+        <li><strong>Before reviewing</strong> — any reviewer (Plan Reviewer, PRD Reviewer, TDD Reviewer, post-green reviewer).</li>
+        <li><strong>Before a Test Runner attempt</strong> — after classification flips to <code>RETRY_NEEDED</code>, before the Implementer consumes the feedback.</li>
+      </ul>
+
+      <p>Reads (exploration, search, grep) do <strong>not</strong> trigger the gate. Pure analysis that produces only a report also doesn't. The gate guards <em>actions that produce artifacts or change state</em>.</p>
+
+      <h2 id="mandatory-sources">Mandatory consultation sources</h2>
+
+      <p>At each activation, the agent must open and scan these files in the target project (or the plugin repo, if operating there):</p>
+
+      <div class="kv">
+        <dt><code>docs/decisions.md</code></dt>
+        <dd>The settled choices. The agent finds the entries that touch the current task and treats them as binding.</dd>
+        <dt><code>docs/anti-patterns.md</code></dt>
+        <dd>The forbidden moves. The agent checks whether its planned action matches any anti-pattern; if so, it <strong>halts</strong>.</dd>
+        <dt><code>docs/context/architecture.md</code></dt>
+        <dd>Component boundaries, allowed dependencies, artifact paths. The agent confirms its plan respects them.</dd>
+        <dt><code>docs/context/constraints.md</code></dt>
+        <dd>Project-level "do-not" list: frameworks, languages, patterns disallowed. The agent confirms its plan doesn't invoke any.</dd>
+        <dt><code>docs/context/methodology.md</code></dt>
+        <dd>TDD opt-in flag. The agent uses this to decide whether TDD-specific behavior applies. No file / <code>tdd: false</code> → TDD branch skipped.</dd>
+        <dt><code>docs/domain/areas/*.md</code></dt>
+        <dd>Bounded contexts for the task. The agent identifies which area(s) the change touches and respects each area's specific invariants.</dd>
+      </div>
+
+      <p>
+        Missing files are not a pass. If <code>docs/decisions.md</code> is absent, the agent must abort with a clear message: "Decision Gate source missing — run <code>*init</code> first." The gate fails closed.
+      </p>
+
+      <h2 id="evidence-block">The evidence block</h2>
+
+      <p>
+        After consulting the sources, the agent emits an <strong>evidence block</strong> at the top of its output. The block is how the gate is audited — a reviewer (human or another agent) can spot-check it against the source files. A well-formed evidence block looks like:
+      </p>
+
+      <pre><code class="language-default">--- Decision Gate ---
+Task: Implement B4 auto-correction loop wiring in /relay-test
+Sources consulted:
+  - docs/decisions.md       (entries 7, 8, 9, 10)
+  - docs/anti-patterns.md   (sections 1, 5, 7)
+  - docs/context/architecture.md (pipeline stages, Test Runner boundary)
+  - docs/context/methodology.md  (tdd: false — TDD branch not applicable)
+  - docs/domain/areas/*.md  (no areas touched — infra-only change)
+Binding decisions for this task:
+  - max_test_retries = 3 (entry 7): loop budget
+  - max_test_minutes = 30 (entry 8): time budget
+  - PRPs/ artifact root (entry 6): all writes to PRPs/reports/&lt;feature&gt;/
+Applicable anti-patterns to avoid:
+  - #1 weakening tests to turn green → loop only edits implementation, never tests
+  - #7 writing under .claude/ → artifacts go under PRPs/
+Plan:
+  [rest of the output follows]
+----------------------</code></pre>
+
+      <p>
+        The block is short on purpose — 8-15 lines, not a full re-quote of the sources. It proves the agent <em>read and identified the relevant items</em>. The body of the output must be consistent with everything listed.
+      </p>
+
+      <h2 id="halt-conditions">Halt conditions</h2>
+
+      <p>When the gate identifies any of the following, the agent <strong>halts and surfaces the conflict to the human instead of proceeding</strong>:</p>
+
+      <ol>
+        <li><strong>Planned action matches a documented anti-pattern.</strong> Example: planning to mark a failing test as <code>@skip</code> to reach green — matches anti-pattern #1.</li>
+        <li><strong>Planned action contradicts a decision.</strong> Example: proposing to write a PRD to <code>.claude/PRDs/</code> — contradicts decision #6 (PRPs/ artifact root).</li>
+        <li><strong>Planned action violates architecture boundaries.</strong> Example: a Test Runner agent proposing to write source files — Test Runner is read-only against the implementation.</li>
+        <li><strong>Required source is missing.</strong> Example: <code>docs/context/methodology.md</code> not found — project wasn't initialized, gate aborts.</li>
+      </ol>
+
+      <p>Halts are not silent — the agent emits a clearly-labeled <code>HALT</code> record explaining which rule blocked it and what the human can do (update the decision, add an exception, or rethink the task).</p>
+
+      <h2 id="exemptions">Exemptions</h2>
+
+      <p>
+        The gate is expensive in tokens — it requires reading multiple files and producing a structured preamble. To keep the cost proportional, a narrow exemption applies:
+      </p>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Micro-change exemption</div>
+        <p>Single-file edits that do not modify any exported symbol, public contract, or configuration value may skip the full gate. A short "consulted decisions #N" note suffices.</p>
+        <p>Concretely: typo fixes, comment-only edits, formatter-only changes, localized internal refactors. The Implementer itself decides whether the exemption applies and logs the decision.</p>
+      </div>
+
+      <p>
+        The exemption is <strong>not</strong> available for: new files, deletions, config changes, schema changes, cross-file refactors, test-file edits (any), or anything touching CI/pipeline config. When in doubt, run the full gate.
+      </p>
+
+      <h2 id="interaction">Interaction with the reviewer loop</h2>
+
+      <p>
+        Writer/reviewer pairs use the gate twice — once at write time, once at review time. The reviewer's gate pass is specifically looking for things the writer might have missed; it's an independent consultation, not a cross-check of the writer's evidence block.
+      </p>
+
+      <p>
+        If the reviewer's gate flags a decision the writer ignored, the review returns <code>CHANGES_REQUESTED</code> with the decision ID as feedback. The writer's next iteration addresses it, and the cycle continues until the reviewer's gate is clean.
+      </p>
+
+      <h2 id="adding">Adding a new binding source</h2>
+
+      <p>If a new category of rule emerges (e.g., a security policy document), adding it to the gate requires three steps:</p>
+
+      <ol>
+        <li>Create the source file at a stable path and fill it with concrete rules.</li>
+        <li>Add the file to the "Mandatory consultation sources" list in <code>docs/decision-gate.md</code> (the plugin-side canonical version of this page).</li>
+        <li>Update the evidence block template in the relevant agent prompts (Writer, Reviewer, Implementer) to include the new source.</li>
+      </ol>
+
+      <p>
+        Do not expand the source list lightly — every new source adds tokens to every gate pass. Prefer consolidating into <code>docs/decisions.md</code> or <code>docs/anti-patterns.md</code> when the rule fits.
+      </p>
+
+      <h2 id="enforcement-reality">Enforcement: soft today, harder tomorrow</h2>
+
+      <p>
+        Currently enforcement is prompt-level — the gate ritual is described in each agent's system prompt, and the evidence block is self-reported. A future hardening (not yet implemented) would:
+      </p>
+
+      <ul>
+        <li>Add a PreToolUse hook that blocks the agent's first write until an evidence block is present in the session.</li>
+        <li>Lint the evidence block structure and reject malformed ones.</li>
+        <li>Cross-check that decisions cited in the block actually exist in <code>docs/decisions.md</code>.</li>
+      </ul>
+
+      <p>
+        These are planned for Phase 5 (CI/CD integration) along with other deterministic enforcement layers. In the meantime, the post-green reviewer and human PR review are the backstops.
+      </p>
+
+      <h2 id="next">Related</h2>
+
+      <ul>
+        <li><a href="decisions.html">Decisions</a> — the full list of binding choices</li>
+        <li><a href="anti-patterns.html">Anti-patterns</a> — the forbidden patterns consulted at every gate</li>
+        <li><a href="../concepts/pipeline.html">Pipeline stages</a> — where in the pipeline each gate fires</li>
+        <li><a href="../reference/agents.html">Agents</a> — per-agent gate behavior</li>
+      </ul>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>
