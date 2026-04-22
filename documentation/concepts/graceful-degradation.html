@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Graceful degradation — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Concepts</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Graceful degradation</span>
+      </div>
+
+      <h1>Graceful degradation</h1>
+      <p class="page-subtitle">Every component in relay detects its own preconditions at the start of its run. Missing infrastructure, absent dependencies, or unsupported configurations result in a <strong>clear skip</strong> with a reason — never a silent failure, never a crash in the middle.</p>
+
+      <h2 id="the-principle">The principle</h2>
+
+      <p>
+        relay is a plugin that runs against real projects with real infrastructure maturity gradients. Some projects have Docker, some don't. Some have full E2E suites, some have unit only. Some declare TDD, most don't. A pipeline that assumes the ideal scenario and crashes when reality doesn't match is useless for adoption.
+      </p>
+
+      <p>
+        The answer is <strong>graceful degradation</strong>: every stage detects what's available, opts in only what's supported, and reports skips explicitly.
+      </p>
+
+      <div class="callout callout--success">
+        <div class="callout__title">Two invariants</div>
+        <p><strong>The pipeline never fails because an optional capability is missing.</strong> It may <em>skip</em> a stage, but it does not abort.</p>
+        <p><strong>The pipeline fails loud when a mandatory capability is missing.</strong> Missing Python interpreter for a Django project is not "graceful" — it's an actionable misconfiguration the user needs to fix.</p>
+      </div>
+
+      <h2 id="scenarios">Scenarios</h2>
+
+      <p>
+        The planning document enumerates the scenarios relay must handle. Each has a specific expected behavior, listed below.
+      </p>
+
+      <h3 id="no-docker">Project without Docker</h3>
+
+      <div class="kv">
+        <dt>What's missing</dt><dd><code>docker</code> CLI or Docker daemon not reachable.</dd>
+        <dt>What relay does</dt><dd>Infra components A1–A4 are skipped. The Test Runner falls back to running tests in the local environment. A warning is added to <code>run.json</code>: <code>degraded: true, reason: "contamination_between_runs"</code>.</dd>
+        <dt>What that means for the user</dt><dd>Tests still run; results are still collected; the final report includes a note that between-run isolation wasn't enforced. If a test is flaky because of leftover state, the report flags it.</dd>
+      </div>
+
+      <h3 id="no-e2e">Project without E2E tests</h3>
+
+      <div class="kv">
+        <dt>What's missing</dt><dd>No Playwright, Cypress, or equivalent detected.</dd>
+        <dt>What relay does</dt><dd>Only the unit/integration layers of the test suite run. B5 (post-green review) reduces its severity — it can't verify E2E coverage didn't drop if there's no E2E to drop from.</dd>
+        <dt>What that means for the user</dt><dd>Features ship without E2E validation. The final report lists "E2E not available" as a known limitation.</dd>
+      </div>
+
+      <h3 id="no-tests">Project without any tests at all</h3>
+
+      <div class="kv">
+        <dt>What's missing</dt><dd>No test framework detected anywhere.</dd>
+        <dt>What relay does</dt><dd>Test Runner is skipped entirely. The orchestrator proceeds to PR with a <strong>"not verified by tests"</strong> badge prominently on the report.</dd>
+        <dt>What that means for the user</dt><dd>The PR opens but with an explicit warning that nothing was verified. The team decides whether to merge without tests (their call, not relay's).</dd>
+        <dt>If TDD is declared</dt><dd>TDD Writer (B7) still runs — it produces the initial suite from AC. That's the <em>other</em> direction of test-first; relay can bootstrap tests for a project that doesn't have any, if the team declared TDD.</dd>
+      </div>
+
+      <h3 id="tdd-no-framework">TDD declared but no test framework installed</h3>
+
+      <div class="kv">
+        <dt>What's missing</dt><dd><code>methodology.md</code> has <code>tdd: true</code> but no test framework is detected (no pytest, no Vitest, no Playwright, nothing).</dd>
+        <dt>What relay does</dt><dd>Hard abort. TDD without a test framework is a misconfiguration, not a graceful degradation case. The error message is actionable: "TDD declared but no test framework detected. Either install a test framework and re-run the context-builder, or flip <code>tdd: false</code> in methodology.md."</dd>
+        <dt>Why not skip?</dt><dd>Because silently skipping would let the team think TDD is active when it's not. That would surprise them the first time a PR merges with no tests after they'd written a PRD expecting the TDD track.</dd>
+      </div>
+
+      <h3 id="no-tdd">Project doesn't declare TDD</h3>
+
+      <div class="kv">
+        <dt>What's missing</dt><dd><code>methodology.md</code> has <code>tdd: false</code> or is absent.</dd>
+        <dt>What relay does</dt><dd>TDD Writer and TDD Reviewer are silently skipped. No warning emitted — this is the <strong>expected</strong> state for non-TDD projects, not a degradation.</dd>
+      </div>
+
+      <h3 id="no-github">Project without GitHub access</h3>
+
+      <div class="kv">
+        <dt>What's missing</dt><dd><code>gh</code> CLI not installed or not authenticated.</dd>
+        <dt>What relay does</dt><dd>C2 (hooks) and C3 (worktree interface) continue working. The final <code>/relay-pr</code> step is <strong>replaced</strong> by instructions in the final report: "Run <code>gh pr create --title '...' --body-file PRPs/reports/&lt;feature&gt;/final-report.md</code> manually to open the PR."</dd>
+        <dt>What that means for the user</dt><dd>The pipeline produced everything except the final PR creation. The user opens it by hand.</dd>
+      </div>
+
+      <h3 id="no-permissions">Project without the pre-approved permissions</h3>
+
+      <div class="kv">
+        <dt>What's missing</dt><dd><code>.claude/settings.json</code> absent or incomplete.</dd>
+        <dt>What relay does</dt><dd>The plugin still runs, but the user is interrupted on every bash command with a permission prompt. This is documented in the plugin README as a configuration requirement for autonomous use, not a graceful-degradation case.</dd>
+        <dt>Fix</dt><dd>Run the context-builder skill in <code>*update</code> mode to regenerate <code>settings.json</code> with the correct allowlist.</dd>
+      </div>
+
+      <h3 id="no-context-builder">Project hasn't been through the context-builder</h3>
+
+      <div class="kv">
+        <dt>What's missing</dt><dd><code>docs/context/</code> doesn't exist. No <code>methodology.md</code>. No <code>settings.json</code>.</dd>
+        <dt>What relay does</dt><dd>Warns that the project hasn't been initialized. Attempts a heuristic stack detection (looking at <code>package.json</code>, <code>pyproject.toml</code>, etc.). Quality of failure classification and redaction degrades significantly — the heuristic surface is smaller than what the context-builder produces.</dd>
+        <dt>TDD heuristic activation</dt><dd>Even under this fallback, TDD is <strong>never</strong> activated heuristically. <code>tdd: false</code> is always assumed when <code>methodology.md</code> is absent.</dd>
+        <dt>Strong recommendation</dt><dd>Run the context-builder first. The quality of the autonomous run depends on the quality of the context tree.</dd>
+      </div>
+
+      <h3 id="no-context7">MCP Context7 unavailable</h3>
+
+      <div class="kv">
+        <dt>What's missing</dt><dd>The Context7 MCP server isn't registered in the Claude Code session.</dd>
+        <dt>What relay does</dt><dd>During context-builder init, a warning is printed: <em>"⚠️ Context7 MCP not available. /libs will not be generated."</em> The <code>SKIP_LIBS=true</code> flag is set and Phase 4 (generate <code>docs/libs/</code>) is skipped. All other phases run normally.</dd>
+        <dt>What that means</dt><dd>Agents still have the target project's own context but lack deep library docs. Reviewers may be less effective at catching library-specific misuse. Can be remediated by running <code>*libs</code> mode once Context7 is available.</dd>
+      </div>
+
+      <h2 id="reporting-degradation">Reporting degradation</h2>
+
+      <p>Every degradation gets surfaced in two places:</p>
+
+      <ol>
+        <li><strong>The Final Report footer</strong> (<code>final-report.md</code>) has a dedicated <strong>"Skipped components"</strong> section listing every skipped stage with its reason.</li>
+        <li><strong>The <code>run.json</code> <code>skipped[]</code> field</strong> carries machine-readable entries with <code>component</code> and <code>reason</code> keys. Downstream tooling reads this rather than parsing the report.</li>
+      </ol>
+
+      <p>Example from a phoenix run with no Docker:</p>
+
+      <pre><code class="language-json">{
+  "skipped": [
+    {
+      "component": "A1-A4 isolated test env",
+      "reason": "docker_not_running",
+      "risk": "contamination between runs; flakiness may be misattributed"
+    },
+    {
+      "component": "B7 TDD Writer",
+      "reason": "tdd: false in methodology.md",
+      "risk": null
+    }
+  ]
+}</code></pre>
+
+      <h2 id="why-it-matters">Why this is the design</h2>
+
+      <p>
+        The alternative — crash on any missing capability — fails in every adoption scenario. A team evaluating relay will try it against whatever they have right now: maybe no Docker, maybe no E2E, maybe no GitHub integration. If the plugin blows up on the first missing piece, they conclude relay doesn't work and move on. With graceful degradation, they get a partial run and a clear report of what was skipped and why. They can then decide: <em>is this capability gap worth closing</em>, or is this run good enough?
+      </p>
+
+      <p>
+        Crucially, graceful degradation is <strong>not</strong> graceful silence. Every skip is reported. The team always knows what wasn't verified. That's what keeps the pipeline honest.
+      </p>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

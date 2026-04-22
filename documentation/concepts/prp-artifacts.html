@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PRP artifact paths — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Concepts</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>PRP artifact paths</span>
+      </div>
+
+      <h1>PRP artifact paths</h1>
+      <p class="page-subtitle">Why every pipeline artifact — PRDs, plans, reports, reviews — lives under <code>PRPs/</code> at the repo root and <strong>never</strong> under <code>.claude/</code>. And why <code>.claude/settings.json</code> is the one explicit exception.</p>
+
+      <h2 id="the-rule">The rule</h2>
+
+      <div class="callout callout--success">
+        <div class="callout__title">Canonical artifact root</div>
+        <p>All relay pipeline outputs land under <code>PRPs/</code> at the repo root of the target project. No exceptions during pipeline runs.</p>
+      </div>
+
+      <pre><code class="language-bash">&lt;repo-root&gt;/
+├── PRPs/
+│   ├── prds/&lt;feature&gt;.prd.md                  # PRD Writer output
+│   ├── plans/&lt;feature&gt;.plan.md                # Plan Writer output
+│   ├── reports/&lt;feature&gt;/
+│   │   ├── run.json                            # /relay-test state
+│   │   ├── test-review.json                    # /relay-test-review verdict
+│   │   ├── final-report.md                     # generate-final-report.mjs output
+│   │   ├── coverage-baseline.json              # optional, team-committed
+│   │   └── attempts/&lt;N&gt;/
+│   │       ├── record.json                     # normalized + classified
+│   │       ├── stdout.log                      # redacted execution log
+│   │       └── diff.patch                      # per-attempt diff
+│   ├── reviews/                                # ad-hoc reviews
+│   └── redaction-extensions.txt                # per-project redaction extras
+└── .worktrees/&lt;feature&gt;/                       # ephemeral per-feature worktree</code></pre>
+
+      <h2 id="why-not-claude">Why not <code>.claude/</code>?</h2>
+
+      <p>
+        The upstream <code>prp-core</code> plugin writes its artifacts under <code>.claude/PRPs/</code>. relay deliberately chose differently. The reason is a concrete property of Claude Code: <strong>any write to <code>.claude/</code> triggers a hardcoded permission prompt</strong>. The prompt is intentional (Claude Code protecting its configuration surface) and there's no configuration to bypass it.
+      </p>
+
+      <p>
+        For a manual workflow, that's fine — one prompt per run is tolerable. For relay's autonomous pipeline, it's fatal: the Plan Writer would prompt to write its output, then the TDD Writer would prompt to write test files, then the Implementer would prompt on each commit, then the Test Runner would prompt on every attempt, then the final report would prompt. A supposed-to-be-autonomous run would turn into a permission-approval marathon.
+      </p>
+
+      <p>
+        Moving the artifact root one level up, to <code>PRPs/</code>, sidesteps the prompt entirely. Writes to <code>PRPs/</code> are governed by the project's own <code>.gitignore</code> and <code>.claude/settings.json</code> allow patterns like any other path.
+      </p>
+
+      <h2 id="the-exception">The one exception: <code>.claude/settings.json</code></h2>
+
+      <p>
+        The <code>context-builder</code> skill generates <code>.claude/settings.json</code> at <code>*init</code> time with the project's allowlist and denylist. That one write to <code>.claude/</code> is acceptable because:
+      </p>
+
+      <ul>
+        <li>It happens <strong>once</strong>, at setup time, not per pipeline run.</li>
+        <li>The user is <strong>interactive</strong> at that moment (running <code>*init</code>), so the one permission prompt from Claude Code is a deliberate user action, not an interruption of an autonomous loop.</li>
+        <li>It's <strong>setup configuration</strong>, not a pipeline artifact. The distinction matters: setup config is written to enable future autonomous runs. Pipeline artifacts are produced by autonomous runs.</li>
+      </ul>
+
+      <p>
+        Writing anything else under <code>.claude/</code> during a pipeline run is explicitly an <a href="../governance/anti-patterns.html">anti-pattern</a>:
+      </p>
+
+      <div class="callout callout--error">
+        <div class="callout__title">Anti-pattern: writing pipeline artifacts under <code>.claude/</code></div>
+        <p><strong>What it is:</strong> An agent writes a PRD, plan, Test Runner report, TDD suite, or any other pipeline artifact somewhere under <code>.claude/</code>.</p>
+        <p><strong>Why it's forbidden:</strong> Claude Code enforces hardcoded permission prompts on writes to <code>.claude/</code>. Each prompt interrupts the autonomous portion of the pipeline. The permission guards are intentional and have no bypass.</p>
+        <p><strong>What to do instead:</strong> Write to <code>PRPs/</code> at the target repository root. Every agent that produces an artifact MUST use this root.</p>
+        <p><strong>Scope / exception:</strong> This rule applies to pipeline artifacts. It does NOT apply to <code>.claude/settings.json</code>, which is setup configuration written once by the context-builder during <code>*init</code>.</p>
+      </div>
+
+      <h2 id="gitignore-consequences">Consequences for <code>.gitignore</code></h2>
+
+      <p>
+        Because <code>PRPs/</code> is the artifact root, and because the autonomous pipeline needs to be able to write there, you <strong>don't</strong> want <code>PRPs/</code> gitignored. Artifacts SHOULD be committed so PR descriptions can link to them (the final report lives at <code>PRPs/reports/&lt;feature&gt;/final-report.md</code> and is referenced from the opened PR).
+      </p>
+
+      <p>On the other hand:</p>
+
+      <ul>
+        <li><strong><code>.worktrees/</code> should be gitignored</strong> — those are ephemeral per-feature directories, not tracked content.</li>
+        <li><strong><code>.claude/settings.json</code> should be committed</strong>, but the rest of <code>.claude/</code> (session state, scheduled tasks, local overrides) should be ignored.</li>
+        <li><strong><code>.claude/settings.local.json</code> should be gitignored</strong> — per-user overrides.</li>
+      </ul>
+
+      <p>The exact <code>.gitignore</code> pattern that achieves this correctly is:</p>
+
+      <pre><code class="language-default"># Claude — ignore session/cache/local artifacts, but commit project-wide settings
+# Use /* (not /) so git still traverses the directory and honors the negation below
+.claude/*
+!.claude/settings.json
+
+# relay — per-feature worktrees (ephemeral)
+.worktrees/</code></pre>
+
+      <div class="callout callout--warn">
+        <div class="callout__title">Git gotcha: <code>.claude/</code> vs <code>.claude/*</code></div>
+        <p>
+          A bare <code>.claude/</code> rule ignores the whole directory — and because git refuses to traverse an ignored directory, the <code>!.claude/settings.json</code> negation is silently ignored. You end up with <code>settings.json</code> still hidden from git despite the negation looking correct.
+        </p>
+        <p>
+          The fix is to use <code>.claude/*</code> instead. The star form tells git to ignore each file inside rather than the directory wholesale, and the negation then works as expected.
+        </p>
+      </div>
+
+      <h2 id="artifact-lifecycle">Artifact lifecycle</h2>
+
+      <h3 id="per-feature">Per-feature</h3>
+
+      <p>
+        A single feature run produces a whole <code>PRPs/reports/&lt;feature&gt;/</code> directory. Those reports should stay committed: they're the audit trail. If a reviewer asks "why did the AI make this choice in attempt 2?", you open <code>attempts/2/stdout.log</code> and read the diff.
+      </p>
+
+      <h3 id="approved">After approval</h3>
+
+      <p>
+        When <code>/relay-approve</code> merges the PR, the feature branch and <code>.worktrees/&lt;feature&gt;/</code> are cleaned up. The <code>PRPs/</code> artifacts stay — they're part of the main-branch history now. The Docs Updater may reference them when proposing updates to <code>docs/context/</code>.
+      </p>
+
+      <h3 id="long-term">Long-term</h3>
+
+      <p>
+        <code>PRPs/</code> grows monotonically. A project that's been using relay for a year has hundreds of report directories. That's fine — they're small (each under 1 MB typically) and text-based (diff-friendly). If the total size becomes a problem, archive old reports to a separate repo rather than deleting in-place (the git history still references them).
+      </p>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agents — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Reference</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Agents</span>
+      </div>
+
+      <h1>Agents</h1>
+      <p class="page-subtitle">The specialized Claude Code agents relay invokes. Each agent has a focused system prompt, a narrow tool allowlist, and a structured output format. Commands (<a href="commands.html">slash commands</a>) wrap agents with orchestration logic; the agents themselves are reusable single-responsibility units.</p>
+
+      <h2 id="implemented">Implemented</h2>
+
+      <h3 id="test-runner">test-runner <span class="badge badge--done">shipped</span></h3>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/agents/test-runner.md</code></dd>
+        <dt>Model</dt><dd>sonnet</dd>
+        <dt>Invoked by</dt><dd><code>/relay-test</code> command, per attempt</dd>
+        <dt>Responsibility</dt><dd>Execute one attempt of a test suite, normalize the output, classify every failure (B3), return a structured verdict so the calling command can drive the auto-correction loop (B4).</dd>
+        <dt>Never does</dt><dd>Loop on its own. Modify tests. Modify production code. Invoke other agents. Write outside <code>PRPs/reports/</code>. Return unstructured verdicts.</dd>
+      </div>
+
+      <h4 id="test-runner-inputs">Inputs (passed by the command)</h4>
+
+      <pre><code class="language-default">worktree: absolute path to the worktree
+attempt: 1-based attempt number
+run_id: UUID shared across all attempts in this session
+tier: unit | integration | e2e (optional; present when layered execution is active)
+framework: pytest | playwright | vitest (optional; auto-detect when absent)
+time_remaining_ms: wall-clock budget remaining
+previous_record_refs: paths to prior attempts' record.json (for flakiness detection)</code></pre>
+
+      <h4 id="test-runner-outputs">Outputs — verdict JSON in a fenced block</h4>
+
+      <p>Returns exactly one of five verdicts:</p>
+
+      <div class="kv">
+        <dt>GREEN</dt><dd>All tests passed (or all failures were flaky-retry-resolved). <code>record_path</code> references the attempt's record.</dd>
+        <dt>RETRY_NEEDED</dt><dd>At least one <code>legitimate</code> failure. Includes a <code>feedback_for_implementer</code> payload the command hands to the Implementer.</dd>
+        <dt>RETRY_FLAKY</dt><dd>All failures are flaky-suspected. Command should re-run the suite without invoking the Implementer.</dd>
+        <dt>ABORT_INFRA</dt><dd>Infrastructure broken (missing settings.json, Docker down, DB unreachable, normalizer failure). Includes <code>reason</code> so the command can decide whether to attempt recovery.</dd>
+        <dt>ABORT_TIME</dt><dd>Attempt entered with <code>time_remaining_ms ≤ 0</code> or consumed so much time that continuing isn't meaningful.</dd>
+      </div>
+
+      <h4 id="test-runner-classifier">Classifier heuristics (B3, inline in the agent prompt)</h4>
+
+      <p>Three real categories plus a default:</p>
+
+      <div class="kv">
+        <dt>infra</dt><dd>Regex against error messages: <code>connection refused</code>, <code>ECONNREFUSED</code>, <code>psycopg.OperationalError</code>, <code>container not running</code>, <code>docker.errors.DockerException</code>, <code>OOMKilled</code>, etc. Indicates the environment is broken, not the code.</dd>
+        <dt>flaky</dt><dd>Regex: <code>timeout</code>, <code>timed out</code>, <code>race condition</code>, <code>port already in use</code>. Also: same failure (same suite + test name) appears in a previous attempt AND the file it lives in wasn't modified since.</dd>
+        <dt>legitimate</dt><dd>Default — no infra pattern matched, no flaky pattern matched. The Implementer is expected to fix.</dd>
+        <dt>weak_test</dt><dd>Intentionally not implemented in B3 for MVP. The post-green reviewer (B5) is the actual guard against test weakening.</dd>
+      </div>
+
+      <h4 id="test-runner-redaction">Redaction before persist</h4>
+
+      <p>
+        Env vars matching the <a href="redaction-policy.html">redaction policy</a> have their values replaced with <code>[REDACTED]</code> (or <code>[REDACTED_URL]</code> for connection strings) <strong>before</strong> stdout.log is written to disk. Never writes raw output that could contain secret values.
+      </p>
+
+      <h3 id="post-green-reviewer">post-green-reviewer <span class="badge badge--done">shipped</span></h3>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/agents/post-green-reviewer.md</code></dd>
+        <dt>Model</dt><dd>sonnet</dd>
+        <dt>Invoked by</dt><dd><code>/relay-test-review</code> command</dd>
+        <dt>Responsibility</dt><dd>Given a GREEN test state, verify the green wasn't achieved by weakening tests. Returns <code>APPROVED</code> or <code>CHANGES_REQUESTED</code> with a concrete concerns list.</dd>
+        <dt>Never does</dt><dd>Re-run tests. Modify code. Propose specific fixes (surface the weakening; let the caller decide on remediation). Return verdicts other than the two specified.</dd>
+      </div>
+
+      <h4 id="post-green-inputs">Inputs</h4>
+
+      <pre><code class="language-default">worktree: absolute path
+run_json_path: absolute path to run.json (must have outcome: GREEN)
+base_branch: reference to diff against (default main/master)
+run_id: UUID matching run.json</code></pre>
+
+      <h4 id="post-green-detection">Detection rules</h4>
+
+      <div class="kv">
+        <dt>test_removed</dt><dd>Count per-language regex matches on removed <code>-</code> lines: <code>def test_*</code>, <code>it(</code>, <code>test(</code>, <code>describe(</code>, <code>func Test*</code>, rspec block heads. Net-negative (after offsetting additions to tolerate renames) is a concern.</dd>
+        <dt>test_skipped</dt><dd>Count added <code>+</code> lines matching skip markers: <code>@pytest.mark.skip</code>, <code>@unittest.skip</code>, <code>.skip()</code>, <code>xit(</code>, <code>xdescribe(</code>, <code>test.skip</code>, <code>t.Skip()</code>. Net-positive is a concern.</dd>
+        <dt>trivial_assertion</dt><dd>Best-effort: flags crystal-clear cases like <code>expect(true).toBe(true)</code>, <code>assertTrue(True)</code>, <code>assert True</code>. Doesn't over-fire.</dd>
+        <dt>coverage_drop</dt><dd>If <code>PRPs/reports/coverage-baseline.json</code> exists, compares current coverage to it. Absolute drop &gt; 5% is a concern. When baseline is missing, emits a <code>notes[]</code> entry rather than blocking approval.</dd>
+      </div>
+
+      <h4 id="post-green-verdict">Verdict structure</h4>
+
+      <pre><code class="language-json">{
+  "verdict": "APPROVED" | "CHANGES_REQUESTED",
+  "run_id": "...",
+  "analyzed_files": 7,
+  "concerns": [
+    { "type": "test_removed", "file": "...", "net_removed": 2, "evidence": ["..."] }
+  ],
+  "notes": [
+    "coverage baseline unavailable (no PRPs/reports/coverage-baseline.json)"
+  ]
+}</code></pre>
+
+      <h2 id="planned">Planned</h2>
+
+      <p>
+        The full Pillar 2 pipeline requires a roster of agents that aren't yet written. Each pairs with its command (see <a href="commands.html">Commands</a>) and slots into a specific place in the <a href="../concepts/pipeline.html">pipeline</a>.
+      </p>
+
+      <table>
+        <thead>
+          <tr><th>Agent</th><th>Role</th><th>Pipeline stage</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>prd-writer</code></td><td>Interactive PRD authoring (6-phase Q&amp;A)</td><td>1 — PRD</td></tr>
+          <tr><td><code>prd-reviewer</code></td><td>PRD validation, looping with user on gaps</td><td>1 — PRD</td></tr>
+          <tr><td><code>plan-writer</code></td><td>Produces phased implementation plan from approved PRD</td><td>2 — Plan</td></tr>
+          <tr><td><code>plan-reviewer</code></td><td>Validates plan against PRD, decisions, anti-patterns</td><td>2 — Plan</td></tr>
+          <tr><td><code>tdd-writer</code></td><td>Opt-in: produces initial red test suite from AC</td><td>4 — TDD</td></tr>
+          <tr><td><code>tdd-reviewer</code></td><td>Opt-in: validates suite against the five TDD pitfalls</td><td>4 — TDD</td></tr>
+          <tr><td><code>implementer</code></td><td>Writes production code against the approved plan</td><td>5 — Implementation</td></tr>
+          <tr><td><code>code-reviewer</code></td><td>Reviews implementation against governance files</td><td>5 — Implementation</td></tr>
+          <tr><td><code>report-pr-creator</code></td><td>Assembles report and opens the PR</td><td>8 — Report + PR</td></tr>
+          <tr><td><code>docs-updater</code></td><td>Post-merge: updates docs/context and docs/domain</td><td>Pillar 3</td></tr>
+          <tr><td><code>docs-reviewer</code></td><td>Post-merge: reviews Docs Updater output, asks user about ambiguous rules</td><td>Pillar 3</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="agent-file-format">Agent file format (convention)</h2>
+
+      <p>
+        Every relay agent follows the same file shape, matching the upstream Claude Code agent format used by <code>prp-core</code> and other plugins:
+      </p>
+
+      <pre><code class="language-default">---
+name: agent-name
+description: One-line imperative description used by the Agent tool for routing.
+model: sonnet | opus | haiku
+color: coral | green | blue | etc.
+---
+
+[agent system prompt — the body]
+
+## Decision Gate (mandatory, before any action)
+...evidence block template...
+
+## Inputs
+...what the caller passes...
+
+## Protocol
+...step-by-step protocol...
+
+## Outputs
+...exact output shape, always structured...
+
+## Constraints (hard rules)
+...what the agent must NOT do...
+
+## Graceful degradation
+...how to handle missing preconditions...</code></pre>
+
+      <p>
+        The structure is intentional: reviewers reading a new agent file know exactly where to find each section. Agents reading each other via the Agent tool also get consistent output format.
+      </p>
+
+      <h2 id="invocation-pattern">How commands invoke agents</h2>
+
+      <p>
+        Commands use the Agent tool (built into Claude Code) with <code>subagent_type=&lt;agent-name&gt;</code> and a prompt containing the agent's inputs. The agent executes inside its own session with its own tool allowlist. The command parses the verdict from the agent's final message and dispatches the next action.
+      </p>
+
+      <p>
+        This separation — <strong>commands as orchestration, agents as decision units</strong> — is what makes individual stages independently testable. You can invoke the <code>test-runner</code> agent directly via the Agent tool without going through <code>/relay-test</code> at all, useful when debugging the agent's classification heuristics in isolation.
+      </p>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

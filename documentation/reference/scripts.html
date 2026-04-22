@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Scripts — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Reference</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Scripts</span>
+      </div>
+
+      <h1>Scripts</h1>
+      <p class="page-subtitle">The helper scripts relay ships alongside agents and commands. All written in Node.js with <strong>zero npm dependencies</strong> so they run on every host regardless of the target project's language stack. Invoked via <code>${CLAUDE_PLUGIN_ROOT}/scripts/&lt;name&gt;.mjs</code>.</p>
+
+      <h2 id="why-node">Why Node.js, no dependencies</h2>
+
+      <p>
+        Claude Code itself runs on Node, so the <code>node</code> runtime is guaranteed available on any host where relay can run. Python is common but not universal — a pure Node / Go / Rust project may not have Python installed. Using Node as the script runtime makes relay truly portable across target projects regardless of their own stack.
+      </p>
+
+      <p>
+        Both scripts below are also built without external npm packages — not even <code>xml2js</code> or similar. The parsers are hand-rolled regex on stable formats (JUnit XML has a constrained shape). This keeps the plugin self-contained: cloning the repo and opening it in Claude Code is enough; no <code>npm install</code> step.
+      </p>
+
+      <h2 id="normalize-test-output">normalize-test-output.mjs <span class="badge badge--done">shipped</span></h2>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>scripts/normalize-test-output.mjs</code></dd>
+        <dt>Purpose</dt><dd>Normalize JUnit XML output from pytest / Playwright / Vitest into the relay canonical <a href="test-output-schema.html">test-output schema v1</a>.</dd>
+        <dt>Invoked by</dt><dd><code>test-runner</code> agent, once per attempt. Also invocable directly for debugging.</dd>
+        <dt>Runtime</dt><dd>Node.js ≥ 18.</dd>
+        <dt>Dependencies</dt><dd>None. Uses only Node built-ins (<code>fs</code>, <code>path</code>, <code>crypto</code>).</dd>
+      </div>
+
+      <h3 id="normalize-usage">Usage</h3>
+
+      <pre><code class="language-bash">node ${CLAUDE_PLUGIN_ROOT}/scripts/normalize-test-output.mjs \
+    --framework pytest|playwright|vitest \
+    --junit path/to/junit.xml \
+    [--tier unit|integration|e2e] \
+    [--run-id &lt;uuid&gt;] \
+    [--attempt &lt;N&gt;] \
+    [--coverage path/to/coverage.json] \
+    [--trace path/to/trace.zip]</code></pre>
+
+      <p>Output: JSON conforming to <a href="test-output-schema.html">schema v1</a> on stdout. Exit code 0 on success, 2 on invalid input (missing JUnit file, malformed XML).</p>
+
+      <h3 id="normalize-what">What it does</h3>
+
+      <ol>
+        <li>Parses the JUnit XML. Handles both <code>&lt;testsuites&gt;</code> roots and single <code>&lt;testsuite&gt;</code> roots, CDATA sections in <code>&lt;failure&gt;</code> bodies, standard XML entity escapes.</li>
+        <li>Tallies counts per suite and aggregates: <code>{ passed, failed, skipped, total }</code>.</li>
+        <li>Extracts per-testcase failures: suite, test name, file, line, message, stack trace.</li>
+        <li>Leaves <code>failures[].category</code> as <code>null</code> — the B3 classifier in the <code>test-runner</code> agent fills it in next.</li>
+        <li>Emits the record with a generated-if-absent <code>run_id</code> (UUIDv4) and a <code>generated_at</code> timestamp.</li>
+        <li>Determines outcome: <code>PASSED</code> if all pass, <code>FAILED</code> if any fail, <code>SKIPPED_UPSTREAM_FAILURE</code> if zero tests ran.</li>
+      </ol>
+
+      <h3 id="normalize-framework-notes">Framework-specific handling</h3>
+
+      <div class="kv">
+        <dt>pytest</dt><dd><code>&lt;testcase&gt;</code> has <code>classname</code> in Python dotted form (<code>mec10.apps.accounts.tests.test_user</code>). File and line come from pytest's JUnit emission.</dd>
+        <dt>Playwright</dt><dd><code>classname</code> is the spec file path. Traces are referenced via <code>--trace</code> flag (path only, not parsed).</dd>
+        <dt>Vitest</dt><dd><code>classname</code> is the describe-block name. Coverage JSON (v8 provider) referenced via <code>--coverage</code>.</dd>
+      </div>
+
+      <h3 id="normalize-example">Example</h3>
+
+      <pre><code class="language-bash">node scripts/normalize-test-output.mjs \
+    --framework pytest \
+    --junit reports/results.xml \
+    --tier e2e \
+    --attempt 1</code></pre>
+
+      <p>Produces a record like (truncated):</p>
+
+      <pre><code class="language-json">{
+  "run_id": "c70ae799-3c2e-4b69-b840-0888362b5e69",
+  "attempt": 1,
+  "tier": "e2e",
+  "framework": "pytest",
+  "outcome": "FAILED",
+  "duration_ms": 11640,
+  "counts": { "passed": 56, "failed": 1, "skipped": 0, "total": 57 },
+  "failures": [
+    {
+      "suite": "mec10.apps.assessment.tests",
+      "test": "test_evidence_factory_uses_sandbox_bucket",
+      "file": "mec10/apps/assessment/tests/test_factories.py",
+      "line": 22,
+      "message": "AssertionError: expected sandbox bucket 'phoenix-test-bucket', got 'phoenix-prod-bucket'",
+      "stack": "Traceback...",
+      "category": null,
+      "raw_framework_output_ref": "mec10.apps.assessment.tests.test_factories#test_evidence_factory_uses_sandbox_bucket"
+    }
+  ],
+  "coverage": null,
+  "artifacts": { "junit_xml": "/absolute/path/to/results.xml" },
+  "generated_at": "2026-04-21T22:25:33.718Z"
+}</code></pre>
+
+      <h2 id="generate-final-report">generate-final-report.mjs <span class="badge badge--done">shipped</span></h2>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>scripts/generate-final-report.mjs</code></dd>
+        <dt>Purpose</dt><dd>Assemble the AC-10 compliant <code>final-report.md</code> for a Test Runner session from all its persisted artifacts.</dd>
+        <dt>Invoked by</dt><dd><code>/relay-pr</code> command (future) as the last step before opening the PR. Also manually for audit.</dd>
+        <dt>Runtime</dt><dd>Node.js ≥ 18.</dd>
+        <dt>Dependencies</dt><dd>None.</dd>
+      </div>
+
+      <h3 id="generate-usage">Usage</h3>
+
+      <pre><code class="language-bash">node ${CLAUDE_PLUGIN_ROOT}/scripts/generate-final-report.mjs \
+    &lt;reports-dir&gt; \
+    [--out path/to/output.md]</code></pre>
+
+      <p>Without <code>--out</code>, writes to <code>&lt;reports-dir&gt;/final-report.md</code>.</p>
+
+      <h3 id="generate-inputs">Inputs read from the reports directory</h3>
+
+      <table>
+        <thead><tr><th>File</th><th>Required</th><th>Used for</th></tr></thead>
+        <tbody>
+          <tr><td><code>run.json</code></td><td>yes</td><td>Top-level outcome, budgets, elapsed_ms, time_breakdown, attempt index, TDD mode flag, secrets_redacted summary, skipped components</td></tr>
+          <tr><td><code>test-review.json</code></td><td>no</td><td>Post-green review verdict and concerns (rendered when present)</td></tr>
+          <tr><td><code>attempts/&lt;N&gt;/record.json</code></td><td>yes for each N</td><td>Per-attempt failures table with categorized failures</td></tr>
+          <tr><td><code>attempts/&lt;N&gt;/stdout.log</code></td><td>no</td><td>Referenced in attempt detail (not rendered inline)</td></tr>
+          <tr><td><code>attempts/&lt;N&gt;/diff.patch</code></td><td>no</td><td>Referenced in attempt detail</td></tr>
+        </tbody>
+      </table>
+
+      <p>Missing optional files are handled gracefully — the corresponding section either shows "not run" or is omitted.</p>
+
+      <h3 id="generate-sections">Report sections</h3>
+
+      <p>The generated <code>final-report.md</code> contains, in order:</p>
+
+      <ol>
+        <li><strong>Header</strong>: feature name, outcome badge with emoji, total duration, run ID, TDD track status, budgets.</li>
+        <li><strong>Summary table</strong>: attempts count, total wall-clock, post-green review verdict.</li>
+        <li><strong>Time breakdown</strong>: per-phase durations from <code>run.json.time_breakdown</code>.</li>
+        <li><strong>Failure classification histogram</strong>: counts per category (legitimate / infra / flaky / weak_test / unclassified) across all attempts.</li>
+        <li><strong>Per-attempt detail</strong>: for each <code>attempts/&lt;N&gt;/</code>, a section with outcome badge, duration, counts, tier, framework, log and diff pointers, and a failures table with category / suite / test / file:line / message.</li>
+        <li><strong>Post-green review</strong>: verdict, base branch, analyzed files, concerns list with evidence, notes.</li>
+        <li><strong>Secrets redaction</strong>: count + categories from <code>run.json.secrets_redacted</code>.</li>
+        <li><strong>Skipped components</strong>: name + reason for any graceful-degradation skip.</li>
+        <li><strong>TDD track</strong>: only present when <code>tdd_mode: true</code> — initial suite diff path, B8 review artifacts.</li>
+        <li><strong>Footer</strong>: generation timestamp and source artifacts path.</li>
+      </ol>
+
+      <h3 id="generate-conventions">Output conventions</h3>
+
+      <ul>
+        <li>Durations formatted as <code>500ms</code>, <code>30s</code>, <code>4m 32s</code> — readable to humans, not machine-parseable.</li>
+        <li>File paths in the Markdown always use forward slashes (<code>attempts/1/stdout.log</code>), even on Windows.</li>
+        <li>Message text in failures tables is truncated at 120 chars and <code>|</code> characters escaped to keep the table valid.</li>
+        <li>Outcome badges: ✅ for green/passed/approved, ❌ for failed, ⏱ for time-budget, 🔁 for oscillation, ⚠ for infra-unrecoverable, ⏭ for skipped.</li>
+      </ul>
+
+      <h2 id="extension-pattern">How new scripts join the plugin</h2>
+
+      <p>If a future stage needs a new helper script (e.g., a coverage-differ, a mutation-tester wrapper), it should follow the same pattern:</p>
+
+      <ol>
+        <li>Node.js <code>.mjs</code> file in <code>scripts/</code>.</li>
+        <li>Zero npm dependencies — Node built-ins only.</li>
+        <li>CLI-style argv parsing with <code>--flag value</code>.</li>
+        <li>Structured JSON or Markdown on stdout.</li>
+        <li>Exit code 0 on success, 2 on invalid input, 1 on unexpected error.</li>
+        <li>Narrow allow pattern added to <code>docs/context/settings-allowlist.md</code> so the script is in the default <code>.claude/settings.json</code> the context-builder generates.</li>
+      </ol>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

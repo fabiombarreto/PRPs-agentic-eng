@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pipeline stages — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Concepts</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Pipeline stages</span>
+      </div>
+
+      <h1>Pipeline stages</h1>
+      <p class="page-subtitle">Each stage of Pillar 2 has a writer/reviewer contract, a specific input shape, a specific output shape, and a well-defined recovery path when it goes wrong. This page walks the pipeline stage by stage, what each one produces, and what happens if it fails.</p>
+
+      <h2 id="overview">Overview</h2>
+
+      <p>
+        Pillar 2 is a chain of <strong>writer/reviewer pairs</strong> plus a Test Runner. Each writer produces an artifact with status <code>DRAFT</code>. Each reviewer reads the artifact and flips it to <code>APPROVED</code> or returns <code>CHANGES_REQUESTED</code> with a concrete list. The orchestrator loops writer→reviewer until approved or the stage's retry budget is exhausted.
+      </p>
+
+      <p>
+        Why this pattern? Because every generative stage in an AI pipeline has the same risk profile: the LLM can produce something that looks right but violates a constraint (business rule, convention, known decision). The reviewer is a second pass specifically looking for those violations. The Decision Gate (<a href="../governance/decision-gate.html">see reference</a>) makes the reviewer consult <code>docs/decisions.md</code>, <code>docs/anti-patterns.md</code>, and the relevant domain files before approving. It's the structural answer to "the AI just ignored our rules again."
+      </p>
+
+      <h2 id="stage-1">1 — PRD (interactive)</h2>
+
+      <div class="kv">
+        <dt>Input</dt><dd>A short description of the feature.</dd>
+        <dt>Output</dt><dd><code>PRPs/prds/&lt;feature&gt;.prd.md</code> with status <code>APPROVED</code>.</dd>
+        <dt>Writer</dt><dd><code>PRD Writer</code> — runs the 6-phase Q&amp;A (see <a href="interactivity-boundary.html">interactivity boundary</a>).</dd>
+        <dt>Reviewer</dt><dd><code>PRD Reviewer</code> — checks Acceptance Criteria are concrete scenarios, Decision Gate evidence is present, hypothesis is testable, out-of-scope is explicit.</dd>
+        <dt>Loop</dt><dd>Writer ↔ human ↔ Reviewer ↔ human, until approved. This is the only interactive stage.</dd>
+        <dt>Failure mode</dt><dd>User abandons the conversation. No artifact produced; no downstream effects.</dd>
+      </div>
+
+      <h2 id="stage-2">2 — Plan</h2>
+
+      <div class="kv">
+        <dt>Input</dt><dd>Approved PRD.</dd>
+        <dt>Output</dt><dd><code>PRPs/plans/&lt;feature&gt;.plan.md</code> with status <code>APPROVED</code>.</dd>
+        <dt>Writer</dt><dd><code>Plan Writer</code> — produces a phased implementation plan with explicit test cases.</dd>
+        <dt>Reviewer</dt><dd><code>Plan Reviewer</code> — checks phases are concrete, dependencies are declared, test scenarios map to AC.</dd>
+        <dt>Loop</dt><dd>Writer → Reviewer. <code>CHANGES_REQUESTED</code> loops back up to <code>max_plan_review_retries</code>.</dd>
+        <dt>Failure mode</dt><dd>Retry exhausted → pipeline halts; orchestrator writes reason to <code>run.json</code>.</dd>
+      </div>
+
+      <h2 id="stage-3">3 — Worktree</h2>
+
+      <div class="kv">
+        <dt>Input</dt><dd>Feature name (derived from approved plan).</dd>
+        <dt>Output</dt><dd>Git worktree at <code>.worktrees/&lt;feature&gt;/</code> on branch <code>feature/&lt;name&gt;</code>.</dd>
+        <dt>No writer/reviewer</dt><dd>Deterministic infra step — single bash invocation, no LLM involved.</dd>
+        <dt>Failure mode</dt><dd>Branch already exists or worktree creation fails — halts loud. Does not overwrite existing worktrees silently.</dd>
+      </div>
+
+      <h2 id="stage-4">4 — TDD track <span class="badge badge--info">opt-in</span></h2>
+
+      <div class="kv">
+        <dt>Input</dt><dd>Approved plan + PRD Acceptance Criteria.</dd>
+        <dt>Output</dt><dd>Test files committed to worktree. Suite is <strong>red</strong> — no production code yet.</dd>
+        <dt>Activation</dt><dd>Only when <code>docs/context/methodology.md</code> declares <code>tdd: true</code>. Otherwise silent skip. <a href="tdd-track.html">Details</a>.</dd>
+        <dt>Writer</dt><dd><code>TDD Writer</code> — derives tests from the PRD's Acceptance Criteria, never from imagined implementation.</dd>
+        <dt>Reviewer</dt><dd><code>TDD Reviewer</code> — flags tests that mirror implementation, trivial asserts, mocks that hide behavior, coverage gaps against AC.</dd>
+        <dt>Failure mode</dt><dd>Same as Plan — retry exhausted halts the pipeline.</dd>
+      </div>
+
+      <h2 id="stage-5">5 — Implementation</h2>
+
+      <div class="kv">
+        <dt>Input</dt><dd>Approved plan + TDD suite (if active).</dd>
+        <dt>Output</dt><dd>Implementation commits in the worktree.</dd>
+        <dt>Writer</dt><dd><code>Implementer</code> — executes the plan; when TDD is active, writes code to make the red tests green.</dd>
+        <dt>Reviewer</dt><dd><code>Code Reviewer</code> — checks against <code>decisions.md</code>, <code>anti-patterns.md</code>, relevant domain files. Not a style reviewer; focuses on correctness + rule violations.</dd>
+        <dt>Loop</dt><dd>Writer → Reviewer. <code>CHANGES_REQUESTED</code> loops back.</dd>
+        <dt>Failure mode</dt><dd>Retry exhausted halts with <code>CODE_REVIEW_FAILED</code>.</dd>
+      </div>
+
+      <h2 id="stage-6">6 — Test Runner loop</h2>
+
+      <div class="kv">
+        <dt>Input</dt><dd>Worktree with code (and TDD suite, if active).</dd>
+        <dt>Output</dt><dd>Green test state + <code>PRPs/reports/&lt;feature&gt;/run.json</code> + per-attempt records.</dd>
+        <dt>Agent</dt><dd><code>test-runner</code> — runs the suite, normalizes output, classifies failures (B3), returns verdict per attempt.</dd>
+        <dt>Loop body</dt><dd>Each attempt: run → classify → if GREEN exit; if RETRY_NEEDED invoke Implementer with feedback; if RETRY_FLAKY re-run without changes; if ABORT_INFRA attempt one recovery; if ABORT_TIME exit.</dd>
+        <dt>Budgets</dt><dd><code>max_test_retries = 3</code> + <code>max_test_minutes = 30</code>. First to exhaust wins.</dd>
+        <dt>Oscillation detection</dt><dd>If attempt N+1 reverts files from attempt N, halt with <code>FAILED_OSCILLATION</code>.</dd>
+        <dt>Details</dt><dd><a href="../reference/agents.html">Test Runner agent reference</a>; <a href="../reference/commands.html#relay-test">/relay-test command reference</a>.</dd>
+      </div>
+
+      <h2 id="stage-7">7 — Post-green review</h2>
+
+      <div class="kv">
+        <dt>Input</dt><dd>Green test state (<code>run.json</code> with <code>outcome: GREEN</code>).</dd>
+        <dt>Output</dt><dd><code>PRPs/reports/&lt;feature&gt;/test-review.json</code> with verdict.</dd>
+        <dt>Agent</dt><dd><code>post-green-reviewer</code> — diffs changed test files against base branch; flags removed tests, added skips, trivial assertions, coverage drops &gt; 5%.</dd>
+        <dt>Verdict</dt><dd><code>APPROVED</code> → proceed. <code>CHANGES_REQUESTED</code> → orchestrator decides: loop back to Implementer or halt for human review.</dd>
+        <dt>Why it exists</dt><dd>Closes the "agent reaches green by deleting the failing test" attack surface. The anti-pattern is listed in <a href="../governance/anti-patterns.html">anti-patterns</a>.</dd>
+      </div>
+
+      <h2 id="stage-8">8 — Report + PR</h2>
+
+      <div class="kv">
+        <dt>Input</dt><dd>Worktree with green tests and all reviews <code>APPROVED</code>.</dd>
+        <dt>Output</dt><dd>PR opened on GitHub with <code>PRPs/reports/&lt;feature&gt;/final-report.md</code> as the description.</dd>
+        <dt>Generator</dt><dd><code>scripts/generate-final-report.mjs</code> — reads <code>run.json</code>, <code>test-review.json</code>, and every <code>attempts/&lt;N&gt;/record.json</code>, produces AC-10 compliant Markdown.</dd>
+        <dt>PR command</dt><dd><code>gh pr create</code> with the report embedded and appropriate labels.</dd>
+        <dt>Failure mode</dt><dd>If <code>gh</code> is unavailable or auth is broken, the report is still written to disk; the user gets an instruction to open the PR manually.</dd>
+      </div>
+
+      <h2 id="what-composes-these">What composes these stages</h2>
+
+      <p>
+        Each stage is an individually invocable command (see <a href="../reference/commands.html">Commands reference</a>). The orchestrator <code>/relay-execute &lt;prd-path&gt;</code> invokes them in order and handles the loop-back logic for <code>CHANGES_REQUESTED</code> verdicts. You can also invoke any single stage manually — useful for:
+      </p>
+
+      <ul>
+        <li><strong>Re-running a stage after a hand edit.</strong> Edit a plan, invoke <code>/relay-plan-review</code> to validate.</li>
+        <li><strong>Debugging.</strong> If the Test Runner keeps aborting on infra, invoke <code>/relay-test</code> alone to narrow the problem.</li>
+        <li><strong>Partial adoption.</strong> Projects using relay only for tests can invoke <code>/relay-test</code> without adopting the orchestrator.</li>
+      </ul>
+
+      <h2 id="per-stage-retry-policy">Per-stage retry policy</h2>
+
+      <p>
+        Each writer/reviewer pair has its own retry budget, configurable independently. Defaults:
+      </p>
+
+      <div class="kv">
+        <dt>max_plan_review_retries</dt><dd>3 (not yet implemented; placeholder)</dd>
+        <dt>max_tdd_review_retries</dt><dd>2 (not yet implemented)</dd>
+        <dt>max_code_review_retries</dt><dd>3 (not yet implemented)</dd>
+        <dt>max_test_retries</dt><dd>3 (implemented)</dd>
+        <dt>max_test_minutes</dt><dd>30 (implemented)</dd>
+      </div>
+
+      <p>
+        The reasoning behind the numbers is the same as for <code>max_test_retries</code>: fewer than 3 aborts on legitimate second-pass corrections; more than 3 wastes time on stuck loops that aren't converging. See the <a href="../governance/decisions.html#max-test-retries">max_test_retries decision</a> for the full reasoning.
+      </p>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

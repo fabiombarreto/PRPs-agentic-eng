@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Redaction policy — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Reference</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Redaction policy</span>
+      </div>
+
+      <h1>Redaction policy</h1>
+      <p class="page-subtitle">The rules the Test Runner applies when capturing stdout/stderr/logs into <code>PRPs/reports/&lt;feature&gt;/</code>. Secret values that appear in test output are replaced with <code>[REDACTED]</code> markers before being written to the versioned report that travels with the PR.</p>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Scope</div>
+        <p>
+          This policy is about <strong>output redaction</strong> — what to hide when writing reports. It is <strong>not</strong> about secret injection (how secrets reach the test container). That's a separate concern handled by the A4 component via <code>.env</code> files or equivalent.
+        </p>
+      </div>
+
+      <h2 id="layer-1">Layer 1 — Invariant defaults</h2>
+
+      <p>Applied to every project regardless of stack. The team cannot remove these; only add on top via Layer 2.</p>
+
+      <h3 id="env-names-wildcards">Env var names — wildcards (case-insensitive)</h3>
+
+      <p>Any env var whose name matches one of these patterns → its value is redacted wherever it appears in captured output.</p>
+
+      <ul>
+        <li><code>*KEY*</code></li>
+        <li><code>*TOKEN*</code></li>
+        <li><code>*SECRET*</code></li>
+        <li><code>*PASSWORD*</code>, <code>*PASSWD*</code></li>
+        <li><code>*CREDENTIAL*</code></li>
+        <li><code>*PRIVATE*</code>, <code>*SIGNING*</code></li>
+        <li><code>*AUTH*</code></li>
+      </ul>
+
+      <h3 id="env-exact">Env var names — exact matches</h3>
+
+      <p>Specific env vars that carry connection strings with embedded credentials, or paths worth protecting for opsec:</p>
+
+      <ul>
+        <li><code>DATABASE_URL</code>, <code>DB_URL</code></li>
+        <li><code>REDIS_URL</code>, <code>MONGODB_URI</code></li>
+        <li><code>KAFKA_BROKERS</code>, <code>AMQP_URL</code></li>
+        <li><code>GOOGLE_APPLICATION_CREDENTIALS</code> (path to service-account JSON)</li>
+      </ul>
+
+      <p>Matched URL values are replaced with <code>[REDACTED_URL]</code> wholesale. No parse-and-partial redaction (URL parsers fail on passwords with special characters — a parse failure that emits the raw URL is a leak).</p>
+
+      <h3 id="value-regex">Value regex — well-known secret formats</h3>
+
+      <p>Applied to every captured line regardless of env-var context. Catches secrets that leak outside env vars (hardcoded in config, printed by libraries, etc.).</p>
+
+      <table>
+        <thead><tr><th>Source</th><th>Pattern</th></tr></thead>
+        <tbody>
+          <tr><td>AWS Access Key</td><td><code>AKIA[0-9A-Z]{16}</code></td></tr>
+          <tr><td>Stripe live</td><td><code>sk_live_[A-Za-z0-9]{24,}</code></td></tr>
+          <tr><td>Stripe test</td><td><code>sk_test_[A-Za-z0-9]{24,}</code></td></tr>
+          <tr><td>GitHub classic PAT</td><td><code>ghp_[A-Za-z0-9]{36}</code></td></tr>
+          <tr><td>GitHub fine-grained PAT</td><td><code>github_pat_[A-Za-z0-9_]{82}</code></td></tr>
+          <tr><td>JWT</td><td><code>eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+</code></td></tr>
+          <tr><td>PEM private key header</td><td><code>-----BEGIN [A-Z ]+PRIVATE KEY-----</code></td></tr>
+          <tr><td>OpenAI API key</td><td><code>sk-[A-Za-z0-9]{48}</code></td></tr>
+          <tr><td>Anthropic API key</td><td><code>sk-ant-[A-Za-z0-9_-]{95,}</code></td></tr>
+          <tr><td>Google API key</td><td><code>AIza[0-9A-Za-z_-]{35}</code></td></tr>
+          <tr><td>Google OAuth2 access token</td><td><code>ya29\.[A-Za-z0-9_-]{10,}</code></td></tr>
+          <tr><td>Google OAuth2 client secret</td><td><code>GOCSPX-[A-Za-z0-9_-]{28,}</code></td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="layer-2">Layer 2 — Per-project extensions</h2>
+
+      <p>Each target project gets a <code>PRPs/redaction-extensions.txt</code> file, created empty by the context-builder during <code>*init</code>. The team adds:</p>
+
+      <ul>
+        <li>Extra env var names (exact or glob) whose values must be redacted</li>
+        <li>Extra value regex for project-specific secret formats</li>
+      </ul>
+
+      <p>Format — one entry per line, <code>#</code> comments allowed:</p>
+
+      <pre><code class="language-default"># Env var names (exact or glob):
+PHOENIX_AUTH_PROXY_SECRET
+LEGACY_*_API
+
+# Value regex — prefix with `regex:`
+regex:phoenix-[a-f0-9]{32}</code></pre>
+
+      <p>
+        The extensions file is versioned in git alongside other project config. Loading order: Layer 1 defaults first, then Layer 2 extensions. Either layer can add new rules; neither can remove rules from the other.
+      </p>
+
+      <h2 id="layer-3">Layer 3 — Known-informative, not redacted</h2>
+
+      <p>Some values are sensitive-ish but NOT redacted by default because redacting them breaks debugging without adding meaningful security. Documented here so teams can opt in via Layer 2 if they decide otherwise:</p>
+
+      <ul>
+        <li><strong>Service account JSON non-key fields</strong>: <code>client_email</code>, <code>project_id</code>, <code>client_id</code>. Reveal GCP project metadata; don't expose credentials by themselves. Add via Layer 2 if considered sensitive.</li>
+        <li><strong>Git commit hashes, build IDs, internal hostnames</strong> in CI. Useful for debugging; rarely secret.</li>
+      </ul>
+
+      <h2 id="application">How the Test Runner applies this</h2>
+
+      <ol>
+        <li><strong>At test execution (A4 / B6):</strong> env vars matching Layer 1 wildcards or exact matches have their values recorded in a runtime redaction table. Values are replaced in any captured line before the line is written to any file under <code>PRPs/reports/&lt;feature&gt;/</code>.</li>
+        <li><strong>After execution (B6 filter):</strong> the full captured output is re-scanned with the Layer 1 value regex set AND any Layer 2 regex entries. Additional matches are replaced.</li>
+        <li><strong>Report footer:</strong> every <code>final-report.md</code> carries a <code>secrets_redacted</code> section showing count + category breakdown:
+          <pre><code class="language-default">secrets_redacted:
+  count: 7
+  categories:
+    env_names: 5
+    url_values: 1
+    regex_matches: 1</code></pre>
+        </li>
+        <li><strong>If zero redactions happened</strong>, the section still appears with <code>count: 0</code> — absence is informative.</li>
+      </ol>
+
+      <h2 id="url-special">URL handling</h2>
+
+      <p>
+        Connection strings like <code>postgres://user:pass@host:5432/db</code> are replaced whole with <code>[REDACTED_URL]</code>. Not parse-and-partial-redacted.
+      </p>
+
+      <p>
+        Rationale: URL parsers struggle with passwords containing special characters (<code>!</code>, <code>@</code>, <code>:</code>, <code>/</code>, <code>#</code>, <code>?</code>, <code>=</code>). A parse failure that emits the raw URL = leak. Going integral on the redaction is the safe default. If a team needs to see the host for debugging, they can re-run the suite manually outside the autonomous pipeline — the raw logs there aren't written to a versioned report.
+      </p>
+
+      <h2 id="what-this-is-not">What this policy is NOT</h2>
+
+      <ul>
+        <li><strong>Not a replacement for proper secret management.</strong> Secrets must still be injected via <code>.env</code> / vault / compose secrets, NOT hardcoded in source. This policy catches accidental leaks into test output; it doesn't legitimize sloppy handling upstream.</li>
+        <li><strong>Not a policy for source-code scanning.</strong> Pre-commit secret scanners (trufflehog, gitleaks) are complementary — they prevent secrets from entering the repo; this policy prevents captured output from containing them in reports. Both are needed.</li>
+        <li><strong>Not about blocking tests from using secrets.</strong> Tests legitimately need credentials to hit sandbox APIs. This policy never blocks access — it only redacts captured output.</li>
+      </ul>
+
+      <h2 id="related">Related</h2>
+
+      <ul>
+        <li><a href="../governance/decisions.html#redaction-policy">Decision: Secret redaction policy for Test Runner reports</a></li>
+        <li><a href="../governance/anti-patterns.html">Anti-patterns — see "Emitting secret values in run reports or logs"</a></li>
+        <li><a href="../concepts/prp-artifacts.html">PRP artifact paths — where redacted reports live</a></li>
+      </ul>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

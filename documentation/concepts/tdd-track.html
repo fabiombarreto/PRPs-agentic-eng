@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TDD opt-in — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Concepts</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>TDD opt-in</span>
+      </div>
+
+      <h1>TDD opt-in</h1>
+      <p class="page-subtitle">relay has a dedicated TDD track that writes tests <strong>before</strong> production code. It's opt-in per project, activated only by an explicit declaration. This page explains why TDD is a first-class concept in relay, how projects enable it, and what the track actually does.</p>
+
+      <h2 id="why-it-matters">Why TDD is a first-class concept</h2>
+
+      <p>
+        When an AI writes the tests and the code in the same session, it almost always writes them <strong>together</strong> — the tests end up mirroring the implementation rather than driving it. The result looks like TDD but provides none of its benefits: tests that pass trivially, don't exercise real contracts, and don't catch regressions.
+      </p>
+
+      <p>
+        Real TDD requires two properties:
+      </p>
+
+      <ol>
+        <li><strong>Tests exist before the implementation.</strong> The suite is red at the start. Passing it means satisfying a contract, not repeating what was just written.</li>
+        <li><strong>Tests derive from requirements, not from imagined code.</strong> They name behaviors, not method signatures. <code>it('rejects expired tokens')</code>, not <code>it('calls validateToken()')</code>.</li>
+      </ol>
+
+      <p>
+        relay's TDD track enforces both structurally: it has a dedicated <strong>TDD Writer</strong> that reads the PRD's Acceptance Criteria and produces tests <em>before</em> the Implementer runs, and a <strong>TDD Reviewer</strong> that refuses to approve tests that leak implementation details, use trivial asserts, or over-mock.
+      </p>
+
+      <h2 id="how-to-activate">How to activate</h2>
+
+      <p>
+        Every project initialized by the <code>context-builder</code> skill gets a <code>docs/context/methodology.md</code> file. The default state is <strong>TDD off</strong>:
+      </p>
+
+      <pre><code class="language-default">---
+tdd: false
+tdd_evidence: null
+test_frameworks:
+  - pytest
+  - vitest
+  - playwright
+---
+
+# Methodology
+
+## TDD (Test-Driven Development)
+
+Current state: **not declared** (default).
+
+The TDD track (agents B7 and B8) activates only when `tdd: true` in
+the frontmatter above. Heuristics MUST NOT flip this value — only a
+human edit or an explicit user declaration during `*init` can.
+
+### Observed signals
+
+[The context-builder populates this with signals it found during the
+ scan — CI coverage-first rules, test-before-code commit patterns,
+ mentions in CONTRIBUTING.md. None of these activate TDD on their own.]
+</code></pre>
+
+      <p>
+        To activate the TDD track:
+      </p>
+
+      <ol>
+        <li>Confirm with the team that TDD is the project's actual methodology.</li>
+        <li>Change <code>tdd: false</code> to <code>tdd: true</code>.</li>
+        <li>Set <code>tdd_evidence</code> to <code>"user-declared"</code> or a path to a CONTRIBUTING doc that records the choice.</li>
+        <li>Commit the change.</li>
+      </ol>
+
+      <p>That's it. Next time <code>/relay-execute</code> runs, the TDD track activates automatically — Writer and Reviewer slot in between Plan Reviewer and Implementer.</p>
+
+      <h2 id="why-explicit-only">Why only explicit activation?</h2>
+
+      <p>
+        Activating TDD based on heuristics (test folder exists, high coverage, etc.) is explicitly <strong>forbidden</strong>. The reason is in <a href="../governance/anti-patterns.html">anti-patterns</a>: many projects have tests without practicing TDD. Turning on the TDD track for them would surprise the team — suddenly every feature gets a red-first test suite that doesn't match their actual workflow.
+      </p>
+
+      <p>
+        The anti-pattern entry is reproduced here because it's central to the concept:
+      </p>
+
+      <div class="callout callout--error">
+        <div class="callout__title">Anti-pattern: activating the TDD track by heuristic</div>
+        <p><strong>What it is:</strong> Inferring that a project "does TDD" from the existence of a test folder, a high test count, or a CI job, and enabling B7/B8 automatically.</p>
+        <p><strong>Why it's forbidden:</strong> TDD is a methodology, not a side effect of having tests. Activating it silently surprises teams that test a lot without practicing TDD.</p>
+        <p><strong>What to do instead:</strong> Read <code>docs/context/methodology.md</code> and check exactly one key: <code>tdd: true | false</code>. No declaration file, <code>tdd: false</code>, or missing frontmatter → skip B7/B8 silently.</p>
+      </div>
+
+      <h2 id="what-happens-when-active">What happens when TDD is active</h2>
+
+      <p>
+        With <code>tdd: true</code>, the Pillar 2 pipeline gains two stages between Plan Review and Implementation:
+      </p>
+
+      <div class="pipeline">
+        <div class="pipeline__row pipeline__row--autonomous">
+          <div class="pipeline__label">stage 2</div>
+          <div class="pipeline__text"><strong>Plan Writer + Plan Reviewer</strong> (as usual)</div>
+        </div>
+        <div class="pipeline__arrow">↓</div>
+        <div class="pipeline__row pipeline__row--autonomous">
+          <div class="pipeline__label">stage 3</div>
+          <div class="pipeline__text"><strong>Worktree creation</strong></div>
+        </div>
+        <div class="pipeline__arrow">↓</div>
+        <div class="pipeline__row pipeline__row--autonomous">
+          <div class="pipeline__label">stage 4 (TDD)</div>
+          <div class="pipeline__text"><strong>TDD Writer</strong> — reads PRD AC + plan, produces red test suite. Commits tests only — <em>never production code</em>.</div>
+        </div>
+        <div class="pipeline__arrow">↓</div>
+        <div class="pipeline__row pipeline__row--autonomous">
+          <div class="pipeline__label">stage 4 (TDD)</div>
+          <div class="pipeline__text"><strong>TDD Reviewer</strong> — validates the suite against five known pitfalls (implementation leaks, trivial asserts, mock abuse, AC coverage, test duplication). Flips to APPROVED.</div>
+        </div>
+        <div class="pipeline__arrow">↓</div>
+        <div class="pipeline__row pipeline__row--autonomous">
+          <div class="pipeline__label">stage 5</div>
+          <div class="pipeline__text"><strong>Implementer</strong> — writes production code until the red suite turns green. The suite is the <em>contract</em>, not a checklist of things that happen to fail.</div>
+        </div>
+      </div>
+
+      <p>The Test Runner downstream respects the TDD contract: B4 (auto-correction loop) explicitly refuses to weaken tests that the TDD Reviewer approved, and B5 (post-green review) uses the TDD suite as the baseline for "tests were not removed."</p>
+
+      <h2 id="what-doesnt-change">What doesn't change when TDD is active</h2>
+
+      <ul>
+        <li><strong>Acceptance Criteria remain the source of truth.</strong> The PRD's AC section is the contract whether TDD is on or off. When TDD is off, the Implementer writes tests alongside the code; when on, the TDD Writer derives tests from AC before the Implementer runs.</li>
+        <li><strong>The Test Runner doesn't care.</strong> It runs the suite, classifies failures, and auto-corrects. It doesn't know whether the suite was written by a TDD Writer or an Implementer; it just runs what's there.</li>
+        <li><strong>The rest of the pipeline is unchanged.</strong> Post-green review, report generation, PR creation — all behave the same.</li>
+      </ul>
+
+      <h2 id="graceful-degradation">Graceful degradation</h2>
+
+      <p>Three scenarios matter:</p>
+
+      <div class="kv">
+        <dt>methodology.md missing</dt><dd>Treated as <code>tdd: false</code>. TDD track silently skipped. A note in the final report flags "methodology.md not found — consider re-running <code>*update</code>."</dd>
+        <dt>methodology.md has <code>tdd: true</code> but no test framework detected</dt><dd>Hard abort with actionable message. TDD without a test framework is a misconfiguration; the user must either install a test framework or flip <code>tdd: false</code>.</dd>
+        <dt>methodology.md has <code>tdd: true</code> and TDD Reviewer exhausts retries</dt><dd>The pipeline halts for human review. The partially-written test suite stays in the worktree for manual completion or discard.</dd>
+      </div>
+
+      <h2 id="related">Related</h2>
+
+      <ul>
+        <li><a href="../reference/commands.html#relay-tdd"><code>/relay-tdd</code></a> and <a href="../reference/commands.html#relay-tdd-review"><code>/relay-tdd-review</code></a> — command references</li>
+        <li><a href="../governance/decisions.html#tdd-opt-in">Decision: TDD activation is opt-in by explicit declaration only</a></li>
+        <li><a href="../governance/decisions.html#methodology-file">Decision: methodology declaration lives in <code>docs/context/methodology.md</code></a></li>
+        <li><a href="../governance/anti-patterns.html">Anti-patterns — see "activating the TDD track by heuristic"</a></li>
+      </ul>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Skills — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Reference</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Skills</span>
+      </div>
+
+      <h1>Skills</h1>
+      <p class="page-subtitle">Claude Code skills are loaded on demand — they're reusable capabilities that agents can invoke when a task matches their description. relay ships one foundational skill: <code>context-builder</code>. This page documents it in detail.</p>
+
+      <h2 id="context-builder">context-builder</h2>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/skills/context-builder/SKILL.md</code></dd>
+        <dt>Invocation</dt><dd>Typed by the user in a Claude Code session as a skill — typical pattern: <code>*init</code>, <code>*update</code>, <code>*validate</code>, <code>*domain</code>, <code>*libs</code>, or <code>*gate</code>.</dd>
+        <dt>Role</dt><dd>Initialize (or update) a target project's documentation tree — the <code>docs/</code> hierarchy, the <code>CLAUDE.md</code> context file, the <code>.claude/settings.json</code> permission list, and the <code>PRPs/redaction-extensions.txt</code>.</dd>
+        <dt>Status</dt><dd><span class="badge badge--done">shipped</span></dd>
+      </div>
+
+      <h2 id="invocation-modes">Invocation modes</h2>
+
+      <table>
+        <thead><tr><th>Mode</th><th>Trigger</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td>Init</td><td><code>*init</code></td><td>Full setup: validate MCP Context7 → scan project → generate all tiers + docs/context + docs/domain + docs/libs + <code>.claude/settings.json</code> + <code>PRPs/redaction-extensions.txt</code>.</td></tr>
+          <tr><td>Update</td><td><code>*update</code></td><td>Re-scan; preserve human-validated content; add missing files only. Safe to re-run.</td></tr>
+          <tr><td>Validate</td><td><code>*validate</code></td><td>Check size limits and anti-pattern violations only. No file writes.</td></tr>
+          <tr><td>Domain</td><td><code>*domain</code></td><td>Re-scan and rebuild <code>docs/domain/</code> only.</td></tr>
+          <tr><td>Libs</td><td><code>*libs</code></td><td>Re-fetch library docs via Context7 MCP and rebuild <code>docs/libs/</code>.</td></tr>
+          <tr><td>Gate</td><td><code>*gate</code></td><td>Regenerate <code>docs/decision-gate.md</code> and its satellite files.</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="what-it-produces">What it produces (Init mode)</h2>
+
+      <pre><code class="language-bash">&lt;target-project&gt;/
+├── CLAUDE.md                     # Tier 1: daily essentials, &lt; 2000 tokens
+├── docs/
+│   ├── KNOWLEDGE_BASE.md         # Tier 2: TOC, 1-2 line summaries per file
+│   ├── decision-gate.md          # mandatory AI control mechanism
+│   ├── decisions.md              # stable decisions inferred from codebase (marked [INFERRED - VALIDATE])
+│   ├── anti-patterns.md          # forbidden patterns inferred from codebase
+│   ├── context/
+│   │   ├── architecture.md       # stack, folder layout, inviolable rules
+│   │   ├── conventions.md        # naming, file structure, imports
+│   │   ├── integrations.md       # external services (no secret values)
+│   │   ├── constraints.md        # runtime versions, tech debt, what NOT to do
+│   │   └── methodology.md        # TDD opt-in frontmatter (default: tdd: false)
+│   ├── domain/
+│   │   ├── glossary.md           # business terms
+│   │   ├── flows.md              # main user flows
+│   │   └── areas/                # one file per business area
+│   └── libs/                     # via Context7 when available
+├── .claude/
+│   └── settings.json             # allow/deny patterns from catalog
+└── PRPs/
+    └── redaction-extensions.txt  # empty template — team adds per-project secrets</code></pre>
+
+      <h2 id="phases">Phases</h2>
+
+      <p>The skill runs in ordered phases. Each phase has explicit <strong>Init behavior</strong> and <strong>Update behavior</strong>.</p>
+
+      <h3 id="phase-0">Phase 0 — Validate mode and environment</h3>
+
+      <ul>
+        <li>Check Context7 MCP availability. If absent, set <code>SKIP_LIBS=true</code> and warn.</li>
+        <li>Init only: if artifacts already exist, prompt <code>[R] Recreate | [U] Switch to update | [S] Skip</code>.</li>
+        <li>Update mode: no prompt — the mode itself signals preservation intent.</li>
+      </ul>
+
+      <h3 id="phase-1">Phase 1 — Project scan</h3>
+
+      <p>Reads package manifests (<code>package.json</code>, <code>pyproject.toml</code>, <code>Gemfile</code>, <code>Cargo.toml</code>), README, folder structure 2 levels deep, config files (<code>docker-compose.yml</code>, CI configs), 3–5 representative code files per layer, migration files or DB schema, route files. Identifies: project type, stack, main domain areas, integrations, test patterns.</p>
+
+      <h3 id="phase-1-5">Phase 1.5 — Generate <code>.claude/settings.json</code></h3>
+
+      <p>Reads the canonical allow/deny catalog (<code>docs/context/settings-allowlist.md</code> in the relay plugin repo via <code>${CLAUDE_PLUGIN_ROOT}</code>), emits narrow allow patterns matched to Phase 1's stack signals, plus the invariant denylist. Refuses to emit broad patterns (<code>Bash(*)</code>, <code>Bash(git *)</code>, etc.).</p>
+
+      <h3 id="phase-1-75">Phase 1.75 — Create <code>PRPs/redaction-extensions.txt</code></h3>
+
+      <p>Always-created empty template with a header comment explaining the format. Teams add per-project secret name patterns or value regex here. Never overwritten in <code>*update</code> mode.</p>
+
+      <h3 id="phase-2">Phase 2 — Create <code>docs/context</code></h3>
+
+      <p>Generates 5 files: <code>architecture.md</code>, <code>conventions.md</code>, <code>integrations.md</code>, <code>constraints.md</code>, <code>methodology.md</code>. Each inferred from the Phase 1 scan with <code>[INFERRED - VALIDATE]</code> markers where the skill couldn't be confident. <code>methodology.md</code> defaults to <code>tdd: false</code> regardless of signals — heuristic activation is an <a href="../governance/anti-patterns.html">anti-pattern</a>.</p>
+
+      <h3 id="phase-3">Phase 3 — Create <code>docs/domain</code></h3>
+
+      <p>The most critical inference phase. Produces <code>glossary.md</code>, <code>flows.md</code>, and one <code>areas/&lt;area&gt;.md</code> per business area detected. Every inferred rule gets a <code>[INFERRED - VALIDATE]</code> marker; all uncertain items collect into an "Open Questions" section at the bottom of each area file.</p>
+
+      <h3 id="phase-4">Phase 4 — Create <code>docs/libs</code></h3>
+
+      <p>Via Context7 MCP. For each main project dependency, fetches version-specific usage patterns and gotchas. Skipped when Context7 is unavailable (<code>SKIP_LIBS=true</code>).</p>
+
+      <h3 id="phase-4-5">Phase 4.5 — Create <code>docs/decision-gate.md</code> and satellites</h3>
+
+      <p>Three files with strict update semantics:</p>
+
+      <ul>
+        <li><code>decision-gate.md</code> — fixed template; dynamic area-row inserts.</li>
+        <li><code>decisions.md</code> — populated with inferred decisions marked <code>[INFERRED - VALIDATE]</code>. In update mode: <strong>preserved entirely</strong> if file has substantive entries.</li>
+        <li><code>anti-patterns.md</code> — same protocol as decisions.md.</li>
+      </ul>
+
+      <h3 id="phase-5">Phase 5 — Tier 3 developer docs</h3>
+
+      <p>Generates <code>docs/architecture.md</code>, <code>development.md</code>, <code>api-reference.md</code>, <code>troubleshooting.md</code>. Update-mode: preserved if exist.</p>
+
+      <h3 id="phase-6">Phase 6 — Tier 2 <code>KNOWLEDGE_BASE.md</code></h3>
+
+      <p>TOC with one entry per doc file. Update-mode: scans existing KB, appends missing required entries, preserves existing summaries (which may be hand-edited).</p>
+
+      <h3 id="phase-7">Phase 7 — Tier 1 <code>CLAUDE.md</code></h3>
+
+      <p>Project summary + stack list + essential commands + top 3 patterns + Context &amp; Domain section. Hard size limit: &lt; 95 lines, &lt; 2000 tokens. Update-mode: preserves hand-edited commands/patterns/stack; only appends missing Context &amp; Domain pointers.</p>
+
+      <h3 id="phase-8">Phase 8 — Final Report</h3>
+
+      <p>Structured report printed to the user with:</p>
+
+      <ul>
+        <li>Files created / updated / preserved</li>
+        <li>Domain areas identified</li>
+        <li>Methodology declaration state</li>
+        <li>Autonomous-pipeline permissions summary</li>
+        <li>Items requiring human validation (all <code>[INFERRED - VALIDATE]</code> markers)</li>
+        <li>Open questions from domain area files</li>
+        <li>Detected drift (update mode only)</li>
+        <li>Skipped stages with reasons</li>
+        <li>.gitignore follow-ups (for first-run)</li>
+      </ul>
+
+      <h2 id="invariants">Invariants</h2>
+
+      <ul>
+        <li><strong>Size limits</strong> on Tier 1 (&lt; 95 lines, &lt; 2000 tokens) and Tier 2 (&lt; 100 lines, &lt; 1500 tokens). Tier 3 is unbounded.</li>
+        <li><strong>Plain text paths only</strong> in Tier 1 and 2 — no <code>@</code> triggers that bloat the context window.</li>
+        <li><strong>No <code>[INFERRED - VALIDATE]</code></strong> markers in Tier 1 or 2 — they belong only in Tier 3 and domain area files.</li>
+        <li><strong>Never activate TDD heuristically.</strong> <code>methodology.md</code> defaults to <code>tdd: false</code>.</li>
+        <li><strong>Business rules belong in <code>docs/domain/areas/</code></strong>, not in <code>CLAUDE.md</code>.</li>
+      </ul>
+
+      <h2 id="extension">Extending the skill</h2>
+
+      <p>
+        The skill is a single Markdown file with a YAML frontmatter and a long body. Editing it requires care:
+      </p>
+
+      <ul>
+        <li>Every phase must declare explicit <strong>Init behavior</strong> and <strong>Update behavior</strong> subsections.</li>
+        <li>Any new artifact path must be added to the Extended Folder Structure at the top of the file.</li>
+        <li>Any new catalog referenced in <code>${CLAUDE_PLUGIN_ROOT}</code> must be documented in the "Relay catalog discovery" section.</li>
+      </ul>
+
+      <p>
+        If a change to the skill breaks the update-mode protocol (e.g., overwrites human-validated content), it's a critical bug — the skill's value depends on being safe to re-run.
+      </p>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

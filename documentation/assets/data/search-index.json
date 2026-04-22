@@ -18,16 +18,28 @@
     "excerpt": "The pipeline is interactive up to PRD approval and autonomous from there on. Catching misunderstanding at PRD time costs minutes; fixing it after implementation costs hours."
   },
   {
+    "title": "Pipeline stages",
+    "path": "concepts/pipeline.html",
+    "category": "Concepts",
+    "excerpt": "Writer/reviewer pairs plus the Test Runner. Each stage has a specific input, output, and recovery path. This page walks through all eight stages and their per-stage retry budgets."
+  },
+  {
     "title": "TDD opt-in",
     "path": "concepts/tdd-track.html",
     "category": "Concepts",
-    "excerpt": "TDD is an explicit opt-in via docs/context/methodology.md with tdd: true. Heuristic activation is forbidden — explicit declaration only."
+    "excerpt": "TDD is an explicit opt-in via docs/context/methodology.md with tdd: true. Heuristic activation is forbidden — explicit declaration only. When active, tests are written before implementation by the TDD Writer."
   },
   {
     "title": "PRP artifact paths",
     "path": "concepts/prp-artifacts.html",
     "category": "Concepts",
     "excerpt": "Pipeline artifacts (PRDs, plans, reports, reviews) live under PRPs/ at the repo root, never under .claude/. The only .claude/ write is settings.json during context-builder setup."
+  },
+  {
+    "title": "Graceful degradation",
+    "path": "concepts/graceful-degradation.html",
+    "category": "Concepts",
+    "excerpt": "Every component detects its preconditions at start. Missing infrastructure results in a clear skip with a reason — never a silent failure, never a crash. No Docker, no tests, no GitHub — each case has defined behavior."
   },
   {
     "title": "Commands",
@@ -39,31 +51,43 @@
     "title": "Agents",
     "path": "reference/agents.html",
     "category": "Reference",
-    "excerpt": "Specialized Claude Code agents invoked by commands. Currently implemented: test-runner (B1 + B3 failure classifier) and post-green-reviewer (B5)."
+    "excerpt": "Specialized Claude Code agents invoked by commands. Currently implemented: test-runner (B1 + B3 failure classifier) and post-green-reviewer (B5). Each has focused prompt, narrow tool allowlist, structured output."
+  },
+  {
+    "title": "Skills",
+    "path": "reference/skills.html",
+    "category": "Reference",
+    "excerpt": "Claude Code skills loaded on demand. relay ships one: context-builder. Initializes (or updates) a target project's documentation tree, permission allowlist, and methodology declaration."
+  },
+  {
+    "title": "Scripts",
+    "path": "reference/scripts.html",
+    "category": "Reference",
+    "excerpt": "Helper scripts written in Node.js with zero npm dependencies. normalize-test-output.mjs (JUnit XML to canonical schema) and generate-final-report.mjs (assembles the PR-embeddable markdown report)."
   },
   {
     "title": "Test output schema",
     "path": "reference/test-output-schema.html",
     "category": "Reference",
-    "excerpt": "Canonical JSON schema v1 every test framework output is normalized into. Produced by normalize-test-output.mjs; consumed by B3 classifier and B4 auto-correction loop."
+    "excerpt": "Canonical JSON schema v1 every test framework output is normalized into. Produced by normalize-test-output.mjs; consumed by B3 classifier and B4 auto-correction loop. Field reference and framework-specific mappings."
   },
   {
     "title": "Settings allowlist",
     "path": "reference/settings-allowlist.html",
     "category": "Reference",
-    "excerpt": "Narrow permission patterns per stack signal plus an invariant denylist. Emitted by context-builder into the target project's .claude/settings.json."
+    "excerpt": "Narrow permission patterns per stack signal plus an invariant denylist. Emitted by context-builder into the target project's .claude/settings.json. Broad patterns like Bash(*) are forbidden."
   },
   {
     "title": "Redaction policy",
     "path": "reference/redaction-policy.html",
     "category": "Reference",
-    "excerpt": "Three-layer secret redaction: invariant defaults (env name wildcards + exact URL vars + value regex), per-project extensions in PRPs/redaction-extensions.txt, and documented non-redacted values."
+    "excerpt": "Three-layer secret redaction: invariant defaults (env name wildcards + exact URL vars + value regex for AWS/Stripe/GitHub/JWT/PEM/OpenAI/Anthropic/Google), per-project extensions, documented non-redacted values."
   },
   {
     "title": "Decisions",
     "path": "governance/decisions.html",
     "category": "Governance",
-    "excerpt": "Stable technical decisions that must not be re-evaluated by the AI. Each entry includes context, decision, reason, and affected areas."
+    "excerpt": "Stable technical decisions that must not be re-evaluated by the AI. Each entry includes context, decision, reason, and affected areas. 14 decisions documented as of 2026-04-21."
   },
   {
     "title": "Anti-patterns",
@@ -81,7 +105,7 @@
     "title": "Phase status",
     "path": "roadmap/status.html",
     "category": "Roadmap",
-    "excerpt": "Overall rollout across 5 phases: Foundation, Testing, Agents, Approval, CI/CD. Plus per-PRD phase status for the Test Runner."
+    "excerpt": "Overall rollout across 5 phases: Foundation, Testing, Agents, Approval, CI/CD. Plus per-PRD phase status for the Test Runner — 8 of 9 phases complete."
   },
   {
     "title": "Phoenix dogfood",

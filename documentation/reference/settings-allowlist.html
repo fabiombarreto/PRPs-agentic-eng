@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Settings allowlist — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Reference</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Settings allowlist</span>
+      </div>
+
+      <h1>Settings allowlist</h1>
+      <p class="page-subtitle">The canonical catalog of allow/deny patterns the <code>context-builder</code> skill emits into every target project's <code>.claude/settings.json</code>. Narrow patterns per detected stack signal, plus an invariant denylist covering destructive operations. The goal: the autonomous pipeline runs without per-command permission prompts, while destructive actions still require human confirmation.</p>
+
+      <h2 id="principles">Principles</h2>
+
+      <ol>
+        <li><strong>Narrow patterns, never broad.</strong> <code>Bash(pnpm test *)</code> — not <code>Bash(*)</code>. Specific verbs with argument wildcards — not verb-terminal wildcards.</li>
+        <li><strong>Invariant denylist.</strong> The same destructive operations require confirmation in every project, regardless of stack.</li>
+        <li><strong>Stack-dependent allow.</strong> The skill only emits allow patterns for tools it actually detected in Phase 1.</li>
+        <li><strong>Exception for <code>settings.json</code> itself.</strong> The file is setup config, not a pipeline artifact — the context-builder writes it once during <code>*init</code>.</li>
+      </ol>
+
+      <h2 id="allow-stack-dependent">Allow — stack-dependent</h2>
+
+      <p>Emitted only when the corresponding stack signal is detected. Unused entries are not written.</p>
+
+      <h3 id="test-execution">Test execution</h3>
+
+      <table>
+        <thead><tr><th>Stack signal</th><th>Emit</th></tr></thead>
+        <tbody>
+          <tr><td><code>bun.lockb</code></td><td><code>Bash(bun test *)</code>, <code>Bash(bun run test*)</code>, <code>Bash(bun run lint*)</code>, <code>Bash(bun run typecheck*)</code></td></tr>
+          <tr><td><code>pnpm-lock.yaml</code></td><td><code>Bash(pnpm test *)</code>, <code>Bash(pnpm run test*)</code>, <code>Bash(pnpm exec *)</code></td></tr>
+          <tr><td><code>yarn.lock</code></td><td><code>Bash(yarn test *)</code>, <code>Bash(yarn run test*)</code></td></tr>
+          <tr><td><code>package-lock.json</code></td><td><code>Bash(npm test *)</code>, <code>Bash(npm run test*)</code>, <code>Bash(npx *)</code></td></tr>
+          <tr><td><code>pyproject.toml</code> + pytest</td><td><code>Bash(pytest *)</code>, <code>Bash(python -m pytest *)</code>, <code>Bash(uv run pytest *)</code></td></tr>
+          <tr><td><code>go.mod</code></td><td><code>Bash(go test *)</code></td></tr>
+          <tr><td><code>Cargo.toml</code></td><td><code>Bash(cargo test *)</code></td></tr>
+          <tr><td><code>pom.xml</code></td><td><code>Bash(mvn test)</code>, <code>Bash(mvn verify)</code></td></tr>
+          <tr><td><code>*.csproj</code>/<code>*.sln</code></td><td><code>Bash(dotnet test *)</code></td></tr>
+          <tr><td><code>Gemfile</code></td><td><code>Bash(bundle exec rspec *)</code>, <code>Bash(rspec *)</code>, <code>Bash(rake test*)</code></td></tr>
+          <tr><td>Makefile with test target</td><td><code>Bash(make test*)</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3 id="docker">Docker / test environment</h3>
+
+      <table>
+        <thead><tr><th>Stack signal</th><th>Emit</th></tr></thead>
+        <tbody>
+          <tr><td><code>compose.test.yml</code> or similar</td><td><code>Bash(docker compose -f compose.test.yml up -d*)</code>, <code>...down*</code>, <code>...exec *</code>, <code>...logs *</code>, <code>...ps*</code></td></tr>
+          <tr><td>Any <code>docker-compose*.yml</code></td><td><code>Bash(docker compose up -d *)</code>, <code>...down *</code>, <code>...exec *</code>, <code>...logs *</code>, <code>...ps*</code></td></tr>
+          <tr><td>Any <code>Dockerfile</code></td><td><code>Bash(docker build *)</code>, <code>Bash(docker ps)</code>, <code>Bash(docker logs *)</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3 id="git">Git — always, non-destructive only</h3>
+
+      <ul>
+        <li><code>Bash(git status*)</code>, <code>Bash(git diff*)</code>, <code>Bash(git log*)</code></li>
+        <li><code>Bash(git add *)</code>, <code>Bash(git commit *)</code>, <code>Bash(git branch*)</code></li>
+        <li><code>Bash(git checkout feature/*)</code>, <code>Bash(git checkout -b feature/*)</code> — restricted to feature branches</li>
+        <li><code>Bash(git worktree *)</code></li>
+        <li><code>Bash(git fetch*)</code></li>
+        <li><code>Bash(git push origin feature/*)</code> — never <code>main</code>, never <code>--force</code></li>
+        <li><code>Bash(git stash*)</code></li>
+        <li><code>Bash(git rev-parse*)</code>, <code>Bash(git show*)</code>, <code>Bash(git ls-files*)</code></li>
+      </ul>
+
+      <h3 id="gh">GitHub CLI — always, read + restricted write</h3>
+
+      <ul>
+        <li><code>Bash(gh pr create *)</code>, <code>Bash(gh pr view *)</code>, <code>Bash(gh pr checks *)</code>, <code>Bash(gh pr list *)</code></li>
+        <li><code>Bash(gh issue view *)</code>, <code>Bash(gh issue list *)</code></li>
+        <li><code>Bash(gh api *)</code> — default method is GET; mutation verbs are denylisted below</li>
+      </ul>
+
+      <h3 id="packages">Package managers — install / add, never global</h3>
+
+      <table>
+        <thead><tr><th>Stack signal</th><th>Emit</th><th>Explicit deny</th></tr></thead>
+        <tbody>
+          <tr><td><code>bun.lockb</code></td><td><code>Bash(bun install)</code>, <code>Bash(bun add *)</code></td><td><code>bun add -g *</code></td></tr>
+          <tr><td><code>pnpm-lock.yaml</code></td><td><code>Bash(pnpm install)</code>, <code>Bash(pnpm add *)</code></td><td><code>pnpm add -g *</code></td></tr>
+          <tr><td><code>package-lock.json</code></td><td><code>Bash(npm install)</code>, <code>Bash(npm ci)</code>, <code>Bash(npm install --save *)</code></td><td><code>npm install -g *</code></td></tr>
+          <tr><td><code>pyproject.toml</code></td><td><code>Bash(uv sync)</code>, <code>Bash(uv add *)</code>, <code>Bash(pip install -r *)</code></td><td><code>pip install --user *</code>, <code>pip install -g *</code></td></tr>
+          <tr><td><code>Gemfile</code></td><td><code>Bash(bundle install)</code>, <code>Bash(bundle add *)</code></td><td>—</td></tr>
+        </tbody>
+      </table>
+
+      <h3 id="lint">Lint / format / typecheck</h3>
+
+      <p>Usually invoked via package scripts (already covered by the test-execution entries). When invoked directly:</p>
+
+      <ul>
+        <li><code>Bash(ruff check*)</code>, <code>Bash(ruff format*)</code></li>
+        <li><code>Bash(eslint *)</code>, <code>Bash(prettier *)</code></li>
+        <li><code>Bash(tsc *)</code>, <code>Bash(mypy *)</code>, <code>Bash(pyright *)</code></li>
+      </ul>
+
+      <h3 id="read-only">Read-only file operations — always</h3>
+
+      <ul>
+        <li><code>Bash(ls *)</code>, <code>Bash(find *)</code></li>
+        <li><code>Bash(cat *)</code>, <code>Bash(head *)</code>, <code>Bash(tail *)</code></li>
+        <li><code>Bash(rg *)</code>, <code>Bash(grep *)</code></li>
+        <li><code>Bash(which *)</code>, <code>Bash(pwd)</code>, <code>Bash(env)</code></li>
+      </ul>
+
+      <h3 id="scripts">Relay plugin scripts — always</h3>
+
+      <p>Agents invoke the plugin's helper scripts via <code>node</code>. Each script has a narrow pattern so only relay-shipped scripts run, never arbitrary node invocations:</p>
+
+      <ul>
+        <li><code>Bash(node */plugins/relay/scripts/normalize-test-output.mjs *)</code></li>
+        <li><code>Bash(node */plugins/relay/scripts/generate-final-report.mjs *)</code></li>
+      </ul>
+
+      <p>The <code>*</code> prefix before <code>/plugins/</code> tolerates the variable-prefix expansion (e.g., <code>${CLAUDE_PLUGIN_ROOT}</code>). A bare <code>Bash(node *)</code> is <strong>not</strong> emitted — it would be verb-terminal-wildcard and defeat the purpose.</p>
+
+      <h3 id="worktree-cleanup">Worktree cleanup — scoped</h3>
+
+      <ul>
+        <li><code>Bash(rm -rf .worktrees/*)</code> — <strong>only</strong> inside the <code>.worktrees/</code> folder</li>
+      </ul>
+
+      <h2 id="deny-invariant">Deny — invariant across all projects</h2>
+
+      <p>Hardcoded. Emitted in every generated <code>settings.json</code> regardless of stack.</p>
+
+      <h3 id="destructive-git">Destructive git</h3>
+
+      <ul>
+        <li><code>Bash(git push --force*)</code>, <code>Bash(git push -f*)</code>, <code>Bash(git push * --force*)</code></li>
+        <li><code>Bash(git reset --hard*)</code></li>
+        <li><code>Bash(git clean -fd*)</code></li>
+        <li><code>Bash(git branch -D*)</code> — force-delete</li>
+        <li><code>Bash(git push origin main*)</code>, <code>Bash(git push origin master*)</code> — direct push to default branch</li>
+      </ul>
+
+      <h3 id="destructive-fs">Destructive file operations</h3>
+
+      <ul>
+        <li><code>Bash(rm -rf /*)</code>, <code>Bash(rm -rf ~*)</code>, <code>Bash(rm -rf ..*)</code></li>
+        <li><code>Bash(rm -rf *)</code> — bare pattern; only the scoped <code>.worktrees/</code> form is allowed</li>
+      </ul>
+
+      <h3 id="privilege">Privilege escalation</h3>
+
+      <ul>
+        <li><code>Bash(sudo *)</code>, <code>Bash(su *)</code></li>
+        <li><code>Bash(chmod 777*)</code>, <code>Bash(chmod -R 777*)</code></li>
+      </ul>
+
+      <h3 id="remote-exec">Remote execution</h3>
+
+      <ul>
+        <li><code>Bash(curl * | sh*)</code>, <code>Bash(curl * | bash*)</code></li>
+        <li><code>Bash(wget * | sh*)</code>, <code>Bash(wget * | bash*)</code></li>
+      </ul>
+
+      <h3 id="destructive-docker">Destructive Docker</h3>
+
+      <ul>
+        <li><code>Bash(docker system prune*)</code></li>
+        <li><code>Bash(docker volume rm *)</code>, <code>Bash(docker volume prune*)</code></li>
+        <li><code>Bash(docker image prune*)</code></li>
+      </ul>
+
+      <h3 id="global-pollution">Global package pollution</h3>
+
+      <ul>
+        <li><code>Bash(npm install -g *)</code>, <code>Bash(npm i -g *)</code></li>
+        <li><code>Bash(pip install --user *)</code>, <code>Bash(pip install -g *)</code></li>
+        <li><code>Bash(bun add -g *)</code>, <code>Bash(pnpm add -g *)</code>, <code>Bash(yarn global *)</code></li>
+      </ul>
+
+      <h3 id="system-paths">System directory writes</h3>
+
+      <ul>
+        <li><code>Bash(* &gt; /etc/*)</code>, <code>Bash(* &gt; /usr/*)</code></li>
+        <li><code>Bash(* &gt; %SystemRoot%/*)</code> (Windows)</li>
+        <li>Any redirection to absolute system paths.</li>
+      </ul>
+
+      <h3 id="gh-mutations">GitHub API mutations</h3>
+
+      <ul>
+        <li><code>Bash(gh api -X DELETE *)</code></li>
+        <li><code>Bash(gh api -X PUT *)</code></li>
+        <li><code>Bash(gh api -X POST *)</code></li>
+        <li><code>Bash(gh api -X PATCH *)</code></li>
+        <li><code>Bash(gh repo delete *)</code></li>
+      </ul>
+
+      <h2 id="forbidden-allow">Patterns explicitly forbidden in <code>allow</code></h2>
+
+      <p>The context-builder refuses to emit these, even if asked:</p>
+
+      <ul>
+        <li><code>Bash(*)</code> — catches everything, defeats the purpose</li>
+        <li><code>Bash(git *)</code> — too broad; would allow <code>git push --force</code></li>
+        <li><code>Bash(docker *)</code> — too broad</li>
+        <li><code>Bash(rm *)</code> — too broad</li>
+        <li>Any pattern ending in <code>*</code> at the verb level</li>
+      </ul>
+
+      <p>If a stack signal would require such a pattern, the detection logic needs more granularity — not pattern loosening.</p>
+
+      <h2 id="update-behavior">Update behavior</h2>
+
+      <ul>
+        <li><strong><code>*init</code></strong>: generates <code>.claude/settings.json</code> fresh. Overwrites any existing file, with a warning.</li>
+        <li><strong><code>*update</code></strong>: re-runs stack detection. <strong>Adds</strong> missing allow entries for newly-detected signals. <strong>Never removes</strong> existing allow entries (they may have been added by the human deliberately). Denylist is replaced wholesale (invariant).</li>
+      </ul>
+
+      <h2 id="per-user">Per-user overrides</h2>
+
+      <p>
+        <code>.claude/settings.local.json</code> (git-ignored by default) is <strong>not</strong> generated by the context-builder. Users can add per-machine allow patterns there (extra tooling they use personally) without polluting the committed <code>settings.json</code>.
+      </p>
+
+      <h2 id="gitignore">Required <code>.gitignore</code> entries</h2>
+
+      <p>After running the context-builder, the target project's <code>.gitignore</code> must include:</p>
+
+      <pre><code class="language-default"># Claude — ignore session/cache/local artifacts, but commit project-wide settings
+# Use /* (not /) so git still traverses the directory and honors the negation below
+.claude/*
+!.claude/settings.json
+
+# relay — per-feature worktrees (ephemeral)
+.worktrees/</code></pre>
+
+      <p>The context-builder's final report lists this as a follow-up every first-run. It does NOT modify <code>.gitignore</code> automatically — the file is project-controlled.</p>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>
