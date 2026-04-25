@@ -56,7 +56,7 @@
             <td>3</td>
             <td><strong>Agents</strong></td>
             <td>Orchestrator — single <code>/relay-execute</code> command driving the full pipeline from approved PRD to PR</td>
-            <td><span class="badge badge--pending">pending</span></td>
+            <td><span class="badge badge--partial">partial</span> (PRD authoring stage shipped: <code>/relay-prd</code> + <code>prd-writer</code> + <code>prd-reviewer</code> + <code>research-web</code> + <code>research-codebase</code>; remaining stages pending)</td>
           </tr>
           <tr>
             <td>4</td>
@@ -147,8 +147,8 @@
 
       <ul>
         <li><strong>Skill:</strong> <code>skills/context-builder/SKILL.md</code> — initializes / updates the documentation tree for any target project</li>
-        <li><strong>Agents:</strong> <code>agents/test-runner.md</code>, <code>agents/post-green-reviewer.md</code></li>
-        <li><strong>Commands:</strong> <code>commands/relay-test.md</code>, <code>commands/relay-test-review.md</code></li>
+        <li><strong>Agents:</strong> <code>agents/test-runner.md</code>, <code>agents/post-green-reviewer.md</code>, <code>agents/prd-writer.md</code>, <code>agents/prd-reviewer.md</code>, <code>agents/research-web.md</code>, <code>agents/research-codebase.md</code></li>
+        <li><strong>Commands:</strong> <code>commands/relay-test.md</code>, <code>commands/relay-test-review.md</code>, <code>commands/relay-prd.md</code></li>
       </ul>
 
       <p>Other agents and commands from the 12-command surface (<a href="../reference/commands.html">Commands</a>) are <span class="badge badge--pending">pending</span>; their implementations are the main deliverables of project phases 3 and 4.</p>
@@ -183,10 +183,16 @@
 
       <h3 id="next-phase-3">Phase 3 (Agents — Orchestrator)</h3>
 
-      <p>The big one. Covers the remaining 10 commands and their agents:</p>
+      <p>The big one. The PRD authoring stage shipped (<code>/relay-prd</code> + <code>prd-writer</code> + <code>prd-reviewer</code>, plus the reusable <code>research-web</code> and <code>research-codebase</code> subagents); the rest of the pipeline is still pending. The PRD for the next stage — Plan authoring (<code>/relay-plan</code> + <code>/relay-plan-review</code>) — is APPROVED at <code>PRPs/prds/plan-authoring.prd.md</code> and queued for implementation.</p>
 
+      <p><strong>Shipped:</strong></p>
       <ul>
-        <li><code>/relay-prd</code> + <code>/relay-plan</code> + <code>/relay-plan-review</code></li>
+        <li><code>/relay-prd</code> — interactive entry point of the pipeline; produces APPROVED PRDs from descriptions or draft markdown</li>
+      </ul>
+
+      <p><strong>Pending:</strong></p>
+      <ul>
+        <li><code>/relay-plan</code> + <code>/relay-plan-review</code> — PRD APPROVED; implementation next</li>
         <li><code>/relay-worktree</code></li>
         <li><code>/relay-tdd</code> + <code>/relay-tdd-review</code> (opt-in)</li>
         <li><code>/relay-implement</code> + <code>/relay-code-review</code></li>
@@ -194,7 +200,7 @@
         <li><code>/relay-execute</code> — the actual orchestrator</li>
       </ul>
 
-      <p>When Phase 3 lands, Phase 5 of the Test Runner PRD (no-prompts autonomous run) and AC-2/3/4 (auto-correction succeeds / budget exhausted / oscillation) become validatable, closing out the remaining Test Runner ACs.</p>
+      <p>When Phase 3 fully lands, Phase 5 of the Test Runner PRD (no-prompts autonomous run) and AC-2/3/4 (auto-correction succeeds / budget exhausted / oscillation) become validatable, closing out the remaining Test Runner ACs.</p>
 
       <h3 id="next-phase-4">Phase 4 (Approval cycle)</h3>
 

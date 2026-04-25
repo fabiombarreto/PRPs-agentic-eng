@@ -38,17 +38,21 @@
 
       <p>Produce an artifact. Each writer has a corresponding reviewer (below) except <code>/relay-prd</code>, which merges writer and reviewer into one interactive flow.</p>
 
-      <h3 id="relay-prd"><code>/relay-prd</code> — interactive PRD authoring</h3>
+      <h3 id="relay-prd"><code>/relay-prd</code> — interactive PRD authoring <span class="badge badge--done">implemented</span></h3>
 
       <div class="kv">
         <dt>Input</dt>
-        <dd>A short description of the feature, OR a path to a draft PRD markdown to refine.</dd>
+        <dd>A short description of the feature, a path to a draft PRD markdown to refine (skips Q&amp;A questions already answered in the draft), or no argument (opens with "What do you want to build?").</dd>
         <dt>Output</dt>
-        <dd><code>PRPs/prds/&lt;feature&gt;.prd.md</code> with status <code>APPROVED</code>.</dd>
+        <dd><code>PRPs/prds/&lt;feature&gt;.prd.md</code> with status <code>APPROVED</code>. Filename is chosen by the writer in kebab-case from the Phase 1 content; collisions are resolved with a numeric suffix; APPROVED files are never overwritten. A review log is appended at <code>PRPs/prds/&lt;basename&gt;.review.jsonl</code>.</dd>
         <dt>Mode</dt>
-        <dd>Interactive. Runs the 6-phase Q&amp;A (Initiate → Foundation → Grounding → Deep dive → Technical grounding → Decisions).</dd>
+        <dd>Interactive. Runs the 6-phase Q&amp;A (Initiate → Foundation → Grounding → Deep dive → optional re-grounding → Decisions → Generate). Research is performed via the <a href="agents.html#research-web"><code>research-web</code></a> and <a href="agents.html#research-codebase"><code>research-codebase</code></a> subagents during the GROUNDING phase.</dd>
+        <dt>Refuses</dt>
+        <dd>Operating on a file whose current status is <code>APPROVED</code>. The user is instructed to manually flip the file back to <code>DRAFT</code> (or copy/rename) to start a new authoring session against it.</dd>
+        <dt>Agents</dt>
+        <dd>Delegates the 6-phase flow to <a href="agents.html#prd-writer"><code>prd-writer</code></a>; delegates rubric validation and the DRAFT→APPROVED flip to <a href="agents.html#prd-reviewer"><code>prd-reviewer</code></a>.</dd>
         <dt>Notes</dt>
-        <dd>The only command on the interactive side of the <a href="../concepts/interactivity-boundary.html">interactivity boundary</a>. Always runs the PRD Reviewer at the end; the PRD is not persisted as <code>APPROVED</code> until the reviewer signs off.</dd>
+        <dd>The only command on the interactive side of the <a href="../concepts/interactivity-boundary.html">interactivity boundary</a>. Always runs the PRD Reviewer at the end; the PRD is not persisted as <code>APPROVED</code> until the reviewer's 7-item rubric passes <strong>and</strong> the user explicitly approves in dialogue.</dd>
       </div>
 
       <h3 id="relay-plan"><code>/relay-plan &lt;prd-path&gt;</code></h3>

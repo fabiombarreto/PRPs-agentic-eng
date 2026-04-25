@@ -35,7 +35,7 @@ cycle.
 
 | Command | Input | Output |
 |---------|-------|--------|
-| `/relay-prd <description \| draft-path>` | description or draft PRD markdown | `PRPs/prds/<feature>.prd.md` with status `APPROVED`. Interactive — runs the 6-phase Q&A loop with the user |
+| `/relay-prd <description \| draft-path>` ✅ **implemented** | description, draft PRD markdown path, or no argument (opens with "What do you want to build?") | `PRPs/prds/<feature>.prd.md` with status `APPROVED`. Interactive — runs the 6-phase Q&A loop with the user, invokes `research-web` + `research-codebase` subagents during GROUNDING, hands off to the `prd-reviewer` agent for the DRAFT→APPROVED flip. Refuses to operate on a file whose current status is `APPROVED` (manual hand-edit is the documented escape hatch). Filename chosen by the writer in kebab-case; collision resolved with numeric suffix; APPROVED files never overwritten. See `PRPs/prds/prd-authoring.prd.md`. |
 | `/relay-plan <prd-path>` | approved PRD | `PRPs/plans/<feature>.plan.md` with status `DRAFT` |
 | `/relay-tdd <plan-path>` | approved plan | test suite committed to worktree (status `DRAFT`). Silently self-skips when `docs/context/methodology.md` has `tdd: false` |
 | `/relay-implement <plan-path>` | approved plan (+ TDD suite if present) | implementation committed to worktree |
@@ -107,13 +107,19 @@ prompts are designed during Phase 2/3 implementation.
 |-------|------|------------|------|
 | `test-runner` ✅ | `plugins/relay/agents/test-runner.md` | `/relay-test` command | Per-attempt: run the suite, normalize output via `scripts/normalize-test-output.py`, classify failures (B3: `infra` / `flaky` / `legitimate`), return a structured verdict (`GREEN` / `RETRY_NEEDED` / `RETRY_FLAKY` / `ABORT_INFRA` / `ABORT_TIME`). Never loops, never edits code. |
 | `post-green-reviewer` ✅ | `plugins/relay/agents/post-green-reviewer.md` | `/relay-test-review` command | Given a GREEN `run.json`, diffs changed test files against the base branch and flags weakening: removed tests, added skips, trivial assertions, coverage drop >5% (when baseline is available). Returns `APPROVED` or `CHANGES_REQUESTED` with concerns. Never modifies code, never re-runs tests. |
+| `prd-writer` ✅ | `plugins/relay/agents/prd-writer.md` | `/relay-prd` command | Drives the interactive 6-phase PRD authoring flow with the user (Initiate → Foundation → Grounding → Deep Dive → optional re-grounding → Decisions → Generate), invokes `research-web` + `research-codebase` during GROUNDING, consults Decision Gate sources, writes the DRAFT to `PRPs/prds/<kebab>.prd.md`. Never approves its own output. |
+| `prd-reviewer` ✅ | `plugins/relay/agents/prd-reviewer.md` | `/relay-prd` command (Phase B) | Validates the DRAFT against the 7-item structural rubric (Decision Gate, sections, no-TBD, AC observability, TDD routing, no-`.claude/`, Implementation Phases). Dialogs the user — small edits applied inline via `Edit`, structural defects routed back to `prd-writer` via `Task`. Owns the DRAFT→APPROVED flip after rubric pass + explicit user approval. Logs every verdict to `PRPs/prds/<basename>.review.jsonl`. |
+| `research-web` ✅ | `plugins/relay/agents/research-web.md` | `prd-writer` (Phase 3 GROUNDING; reusable by future relay agents) | Bounded market-context web research. Tool allowlist: `WebSearch`, `WebFetch`. Caps: 4 searches, 10 fetches, 8 findings. Returns a JSON block `{ findings: [{title, summary, evidence, source}], gaps, degradation_reason?, scope_cap_reached? }`. Read-only; never edits files. |
+| `research-codebase` ✅ | `plugins/relay/agents/research-codebase.md` | `prd-writer` (Phase 3 GROUNDING; reusable by future relay agents) | Bounded local-codebase research via `Glob`, `Grep`, `Read`. Caps: 5 ops, 25 files, 8 findings. Same JSON return shape as `research-web` but with `path:line` sources. Read-only; never modifies files. |
 
 ### Planned
 
-PRD Writer, PRD Reviewer, Plan Writer, Plan Reviewer, TDD Writer
-(B7), TDD Reviewer (B8), Implementer, Code Reviewer, Post-green
-Reviewer (B5), Report + PR Creator, Docs Updater, Docs Reviewer —
-all to be written during their corresponding phases.
+Plan Writer, Plan Reviewer, TDD Writer (B7), TDD Reviewer (B8),
+Implementer, Code Reviewer, Report + PR Creator, Docs Updater, Docs
+Reviewer — all to be written during their corresponding phases. The
+PRD Authoring pair (PRD Writer + PRD Reviewer + the two research
+subagents) shipped in Phase 3 of the rollout; `plan-authoring.prd.md`
+is APPROVED and queued as the next implementation.
 
 ## Hooks (planned)
 

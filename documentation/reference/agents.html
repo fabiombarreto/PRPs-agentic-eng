@@ -114,6 +114,99 @@ run_id: UUID matching run.json</code></pre>
   ]
 }</code></pre>
 
+      <h3 id="prd-writer">prd-writer <span class="badge badge--done">shipped</span></h3>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/agents/prd-writer.md</code></dd>
+        <dt>Model</dt><dd>sonnet</dd>
+        <dt>Invoked by</dt><dd><code>/relay-prd</code> command (Phase A)</dd>
+        <dt>Responsibility</dt><dd>Drive the interactive 6-phase PRD authoring flow with the user (Initiate → Foundation → Grounding → Deep Dive → optional re-grounding → Decisions → Generate). Invoke <code>research-web</code> and <code>research-codebase</code> in parallel during GROUNDING. Consult the three Decision Gate sources (<code>decisions.md</code>, <code>anti-patterns.md</code>, <code>architecture.md</code>) and emit the evidence block as the first fenced block of the PRD. Read <code>methodology.md</code> for the TDD routing note. Write the DRAFT to <code>PRPs/prds/&lt;kebab&gt;.prd.md</code>.</dd>
+        <dt>Never does</dt><dd>Approve its own output (the reviewer owns the flip). Skip phases. Fill mandatory sections with plausible filler instead of <code>TBD - needs validation</code>. Overwrite an existing PRD (collision uses numeric suffix; APPROVED files never overwritten). Write under <code>.claude/</code>.</dd>
+      </div>
+
+      <h4 id="prd-writer-inputs">Inputs (passed by the command)</h4>
+
+      <pre><code class="language-default">mode: blank | description | draft-path
+description: free-text (when mode == description)
+draft_path: absolute path (when mode == draft-path; the command has
+            already verified the file is not APPROVED)
+target_root: absolute path to the target project root</code></pre>
+
+      <h4 id="prd-writer-skip-on-answered">Draft-path: skip-on-answered detection</h4>
+
+      <p>
+        When invoked with a draft path, the writer reads the draft and detects which Phase 1, 2, 4, and 6 questions are already answered. A question counts as answered when the draft has a heading or paragraph addressing it, content of at least one complete sentence, and no <code>TBD</code> / <code>TODO</code> / <code>{placeholder}</code> prefix. Answered questions are skipped; only unanswered ones go to dialogue.
+      </p>
+
+      <h3 id="prd-reviewer">prd-reviewer <span class="badge badge--done">shipped</span></h3>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/agents/prd-reviewer.md</code></dd>
+        <dt>Model</dt><dd>sonnet</dd>
+        <dt>Invoked by</dt><dd><code>/relay-prd</code> command (Phase B), after the writer hands off the DRAFT</dd>
+        <dt>Responsibility</dt><dd>Validate the DRAFT against the 7-item structural rubric. On full pass, ask the user to approve in free-text dialogue. On explicit approval, re-validate the rubric one final time, then flip <code>*Status: DRAFT*</code> to <code>*Status: APPROVED*</code> via two-line <code>Edit</code> and stamp <code>*Approved: YYYY-MM-DD*</code>. Append every verdict to <code>PRPs/prds/&lt;basename&gt;.review.jsonl</code>.</dd>
+        <dt>Never does</dt><dd>Approve without explicit user confirmation. Flip without the final pre-flip re-validation. Rewrite whole sections inline (structural defects route back to <code>prd-writer</code> via <code>Task</code>). Edit the DRAFT silently to make the rubric pass. Operate on a file whose status is already <code>APPROVED</code> (returns <code>error: already_approved</code>).</dd>
+      </div>
+
+      <h4 id="prd-reviewer-rubric">The 7-item rubric</h4>
+
+      <div class="kv">
+        <dt>R1 Decision Gate</dt><dd>Block present as first fenced block under the title; six required lines populated; <code>Result:</code> is <code>PROCEED</code> or <code>HALT (&lt;reason&gt;)</code>.</dd>
+        <dt>R2 Mandatory sections</dt><dd>All 14 sections from the template present in order, no extras inserted between them.</dd>
+        <dt>R3 No TBD in mandatories</dt><dd>Problem Statement, Proposed Solution, Key Hypothesis, Success Metrics rows, AC-N items must not contain <code>TBD</code>. Permitted in Open Questions, in Research Summary when research degraded, and in deferred risk mitigations.</dd>
+        <dt>R4 AC count and shape</dt><dd>At least 3 AC-N items; each begins with <code>**AC-N &lt;name&gt;:**</code> and is observable (Given/When/Then or input→output).</dd>
+        <dt>R5 TDD routing</dt><dd>Reads <code>tdd:</code> from <code>docs/context/methodology.md</code> and verifies the PRD's TDD routing line matches the corresponding verbatim string.</dd>
+        <dt>R6 No <code>.claude/</code></dt><dd>Output path has no <code>.claude/</code> prefix; PRD body does not reference <code>.claude/PRPs/</code>.</dd>
+        <dt>R7 Implementation Phases</dt><dd>Table with the canonical header row plus at least one data row with non-empty Phase, Description, Status.</dd>
+      </div>
+
+      <h4 id="prd-reviewer-inline-vs-handoff">Inline edit vs. writer handoff</h4>
+
+      <p>
+        Surgical edits — single sentence, single AC-N, single table row, typo, Open Question resolution — are applied via <code>Edit</code> with the narrowest possible <code>old_string</code>. Structural defects — regenerating Problem Statement / Proposed Solution / Key Hypothesis / Research Summary / restructured phases — invoke <code>prd-writer</code> via <code>Task</code> in <code>draft-path</code> mode with the user's change request as the brief.
+      </p>
+
+      <h3 id="research-web">research-web <span class="badge badge--done">shipped</span></h3>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/agents/research-web.md</code></dd>
+        <dt>Model</dt><dd>sonnet</dd>
+        <dt>Tool allowlist</dt><dd><code>WebSearch</code>, <code>WebFetch</code> only</dd>
+        <dt>Invoked by</dt><dd><code>prd-writer</code> during Phase 3 GROUNDING; reusable by any future relay agent that needs market context</dd>
+        <dt>Responsibility</dt><dd>Bounded market-context research for a feature idea — competitors, similar products, known patterns and anti-patterns, recent trends. Returns evidence with source URLs.</dd>
+        <dt>Caps (hard)</dt><dd>4 searches; 10 fetches; 8 findings.</dd>
+        <dt>Never does</dt><dd>Recommend, opine, or synthesize strategy. Fabricate findings. Emit a finding without a source URL. Exceed the caps. Use any tool beyond <code>WebSearch</code> / <code>WebFetch</code>.</dd>
+      </div>
+
+      <h3 id="research-codebase">research-codebase <span class="badge badge--done">shipped</span></h3>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/agents/research-codebase.md</code></dd>
+        <dt>Model</dt><dd>sonnet</dd>
+        <dt>Tool allowlist</dt><dd><code>Glob</code>, <code>Grep</code>, <code>Read</code> only</dd>
+        <dt>Invoked by</dt><dd><code>prd-writer</code> during Phase 3 GROUNDING; reusable by any future relay agent that needs codebase context</dd>
+        <dt>Responsibility</dt><dd>Bounded local-codebase research — locates existing related functionality, reusable patterns, technical constraints. Returns evidence with precise <code>path:line</code> sources.</dd>
+        <dt>Caps (hard)</dt><dd>5 ops (Glob + Grep combined); 25 file reads; 8 findings.</dd>
+        <dt>Never does</dt><dd>Modify files. Run shell commands or tests. Cross out of the target repository. Fabricate evidence. Exceed the caps. Use any tool beyond <code>Glob</code> / <code>Grep</code> / <code>Read</code>.</dd>
+      </div>
+
+      <h4 id="research-output-shape">Shared return shape</h4>
+
+      <p>Both research agents return the same JSON shape so calling agents can consume them uniformly:</p>
+
+      <pre><code class="language-json">{
+  "findings": [
+    { "title": "...", "summary": "...", "evidence": "...", "source": "https://... or path/to/file.ts:123" }
+  ],
+  "gaps": ["sub-questions the search did not answer"],
+  "degradation_reason": null,
+  "scope_cap_reached": false
+}</code></pre>
+
+      <p>
+        Empty <code>findings</code> with a non-null <code>degradation_reason</code> is a correct outcome (e.g., WebSearch unavailable, codebase empty) — never a fabricated fill.
+      </p>
+
       <h2 id="planned">Planned</h2>
 
       <p>
@@ -125,8 +218,6 @@ run_id: UUID matching run.json</code></pre>
           <tr><th>Agent</th><th>Role</th><th>Pipeline stage</th></tr>
         </thead>
         <tbody>
-          <tr><td><code>prd-writer</code></td><td>Interactive PRD authoring (6-phase Q&amp;A)</td><td>1 — PRD</td></tr>
-          <tr><td><code>prd-reviewer</code></td><td>PRD validation, looping with user on gaps</td><td>1 — PRD</td></tr>
           <tr><td><code>plan-writer</code></td><td>Produces phased implementation plan from approved PRD</td><td>2 — Plan</td></tr>
           <tr><td><code>plan-reviewer</code></td><td>Validates plan against PRD, decisions, anti-patterns</td><td>2 — Plan</td></tr>
           <tr><td><code>tdd-writer</code></td><td>Opt-in: produces initial red test suite from AC</td><td>4 — TDD</td></tr>

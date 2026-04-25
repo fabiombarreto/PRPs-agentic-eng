@@ -132,7 +132,11 @@ flexibility, not for routine use.
 
 See `docs/planning/planejamento_fase_2.docx` for the Phase 2 design in detail
 (16 components across Infra / Plugin / Integrations layers, plus the TDD
-opt-in trilho).
+opt-in trilho). **This `.docx` is a living document**, not a historical
+record: when the Phase 2 scope changes (components added, removed, or
+materially redesigned), the file MUST be updated to match. Edits are
+performed programmatically via `python-docx` rather than Word/LibreOffice
+to preserve a clean diff and to avoid spurious formatting churn.
 
 ## Folder structure explained
 

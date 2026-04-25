@@ -32,6 +32,28 @@
 
       <p><em>No unreleased changes at the moment.</em></p>
 
+      <h2 id="v0-6-0">0.6.0 — 2026-04-25</h2>
+
+      <p>PRD authoring stage shipped — first slice of project Phase 3 (Agents — Orchestrator). The interactive entry point of the relay pipeline is live: <code>/relay-prd</code> drives the 6-phase Q&amp;A flow with the user, invokes two new bounded research subagents during GROUNDING, consults the Decision Gate sources, and hands off to a structural reviewer that gates the DRAFT→APPROVED flip. Project-level Phase 3 advances from <code>pending</code> to <code>partial</code>.</p>
+
+      <h3 id="v0-6-0-changed">Changed</h3>
+
+      <ul>
+        <li><strong><code>reference/commands.html</code></strong> — <code>/relay-prd</code> now carries the <code>badge--done</code> "implemented" badge. Notes expanded to cover the three input shapes (description / draft path / blank), kebab-case filename selection, collision handling with numeric suffix, the APPROVED-file refusal, and links to the two delegated agents (<code>prd-writer</code>, <code>prd-reviewer</code>).</li>
+        <li><strong><code>reference/agents.html</code></strong> — four new "Implemented" sections following the <code>test-runner</code> / <code>post-green-reviewer</code> pattern: <code>prd-writer</code> (with skip-on-answered detection notes), <code>prd-reviewer</code> (with the 7-item rubric and the inline-edit vs. writer-handoff criteria), <code>research-web</code>, <code>research-codebase</code>. The two PRD-stage agents removed from the "Planned" table at the same time.</li>
+        <li><strong><code>roadmap/status.html</code></strong> — project-level Phase 3 row flipped from <code>pending</code> to <code>partial</code> with an inline note enumerating the shipped pieces. "What's shipped &gt; Plugin artifacts" lists now include the four new agents and the new command. "What's next &gt; Phase 3" rewritten to separate Shipped from Pending and to point at the APPROVED <code>plan-authoring.prd.md</code> as the next implementation target.</li>
+      </ul>
+
+      <h3 id="v0-6-0-added">Added</h3>
+
+      <ul>
+        <li>Cross-references between the new <code>/relay-prd</code> entry and its delegated agents (<code>prd-writer</code>, <code>prd-reviewer</code>, <code>research-web</code>, <code>research-codebase</code>) so readers landing on either reference page can navigate to the other without leaving the site.</li>
+      </ul>
+
+      <h3 id="v0-6-0-notes">Notes</h3>
+
+      <p>No new pages or new NAV entries — all changes are content updates to existing pages. Search index untouched (page set unchanged). The corresponding plugin-level governance file <code>docs/api-reference.md</code> received the same promotion (live in the same release commit but outside <code>documentation/</code>'s versioning surface).</p>
+
       <h2 id="v0-5-0">0.5.0 — 2026-04-22</h2>
 
       <p>Doc site evolution contract + changelog infrastructure.</p>
