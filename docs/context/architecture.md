@@ -87,7 +87,7 @@ All pipeline artifacts live under `PRPs/` at the repository root:
 | Path | Contents |
 |------|----------|
 | `PRPs/prds/<feature>.prd.md` | PRDs (written by PRD Writer, approved by PRD Reviewer) |
-| `PRPs/plans/<feature>.plan.md` | Implementation plans (Plan Writer) |
+| `PRPs/plans/<feature>-phase-<N>-<slug>.plan.md` | Implementation plans, one per PRD phase (`plan-writer` writes DRAFT; `plan-reviewer` flips to APPROVED). Per-phase pattern recorded in `docs/decisions.md` 2026-04-25. |
 | `PRPs/reports/<feature>/` | Test Runner execution reports, attempts log, per-attempt diffs, final report; when TDD is active, also `tdd-initial-suite.diff` and `tdd-reviews.md` |
 
 Artifacts are NEVER written under `.claude/`. Claude Code enforces

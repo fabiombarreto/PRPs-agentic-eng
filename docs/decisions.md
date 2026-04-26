@@ -276,6 +276,13 @@ layers:
 
 ---
 
+## [2026-04-25] Plan filenames carry the source PRD phase number and slug
+
+**Context:** The api-reference shorthand at `docs/api-reference.md:39` lists `/relay-plan` output as `PRPs/plans/<feature>.plan.md`, treating each feature as one plan. The plan-authoring PRD (Phase 1 of `plan-authoring.prd.md`, shipped 2026-04-25) generates one plan per PRD Implementation Phases row, not one per feature. A `<feature>.plan.md` shorthand cannot represent that 1-to-many relationship and would force collisions whenever a PRD has more than one phase to plan.
+**Decision:** Plan files written by `plan-writer` use the path `PRPs/plans/<feature>-phase-<N>-<slug>.plan.md`, where `<feature>` is the PRD basename (without `.prd.md`), `<N>` is the Implementation Phases row number, and `<slug>` is the kebab-cased phase name. The plan-template at `docs/context/plan-template.md` codifies this; `plan-reviewer` rubric R8c validates the back-reference between the plan filename and the source PRD's row.
+**Reason:** Per-phase plans match the actual unit of work the Implementer consumes, keep filenames grep-friendly, and make orchestrator state machine bookkeeping trivial (`PRP Plan` cell of row N points at exactly one plan). The `<feature>.plan.md` shorthand survives only as a documentation simplification in the api-reference and architecture rows; both have been refined to the per-phase pattern in Phase 6 of `plan-authoring.prd.md`.
+**Areas affected:** plan-writer agent, plan-reviewer agent, `/relay-plan` command, `/relay-plan-review` command, `docs/context/plan-template.md`, `docs/api-reference.md`, `docs/context/architecture.md`, future Implementer (`/relay-implement`)
+
 ---
 
 <!-- Template for future entries:

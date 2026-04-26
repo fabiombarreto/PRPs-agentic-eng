@@ -32,6 +32,28 @@
 
       <p><em>No unreleased changes at the moment.</em></p>
 
+      <h2 id="v0-7-0">0.7.0 — 2026-04-25</h2>
+
+      <p>Plan authoring stage shipped — second slice of project Phase 3 (Agents — Orchestrator). The plan-stage writer/reviewer pair is now live: <code>/relay-plan</code> dispatches the autonomous <code>plan-writer</code> agent to transform an APPROVED PRD into a per-phase DRAFT plan; <code>/relay-plan-review</code> dispatches the autonomous <code>plan-reviewer</code> agent which runs an 8-item structural rubric (R1&ndash;R8 with R8 for PRD&harr;plan traceability) and auto-flips DRAFT&rarr;APPROVED on full pass. Adds the canonical <code>docs/context/plan-template.md</code> as the source of truth for plan section structure. Records the per-phase plan filename pattern (<code>&lt;feature&gt;-phase-&lt;N&gt;-&lt;slug&gt;.plan.md</code>) as an explicit decision, refining the api-reference shorthand.</p>
+
+      <h3 id="v0-7-0-added">Added</h3>
+
+      <ul>
+        <li><strong><code>plugins/relay/agents/plan-writer.md</code></strong> &mdash; autonomous PRD-phase &rarr; DRAFT plan transformer. Parses the source PRD's Implementation Phases table, selects the next actionable row, dispatches <code>research-codebase</code> + <code>research-web</code> in parallel, consults the three Decision Gate sources, writes a DRAFT plan to <code>PRPs/plans/&lt;feature&gt;-phase-&lt;N&gt;-&lt;slug&gt;.plan.md</code>, and back-fills the source PRD's row N (Status to in-progress; PRP Plan cell to the relative plan path).</li>
+        <li><strong><code>plugins/relay/agents/plan-reviewer.md</code></strong> &mdash; autonomous 8-item rubric runner. Diverges from <code>prd-reviewer</code> in three documented ways: auto-flips <code>*Status: DRAFT*</code> &rarr; <code>*Status: APPROVED*</code> on rubric pass without user dialogue (interactivity boundary), evaluates all 8 items every run with no short-circuit (per AC-10), and has no Step 5 dialogue loop (CHANGES_REQUESTED is terminal). Every verdict appended to <code>PRPs/plans/&lt;basename&gt;.review.jsonl</code>.</li>
+        <li><strong><code>plugins/relay/commands/relay-plan.md</code></strong> &mdash; public command surface for the plan-writer. Single-role (no Phase B reviewer adoption per the writer/reviewer split decision); 4 preconditions (P1 PRD readable, P2 PRD ends with <code>*Status: APPROVED*</code>, P3 Decision Gate sources readable, P4 actionable phase exists in the table); surfaces <code>plan-writer</code>'s halts verbatim and exits.</li>
+        <li><strong><code>plugins/relay/commands/relay-plan-review.md</code></strong> &mdash; public command surface for the plan-reviewer. Single-role (no Phase B writer adoption); 3 preconditions (P1 plan readable, P2 plan ends with <code>*Status: DRAFT*</code>, P3 Decision Gate sources readable); surfaces APPROVED summary or CHANGES_REQUESTED bullet list verbatim.</li>
+        <li><strong><code>docs/context/plan-template.md</code></strong> &mdash; canonical plan section shape. Mirrors <code>docs/context/prd-template.md</code> structure with four mandatory adaptations: Decision Gate header, PRD&harr;plan back-reference, per-task <code>VALIDATE</code> invariant, TDD routing note. Anchors plan-reviewer R2 (15 mandatory sections in order) and Implementer expectations.</li>
+        <li><strong><code>docs/decisions.md</code></strong> &mdash; new <code>2026-04-25</code> row recording the per-phase plan filename pattern as an explicit decision, refining the api-reference shorthand.</li>
+      </ul>
+
+      <h3 id="v0-7-0-changed">Changed</h3>
+
+      <ul>
+        <li><strong><code>docs/api-reference.md</code></strong> &mdash; <code>/relay-plan</code> and <code>/relay-plan-review</code> rows now carry the implemented badge and the per-phase filename pattern. Notes expanded to cover the writer's autonomous PRD-parse + research dispatch + back-fill, and the reviewer's 8-item rubric with R8 traceability.</li>
+        <li><strong><code>docs/context/architecture.md</code></strong> &mdash; &sect;PRP artifact paths row for plans refined from <code>&lt;feature&gt;.plan.md</code> shorthand to the per-phase pattern <code>&lt;feature&gt;-phase-&lt;N&gt;-&lt;slug&gt;.plan.md</code>, with cross-reference to the new decision row.</li>
+      </ul>
+
       <h2 id="v0-6-0">0.6.0 — 2026-04-25</h2>
 
       <p>PRD authoring stage shipped — first slice of project Phase 3 (Agents — Orchestrator). The interactive entry point of the relay pipeline is live: <code>/relay-prd</code> drives the 6-phase Q&amp;A flow with the user, invokes two new bounded research subagents during GROUNDING, consults the Decision Gate sources, and hands off to a structural reviewer that gates the DRAFT→APPROVED flip. Project-level Phase 3 advances from <code>pending</code> to <code>partial</code>.</p>

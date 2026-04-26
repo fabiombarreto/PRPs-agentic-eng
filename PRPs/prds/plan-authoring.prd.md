@@ -191,12 +191,12 @@ Current value of `tdd` in `docs/context/methodology.md`: **false**. TDD track in
 
 | # | Phase | Description | Status | Parallel | Depends | PRP Plan |
 |---|-------|-------------|--------|----------|---------|----------|
-| 1 | plan-writer agent | `plugins/relay/agents/plan-writer.md` — autonomous PRD-parse, phase-selection, research-subagent dispatch, Decision Gate consultation, plan file write, source PRD back-fill | pending | yes (with #2) | - | - |
-| 2 | plan-reviewer agent | `plugins/relay/agents/plan-reviewer.md` — 8-item rubric, auto-flip on pass, review.jsonl append-only logging, inline-edit / writer-handoff dialogue branch | pending | yes (with #1) | - | - |
-| 3 | `/relay-plan` command | `plugins/relay/commands/relay-plan.md` — argument dispatch, preconditions (PRD exists + APPROVED + has pending phase), adopt writer role, surface writer halts | pending | yes (with #4) | 1 | - |
-| 4 | `/relay-plan-review` command | `plugins/relay/commands/relay-plan-review.md` — preconditions (plan exists + DRAFT), adopt reviewer role, surface CHANGES_REQUESTED to caller | pending | yes (with #3) | 2 | - |
-| 5 | `docs/context/plan-template.md` | Canonical plan section shape — analogous to `prd-template.md`. Anchors R2 (mandatory sections check) and Implementer expectations | pending | yes | - | - |
-| 6 | docs updates | `docs/decisions.md` row recording per-phase plan path divergence from api-reference; `docs/api-reference.md` refinement; `documentation/changelog.html` entry per AGENTS contract | pending | - | 1, 2, 3, 4, 5 | - |
+| 1 | plan-writer agent | `plugins/relay/agents/plan-writer.md` — autonomous PRD-parse, phase-selection, research-subagent dispatch, Decision Gate consultation, plan file write, source PRD back-fill | complete | yes (with #2) | - | PRPs/plans/plan-authoring-phase-1-plan-writer.plan.md |
+| 2 | plan-reviewer agent | `plugins/relay/agents/plan-reviewer.md` — 8-item rubric, auto-flip on pass, review.jsonl append-only logging, inline-edit / writer-handoff dialogue branch | complete | yes (with #1) | - | PRPs/plans/plan-authoring-phase-2-plan-reviewer-agent.plan.md |
+| 3 | `/relay-plan` command | `plugins/relay/commands/relay-plan.md` — argument dispatch, preconditions (PRD exists + APPROVED + has pending phase), adopt writer role, surface writer halts | complete | yes (with #4) | 1 | PRPs/plans/plan-authoring-phase-3-relay-plan-command.plan.md |
+| 4 | `/relay-plan-review` command | `plugins/relay/commands/relay-plan-review.md` — preconditions (plan exists + DRAFT), adopt reviewer role, surface CHANGES_REQUESTED to caller | complete | yes (with #3) | 2 | PRPs/plans/plan-authoring-phase-4-relay-plan-review-command.plan.md |
+| 5 | `docs/context/plan-template.md` | Canonical plan section shape — analogous to `prd-template.md`. Anchors R2 (mandatory sections check) and Implementer expectations | complete | yes | - | PRPs/plans/plan-authoring-phase-5-plan-template.plan.md |
+| 6 | docs updates | `docs/decisions.md` row recording per-phase plan path divergence from api-reference; `docs/api-reference.md` refinement; `documentation/changelog.html` entry per AGENTS contract | complete | - | 1, 2, 3, 4, 5 | PRPs/plans/plan-authoring-phase-6-docs-updates.plan.md |
 
 ### Phase Details
 
