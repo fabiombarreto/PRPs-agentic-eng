@@ -39,7 +39,7 @@
         <dt>Input</dt><dd>A short description of the feature.</dd>
         <dt>Output</dt><dd><code>PRPs/prds/&lt;feature&gt;.prd.md</code> with status <code>APPROVED</code>.</dd>
         <dt>Writer</dt><dd><code>PRD Writer</code> — runs the 6-phase Q&amp;A (see <a href="interactivity-boundary.html">interactivity boundary</a>).</dd>
-        <dt>Reviewer</dt><dd><code>PRD Reviewer</code> — checks Acceptance Criteria are concrete scenarios, Decision Gate evidence is present, hypothesis is testable, out-of-scope is explicit.</dd>
+        <dt>Reviewer</dt><dd><code>PRD Reviewer</code> — runs a 7-item structural rubric (Acceptance Criteria are concrete scenarios, Decision Gate evidence is present, hypothesis is testable, out-of-scope is explicit) <strong>plus an additive <code>R-COH-*</code> coherence layer</strong> that catches intra-PRD contradictions: ACs that contradict each other, metrics decoupled from the hypothesis, references to non-existent sections / ACs / phases, and decisions that contradict the proposed solution. See the <a href="../reference/agents.html#prd-reviewer-coherence">coherence layer reference</a>.</dd>
         <dt>Loop</dt><dd>Writer ↔ human ↔ Reviewer ↔ human, until approved. This is the only interactive stage.</dd>
         <dt>Failure mode</dt><dd>User abandons the conversation. No artifact produced; no downstream effects.</dd>
       </div>
@@ -50,7 +50,7 @@
         <dt>Input</dt><dd>Approved PRD.</dd>
         <dt>Output</dt><dd><code>PRPs/plans/&lt;feature&gt;.plan.md</code> with status <code>APPROVED</code>.</dd>
         <dt>Writer</dt><dd><code>Plan Writer</code> — produces a phased implementation plan with explicit test cases.</dd>
-        <dt>Reviewer</dt><dd><code>Plan Reviewer</code> — checks phases are concrete, dependencies are declared, test scenarios map to AC.</dd>
+        <dt>Reviewer</dt><dd><code>Plan Reviewer</code> — runs an 8-item structural rubric (phases concrete, dependencies declared, test scenarios map to AC, PRD↔plan traceability) <strong>plus an additive <code>R-COH-*</code> coherence layer</strong> that catches intra-plan contradictions: tasks that don't reference any AC, Files-to-Change rows untouched by tasks, VALIDATE commands mismatching declared frameworks, Patterns-to-Mirror SOURCE paths missing, Mandatory Reading paths missing, plus K=5 LLM-detected drift between Summary / Solution Statement and Tasks. See the <a href="../reference/agents.html#plan-reviewer-coherence">coherence layer reference</a>.</dd>
         <dt>Loop</dt><dd>Writer → Reviewer. <code>CHANGES_REQUESTED</code> loops back up to <code>max_plan_review_retries</code>.</dd>
         <dt>Failure mode</dt><dd>Retry exhausted → pipeline halts; orchestrator writes reason to <code>run.json</code>.</dd>
       </div>
@@ -81,7 +81,7 @@
         <dt>Input</dt><dd>Approved plan + TDD suite (if active).</dd>
         <dt>Output</dt><dd>Implementation commits in the worktree.</dd>
         <dt>Writer</dt><dd><code>Implementer</code> — executes the plan; when TDD is active, writes code to make the red tests green.</dd>
-        <dt>Reviewer</dt><dd><code>Code Reviewer</code> — checks against <code>decisions.md</code>, <code>anti-patterns.md</code>, relevant domain files. Not a style reviewer; focuses on correctness + rule violations.</dd>
+        <dt>Reviewer</dt><dd><code>Code Reviewer</code> — checks against <code>decisions.md</code>, <code>anti-patterns.md</code>, relevant domain files via an 8-item three-layer rubric (R-S* structural, R-L* lint/type/build, R-SEM semantic, R-X test-modification guard) <strong>plus an additive <code>R-COH-*</code> coherence layer</strong> with 4 deterministic intra-diff checks (dead imports, signature drift to callers within diff + 1-hop imports, config references missing, new files unregistered) and a bounded sub-agent dispatch to <code>code-reviewer-semantic</code> via <code>Task</code> for the K=5 LLM judgment pass (comment-vs-code, test-name-vs-assert, code-vs-task contradictions). Not a style reviewer; focuses on correctness + rule violations + intra-diff coherence. See the <a href="../reference/agents.html#code-reviewer-coherence">coherence layer reference</a>.</dd>
         <dt>Loop</dt><dd>Writer → Reviewer. <code>CHANGES_REQUESTED</code> loops back.</dd>
         <dt>Failure mode</dt><dd>Retry exhausted halts with <code>CODE_REVIEW_FAILED</code>.</dd>
       </div>

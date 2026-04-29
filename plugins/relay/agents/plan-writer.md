@@ -408,9 +408,24 @@ Assemble in this order:
 
 ### Step 4.4.bis — TDD routing note
 
-Inside `## Notes`, emit one of these three strings VERBATIM,
-selected by the `tdd:` value read in Phase 0. The strings are the
-canonical text from `prd-writer.md` Step 7.4 (lines 382–386):
+Inside `## Notes`, emit the TDD routing note as a single bullet (or
+short paragraph) using the canonical label prefix immediately
+followed by the byte-exact verbatim string for the current `tdd:`
+value:
+
+```
+**TDD routing (this plan, against the relay repo):** <verbatim string>
+```
+
+The label `**TDD routing (this plan, against the relay repo):**` is
+the canonical prefix used by every shipped plan-authoring plan
+(rows 1–6 of `PRPs/prds/plan-authoring.prd.md`). plan-reviewer R5
+verifies the verbatim-string substring; the prefix removes any
+borderline reading by anchoring the location and shape.
+
+The three verbatim strings, selected by the `tdd:` value read in
+Phase 0, are the canonical text from `prd-writer.md` Step 7.4
+(lines 382–386):
 
 - `tdd: true` →
   `Current value of \`tdd\` in \`docs/context/methodology.md\`: **true**. TDD track active — TDD Writer (B7) produces the initial test suite from the Acceptance Criteria above, before the Implementer runs.`

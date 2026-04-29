@@ -144,8 +144,8 @@ target_root: absolute path to the target project root</code></pre>
         <dt>Path</dt><dd><code>plugins/relay/agents/prd-reviewer.md</code></dd>
         <dt>Model</dt><dd>sonnet</dd>
         <dt>Invoked by</dt><dd><code>/relay-prd</code> command (Phase B), after the writer hands off the DRAFT</dd>
-        <dt>Responsibility</dt><dd>Validate the DRAFT against the 7-item structural rubric. On full pass, ask the user to approve in free-text dialogue. On explicit approval, re-validate the rubric one final time, then flip <code>*Status: DRAFT*</code> to <code>*Status: APPROVED*</code> via two-line <code>Edit</code> and stamp <code>*Approved: YYYY-MM-DD*</code>. Append every verdict to <code>PRPs/prds/&lt;basename&gt;.review.jsonl</code>.</dd>
-        <dt>Never does</dt><dd>Approve without explicit user confirmation. Flip without the final pre-flip re-validation. Rewrite whole sections inline (structural defects route back to <code>prd-writer</code> via <code>Task</code>). Edit the DRAFT silently to make the rubric pass. Operate on a file whose status is already <code>APPROVED</code> (returns <code>error: already_approved</code>).</dd>
+        <dt>Responsibility</dt><dd>Validate the DRAFT against the 7-item structural rubric <strong>plus the additive <code>R-COH-*</code> coherence layer</strong> (deterministic intra-PRD checks + a bounded K=5 LLM judgment pass). On full pass (R1–R7 plus all R-COH-* rows <code>passed: true</code>), ask the user to approve in free-text dialogue. On explicit approval, re-validate the rubric one final time, then flip <code>*Status: DRAFT*</code> to <code>*Status: APPROVED*</code> via two-line <code>Edit</code> and stamp <code>*Approved: YYYY-MM-DD*</code>. Append every verdict to <code>PRPs/prds/&lt;basename&gt;.review.jsonl</code>.</dd>
+        <dt>Never does</dt><dd>Approve without explicit user confirmation. Flip without the final pre-flip re-validation. Rewrite whole sections inline (structural defects route back to <code>prd-writer</code> via <code>Task</code>). Edit the DRAFT silently to make the rubric pass. Operate on a file whose status is already <code>APPROVED</code> (returns <code>error: already_approved</code>). <strong>Pad the K=5 LLM pass with synthetic contradictions to fill the cap</strong> — returning fewer than 5 findings (including zero) is the correct behavior when fewer real contradictions exist.</dd>
       </div>
 
       <h4 id="prd-reviewer-rubric">The 7-item rubric</h4>
@@ -160,11 +160,142 @@ target_root: absolute path to the target project root</code></pre>
         <dt>R7 Implementation Phases</dt><dd>Table with the canonical header row plus at least one data row with non-empty Phase, Description, Status.</dd>
       </div>
 
+      <h4 id="prd-reviewer-coherence">The <code>R-COH-*</code> coherence layer (additive)</h4>
+
+      <p>
+        Runs after R1–R7 and appends rows to the same <code>rubric[]</code> array of the per-PRD JSONL. The layer detects intra-PRD contradictions the structural rubric does not catch — ACs that contradict each other in prose, Success Metrics that don't measure the Key Hypothesis, Solution Detail that drifts from Proposed Solution, references to non-existent sections / ACs / phases, table-vs-prose number drift, Decisions Log entries that contradict the Proposed Solution. Two execution stages: <strong>deterministic checks</strong> first (regex / cross-reference validation), then a <strong>bounded K=5 LLM judgment pass</strong> over the full PRD body.
+      </p>
+
+      <div class="kv">
+        <dt>R-COH-NUMBER-DRIFT</dt><dd>Deterministic. Table row counts match prose mentions of the same noun (e.g. table says "5 phases", prose says "4 phases" → fail).</dd>
+        <dt>R-COH-SECTION-REF-MISSING</dt><dd>Deterministic. Every <code>AC-&lt;N&gt;</code>, <code>Phase &lt;N&gt;</code>, and section back-reference in the prose resolves to a token actually defined in the file.</dd>
+        <dt>R-COH-AC-CONTRADICT</dt><dd>K=5 finding. Two ACs contradict each other in prose. <code>reason</code> quotes both sides verbatim (Datadog "quote both sides" pattern).</dd>
+        <dt>R-COH-METRIC-HYPOTHESIS-DECOUPLED</dt><dd>K=5 finding. Success Metrics measure something the Key Hypothesis does not claim, or vice versa.</dd>
+        <dt>R-COH-SOLUTION-DETAIL-DRIFT</dt><dd>K=5 finding. Solution Detail describes a different approach than Proposed Solution.</dd>
+        <dt>R-COH-DECISIONS-CONTRADICT</dt><dd>K=5 finding. Decisions Log entries contradict the Proposed Solution or another Decisions Log entry.</dd>
+        <dt>R-COH-OTHER-INTERNAL-CONTRADICTION</dt><dd>K=5 finding. Catchall for findings that don't fit the named classes; the LLM picks this only as fallback.</dd>
+      </div>
+
+      <p>
+        The K=5 prompt is inline within this agent (no <code>Task</code> sub-agent dispatch — that pattern applies only to <code>code-reviewer</code>). The prompt instructs the model to return an empty array <code>[]</code> when no contradictions exist (no padding to 5), to quote contradicting fragments verbatim from both sides per finding, and to drop any candidate finding for which it cannot produce verbatim quotes from both sides. Temperature is 0.2 (evaluation-pass default). The combined <code>rubric[]</code> length per run is 9 to 14 rows: 7 (R1–R7) + 2 (deterministic R-COH-*) + ≤5 (K=5 pass).
+      </p>
+
       <h4 id="prd-reviewer-inline-vs-handoff">Inline edit vs. writer handoff</h4>
 
       <p>
         Surgical edits — single sentence, single AC-N, single table row, typo, Open Question resolution — are applied via <code>Edit</code> with the narrowest possible <code>old_string</code>. Structural defects — regenerating Problem Statement / Proposed Solution / Key Hypothesis / Research Summary / restructured phases — invoke <code>prd-writer</code> via <code>Task</code> in <code>draft-path</code> mode with the user's change request as the brief.
       </p>
+
+      <h3 id="plan-reviewer">plan-reviewer <span class="badge badge--done">shipped</span></h3>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/agents/plan-reviewer.md</code></dd>
+        <dt>Model</dt><dd>sonnet</dd>
+        <dt>Invoked by</dt><dd><code>/relay-plan-review</code> command</dd>
+        <dt>Responsibility</dt><dd>Validate the DRAFT plan against the 8-item structural rubric (R1–R8) <strong>plus the additive <code>R-COH-*</code> coherence layer</strong> (5 deterministic intra-plan checks + a bounded K=5 LLM judgment pass). On full pass, auto-flip <code>*Status: DRAFT*</code> to <code>*Status: APPROVED*</code> via two-line <code>Edit</code> and stamp <code>*Approved: YYYY-MM-DD*</code> — no user dialogue (interactivity boundary). On any failure, emit a CHANGES_REQUESTED bullet list naming each failing rubric item by ID + reason; CHANGES_REQUESTED is terminal for the run. Append every verdict to <code>PRPs/plans/&lt;basename&gt;.review.jsonl</code> with all 8 R1–R8 outcomes plus zero or more R-COH-* outcomes.</dd>
+        <dt>Never does</dt><dd>Flip without the rubric pass (all 8 R1–R8 plus all R-COH-* must read <code>passed: true</code>). Flip without the final pre-flip re-validation. Short-circuit the rubric (R1–R8 always present, no duplicates among R1–R8). Inline-edit plan bodies on CHANGES_REQUESTED (no <code>Task</code> tool — no writer handoff in the autonomous flow). Prompt the user. Operate on a file whose status is already <code>APPROVED</code> (returns <code>error: already_approved</code>). <strong>Pad the K=5 LLM pass with synthetic contradictions to fill the cap</strong> — returning fewer than 5 findings (including zero) is the correct behavior when fewer real contradictions exist.</dd>
+      </div>
+
+      <h4 id="plan-reviewer-rubric">The 8-item rubric</h4>
+
+      <div class="kv">
+        <dt>R1 Decision Gate</dt><dd>Block present as first fenced block under the <code># Feature: ...</code> title; six required lines populated; <code>Result:</code> is <code>PROCEED</code> or <code>HALT (&lt;reason&gt;)</code>.</dd>
+        <dt>R2 Mandatory sections</dt><dd>All 15 plan sections (Source PRD → Summary → User Story → Problem Statement → Solution Statement → Metadata → Mandatory Reading → Patterns to Mirror → Files to Change → NOT Building → Step-by-Step Tasks → Validation Commands → Acceptance Criteria → Risks and Mitigations → Notes) present in order, no extras inserted between them.</dd>
+        <dt>R3 No TBD in mandatories</dt><dd>Summary, Patterns to Mirror snippet headers and code blocks, Files to Change cells, Step-by-Step Tasks MIRROR/VALIDATE lines must not contain <code>TBD</code>. Permitted in Notes and in deferred Risks mitigations.</dd>
+        <dt>R4 Tasks count and shape</dt><dd>At least 3 tasks under <code>## Step-by-Step Tasks</code>, each with a <code>**VALIDATE**:</code> line and a non-empty command on the same or following line.</dd>
+        <dt>R5 TDD routing</dt><dd>Reads <code>tdd:</code> from <code>docs/context/methodology.md</code> and verifies the plan's TDD routing line in <code>## Notes</code> matches the corresponding verbatim string from <code>prd-writer.md</code> Step 7.4 byte-for-byte.</dd>
+        <dt>R6 No <code>.claude/</code></dt><dd>Plan path has no <code>.claude/</code> prefix; plan body does not reference <code>.claude/PRPs/</code> except as quoted prohibition.</dd>
+        <dt>R7 Files to Change</dt><dd>Table with File / Action / Justification columns plus at least one data row with non-empty cells.</dd>
+        <dt>R8 PRD↔plan traceability</dt><dd>R8a: Source PRD section names a real APPROVED PRD. R8b: every plan AC-A item references at least one PRD AC-N that exists in the source PRD. R8c: plan filename pattern <code>&lt;feature&gt;-phase-&lt;N&gt;-&lt;slug&gt;.plan.md</code>; PRD row N has Status <code>in-progress</code> or <code>complete</code> with PRP Plan cell pointing at this plan.</dd>
+      </div>
+
+      <h4 id="plan-reviewer-coherence">The <code>R-COH-*</code> coherence layer (additive)</h4>
+
+      <p>
+        Runs after R1–R8 and appends rows to the same <code>rubric[]</code> array of the per-plan JSONL. The layer detects intra-plan contradictions the structural rubric does not catch — tasks that don't reference any AC, Files-to-Change rows that no task touches, VALIDATE commands incompatible with the project's declared frameworks, Patterns-to-Mirror SOURCE paths that don't exist, Mandatory Reading paths that don't exist, plus prose-level drift between Summary / Solution Statement and the Step-by-Step Tasks. Two execution stages: <strong>deterministic checks</strong> first (regex / cross-reference validation), then a <strong>bounded K=5 LLM judgment pass</strong> over plan-section pairs (HD-Eval-style criteria decomposition).
+      </p>
+
+      <div class="kv">
+        <dt>R-COH-TASK-AC-MISSING</dt><dd>Deterministic. Every Step-by-Step Task references at least one Acceptance Criterion (<code>AC-A&lt;i&gt;</code> or <code>AC-&lt;N&gt;</code> token).</dd>
+        <dt>R-COH-FILES-UNTOUCHED</dt><dd>Deterministic. Every row in the Files to Change table has at least one task whose body mentions the file path.</dd>
+        <dt>R-COH-VALIDATE-FRAMEWORK-MISMATCH</dt><dd>Deterministic. Every <code>**VALIDATE**:</code> command matches a framework declared in <code>methodology.md</code>'s <code>test_frameworks</code> array. Silent-degradation branch when the array is empty: check skipped, <code>passed: true</code> with reason.</dd>
+        <dt>R-COH-PATTERN-SOURCE-MISSING</dt><dd>Deterministic. Every <code># SOURCE: &lt;path&gt;:&lt;line-range&gt;</code> header in Patterns to Mirror resolves to a real path with the cited range in bounds.</dd>
+        <dt>R-COH-MANDATORY-READING-MISSING</dt><dd>Deterministic. Every non-URL path in the Mandatory Reading table resolves under <code>target_root</code>.</dd>
+        <dt>R-COH-SUMMARY-TASKS-DRIFT</dt><dd>K=5 finding. Summary or Solution Statement claims approach X but Step-by-Step Tasks deliver approach Y.</dd>
+        <dt>R-COH-AC-TASK-DECOUPLED</dt><dd>K=5 finding. Plan AC-A item references behavior no task implements, or task delivers behavior no AC-A enforces.</dd>
+        <dt>R-COH-PATTERN-TASK-DRIFT</dt><dd>K=5 finding. Pattern-to-Mirror snippet content diverges from the referencing task's MIRROR claim.</dd>
+        <dt>R-COH-MANDATORY-READING-IRRELEVANT</dt><dd>K=5 finding. A Mandatory Reading row's "why" justification doesn't match the cited file's actual content.</dd>
+        <dt>R-COH-OTHER-INTERNAL-CONTRADICTION</dt><dd>K=5 finding. Catchall when none of the named classes apply.</dd>
+      </div>
+
+      <p>
+        The K=5 prompt is inline within this agent (no <code>Task</code> sub-agent — plan-reviewer has no <code>Task</code> tool). Section-pair decomposition (Summary vs. Tasks; ACs vs. Tasks; Patterns vs. Tasks; Mandatory Reading vs. cited files) anchors each finding to verbatim section-heading citations and quotes from both contradicting sides. Empty array <code>[]</code> when no contradictions exist (no padding to 5). Temperature 0.2 (evaluation-pass default). The combined <code>rubric[]</code> length per run is 13 to 18 rows: 8 (R1–R8) + 5 (deterministic R-COH-*) + ≤5 (K=5 pass).
+      </p>
+
+      <p>
+        AC-10 of <code>plan-authoring.prd.md</code> originally mandated the <code>rubric[]</code> array contain "exactly 8 objects … no extras". Phase 2 of the reviewer-coherence-layer feature consciously evolves this to "R1–R8 always present, no duplicates among R1–R8; R-COH-* rows additional"; the no-short-circuit invariant is preserved verbatim. The contract evolution is recorded as the 2026-04-28 entry in <code>docs/decisions.md</code>; the APPROVED <code>plan-authoring.prd.md</code> is not mutated.
+      </p>
+
+      <h3 id="code-reviewer">code-reviewer <span class="badge badge--done">shipped</span></h3>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/agents/code-reviewer.md</code></dd>
+        <dt>Model</dt><dd>sonnet</dd>
+        <dt>Invoked by</dt><dd><code>/relay-implement</code> (post-implementer review) or <code>/relay-code-review</code> (standalone)</dd>
+        <dt>Responsibility</dt><dd>Validate the implementer's working-tree diff against an 8-item three-layer rubric (R-S1/R-S2/R-S3 structural, R-L1/R-L2/R-L3 lint/type/build static, R-SEM semantic vs. plan/PRD, R-X universal test-modification guard) <strong>plus the additive <code>R-COH-*</code> coherence layer</strong> (4 deterministic intra-diff checks + a bounded sub-agent dispatch to <code>code-reviewer-semantic</code> via <code>Task</code>). Standard mode runs the full rubric; arbitration mode resolves a <code>TEST_CONTRACT_DISPUTE</code> payload (R-COH-* rows do NOT appear in arbitration mode). Append every verdict to <code>PRPs/plans/&lt;basename&gt;.code-review.jsonl</code> with all R-S*/R-L*/R-SEM/R-X outcomes plus zero or more R-COH-* outcomes.</dd>
+        <dt>Never does</dt><dd>Modify any source file, plan, or PRD (read-only review philosophy; D11). The <code>Edit</code> tool is absent from frontmatter; <code>Write</code> is exclusively scoped to the jsonl log. Use <code>Bash</code> for write operations. Perform D8 post-approval mutations (those are the COMMAND's responsibility). Short-circuit the rubric (R-S*/R-L*/R-SEM/R-X always present, no duplicates among them). Prompt the user. <strong>Pad the K=5 LLM pass with synthetic contradictions</strong>. Add <code>Edit</code> to its tools (the 2026-04-28 <code>docs/decisions.md</code> entry adds only <code>Task</code> for bounded sub-agent dispatch; <code>Edit</code> remains forbidden forever).</dd>
+      </div>
+
+      <h4 id="code-reviewer-rubric">The 8-item rubric</h4>
+
+      <div class="kv">
+        <dt>R-S1 Tasks addressed</dt><dd>Every <code>### Task &lt;i&gt;:</code> in the plan's Step-by-Step Tasks has its target file appearing in the diff (or, for CREATE actions, the new file exists).</dd>
+        <dt>R-S2 Files-to-Change rows</dt><dd>Every row of <code>## Files to Change</code> has at least one corresponding change in the diff.</dd>
+        <dt>R-S3 AC observability</dt><dd>Every plan AC-A bullet has an observable counterpart in the diff (test or production code).</dd>
+        <dt>R-L1 Static analysis</dt><dd>Plan's Level-1 STATIC_ANALYSIS command exits 0.</dd>
+        <dt>R-L2 Unit tests / content invariants</dt><dd>Plan's Level-2 CONTENT_INVARIANTS / UNIT_TESTS command exits 0.</dd>
+        <dt>R-L3 Integration / dry-run</dt><dd>Plan's Level-3 INTEGRATION / DRY-RUN command exits 0.</dd>
+        <dt>R-SEM Semantic review</dt><dd>Diff's business-rule consistency, bugs, security gaps; alignment to plan task and PRD AC. The "primary value layer" per D4 of the source PRD.</dd>
+        <dt>R-X Test-modification guard</dt><dd>Diff does NOT touch test files (canonical pathspec set), unless a prior arbitration upheld the implementer's <code>TEST_CONTRACT_DISPUTE</code>. D17 straight-fail in standard mode without an upheld dispute.</dd>
+      </div>
+
+      <h4 id="code-reviewer-coherence">The <code>R-COH-*</code> coherence layer (additive)</h4>
+
+      <p>
+        Runs after R-S*/R-L*/R-SEM/R-X in standard mode and appends rows to the same <code>rubric[]</code> array of the per-plan code-review jsonl. The layer detects intra-diff contradictions the structural and semantic rubric does not catch — dead imports, signature changes the diff didn't propagate to its own callers (within diff + 1-hop imports, M=10 cap), configuration references missing from touched config files, new files unregistered in expected indexes, plus comment-vs-code contradictions, test-name-vs-assert lies, and code that contradicts the source plan task's literal description. Two execution stages: <strong>deterministic checks</strong> first (inline in the parent agent via <code>Bash</code>/<code>ast-grep</code>/<code>Grep</code>), then a <strong>bounded sub-agent dispatch</strong> to <code>code-reviewer-semantic</code> via <code>Task</code> for the K=5 LLM judgment pass + a dedicated <code>R-COH-TASK-CONTRADICTION</code> check.
+      </p>
+
+      <div class="kv">
+        <dt>R-COH-DEAD-IMPORT</dt><dd>Deterministic. Imports declared but not referenced in the file body (per language; ast-grep / lint in report mode). Per-language degradation when the language isn't supported.</dd>
+        <dt>R-COH-CALLER-DRIFT</dt><dd>Deterministic. Function/method signatures changed in the diff without corresponding caller updates within diff + first-degree imports (M=10 hop cap).</dd>
+        <dt>R-COH-CONFIG-DANGLING</dt><dd>Deterministic. Configuration-key references in the diff (<code>config["KEY"]</code>, <code>getenv("KEY")</code>, <code>process.env.KEY</code>, etc.) that aren't defined in the touched config files.</dd>
+        <dt>R-COH-REGISTRY-MISSING</dt><dd>Deterministic. New files (CREATE actions) under directories listed in <code>docs/context/code-review-registries.md</code> that aren't registered in the expected index files. Silent-degradation when the registries file is absent or empty.</dd>
+        <dt>R-COH-COMMENT-MISMATCH</dt><dd>K=5 finding (sub-agent). Comment in the diff contradicts the code below it; reason quotes both sides verbatim.</dd>
+        <dt>R-COH-TEST-NAME-LIES</dt><dd>K=5 finding (sub-agent). Test name describes one behavior but assertions check another.</dd>
+        <dt>R-COH-OTHER-INTERNAL-CONTRADICTION</dt><dd>K=5 finding (sub-agent). Catchall for findings that don't fit the named classes.</dd>
+        <dt>R-COH-TASK-CONTRADICTION</dt><dd>Dedicated check (sub-agent), always emitted as exactly one row. Diff's signature / parameter list / return type / observable behavior contradicts the source plan task's literal description. An extension of R-SEM, focused narrowly on intra-diff structural divergence vs. the plan task's statement.</dd>
+        <dt>R-COH-SEMANTIC-DEGRADED</dt><dd>Emitted by the parent (not the sub-agent) when the sub-agent's return is unparseable JSON or when its <code>degradation_reason</code> is set. Always <code>passed: true</code> with reason; the run continues, never halts.</dd>
+      </div>
+
+      <p>
+        The K=5 prompt is delegated to the <code>code-reviewer-semantic</code> sub-agent (the only relay reviewer that uses sub-agent dispatch — D2 of the source PRD: PRD/plan reviewers run K=5 inline because their artifacts are small markdown files; code-reviewer dispatches a sub-agent because diffs can be large and parent token budget pressures justify the factoring). The parent injects the diff + plan task + PRD AC excerpts into the sub-agent's prompt via XML tags (<code>&lt;diff&gt;</code>, <code>&lt;plan_task&gt;</code>, <code>&lt;prd_acs&gt;</code>, <code>&lt;instructions&gt;</code>) per Anthropic best practices. The sub-agent is read-only (<code>tools: Glob, Grep, Read</code>); no Bash, no Edit, no Write, no Task. Empty <code>findings: []</code> when no contradictions exist (no padding). Temperature 0.2.
+      </p>
+
+      <p>
+        AC-10 of <code>implementation-authoring.prd.md</code> originally mandated the <code>rubric[]</code> array contain "exactly one entry per rubric item evaluated, no duplicates, no extras". Phase 3 of the reviewer-coherence-layer feature consciously evolves this to "R-S*/R-L*/R-SEM/R-X always present, no duplicates among them; R-COH-* rows additional in standard mode". Arbitration mode (exactly 1 object with id <code>arbitration</code>) is unchanged. D11's read-only invariant is also preserved: <code>Task</code> is added to code-reviewer's tools EXCLUSIVELY for sub-agent dispatch; <code>Edit</code> remains absent. Both contract evolutions are recorded as the 2026-04-28 combined entry in <code>docs/decisions.md</code>; the APPROVED <code>implementation-authoring.prd.md</code> is not mutated.
+      </p>
+
+      <h3 id="code-reviewer-semantic">code-reviewer-semantic <span class="badge badge--done">shipped</span></h3>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/agents/code-reviewer-semantic.md</code></dd>
+        <dt>Model</dt><dd>sonnet</dd>
+        <dt>Tool allowlist</dt><dd><code>Glob</code>, <code>Grep</code>, <code>Read</code> only — no <code>Bash</code>, no <code>Edit</code>, no <code>Write</code>, no <code>Task</code>. Read-only over the repo. The sub-agent receives the diff via the parent's invocation prompt and never re-Reads it.</dd>
+        <dt>Invoked by</dt><dd><code>code-reviewer</code> parent via <code>Task</code> during the standard-mode coherence layer; never invoked by a command directly</dd>
+        <dt>Responsibility</dt><dd>Bounded LLM judgment pass over an injected diff + plan task + PRD AC excerpts, returning at most 5 K=5 findings (<code>R-COH-COMMENT-MISMATCH</code>, <code>R-COH-TEST-NAME-LIES</code>, <code>R-COH-OTHER-INTERNAL-CONTRADICTION</code>) plus exactly one always-emitted <code>R-COH-TASK-CONTRADICTION</code> row. Strict JSON output, no commentary outside the JSON; verbatim quotes from both contradicting sides per finding (Datadog quote-both-sides pattern).</dd>
+        <dt>Caps (hard)</dt><dd>K=5 generic findings; 1 task-contradiction row; total ≤6 rows contributed to the parent's <code>rubric[]</code>.</dd>
+        <dt>Never does</dt><dd>Pad <code>findings</code> to 5 with synthetic contradictions (forbidden by the parent's anti-pattern). Fabricate verbatim quotes (drop the finding instead). Re-Read the diff (defeats the token-budget rationale of factoring this work out of the parent). Use <code>Bash</code> (excluded from frontmatter). Emit commentary outside the JSON. Omit <code>task_contradiction</code> from the return (always emitted; <code>passed: true</code> when no contradiction).</dd>
+      </div>
 
       <h3 id="research-web">research-web <span class="badge badge--done">shipped</span></h3>
 
@@ -218,12 +349,10 @@ target_root: absolute path to the target project root</code></pre>
           <tr><th>Agent</th><th>Role</th><th>Pipeline stage</th></tr>
         </thead>
         <tbody>
-          <tr><td><code>plan-writer</code></td><td>Produces phased implementation plan from approved PRD</td><td>2 — Plan</td></tr>
-          <tr><td><code>plan-reviewer</code></td><td>Validates plan against PRD, decisions, anti-patterns</td><td>2 — Plan</td></tr>
+          <tr><td><code>plan-writer</code></td><td>Produces phased implementation plan from approved PRD <em>(shipped v0.7.0; detailed section pending docs sync)</em></td><td>2 — Plan</td></tr>
           <tr><td><code>tdd-writer</code></td><td>Opt-in: produces initial red test suite from AC</td><td>4 — TDD</td></tr>
           <tr><td><code>tdd-reviewer</code></td><td>Opt-in: validates suite against the five TDD pitfalls</td><td>4 — TDD</td></tr>
           <tr><td><code>implementer</code></td><td>Writes production code against the approved plan</td><td>5 — Implementation</td></tr>
-          <tr><td><code>code-reviewer</code></td><td>Reviews implementation against governance files</td><td>5 — Implementation</td></tr>
           <tr><td><code>report-pr-creator</code></td><td>Assembles report and opens the PR</td><td>8 — Report + PR</td></tr>
           <tr><td><code>docs-updater</code></td><td>Post-merge: updates docs/context and docs/domain</td><td>Pillar 3</td></tr>
           <tr><td><code>docs-reviewer</code></td><td>Post-merge: reviews Docs Updater output, asks user about ambiguous rules</td><td>Pillar 3</td></tr>

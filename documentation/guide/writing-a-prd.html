@@ -161,8 +161,10 @@
       <h2 id="review">Step 4 — The PRD Reviewer runs</h2>
 
       <p>
-        Once the draft is produced, the PRD Reviewer reads it against the project's governance files and checks for:
+        Once the draft is produced, the PRD Reviewer reads it against the project's governance files and runs a two-layer check.
       </p>
+
+      <h3 id="review-structural">Structural rubric (R1–R7)</h3>
 
       <ul>
         <li>Decision Gate evidence block present and referencing real entries</li>
@@ -172,7 +174,26 @@
         <li>No violation of existing decisions or anti-patterns</li>
       </ul>
 
-      <p>If any of those fail, the reviewer loops back with specific issues:</p>
+      <h3 id="review-coherence">Coherence layer (<code>R-COH-*</code>)</h3>
+
+      <p>
+        After the structural rubric, the reviewer runs an additive coherence layer to catch <strong>intra-PRD contradictions</strong> that pass shape-based checks but cause cascading rework downstream. Two parts:
+      </p>
+
+      <ul>
+        <li><strong>Deterministic</strong> — table-vs-prose number drift (table says "5 phases", prose says "4 phases"), references to non-existent sections / ACs / phases.</li>
+        <li><strong>Bounded LLM judgment (K=5)</strong> — at most 5 contradictions flagged per run, each with verbatim quotes from both contradicting sides. Catches: ACs that contradict each other in prose, Success Metrics decoupled from the Key Hypothesis, Solution Detail that drifts from Proposed Solution, Decisions Log entries that contradict the Proposed Solution.</li>
+      </ul>
+
+      <p>
+        The K=5 pass returns an empty list when no contradictions exist — it does not pad to 5. This is by design: a clean PRD should produce zero coherence findings.
+      </p>
+
+      <p>
+        See the <a href="../reference/agents.html#prd-reviewer-coherence">coherence layer reference</a> for the full ID taxonomy.
+      </p>
+
+      <p>If any structural or coherence check fails, the reviewer loops back with specific issues:</p>
 
       <div class="callout callout--warn">
         <div class="callout__title">Reviewer</div>

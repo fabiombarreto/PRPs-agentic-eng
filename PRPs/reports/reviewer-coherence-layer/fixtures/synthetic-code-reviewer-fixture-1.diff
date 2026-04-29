@@ -1,0 +1,55 @@
+# Synthetic regression fixture #1 for code-reviewer R-COH-* dogfood
+#
+# Purpose: deliberately exercise three deterministic / sub-agent checks
+# in a single bounded diff. Used by Phase 4 of reviewer-coherence-layer
+# (PRPs/prds/reviewer-coherence-layer.prd.md) to validate determinism of
+# R-COH-DEAD-IMPORT, R-COH-CONFIG-DANGLING (deterministic, parent agent)
+# and R-COH-COMMENT-MISMATCH (K=5 finding, sub-agent code-reviewer-semantic).
+#
+# Expected outcomes per check:
+#   R-COH-DEAD-IMPORT     : passed=false  (import sys + import json never
+#                                          used; import os IS used by
+#                                          os.environ at line 18 — parent
+#                                          flags only sys + json as dead)
+#   R-COH-CALLER-DRIFT    : passed=true   (no signature changes in diff)
+#   R-COH-CONFIG-DANGLING : passed=false  (os.environ["MISSING_KEY"]
+#                                          referenced but no config file
+#                                          in diff defines MISSING_KEY)
+#   R-COH-REGISTRY-MISSING: passed=true   (silent degradation — fixture
+#                                          file is under PRPs/reports/,
+#                                          not plugins/relay/agents/)
+#   R-COH-COMMENT-MISMATCH: passed=false  (sub-agent K=5 finding:
+#                                          comment claims method returns
+#                                          email; code returns id)
+#   R-COH-TEST-NAME-LIES  : passed=true   (no tests in fixture)
+#   R-COH-TASK-CONTRADICTION:passed=true  (no source plan task; check N/A)
+#
+# Findings expected: 3 deterministic+K=5 row contradictions; checks 2,4,6,7 pass.
+
+diff --git a/synthetic/users.py b/synthetic/users.py
+new file mode 100644
+index 0000000..e1f8c2a
+--- /dev/null
++++ b/synthetic/users.py
+@@ -0,0 +1,18 @@
++"""Synthetic user-service module for code-reviewer dogfood fixture.
++
++Deliberately defective for regression testing. Do not use in production.
++"""
++
++import os                                  # used by os.environ below
++import sys                                 # DEAD: never referenced below
++import json                                # DEAD: never referenced below
++
++
++class User:
++    def __init__(self, user_id: str, email: str):
++        self.id = user_id
++        self.email = email
++
++    # Returns the user's email address.   <-- comment claim
++    def lookup(self) -> str:
++        return self.id                     # <-- code reality (id, not email)
++
++
++API_TOKEN = os.environ["MISSING_KEY"]      # config key not defined anywhere

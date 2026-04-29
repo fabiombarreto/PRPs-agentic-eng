@@ -150,6 +150,131 @@ TBD is permitted in:
 
 ---
 
+## The R-COH-* coherence layer (additive, runs after R1–R7)
+
+After R1–R7 record their outcomes, walk this layer to detect intra-PRD
+contradictions the structural rubric does not catch. The layer is
+**additive** — it does NOT modify or replace any R1–R7 check, and its
+rows append to the same `rubric[]` array of the per-PRD JSONL. R-COH-*
+failures produce `verdict: "CHANGES_REQUESTED"` the same way R1–R7
+failures do; on full rubric pass (all R1–R7 + all R-COH-* rows
+`passed: true`), the existing user-approval gate of Step 3 applies
+unchanged.
+
+Two execution stages, in order:
+
+1. **Deterministic checks** — mechanical regex / cross-reference
+   validation; emit one row per check.
+2. **Bounded K=5 LLM judgment pass** — single inline prompt over the
+   full PRD body; emit at most 5 rows, one per finding; explicit
+   "return zero findings if none exist" branch. The K=5 pass is inline
+   within this agent (no `Task` sub-agent dispatch — that pattern
+   applies only to `code-reviewer`).
+
+### Deterministic checks
+
+#### R-COH-NUMBER-DRIFT — table vs. prose number drift
+
+- For every markdown table in the PRD that lists numeric counts (e.g.
+  `Implementation Phases` row count, `Success Metrics` row count,
+  `MoSCoW` row count), build the count from the table's data rows.
+- Grep the PRD prose for sentences that quote the same noun with a
+  different number ("5 phases" / "4 phases").
+- Fail if a quoted prose number does not match the corresponding table
+  count. `reason` names the noun, the table count, the prose number,
+  and the prose `file:line`.
+- Pass if no candidate noun pairs exist or all numbers agree.
+
+#### R-COH-SECTION-REF-MISSING — references to non-existent sections / ACs / phases
+
+- Build the set of defined tokens in the PRD:
+  - Section headings (`## ...`) actually present in the file.
+  - AC tokens (`AC-<N>` where `<N>` is an integer) defined in
+    `## Acceptance Criteria (test scenarios)`.
+  - Phase numbers in `## Implementation Phases` table's `#` column.
+- Build the set of cited tokens by grepping the PRD prose for `AC-<N>`,
+  `Phase <N>` / `phase <N>`, and section-name back-references (e.g.
+  "see `## Solution Detail`").
+- **Contextual filter (cross-domain Phase exception, added 2026-04-28
+  per Phase 4 dogfood iteration):** when a `Phase <N>` citation
+  appears in prose that explicitly disambiguates the agent-protocol-
+  phase domain, do NOT flag the citation as missing. Disambiguation
+  cues include any of: the surrounding ±2 lines contain the phrase
+  `writer's Phase`, `agent's Phase`, `reviewer's Phase`, `protocol's
+  Phase`, `prd-writer Phase`, `plan-writer Phase`, `code-reviewer
+  Phase`, `implementer Phase`, `prp-implement Phase`; OR the
+  citation matches the pattern `Phase <N> <STEP_NAME>` where
+  `<STEP_NAME>` is in CAPITALS or TitleCase (e.g. `Phase 7 GENERATE`,
+  `Phase 6 DECISIONS`, `Phase 0 DETECT`). The check applies only to
+  Phase numbers that purport to refer to the PRD's own
+  Implementation Phases table.
+- Fail when any cited token is not in the defined set AND does NOT
+  match the contextual filter. `reason` names the orphan citation
+  and the `file:line` where it appears.
+
+### Bounded K=5 LLM judgment pass
+
+After the deterministic checks emit their rows, run a single LLM pass
+over the full PRD body with this contract (inline within this agent,
+no `Task` dispatch):
+
+- **Input**: the full PRD content (already in memory from Step 1 Load).
+- **Output**: a strict JSON array of at most 5 objects, each
+  `{id, passed: false, reason, file, line}`. Empty array `[]` when no
+  contradictions exist — **do NOT pad to 5**.
+- **Per-finding `id` taxonomy** (the LLM picks the closest match):
+  - `R-COH-AC-CONTRADICT` — two ACs contradict each other in prose.
+  - `R-COH-METRIC-HYPOTHESIS-DECOUPLED` — Success Metrics measure
+    something the Key Hypothesis does not claim, or the Hypothesis
+    claims something no metric measures.
+  - `R-COH-SOLUTION-DETAIL-DRIFT` — Solution Detail describes a
+    different approach than Proposed Solution.
+  - `R-COH-DECISIONS-CONTRADICT` — Decisions Log entries contradict
+    the Proposed Solution or another Decisions Log entry.
+  - `R-COH-OTHER-INTERNAL-CONTRADICTION` — catchall when none of the
+    named classes apply; the LLM picks this only as fallback.
+- **Per-finding `reason` discipline** (Datadog "quote both sides"
+  pattern):
+  - Quote the verbatim contradicting fragments from both sides:
+    `"X says \"<quote A>\"; Y says \"<quote B>\""`.
+  - Verbatim only — no paraphrase.
+- **Per-finding `file` and `line`**: `file` is the PRD path; `line` is
+  the line where the second-quoted fragment appears.
+- **Prompt discipline**:
+  - Strict JSON output; no commentary outside the JSON array.
+  - Temperature low (0.2 default for evaluation passes).
+  - Explicit instruction: "If no contradictions exist, return `[]` —
+    do NOT invent findings to fill the cap."
+  - Explicit instruction: "If you cannot quote a verbatim contradicting
+    fragment from both sides for a candidate finding, do NOT emit the
+    finding — drop it from the list. Better zero findings than
+    fabricated evidence."
+
+### Logging discipline
+
+Each R-COH-* outcome is one row in `rubric[]`. The `id` field carries
+the descriptive name; `passed` is `true` when the check found no
+contradictions / the deterministic check held / the K=5 pass returned
+zero findings under that classification, and `false` when a
+contradiction was found (with a non-empty `reason`).
+
+When the K=5 pass emits N findings (N < 5), the remaining slots are NOT
+padded with `passed: true` rows — only emitted findings appear. The
+"exactly N" rubric-array constraint that exists in `plan-reviewer`
+(R1–R8) does NOT apply here; this agent's `rubric[]` is open-ended on
+the R-COH-* portion.
+
+### Anti-pattern (specific to this layer)
+
+**Padding the K=5 LLM pass with synthetic contradictions to fill the
+cap.** Forbidden. Returning fewer than 5 findings (including zero) is
+the correct behavior when fewer (or no) real contradictions exist. The
+prompt explicitly instructs against this, and the dogfood report
+(Phase 4 of `PRPs/prds/reviewer-coherence-layer.prd.md`) measures
+fabrication-rate as part of the FP rate threshold.
+
+---
+
 ## Protocol
 
 ### Step 1 — Load and parse
@@ -169,6 +294,13 @@ Walk R1 through R7 in order. For each, record:
 ```json
 { "id": "R3", "passed": false, "reason": "TBD in Problem Statement body" }
 ```
+
+After R1–R7 record their outcomes, walk the R-COH-* coherence layer
+(see "## The R-COH-* coherence layer" section above): deterministic
+checks first, then the bounded K=5 LLM pass. Append one row per check
+and one row per K=5 finding to the same outcome array. The combined
+array (R1–R7 + R-COH-*) is what Step 3's branch logic evaluates: any
+`passed: false` row triggers the CHANGES_REQUESTED branch.
 
 ### Step 3 — Branch on the result
 
@@ -294,7 +426,9 @@ One JSON object per line, appended (never truncated). Shape:
   "verdict": "CHANGES_REQUESTED",
   "rubric": [
     { "id": "R1", "passed": true },
-    { "id": "R3", "passed": false, "reason": "TBD in Problem Statement body" }
+    { "id": "R3", "passed": false, "reason": "TBD in Problem Statement body" },
+    { "id": "R-COH-NUMBER-DRIFT", "passed": true },
+    { "id": "R-COH-AC-CONTRADICT", "passed": false, "reason": "AC-3 says \"the email is sent within 60 seconds\"; AC-7 says \"the email is queued for batch delivery\". The two contradict each other on delivery latency.", "file": "PRPs/prds/digest-email.prd.md", "line": 142 }
   ],
   "action": "inline_edit|writer_handoff|user_approval|final_flip",
   "user_message": "<verbatim short excerpt of the user's reply, if any>"
