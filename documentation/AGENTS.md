@@ -292,13 +292,15 @@ site. Rules:
 
 ### 7.1 Versioning
 
-The doc site uses its own semver, independent of the plugin version:
+The doc site uses semver:
 
 - **Patch (0.x.Y)** — typo fixes, wording tweaks, broken-link fixes, accessibility fixes. No structural change.
 - **Minor (0.X.0)** — new pages, new sections, new NAV entries, new CSS components. Existing content unchanged.
 - **Major (X.0.0)** — breaking restructure: renamed top-level folders, removed pages, broken-link-inducing reshuffles, overhauled theme. Accompany with a migration note in the changelog entry.
 
 The project is pre-1.0; expect minor bumps frequently, major bumps rarely.
+
+The doc-site version was historically described as "independent of the plugin version", but as of 2026-04-30 the two are kept in lock-step (see §7.5 below + `docs/decisions.md` 2026-04-30). The numbers are conceptually distinct (the changelog tracks doc-site changes; the plugin manifest identifies the plugin) but they share the same value to keep Claude Code's plugin cache invalidation aligned with shipped contracts.
 
 ### 7.2 Entry shape
 
@@ -326,6 +328,56 @@ Every PR / commit that touches `documentation/` must include a
 corresponding changelog update. No silent changes. If you're uncertain
 whether a change is user-visible, err on the side of logging it — deleting
 an entry later is cheap.
+
+### 7.5 Plugin manifest version sync (binding)
+
+**Every minor or major release cut in `changelog.html` MUST also bump
+`plugins/relay/.claude-plugin/plugin.json`'s `version` field to the
+same value, in the same commit.**
+
+This rule is binding because Claude Code keys its plugin cache on the
+manifest version: `~/.claude/plugins/cache/relay-marketplace/relay/<version>/`.
+A stale `plugin.json` (e.g. frozen at `0.1.0` while the changelog
+ships `0.8.0`) means installed users keep loading the cached old
+plugin even after the marketplace publishes new commands and agents.
+
+**Rules:**
+
+- **Minor (0.X.0) or major (X.0.0) bump in changelog** → bump
+  `plugin.json` to the same version in the same commit. Always.
+- **Patch (0.x.Y) bump in changelog** → bump `plugin.json` ONLY if
+  the patch ships a plugin asset (anything under `plugins/relay/`).
+  Pure doc-site copy fixes (typos, wording tweaks confined to
+  `documentation/`) do NOT require a plugin bump.
+- **The two version numbers are identical from 2026-04-30 onward.**
+  The "independent versions" framing in §7.1 was revised — they
+  remain conceptually distinct but share the same number to keep
+  cache invalidation aligned.
+
+**When cutting a release that includes plugin changes**, the
+changelog block MUST list the plugin bump under `Changed`:
+
+```html
+<li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+  &mdash; version bumped <code>0.X.Y</code> &rarr; <code>0.A.B</code> to
+  match this release; users running <code>/plugin</code> after pulling
+  this version will get a fresh <code>relay/0.A.B/</code> cache directory
+  with all newly-shipped commands and agents registered.</li>
+```
+
+**When the rule was missed (drift cleanup):** if a release shipped
+without a plugin bump, the next release (or a dedicated patch)
+must bump the plugin to the most-recent changelog version and document
+the back-fill in the entry's Changed section. Drift is a bug; the
+fix is always to align forward, never to roll the changelog back.
+
+**Rationale, in one sentence:** without the bump, the plugin you
+just shipped is invisible to users who already had a previous version
+installed.
+
+For the durable contract behind this rule, see
+[`docs/decisions.md` 2026-04-30 entry "Plugin manifest version is
+bumped on every minor/major release cut"](../docs/decisions.md).
 
 ---
 

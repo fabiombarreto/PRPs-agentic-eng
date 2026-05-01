@@ -377,6 +377,20 @@ The evolution is implemented at the dogfood report level (`PRPs/reports/reviewer
 
 ---
 
+## [2026-04-30] Plugin manifest version is bumped on every minor/major release cut in documentation/changelog.html
+
+**Context:** The plugin manifest at `plugins/relay/.claude-plugin/plugin.json` carries a `version` field. Claude Code uses this version as a cache key under `~/.claude/plugins/cache/relay-marketplace/relay/<version>/`. Until 2026-04-30 the manifest was frozen at `0.1.0` (its initial value) while the documentation changelog cut nine releases (`v0.5.0` Test Runner → `v0.7.3` reviewer-coherence-layer → `v0.8.0` Implementation Authoring). Result: users who had previously installed the plugin kept loading the stale `0.1.0` cache and never picked up new commands (`/relay-plan`, `/relay-plan-review`, `/relay-implement`, `/relay-code-review`) or new agents (`plan-writer`, `plan-reviewer`, `implementer`, `code-reviewer`, `code-reviewer-semantic`) even after pulling the updated marketplace. The drift was discovered when the user attempted to invoke `/relay-implement` post-v0.8.0 ship and the command was absent from the registered slash-command list.
+
+**Decision:** The plugin manifest version is kept in lock-step with `documentation/changelog.html`'s most recent versioned release. Every minor (`0.X.0`) or major (`X.0.0`) bump in the changelog **MUST** include a matching bump in `plugins/relay/.claude-plugin/plugin.json` within the same commit. Patch bumps (`0.x.Y`) require a plugin bump only when the patch ships a plugin asset (anything under `plugins/relay/`); pure doc-site copy fixes do not require a plugin bump.
+
+This supersedes the prior framing in `documentation/AGENTS.md` §7.1 ("the doc site uses its own semver, independent of the plugin version") — the two version numbers remain conceptually independent (the changelog tracks doc-site changes; the plugin manifest identifies the plugin) but they share the same number from 2026-04-30 onward to keep Claude Code's cache invalidation aligned with shipped plugin contracts.
+
+**Reason:** Claude Code's plugin cache is keyed by manifest version, not by git SHA or content hash. Without a manifest bump, the cache silently serves stale plugin assets even after the marketplace publishes new ones. Manual cache clears (`rm -rf ~/.claude/plugins/cache/relay-marketplace/`) are a workaround, not a contract — they require user intervention and don't scale to multi-user installations. Aligning the manifest version with changelog releases makes cache invalidation automatic and version-traceable: a user who runs `/plugin` after a manifest bump gets a fresh `<version>/` directory; a user who upgraded their marketplace clone but didn't see new commands knows immediately to check whether `plugin.json` was bumped.
+
+**Areas affected:** `plugins/relay/.claude-plugin/plugin.json` (versioned identically to the most recent versioned changelog release); `documentation/AGENTS.md` §7.1 + §7.5 (the binding contract for release discipline; §7.5 codifies the bump rule explicitly); `documentation/changelog.html` (every minor/major release block now also documents the plugin bump in its Changed section); future PRDs' Phase 5 docs-update plans (the deliverable now includes "bump `plugin.json` to match the new release version" as an explicit task); release-cut workflow (whether manual or future-automated via `/relay-execute`'s docs-update phase).
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision
