@@ -236,6 +236,25 @@ target_root: absolute path to the target project root</code></pre>
         AC-10 of <code>plan-authoring.prd.md</code> originally mandated the <code>rubric[]</code> array contain "exactly 8 objects … no extras". Phase 2 of the reviewer-coherence-layer feature consciously evolves this to "R1–R8 always present, no duplicates among R1–R8; R-COH-* rows additional"; the no-short-circuit invariant is preserved verbatim. The contract evolution is recorded as the 2026-04-28 entry in <code>docs/decisions.md</code>; the APPROVED <code>plan-authoring.prd.md</code> is not mutated.
       </p>
 
+      <h3 id="implementer">implementer <span class="badge badge--done">shipped</span></h3>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/agents/implementer.md</code></dd>
+        <dt>Model</dt><dd>sonnet</dd>
+        <dt>Invoked by</dt><dd><code>/relay-implement</code> command (internal dispatch per attempt)</dd>
+        <dt>Responsibility</dt><dd>Autonomous plan-driven code writer. Reads methodology + plan + source PRD; executes Step-by-Step Tasks via <code>Edit</code>/<code>Write</code> directly in the working tree (state accumulates across tasks per D6 aggregate validation); runs the plan's Validation Commands Levels 1&ndash;3 after all tasks complete; emits one of two verdicts: <code>IMPLEMENTATION_COMPLETE</code> with <code>{files_changed, validation: {level_1/2/3}, validation_outputs}</code>, or <code>TEST_CONTRACT_DISPUTE</code> with <code>{disputed_tests, prd_refs, claim, proposed_resolution}</code> when the plan's existing tests appear to contradict the PRD (D9 Layer 1 escape valve).</dd>
+        <dt>Never does</dt><dd>Modify test files without emitting a <code>TEST_CONTRACT_DISPUTE</code> verdict (universal R-X rule per D9 Layer 0). Re-ground via research subagents (no <code>Task</code> tool per D11 — the plan is the source of truth). Perform D8 post-approval mutations (those are <code>/relay-implement</code>'s responsibility). Loop &mdash; the agent runs single-attempt per dispatch; the loop logic lives in <code>/relay-implement</code>'s Phase A.</dd>
+        <dt>Tools</dt><dd><code>Read, Write, Edit, Glob, Grep, Bash, BashOutput, KillBash</code> &mdash; <code>Bash</code> is open at the agent layer; the project's <code>.claude/settings.json</code> allowlist is the security gate per the 2026-04-19 narrow-patterns decision (codified as the 2026-04-30 D11 entry in <code>docs/decisions.md</code>).</dd>
+        <dt>Color</dt><dd>green</dd>
+      </div>
+
+      <h4 id="implementer-verdicts">Verdict shapes</h4>
+
+      <div class="kv">
+        <dt>IMPLEMENTATION_COMPLETE</dt><dd>The implementer believes it has addressed every Step-by-Step Task and the plan's Validation Commands all pass (or are reported with their per-Level outcomes for the code-reviewer to evaluate). The verdict carries the list of files changed, per-Level <code>PASS</code>/<code>FAIL</code> for L1/L2/L3, and any captured validation output excerpts.</dd>
+        <dt>TEST_CONTRACT_DISPUTE</dt><dd>The implementer believes the plan's existing tests are contradictory with the source PRD's Acceptance Criteria. The verdict carries: <code>disputed_tests</code> (list of test file paths + line ranges), <code>prd_refs</code> (cited PRD AC-N items), <code>claim</code> (the implementer's structured argument why the tests are wrong), <code>proposed_resolution</code> (a description of how the tests would need to change to align with the PRD). Counts as one attempt; capped at <code>max_disputes_per_session = 2</code>. The code-reviewer arbitrates with one of three verdicts (<code>DISPUTE_REJECTED</code> / <code>DISPUTE_UPHELD_TEST_WRONG</code> / <code>DISPUTE_UPHELD_PRD_AMBIGUOUS</code>) per D9 Layer 2.</dd>
+      </div>
+
       <h3 id="code-reviewer">code-reviewer <span class="badge badge--done">shipped</span></h3>
 
       <div class="kv">
@@ -352,7 +371,6 @@ target_root: absolute path to the target project root</code></pre>
           <tr><td><code>plan-writer</code></td><td>Produces phased implementation plan from approved PRD <em>(shipped v0.7.0; detailed section pending docs sync)</em></td><td>2 — Plan</td></tr>
           <tr><td><code>tdd-writer</code></td><td>Opt-in: produces initial red test suite from AC</td><td>4 — TDD</td></tr>
           <tr><td><code>tdd-reviewer</code></td><td>Opt-in: validates suite against the five TDD pitfalls</td><td>4 — TDD</td></tr>
-          <tr><td><code>implementer</code></td><td>Writes production code against the approved plan</td><td>5 — Implementation</td></tr>
           <tr><td><code>report-pr-creator</code></td><td>Assembles report and opens the PR</td><td>8 — Report + PR</td></tr>
           <tr><td><code>docs-updater</code></td><td>Post-merge: updates docs/context and docs/domain</td><td>Pillar 3</td></tr>
           <tr><td><code>docs-reviewer</code></td><td>Post-merge: reviews Docs Updater output, asks user about ambiguous rules</td><td>Pillar 3</td></tr>

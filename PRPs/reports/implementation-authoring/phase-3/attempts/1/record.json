@@ -1,0 +1,29 @@
+{
+  "attempt": 1,
+  "verdict": "IMPLEMENTATION_COMPLETE",
+  "files_changed": [
+    "plugins/relay/commands/relay-implement.md"
+  ],
+  "validation": {
+    "level_1": "PASS",
+    "level_2": "PASS",
+    "level_3": "PASS"
+  },
+  "validation_outputs": [
+    "L1.1 heading count = 18 (>= 13 expected)",
+    "L1.2 YAML frontmatter parses (description+argument-hint present after frontmatter description was single-quoted to handle ':' in '*Status: IMPLEMENTED*')",
+    "L2.1 8 canonical ## sections (Your mission, Decision Gate, Parse arguments, Preconditions, Phase A, Final output, Constraints, What you do NOT do)",
+    "L2.2 10 FAILED_* outcome code occurrences (>= 4 expected)",
+    "L2.3 6 DISPUTE_* arbitration verdict occurrences (>= 3 expected)",
+    "L2.4 7 budget cap occurrences (max_implement_retries=3, max_implement_minutes=45, max_disputes_per_session=2; >= 3 expected)",
+    "L2.5 12 PRPs/plans/completed references (>= 1 expected)",
+    "L2.6 5 'Status: IMPLEMENTED' references (>= 1 expected)",
+    "L2.7 13 'phase-<N>/attempts' references (>= 2 expected)",
+    "L2.8 0 .claude/PRPs Write/Edit targets (must be 0)",
+    "L2.9 5 ### P preconditions (P1 plan-readable, P2 APPROVED, P3 PRD row in-progress, P4 Decision Gate sources, P5 base-commit derivable)",
+    "L3.1 only plugins/relay/commands/relay-implement.md is net-new in plugins/",
+    "L3.2 sibling commands/agents untouched"
+  ],
+  "base_commit": "fb36d1309061749951c60b229b72c5e287d6ccbc",
+  "fix_applied_inline": "single-quoted YAML description to allow ':' in '*Status: IMPLEMENTED*' literal"
+}

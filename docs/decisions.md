@@ -332,6 +332,51 @@ The evolution is implemented at the dogfood report level (`PRPs/reports/reviewer
 
 ---
 
+## [2026-04-30] Implementer Bash tool allowlist gate (D11 of implementation-authoring)
+
+**Context:** The `implementer` agent (shipped Phase 1 of `implementation-authoring`) needs `Bash` to execute the plan's Validation Commands Levels 1–3 after all Step-by-Step Tasks complete (per D6 aggregate validation). A per-agent pattern allowlist would duplicate context-builder's project-level `.claude/settings.json` allowlist generated at `*init`.
+**Decision:** The implementer's frontmatter declares `Bash` (open at the agent layer); the project's `.claude/settings.json` allowlist is the security gate per the 2026-04-19 narrow-patterns decision. No agent-level Bash pattern allowlist is added; the security boundary is the `.claude/settings.json` denylist + allowlist already enforced by Claude Code.
+**Reason:** Avoids duplication; reuses existing security plumbing; matches the established pattern from `/relay-test`'s `test-runner` agent which also has open `Bash` gated by the project allowlist. A second allowlist at the agent layer would diverge under maintenance from the project-level one and create silent security gaps.
+**Areas affected:** implementer agent, `/relay-implement` command, project-level allowlist generation by context-builder, future `/relay-execute` orchestrator (which composes implementer dispatches).
+
+---
+
+## [2026-04-30] Code-reviewer agent has no Edit tool (D11 divergence from plan-reviewer)
+
+**Context:** The `plan-reviewer` agent has the `Edit` tool because its protocol Step 4 flips the plan's trailing block `*Status: DRAFT*` → `*Status: APPROVED*` directly. The `code-reviewer` agent (shipped Phase 2 of `implementation-authoring`) must NOT mutate plan or PRD status — D8 of `implementation-authoring.prd.md` specifies that the three post-approval mutations (plan trailing-block flip, plan move to `PRPs/plans/completed/`, source PRD row N flip) are exclusively `/relay-implement`'s responsibility (the COMMAND, not the agent).
+**Decision:** The `code-reviewer` agent's frontmatter tool allowlist is `Read, Write, Glob, Grep, Bash, BashOutput, Task` — explicitly omitting `Edit`. `Write` is gated by the agent's prompt to `PRPs/plans/<basename>.code-review.jsonl` only. The `Task` tool is added (per the reviewer-coherence-layer 2026-04-28 D11 evolution) for invoking the `code-reviewer-semantic` sub-agent during the K=5 LLM judgment pass; the read-only invariant is preserved verbatim because the sub-agent itself is read-only (`tools: Glob, Grep, Read`).
+**Reason:** Tool-level enforcement of the read-only review philosophy. Even if the agent's prompt drifted under maintenance and accidentally instructed a plan-status mutation, the absence of `Edit` makes the mutation impossible. Defense-in-depth between prompt-level constraints and tool-level capabilities.
+**Areas affected:** code-reviewer agent, `/relay-implement` command (internal dispatch), `/relay-code-review` command (standalone dispatch), `code-reviewer-semantic` sub-agent.
+
+---
+
+## [2026-04-30] D8 post-approval mutations are best-effort atomic with rollback note (no transactional WAL)
+
+**Context:** `/relay-implement` performs three post-approval mutations on APPROVED rubric: (a) plan trailing-block flip `*Status: APPROVED*` → `*Status: IMPLEMENTED*`; (b) plan move from `PRPs/plans/<basename>.plan.md` to `PRPs/plans/completed/<basename>.plan.md` via `Bash(mv ...)`; (c) source PRD's Implementation Phases row N `Status` cell flip `in-progress` → `complete` via `Edit` with verbatim full-row `old_string`. A transactional Write-Ahead Log was considered (mirroring databasesandlife.com's indirection-pointer pattern) but rejected for MVP scope.
+**Decision:** Best-effort atomic — each mutation is attempted in order; on the first failure, the partial state is captured to `PRPs/reports/<feature>/phase-<N>/halt.json` with structured `{mutations_attempted, mutations_succeeded, mutation_failed, error, manual_recovery_steps}` and an actionable rollback message is emitted; the command does NOT roll back successful mutations. Recovery is documented (in the halt message), not automatic.
+**Reason:** WAL adds significant complexity (dedicated rollback file, replay logic, post-crash startup hooks) without proportional value for three filesystem mutations on a single repo. Partial-state capture + manual recovery is sufficient and matches the "graceful degradation + no silent failures" architectural rule. If dogfood telemetry shows recurrent partial failures, a follow-up decision can introduce a WAL; until then, simpler is better.
+**Areas affected:** `/relay-implement` command Phase A.4, plan trailing-block discipline, plan archive directory `PRPs/plans/completed/`, source PRD Implementation Phases table back-fill.
+
+---
+
+## [2026-04-30] PRPs/plans/completed/ is the canonical archive path for IMPLEMENTED plans
+
+**Context:** Upstream `prp-core` archives implemented plans at `.claude/PRPs/plans/completed/`. Relay's no-`.claude/`-writes rule (2026-04-19) explicitly forbids that path because Claude Code's permission guards on `.claude/` would interrupt the autonomous loop on every archive operation. With `/relay-implement` shipped and producing IMPLEMENTED plans that need archival, a relay-specific path was needed.
+**Decision:** Relay archives implemented plans at `PRPs/plans/completed/<basename>.plan.md`. The archive operation is performed by `/relay-implement` Mutation b (Phase A.4) after rubric APPROVED, via `Bash(mv ...)`. The directory is created on-demand (`mkdir -p PRPs/plans/completed/` if absent) but in practice it already exists and is populated with prior completed plans across `plan-authoring`, `implementation-authoring`, and `reviewer-coherence-layer` features.
+**Reason:** Aligns with relay's PRPs-at-repo-root convention (2026-04-19); preserves the prp-core archive semantics while avoiding the `.claude/` permission-prompt failure mode; keeps the plan filesystem layout grep-friendly and version-controllable.
+**Areas affected:** `/relay-implement` command Mutation b, `docs/context/architecture.md` PRP artifact paths table, future `/relay-execute` orchestrator's per-phase state-machine bookkeeping.
+
+---
+
+## [2026-04-30] Per-attempt diff.patch artifact at PRPs/reports/<feature>/phase-<N>/attempts/<i>/
+
+**Context:** `/relay-implement` runs an internal writer↔reviewer loop with up to 4 attempts (`max_implement_retries=3`). Each attempt's cumulative diff vs the base commit must be auditable both for debugging the loop's retry behavior and for the future `/relay-execute` orchestrator's reasoning about which artifacts /relay-implement produced. The Test Runner's existing layout uses flat `PRPs/reports/<feature>/attempts/<N>/`; the implementer needs an additional path tier because it runs per-PRD-phase (not per-feature) and multiple plans may exist for one feature.
+**Decision:** After each attempt, `/relay-implement` captures `git diff <base-commit>` and writes it to `PRPs/reports/<feature>/phase-<N>/attempts/<i>/diff.patch` plus a `record.json` containing `{attempt, verdict, files_changed, validation, base_commit}`. The `phase-<N>/` segment is the relay-implement-original tier (no precedent in the existing Test Runner C4 layout). The `<feature>` value is parsed from the plan filename pattern `<feature>-phase-<N>-<slug>.plan.md`.
+**Reason:** Per-attempt cumulative diffs (each retry stacks on the previous, not a clean reset per D2) are the audit trail for the loop's bounded-retry behavior; the `phase-<N>/` segment provides per-phase isolation and prevents cross-phase artifact collision when one feature ships through multiple `/relay-implement` invocations; reuses Test Runner's directory shape with one additional tier so future Test Runner integration consumes the worktree state without restructuring.
+**Areas affected:** `/relay-implement` command Phase A.2, `docs/context/architecture.md` PRP artifact paths table (PRPs/reports/ row description extended), future Test Runner integration (downstream consumes the worktree state /relay-implement leaves behind), future `/relay-execute` orchestrator (composes both commands).
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision

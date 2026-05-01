@@ -79,17 +79,17 @@
         <dd>Reads the PRD's Acceptance Criteria section to derive tests. Never writes production code.</dd>
       </div>
 
-      <h3 id="relay-implement"><code>/relay-implement &lt;plan-path&gt;</code></h3>
+      <h3 id="relay-implement"><code>/relay-implement &lt;plan-path&gt;</code> <span class="badge badge--done">implemented</span></h3>
 
       <div class="kv">
         <dt>Input</dt>
-        <dd>An approved plan. When TDD is active, also the TDD Writer's test suite is present in the worktree.</dd>
+        <dd>A plan ending with <code>*Status: APPROVED*</code> whose source PRD's Implementation Phases row N has <code>Status: in-progress</code>. The plan's Step-by-Step Tasks, Validation Commands Levels 1&ndash;3, Files to Change, and Acceptance Criteria are the rubric's structural inputs.</dd>
         <dt>Output</dt>
-        <dd>Implementation commits in the worktree.</dd>
+        <dd>Working tree carries the implementation diff against the base commit. On APPROVED rubric: plan trailing block flipped to <code>*Status: IMPLEMENTED*</code>, plan moved to <code>PRPs/plans/completed/&lt;basename&gt;.plan.md</code>, source PRD row N flipped from <code>in-progress</code> to <code>complete</code>. On HALT: structured halt.json with attempt history at <code>PRPs/reports/&lt;feature&gt;/phase-&lt;N&gt;/halt.json</code>.</dd>
         <dt>Mode</dt>
         <dd>Autonomous.</dd>
         <dt>Notes</dt>
-        <dd>Name chosen to match <code>prp-implement</code> from the upstream prp-core plugin. Uses the Agent tool to delegate writer/reviewer loops internally.</dd>
+        <dd>Internal writer&harr;reviewer loop dispatching the <code>implementer</code> agent (writes code via <code>Edit</code>/<code>Write</code> directly in the working tree) and the <code>code-reviewer</code> agent (three-layer rubric: structural / static / semantic + R-X universal test-modification guard) once per attempt. Bounded by <code>max_implement_retries=3</code> (4 attempts total), <code>max_implement_minutes=45</code> (wall-clock; first-to-expire-wins), <code>max_disputes_per_session=2</code> (TEST_CONTRACT_DISPUTE escape valve cap; arbitration mode resolves with <code>DISPUTE_REJECTED</code>/<code>DISPUTE_UPHELD_TEST_WRONG</code>/<code>DISPUTE_UPHELD_PRD_AMBIGUOUS</code>). Oscillation detection always-on. Per-attempt cumulative <code>diff.patch</code> at <code>PRPs/reports/&lt;feature&gt;/phase-&lt;N&gt;/attempts/&lt;i&gt;/</code>. D8 post-approval mutations are best-effort atomic with rollback note on partial failure. Name chosen to match <code>prp-implement</code> from the upstream prp-core plugin. See <code>PRPs/prds/implementation-authoring.prd.md</code>.</dd>
       </div>
 
       <h2 id="reviewers">Reviewers</h2>
@@ -114,14 +114,16 @@
         <dd>Specifically looks for tests that mirror imagined implementation, mocks that hide behavior, trivial asserts, and gaps against the PRD's Acceptance Criteria.</dd>
       </div>
 
-      <h3 id="relay-code-review"><code>/relay-code-review &lt;worktree&gt;</code></h3>
+      <h3 id="relay-code-review"><code>/relay-code-review &lt;plan-path&gt;</code> <span class="badge badge--done">implemented</span></h3>
       <div class="kv">
         <dt>Input</dt>
-        <dd>A worktree with the Implementer's diff.</dd>
+        <dd>A plan path resolving to <code>PRPs/plans/&lt;basename&gt;.plan.md</code> (status <code>*Status: APPROVED*</code>, mid-implementation review) or <code>PRPs/plans/completed/&lt;basename&gt;.plan.md</code> (status <code>*Status: IMPLEMENTED*</code>, post-implementation re-review after a hand-edit). A working-tree diff against the base branch is required (P3 precondition).</dd>
         <dt>Output</dt>
-        <dd><code>APPROVED</code> or <code>CHANGES_REQUESTED</code>.</dd>
+        <dd><code>APPROVED</code> or <code>CHANGES_REQUESTED</code> appended to <code>PRPs/plans/&lt;basename&gt;.code-review.jsonl</code>. The plan trailing block is byte-identical before and after the command runs, regardless of verdict.</dd>
+        <dt>Mode</dt>
+        <dd>Autonomous, single-shot.</dd>
         <dt>Notes</dt>
-        <dd>Reviews against the <code>decisions.md</code>, <code>anti-patterns.md</code>, and relevant domain-area files via the <a href="../governance/decision-gate.html">Decision Gate</a>.</dd>
+        <dd>Standalone single-shot dispatch of the <code>code-reviewer</code> agent in <code>mode: 'standard'</code>; no internal loop, no retries, no per-attempt <code>diff.patch</code> artifact, no D8 mutations. <strong>Critical architectural divergence from <code>/relay-plan-review</code></strong>: this command surfaces the verdict and exits without auto-flipping plan status &mdash; D8 mutations (plan trailing-block flip, plan move to <code>completed/</code>, source PRD row N flip) are exclusively <code>/relay-implement</code>'s responsibility per source PRD AC-12 + D5 + D8. Read-only counterpart to <code>/relay-implement</code>'s mutation-triggering autonomous loop, for hand-invoked review where no automated state transition is desired. Closest external precedent is <a href="https://blog.cloudflare.com/ai-code-review/">Cloudflare's AI code review architecture</a> (sub-reviewers emit findings; coordinator alone mutates state) and GitHub's <code>Comment</code> PR review type (verdict without approval signal). See <code>PRPs/prds/implementation-authoring.prd.md</code>.</dd>
       </div>
 
       <h3 id="relay-test-review"><code>/relay-test-review &lt;worktree&gt;</code> <span class="badge badge--done">implemented</span></h3>

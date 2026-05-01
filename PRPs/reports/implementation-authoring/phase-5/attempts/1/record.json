@@ -1,0 +1,36 @@
+{
+  "attempt": 1,
+  "verdict": "IMPLEMENTATION_COMPLETE",
+  "files_changed": [
+    "docs/api-reference.md",
+    "docs/decisions.md",
+    "docs/context/architecture.md",
+    "documentation/changelog.html",
+    "documentation/reference/commands.html",
+    "documentation/reference/agents.html",
+    "documentation/roadmap/status.html"
+  ],
+  "validation": {
+    "level_1": "PASS",
+    "level_2": "PASS",
+    "level_3": "PASS"
+  },
+  "validation_outputs": [
+    "L1.1 all 7 target files exist",
+    "L1.2 all 4 HTML files parse without errors",
+    "L1.3 markdown fence balance: api-ref 0 (no code blocks), decisions 4 = 2 pairs (balanced)",
+    "L1.4 zero emojis in documentation/*.html files (AGENTS.md §2 hard constraint)",
+    "L2.1 api-reference.md: 2 commands promoted, 2 agent rows added, Planned narrative cleaned (Implementer/Code Reviewer removed)",
+    "L2.2 docs/decisions.md: 5 new [2026-04-30] entries (D11 Bash gate, D11 no-Edit, D8 atomic, completed/ path, phase-<N>/attempts path)",
+    "L2.3 docs/context/architecture.md: PRPs/plans/completed/ row added; phase-<N>/attempts noted in PRPs/reports description; Phase 3 row promoted from 'not started' to 'partial' with sub-status",
+    "L2.4 documentation/changelog.html: cut Unreleased -> v0.7.3 (reviewer-coherence-layer Phases 1-4) + new v0.8.0 block + fresh empty Unreleased; Added section names 4 shipped artifacts; Changed section lists 6 surfaces updated",
+    "L2.5 documentation/reference/commands.html: badge--done 'implemented' on both /relay-implement and /relay-code-review headings; Notes blocks expanded with shipped behavioral details",
+    "L2.6 documentation/reference/agents.html: new shipped section for implementer inserted before code-reviewer (writer-before-reviewer pairing); implementer removed from Planned table",
+    "L2.7 documentation/roadmap/status.html: Plugin artifacts list refreshed with all currently-shipped agents (+plan-writer/plan-reviewer/implementer/code-reviewer/code-reviewer-semantic) and commands (+relay-plan/relay-plan-review/relay-implement/relay-code-review)",
+    "L3.1 NAV (app.js) and search-index.json byte-identical (AGENTS.md §9 modifying-existing-page workflow correctly applied)",
+    "L3.2 7 files modified (exactly the 7 named in Files to Change), zero added, zero deleted",
+    "L3.3 cross-file consistency: same 4 artifact names appear in api-reference + changelog + status.html (counts 1-7 each per file)"
+  ],
+  "base_commit": "fb36d1309061749951c60b229b72c5e287d6ccbc",
+  "fix_applied_inline": "none — all 7 edits applied cleanly on first attempt"
+}

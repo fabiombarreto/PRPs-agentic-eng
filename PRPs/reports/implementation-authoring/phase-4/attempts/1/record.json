@@ -1,0 +1,26 @@
+{
+  "attempt": 1,
+  "verdict": "IMPLEMENTATION_COMPLETE",
+  "files_changed": [
+    "plugins/relay/commands/relay-code-review.md"
+  ],
+  "validation": {
+    "level_1": "PASS",
+    "level_2": "PASS",
+    "level_3": "PASS"
+  },
+  "validation_outputs": [
+    "L1.1 heading count = 20 (>= 13 expected)",
+    "L1.2 YAML frontmatter parses (description len=1234, single-quoted to handle ':' in '*Status: APPROVED*' and '*Status: IMPLEMENTED*' literals)",
+    "L2.1 8 canonical ## sections present",
+    "L2.2 5 ### P preconditions (P1 readable, P2 APPROVED-or-IMPLEMENTED, P3 worktree diff, P4 Decision Gate sources, P5 base-commit derivable)",
+    "L2.3 no-mutation invariant stated 4 times (>= 3 expected)",
+    "L2.4 single-shot discipline stated 6 times (>= 2 expected)",
+    "L2.5 1 code-reviewer Task dispatch; 8 occurrences of mode/attempt references",
+    "L2.6 0 .claude/PRPs Write/Edit targets",
+    "L2.7 3 occurrences naming both APPROVED and IMPLEMENTED (P2 lists both as acceptable)",
+    "L3.1 only relay-code-review.md is the new plugin/ deliverable for Phase 4 (relay-implement.md from prior Phase 3 also visible in cumulative diff against base, as expected for uncommitted-session work)"
+  ],
+  "base_commit": "fb36d1309061749951c60b229b72c5e287d6ccbc",
+  "fix_applied_inline": "none — frontmatter description was single-quoted from the start (lesson learned from Phase 3's inline fix carried forward)"
+}

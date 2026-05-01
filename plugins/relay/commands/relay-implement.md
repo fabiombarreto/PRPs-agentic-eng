@@ -1,0 +1,460 @@
+---
+description: 'Autonomous code generation from an APPROVED plan. Validates the plan path, runs preconditions, then adopts the implementer/code-reviewer pair via an internal writer↔reviewer loop with bounded retries (max_implement_retries=3), wall-clock budget (max_implement_minutes=45), oscillation detection always-on, dispute cap (max_disputes_per_session=2), per-attempt diff capture at PRPs/reports/<feature>/phase-<N>/attempts/<i>/diff.patch, and on APPROVED rubric performs all three D8 post-approval mutations atomically (plan trailing-block flip to *Status: IMPLEMENTED*, plan move to PRPs/plans/completed/, source PRD row N flip from in-progress to complete). Reviewer adoption is single-shot via Task per attempt — there is no Phase B; the loop lives entirely inside Phase A.'
+argument-hint: <plan-path>
+---
+
+# /relay-implement
+
+**Arguments:** `$ARGUMENTS`
+
+---
+
+## Your mission
+
+Validate the plan path argument, run the preconditions check, then run an internal writer↔reviewer loop that dispatches the `implementer` agent (Phase 1 of `implementation-authoring`, color: green) and the `code-reviewer` agent (Phase 2, color: magenta) once per attempt. Capture `git diff <base-commit>` to a per-attempt artifact after every attempt regardless of verdict. Enforce four orthogonal stop conditions (retry budget, wall-clock budget, oscillation detection, dispute cap) with distinct outcome codes. On APPROVED rubric, perform all three D8 post-approval mutations atomically (best-effort) with rollback note on partial failure.
+
+You are autonomous. You do not prompt the user. You do not loop the writer↔reviewer pair across `/relay-implement` invocations — that is `/relay-execute`'s job. A single `/relay-implement` invocation produces zero or one APPROVED implementation; the loop is internal.
+
+See:
+- `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/implementation-authoring.prd.md` — source PRD with D1–D18 decisions and AC-1 through AC-14, especially D7 (budgets), D8 (post-approval mutations), D9 (TDD opt-in / dispute escape valve), D14–D18 (resolved Open Questions).
+- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/implementer.md` — the implementer agent's input/output contract (verdict shapes: `IMPLEMENTATION_COMPLETE` and `TEST_CONTRACT_DISPUTE`); D8 boundary (mutations are COMMAND-owned, not agent-owned).
+- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/code-reviewer.md` — the code-reviewer agent's input/output contract (modes `standard` and `arbitration`; rubric IDs R-S1/R-S2/R-S3/R-L1/R-L2/R-L3/R-SEM/R-X plus R-COH-* additive; jsonl audit log shape).
+- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-test.md` — closest precedent for the internal-loop pattern with budget checks + oscillation detection + per-attempt artifacts + outcome code distinction.
+- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-plan.md` — sibling writer-only command shape (Decision Gate emission, Preconditions structure, Final output / Constraints / What you do NOT do sections).
+- `docs/context/plan-template.md` (in the target project) — canonical plan shape; the command reads the Step-by-Step Tasks, Validation Commands, Files to Change, and Acceptance Criteria sections from a plan that conforms to this template.
+
+---
+
+## Decision Gate (before any action)
+
+Emit the evidence block per `docs/decision-gate.md` of the relay plugin repo. This command creates a cross-cutting artifact (the implementation diff that the Test Runner consumes); the gate is active. Consult `docs/decisions.md`, `docs/anti-patterns.md`, and `docs/context/architecture.md` in the target project — these are the same three files the implementer and code-reviewer agents consult in their Phase 0 setups when assembling their own Decision Gate references. Your gate here covers the *command invocation*; the agents' gates inside their dispatch payloads cover the *plan being implemented*.
+
+Emit the canonical six-line shape:
+
+```
+**Decision Gate**
+- Active context: {path to .context.md or "none"}
+- Activated criteria: {semicolon-separated list — typically: cross-cutting artifact creation; impact on Test Runner; third writer/reviewer pair execution; references source PRD D7+D8+D9+D11}
+- Decisions found:
+  - {decision 1, e.g. command surface writer/reviewer split (2026-04-19)}
+  - {decision 2, e.g. PRP artifact paths under PRPs/ (2026-04-19)}
+  - ...
+- Applicable anti-patterns:
+  - Writing pipeline artifacts under .claude/ (docs/anti-patterns.md:60-66)
+  - Weakening tests to make the loop turn green (D9 Layer 0 R-X enforcement)
+- Applicable architectural rules:
+  - Three-pillar Pillar 2; interactivity boundary; PRPs/ artifact paths; writer/reviewer split; graceful degradation
+- Result: PROCEED | HALT (reason)
+```
+
+If the Decision Gate cannot be emitted because one of the three sources is unreadable, fall through to P4 below for the canonical halt message; do not attempt the gate against an incomplete source set.
+
+---
+
+## Parse arguments
+
+`$ARGUMENTS` MUST be a single non-empty path-like string. Treat the argument as the plan path; resolve it as absolute, or as relative to the current working directory. If the argument is blank/whitespace, HALT with:
+
+> /relay-implement requires a plan path. Usage:
+>   /relay-implement PRPs/plans/<feature>-phase-<N>-<slug>.plan.md
+> Example:
+>   /relay-implement PRPs/plans/implementation-authoring-phase-3-relay-implement-command.plan.md
+
+If the argument is non-empty but does not resolve to an existing readable file, fall through to P1 below for the canonical file-not-readable HALT message.
+
+Record `plan_path` as the resolved absolute path. Record `target_root` as the current working directory (the repository from which the user invoked the command). Parse `<feature>` and `<N>` from the plan filename pattern `<feature>-phase-<N>-<slug>.plan.md`:
+
+- `<feature>` = basename of `<plan_path>` minus `-phase-<N>-<slug>.plan.md`.
+- `<N>` = the integer between `-phase-` and the next `-`.
+- `<slug>` = the kebab-cased remainder before `.plan.md`.
+
+If the filename does not match this pattern, HALT with:
+
+> Plan filename does not match the canonical pattern
+> `<feature>-phase-<N>-<slug>.plan.md`. The plan was not produced by
+> /relay-plan (or was hand-renamed). Either re-run /relay-plan to
+> regenerate the plan with the canonical filename, or rename the
+> plan file to match the pattern.
+
+These derived values are used to locate the source PRD (`PRPs/prds/<feature>.prd.md`), the per-attempt artifact root (`PRPs/reports/<feature>/phase-<N>/attempts/<i>/`), and the completed-plan target (`PRPs/plans/completed/<basename>.plan.md`).
+
+---
+
+## Preconditions
+
+HALT with a clear user-facing message (and do not proceed) if any of these fail. The HALTs are surfaced verbatim and the command exits without writing any code, any per-attempt artifact, or any code-review.jsonl entry.
+
+### P1 — Plan path resolves to a readable file
+
+If `plan_path` does not point at an existing readable file:
+
+> I cannot start implementation without `<plan_path>`.
+> The path did not resolve to an existing readable file.
+> Usage: /relay-implement PRPs/plans/<feature>-phase-<N>-<slug>.plan.md
+
+### P2 — Plan ends with `*Status: APPROVED*`
+
+`Read` the plan. Inspect its trailing status line (the last non-empty line of the file).
+
+- If it equals `*Status: APPROVED*` → proceed.
+- If it equals `*Status: DRAFT*`, `*Status: IMPLEMENTED*`, or any other non-APPROVED status, or has no status line:
+
+  HALT with:
+
+  > The plan at `<plan_path>` is not APPROVED (current status:
+  > `<status>`). /relay-implement only operates on APPROVED plans.
+  > Run /relay-plan-review to bring the plan to APPROVED first
+  > (or, if the plan is already IMPLEMENTED, the implementation
+  > has already been performed — manual hand-edit to flip the
+  > status back to APPROVED + move from PRPs/plans/completed/
+  > is the documented escape hatch for re-implementation).
+
+Trim trailing whitespace and newlines before comparison; the check is "the last non-empty line equals `*Status: APPROVED*`" character-for-character.
+
+### P3 — Source PRD row N status cell is `in-progress`
+
+`Read` `PRPs/prds/<feature>.prd.md`. Locate the Implementation Phases table by exact-match header line:
+
+| # | Phase | Description | Status | Parallel | Depends | PRP Plan |
+
+Locate row `<N>` (the row whose first cell, trimmed, equals the integer `<N>`). Verify the `Status` cell is exactly `in-progress` (case-sensitive). If the cell value is anything else (`pending`, `complete`, or other), HALT with the source PRD AC-11 message verbatim:
+
+> Source PRD `PRPs/prds/<feature>.prd.md` row <N> has Status cell
+> value `<actual>`, expected `in-progress`. /relay-implement
+> requires the plan-writer's Phase 5 back-fill to have run before
+> implementation begins. Either:
+>   (a) re-run /relay-plan against the source PRD (back-fills row N
+>       to in-progress and populates the PRP Plan cell), then re-run
+>       /relay-implement; OR
+>   (b) hand-edit row <N>'s Status cell to `in-progress` if the
+>       back-fill was bypassed for a documented reason.
+> No code has been changed and no review has been run.
+
+The check is for `in-progress` specifically. If the cell shows `complete`, the implementation has already been performed — refuse rather than re-execute (D8 mutations would corrupt the per-phase state machine).
+
+### P4 — Decision Gate sources readable
+
+All three files must exist and be readable at `target_root`:
+
+- `docs/decisions.md`
+- `docs/anti-patterns.md`
+- `docs/context/architecture.md`
+
+If any is missing, HALT with the source PRD AC-14 message verbatim:
+
+> I cannot emit the Decision Gate evidence block without reading
+> `<missing-file>`. Please ensure the file exists at
+> `<target_root>/<relative-path>` and re-run /relay-implement
+> (or /relay-code-review). No code has been changed and no review
+> has been run.
+
+### P5 — Base-commit derivable
+
+Detect the base branch in priority order:
+
+1. If `$ARGUMENTS` contained `--base <branch>`, extract that value.
+2. Otherwise, run `git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@'`.
+3. Fallback: `git remote show origin 2>/dev/null | grep 'HEAD branch' | awk '{print $NF}'`.
+4. Last resort: `main`.
+
+Record `base_branch`. Then compute `base_commit = git merge-base HEAD <base_branch>`. If `git merge-base` exits non-zero (no common ancestor — typically a detached HEAD or unrelated histories), HALT with:
+
+> Cannot derive base-commit: `git merge-base HEAD <base_branch>`
+> exited non-zero. /relay-implement needs a base-commit against
+> which to compute per-attempt diffs. Set up a worktree against
+> the base branch (`/relay-worktree <feature>` when shipped) or
+> run /relay-implement from a branch with a clean ancestry to
+> `<base_branch>`. No code has been changed.
+
+Record `base_commit` for use in Phase A diff capture.
+
+---
+
+## Phase A — Internal writer↔reviewer loop
+
+This phase holds the entire loop logic. The implementer and code-reviewer agents run once per attempt via `Task`; they do not loop themselves. The loop lives here.
+
+### Phase A.0 — Initialise loop state
+
+Set the budget caps and counters:
+
+- `max_implement_retries = 3` (4 attempts total including the initial)
+- `max_implement_minutes = 45` (wall-clock; 0 forbidden per source PRD D7)
+- `max_disputes_per_session = 2` (TEST_CONTRACT_DISPUTE cap; consumes from retries per D9 Layer 1)
+- `attempt = 1`
+- `disputes_used = 0`
+- `deadline_ts = now() + max_implement_minutes minutes`
+- `files_changed_by_attempt: dict<int, set<str>> = {}` — populated from each attempt's diff.patch
+- `last_reviewer_feedback: list<{rubric_id, reason}> = []` — carried into the next attempt's implementer prompt
+
+Soft-fail concurrency diagnostic per source PRD D18: `Glob` `PRPs/reports/<feature>/phase-<N>/attempts/*/diff.patch` for any in-flight attempt (heuristic: a `diff.patch` whose corresponding `<basename>.code-review.jsonl` line shows neither APPROVED nor a final HALT). If found, emit warning `"concurrent /relay-implement detected for <feature> phase <N>; orchestrator must serialize"` and **continue** (do not block). Robust file-lock semantics deferred until `/relay-execute` is designed.
+
+### Phase A.1 — Per-attempt pre-flight checks (in order)
+
+Run before each implementer/code-reviewer dispatch. The checks are ordered: time budget first, then retry budget, then oscillation, then dispute cap. First-to-trip wins.
+
+1. **Time budget check.** If `now() >= deadline_ts`:
+   - Write `PRPs/reports/<feature>/phase-<N>/halt.json` with `{outcome: "FAILED_TIME_BUDGET_EXCEEDED", attempts_completed: <attempt-1>, deadline_ts, elapsed_minutes, remaining_retries: <max_implement_retries + 1 - attempt>, attempt_history: [...], dispute_history: [...], actionable_recommendation: "..."}`.
+   - HALT with verbatim message:
+     > FAILED_TIME_BUDGET_EXCEEDED. /relay-implement aborted after
+     > <elapsed_minutes> wall-clock minutes (max_implement_minutes=45)
+     > with <max_implement_retries + 1 - attempt> retries unused.
+     > Per-attempt diffs preserved at
+     > PRPs/reports/<feature>/phase-<N>/attempts/. Halt state at
+     > PRPs/reports/<feature>/phase-<N>/halt.json.
+
+2. **Retry budget check.** If `attempt > max_implement_retries + 1` (i.e., we have used all 4 attempts):
+   - Write `halt.json` with `{outcome: "FAILED_AFTER_N_RETRIES", attempts_completed: max_implement_retries + 1, last_reviewer_verdict, attempt_history, dispute_history, actionable_recommendation}`.
+   - HALT with verbatim message:
+     > FAILED_AFTER_N_RETRIES. /relay-implement aborted after 4
+     > attempts (max_implement_retries=3). Last reviewer verdict:
+     > <last_reviewer_verdict>. Per-attempt diffs preserved at
+     > PRPs/reports/<feature>/phase-<N>/attempts/. Halt state at
+     > PRPs/reports/<feature>/phase-<N>/halt.json.
+
+3. **Oscillation check** (only when `attempt >= 3`). For each prior attempt `k` in `[1, attempt-1]`:
+   - Compute `intersection_k = files_changed_by_attempt[k] ∩ files_changed_by_attempt[attempt-1]`.
+   - If `intersection_k` is non-empty AND, for at least one file in `intersection_k`, the diff in attempt `attempt-1` semantically reverses the diff in attempt `k` (heuristic: same file modified to a state byte-equal to the file's content at attempt `k-1` or earlier base):
+     - Write `halt.json` with `{outcome: "FAILED_OSCILLATION_DETECTED", oscillation_pair: [k, attempt-1], reverting_files: [...], attempt_history, actionable_recommendation}`.
+     - HALT with verbatim message:
+       > FAILED_OSCILLATION_DETECTED. Attempt <attempt-1> reverts
+       > files changed in attempt <k>: <reverting_files>. The loop
+       > is stuck oscillating. Per-attempt diffs preserved at
+       > PRPs/reports/<feature>/phase-<N>/attempts/. Halt state at
+       > PRPs/reports/<feature>/phase-<N>/halt.json. Manual
+       > recovery: inspect the diffs and either resolve the
+       > underlying tension by hand or re-run /relay-plan against
+       > the source PRD to clarify the contract.
+
+4. **Dispute cap check** (only at the start of an arbitration step — not before the implementer dispatch). If `disputes_used >= max_disputes_per_session`:
+   - Write `halt.json` with `{outcome: "FAILED_DISPUTE_CAP_EXCEEDED", disputes_used, max_disputes_per_session, dispute_history, actionable_recommendation}`.
+   - HALT with verbatim message:
+     > FAILED_DISPUTE_CAP_EXCEEDED. /relay-implement aborted after
+     > <disputes_used> TEST_CONTRACT_DISPUTE attempts
+     > (max_disputes_per_session=2). The implementer cannot continue
+     > to dispute; either the disputed tests are correct (the
+     > implementer must produce code addressing them) or the PRD
+     > needs revision. Dispute history preserved at
+     > PRPs/reports/<feature>/phase-<N>/halt.json.
+
+If all four checks pass, proceed to Phase A.2.
+
+### Phase A.2 — Implementer dispatch + diff capture
+
+Invoke the implementer agent via `Task`:
+
+```
+Task(subagent_type="implementer",
+     prompt={
+       plan_path: <plan_path>,
+       target_root: <target_root>,
+       attempt: <attempt>,
+       prior_feedback: <last_reviewer_feedback when attempt > 1; null otherwise>,
+       base_commit: <base_commit>,
+     })
+```
+
+The implementer reads the plan, executes its Step-by-Step Tasks via `Edit`/`Write` directly in the working tree, runs the plan's Validation Commands Levels 1–3 after all tasks complete (D6 — aggregate validation), and returns one of two verdicts:
+
+- **`IMPLEMENTATION_COMPLETE`** with `{files_changed: [...], validation: {level_1: PASS|FAIL, level_2: PASS|FAIL, level_3: PASS|FAIL}, validation_outputs: [...]}`.
+- **`TEST_CONTRACT_DISPUTE`** with `{disputed_tests: [...], prd_refs: [...], claim: "...", proposed_resolution: "..."}`.
+
+After every attempt regardless of verdict:
+
+1. Run `git add -A` (the implementer uses `Edit`/`Write` and may leave files unstaged; the diff against `<base_commit>` would otherwise miss those files).
+2. Run `git diff <base_commit>` and write the result to `PRPs/reports/<feature>/phase-<N>/attempts/<attempt>/diff.patch` (creating parent directories as needed).
+3. Parse the diff to extract `files_changed_by_attempt[attempt] = set(<paths>)`.
+4. Write `PRPs/reports/<feature>/phase-<N>/attempts/<attempt>/record.json` with `{attempt: <attempt>, verdict: "<IMPLEMENTATION_COMPLETE | TEST_CONTRACT_DISPUTE>", files_changed: [...], validation?: {...}, dispute_evidence?: {...}, base_commit: <base_commit>}`.
+
+Branch on the verdict:
+
+- `IMPLEMENTATION_COMPLETE` → proceed to Phase A.3 (code-reviewer dispatch in standard mode).
+- `TEST_CONTRACT_DISPUTE` → increment `disputes_used`, re-run pre-flight check 4 (dispute cap) once before proceeding, then proceed to Phase A.3 (code-reviewer dispatch in arbitration mode).
+
+The implementer is single-attempt; the loop, diff.patch capture, and D8 mutations are all this command's responsibility.
+
+### Phase A.3 — Code-reviewer dispatch + verdict branching
+
+#### Standard mode (after IMPLEMENTATION_COMPLETE)
+
+Invoke the code-reviewer agent via `Task`:
+
+```
+Task(subagent_type="code-reviewer",
+     prompt={
+       plan_path: <plan_path>,
+       target_root: <target_root>,
+       mode: "standard",
+       attempt: <attempt>,
+       diff_target: "PRPs/reports/<feature>/phase-<N>/attempts/<attempt>/diff.patch",
+     })
+```
+
+The code-reviewer runs the 8-item rubric (R-S1, R-S2, R-S3, R-L1, R-L2, R-L3, R-SEM, R-X — plus R-COH-* additive when the reviewer-coherence-layer is active) against the diff. It appends one verdict line to `PRPs/plans/<basename>.code-review.jsonl` itself per its protocol (D11 — code-reviewer is the writer of its own audit log; the command does not duplicate that write). All 8 rubric items are recorded in the verdict line; no short-circuit.
+
+Read the just-appended jsonl line. Parse `verdict`:
+
+- **APPROVED** → exit Phase A loop into Phase A.4 (D8 mutations).
+- **CHANGES_REQUESTED** → carry the rubric defects (`reason` fields from each `passed: false` item) into `last_reviewer_feedback`. Increment `attempt`. Restart pre-flight checks (Phase A.1).
+
+#### Arbitration mode (after TEST_CONTRACT_DISPUTE)
+
+Invoke the code-reviewer agent via `Task`:
+
+```
+Task(subagent_type="code-reviewer",
+     prompt={
+       plan_path: <plan_path>,
+       target_root: <target_root>,
+       mode: "arbitration",
+       attempt: <attempt>,
+       dispute_payload: <implementer's structured TEST_CONTRACT_DISPUTE evidence>,
+       diff_target: "PRPs/reports/<feature>/phase-<N>/attempts/<attempt>/diff.patch",
+     })
+```
+
+The code-reviewer arbitrates the dispute. It appends one verdict line to `code-review.jsonl` with `mode: "arbitration"` and the full `dispute_evidence` block. Parse `verdict`:
+
+- **`DISPUTE_REJECTED`** → next attempt mandates code (the implementer cannot dispute the same tests again). Carry `last_reviewer_feedback = [{rubric_id: "arbitration", reason: "dispute rejected: <reason>; produce code addressing the disputed tests"}]`. Increment `attempt`. Restart pre-flight checks.
+
+- **`DISPUTE_UPHELD_TEST_WRONG`** → the disputed tests are wrong. B7/B8 bounce-back is deferred per source PRD D14 (placeholder protocol reserved). Write `halt.json` with `{outcome: "DISPUTE_UPHELD_TEST_WRONG", dispute_payload, arbitration_verdict, attempt_history, dispute_history, actionable_recommendation: "Surface dispute to user; user decides whether to update tests or re-author the PRD. When B7/B8 ship, re-invoke via Task(subagent_type='tdd-writer', prompt={attempt_history, dispute_evidence})."}`. HALT with verbatim message:
+  > DISPUTE_UPHELD_TEST_WRONG. The code-reviewer agreed the
+  > disputed tests contradict the PRD. B7/B8 bounce-back is
+  > deferred in MVP per source PRD D14 (placeholder protocol
+  > reserved). Manual recovery: review the dispute evidence at
+  > PRPs/reports/<feature>/phase-<N>/halt.json; either update the
+  > tests by hand or surface the dispute to the user for decision.
+  > When TDD Writer (B7) ships, the Task dispatch contract will
+  > be: Task(subagent_type='tdd-writer',
+  > prompt={attempt_history, dispute_evidence}).
+
+- **`DISPUTE_UPHELD_PRD_AMBIGUOUS`** → the PRD itself is ambiguous; tests and proposed code both have legitimate readings. Write `halt.json` with the same shape, `actionable_recommendation: "Hand-edit the PRD to disambiguate; flip its status back to DRAFT; re-run /relay-prd."`. HALT with verbatim message:
+  > DISPUTE_UPHELD_PRD_AMBIGUOUS. The code-reviewer agreed the
+  > PRD itself is ambiguous on the disputed point. Manual
+  > recovery: hand-edit `PRPs/prds/<feature>.prd.md` per the
+  > dispute_evidence in halt.json; flip the PRD status back to
+  > DRAFT (and remove the *Approved:* line); re-run /relay-prd
+  > to re-author against the disambiguation.
+
+In all `DISPUTE_UPHELD_*` cases, the loop terminates structurally; the orchestrator (or developer) decides the recovery path.
+
+### Phase A.4 — D8 post-approval mutations (best-effort atomic with rollback note)
+
+Triggered exactly once when Phase A.3 standard-mode returns APPROVED. Performed in this order; each step records its success/failure for the rollback note:
+
+#### Mutation a — Plan trailing-block flip
+
+`Edit` `<plan_path>`:
+- `old_string`: `*Status: APPROVED*`
+- `new_string`: `*Implemented: <YYYY-MM-DD>*\n*Status: IMPLEMENTED*` (where `<YYYY-MM-DD>` is today's date in UTC)
+- `replace_all`: `false`
+
+Record `mutation_a_success: true|false`. On `false`, capture the error message.
+
+#### Mutation b — Plan move to PRPs/plans/completed/
+
+`Bash`: `mv <plan_path> PRPs/plans/completed/<basename>.plan.md`
+
+The destination directory `PRPs/plans/completed/` is expected to exist (already populated with prior completed plans across `plan-authoring`, `implementation-authoring`, and `reviewer-coherence-layer` features). If it does not exist, create it first via `mkdir -p PRPs/plans/completed/` then perform the move.
+
+Record `mutation_b_success: true|false`. On `false`, capture the error message and the mid-state plan path.
+
+#### Mutation c — Source PRD row N status flip
+
+`Edit` `PRPs/prds/<feature>.prd.md`:
+- `old_string`: the verbatim full row N line copied from the source PRD (including all leading and trailing pipes and whitespace; the full line guarantees a unique match).
+- `new_string`: the same row line with `Status` cell `in-progress` → `complete`. The `PRP Plan` cell is left unchanged (plan-writer already populated it with the relative path; that path now resolves under `PRPs/plans/completed/` after Mutation b, but the cell is not updated to reflect the move — the row's PRP Plan cell carries the *original* plan name as a stable reference).
+- `replace_all`: `false`
+
+Record `mutation_c_success: true|false`. On `false`, capture the error message.
+
+#### Atomicity discipline
+
+If all three mutations succeed → success path; emit the final summary (Final output surface below) and exit.
+
+If any mutation fails: write `PRPs/reports/<feature>/phase-<N>/halt.json` with:
+
+```json
+{
+  "outcome": "PARTIAL_D8_FAILURE",
+  "mutations_attempted": ["a", "b", "c"],
+  "mutations_succeeded": ["a", "b" or just "a" or empty],
+  "mutation_failed": "a" | "b" | "c",
+  "error": "<the failing mutation's error message>",
+  "manual_recovery_steps": [
+    "<step 1 — e.g., re-run Edit on plan trailing block>",
+    "<step 2 — e.g., move plan to completed/ by hand>",
+    "<step 3 — e.g., flip source PRD row N Status cell to complete by hand>"
+  ],
+  "attempt_history": [...],
+  "dispute_history": [...]
+}
+```
+
+Per source PRD D8: best-effort atomic. The command does **not** roll back successful mutations; recovery is documented, not automatic. Emit a structured rollback note message naming the next manual step:
+
+> PARTIAL_D8_FAILURE. Mutation <which> failed: <error>. Mutations
+> succeeded: <list>. Manual recovery steps recorded at
+> PRPs/reports/<feature>/phase-<N>/halt.json. The implementation
+> diff is preserved in the working tree (or in
+> PRPs/plans/completed/ if Mutation b succeeded). The Test Runner
+> can still be run against the worktree; the per-phase state
+> machine in the source PRD will be inconsistent until the
+> manual recovery steps are taken.
+
+---
+
+## Final output surface
+
+On the success path (Phase A.3 standard-mode APPROVED + all three D8 mutations succeeded), emit verbatim per source PRD AC-1:
+
+> ✅ Plan **IMPLEMENTED** at `PRPs/plans/completed/<basename>.plan.md`.
+> Source PRD `PRPs/prds/<feature>.prd.md` row <N> marked `complete`.
+> Implementation diff (final attempt) at
+> `PRPs/reports/<feature>/phase-<N>/attempts/<attempt>/diff.patch`.
+> Code-review verdict at
+> `PRPs/plans/<basename>.code-review.jsonl` (line <line_index>).
+> Worktree ready for `/relay-test PRPs/plans/completed/<basename>.plan.md`.
+
+On HALT (one of `FAILED_AFTER_N_RETRIES`, `FAILED_TIME_BUDGET_EXCEEDED`, `FAILED_OSCILLATION_DETECTED`, `FAILED_DISPUTE_CAP_EXCEEDED`, `DISPUTE_UPHELD_TEST_WRONG`, `DISPUTE_UPHELD_PRD_AMBIGUOUS`, `PARTIAL_D8_FAILURE`, or any precondition HALT), the user-facing message is the verbatim halt message defined in the relevant Phase A.* sub-section above, and the command exits without performing further mutations.
+
+In all cases, the per-attempt artifacts at `PRPs/reports/<feature>/phase-<N>/attempts/<i>/` are preserved on disk for post-mortem audit.
+
+---
+
+## Constraints (hard rules)
+
+1. **Never write anything under `.claude/`.** Per-attempt artifacts go to `PRPs/reports/<feature>/phase-<N>/attempts/<i>/` (`diff.patch`, `record.json`); halt state goes to `PRPs/reports/<feature>/phase-<N>/halt.json`; the plan moves to `PRPs/plans/completed/`; the source PRD is back-filled in place at `PRPs/prds/<feature>.prd.md`. Nothing else goes on disk from this command. The implementer and code-reviewer agents enforce the same rule at the agent level via their own Hard constraints; this command is the first guard.
+
+2. **Never bundle writer + reviewer.** The internal Phase A loop is NOT bundling — it has the same shape as `/relay-test`'s per-attempt loop (each agent runs once per attempt; the command holds the loop). The reviewer surface for hand-invoked review is `/relay-code-review` (Phase 4 of source PRD), a separate command. The writer/reviewer split decision (2026-04-19) still applies.
+
+3. **Never adopt the reviewer role beyond `Task` dispatch.** The command does not run the rubric inline. The `code-reviewer` agent is the sole authority on rubric pass/fail; this command parses the agent's jsonl verdict line and branches.
+
+4. **Never prompt the user.** Past the interactivity boundary (`docs/context/architecture.md` §Interactivity boundary). HALTs are surfaced verbatim and the command exits.
+
+5. **Never overwrite an APPROVED plan.** P2 catches this at command entry. Phase A.4 Mutation a only operates on `*Status: APPROVED*` (not `*Status: IMPLEMENTED*` or any other state); subsequent re-invocations against an IMPLEMENTED plan fail at P2.
+
+6. **Never bypass D8.** All three mutations (a, b, c) are attempted on APPROVED rubric. On partial failure, the command writes `halt.json` and emits a structured rollback note; it does **not** silently skip a mutation or claim success.
+
+7. **Never skip the Decision Gate evidence block.** The command-level gate (above) is mandatory. The implementer and code-reviewer agents emit their own gates inside their dispatch payloads.
+
+8. **Never re-run the writer↔reviewer pair across `/relay-implement` invocations.** That is `/relay-execute`'s call. A single `/relay-implement` invocation produces zero or one APPROVED implementation; the loop is internal to one invocation. CHANGES_REQUESTED at the end of the budget terminates with `FAILED_AFTER_N_RETRIES`; the orchestrator (or developer) decides whether to re-run.
+
+9. **Never modify test files without an upheld dispute.** This is the universal R-X rule (D9 Layer 0). The code-reviewer enforces R-X; this command does not bypass. If the implementer modifies tests without a `TEST_CONTRACT_DISPUTE` verdict, R-X fails and the loop continues to the next attempt with the R-X reason in `last_reviewer_feedback`.
+
+10. **Never invoke `/relay-code-review` from this command.** The standalone reviewer surface is for hand-invoked review of an existing implementation, not for the internal loop. The internal dispatch goes directly to the `code-reviewer` agent via `Task`.
+
+---
+
+## What you do NOT do
+
+- **Reviewing the plan** — the `code-reviewer` agent is dispatched via `Task` for that purpose. The standalone `/relay-code-review` command (Phase 4 of source PRD) is the hand-invoked surface.
+- **Implementing additional phases beyond row N** — one plan per invocation per source PRD D5. Multi-phase orchestration is `/relay-execute`'s job.
+- **Bundling writer + reviewer into a single agent** — bound by the 2026-04-19 command-surface decision; the implementer and code-reviewer are separate agents with separate roles.
+- **Reopening an IMPLEMENTED plan via tooling** — out of scope. Manual hand-edit (flip `*Status: IMPLEMENTED*` back to `*Status: APPROVED*` + move from `PRPs/plans/completed/` back to `PRPs/plans/`) is the documented escape hatch.
+- **Targeting a specific phase via `--phase <N>` flag** — Could-item per source PRD MoSCoW; deferred. The command parses `<N>` deterministically from the plan filename.
+- **Cross-PRD planning** — the command operates on exactly one plan per invocation. Multi-PRD coordination is `/relay-execute`'s job.
+- **`--dry-run` flag** — Could-item per source PRD MoSCoW; deferred. To inspect what `/relay-implement` would do without performing mutations, the developer can manually run the implementer agent via `Task` and inspect its return verdict before invoking `/relay-implement` for real.
+- **`--from-attempt <N>` resume flag** — Could-item per source PRD MoSCoW; deferred. To resume after a HALT, the developer must re-run `/relay-implement`; the command does not currently support partial-state recovery beyond the per-attempt diffs preserved on disk.
+- **Re-grounding via research subagents** — the implementer has no `Task` tool per source PRD D11; the plan is the source of truth. The plan-writer's grounding (recorded in the plan's "Patterns to Mirror" and "Mandatory Reading" sections) is the only research input the implementer consumes.
+- **Persisting research blobs** — Could-item; not MVP per source PRD's "What We're NOT Building".
