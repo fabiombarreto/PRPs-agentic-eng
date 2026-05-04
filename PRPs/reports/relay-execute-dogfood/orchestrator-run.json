@@ -1,0 +1,20 @@
+{
+  "feature": "relay-execute-dogfood",
+  "prd_path": "PRPs/prds/relay-execute-dogfood.prd.md",
+  "started_at": "2026-05-01T00:00:00Z",
+  "ended_at": "2026-05-01T00:30:00Z",
+  "max_plan_review_retries": 2,
+  "max_orchestrator_minutes": 240,
+  "phases": [
+    {"phase": 1, "stage": "plan", "outcome": "APPROVED", "plan_path": "PRPs/plans/relay-execute-dogfood-phase-1-create-dogfood-file-1md.plan.md"},
+    {"phase": 1, "stage": "implement", "outcome": "APPROVED"},
+    {"phase": 1, "stage": "test", "outcome": "skipped_command_absent"},
+    {"phase": 1, "status": "complete", "plan_path": "PRPs/plans/completed/relay-execute-dogfood-phase-1-create-dogfood-file-1md.plan.md", "timestamp": "2026-05-01T00:15:00Z"},
+    {"phase": 2, "stage": "plan", "outcome": "APPROVED", "plan_path": "PRPs/plans/relay-execute-dogfood-phase-2-create-dogfood-file-2md.plan.md"},
+    {"phase": 2, "stage": "implement", "outcome": "APPROVED"},
+    {"phase": 2, "stage": "test", "outcome": "skipped_command_absent"},
+    {"phase": 2, "status": "complete", "plan_path": "PRPs/plans/completed/relay-execute-dogfood-phase-2-create-dogfood-file-2md.plan.md", "timestamp": "2026-05-01T00:30:00Z"}
+  ],
+  "outcome": "ALL_PHASES_COMPLETE",
+  "phases_completed": [1, 2]
+}

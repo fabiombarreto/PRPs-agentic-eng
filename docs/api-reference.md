@@ -12,11 +12,12 @@ commands, agents, and hooks the plugin publishes into Claude Code.
 Modes for `context-builder`: `*init`, `*update`, `*validate`, `*domain`,
 `*libs`, `*gate` — see its `SKILL.md` for details.
 
-## Commands (planned — not yet implemented)
+## Commands
 
-12 commands organized by role, plus 1 placeholder for Pillar 3. None are
-implemented yet. See `docs/decisions.md` for the decision record and
-rationale; the layout is stable enough to code against.
+12 commands organized by role, plus 1 placeholder for Pillar 3. All core
+pipeline commands are now implemented; `/relay-execute` ✅ orchestrator
+shipped in v0.9.0 completing project Phase 3. See `docs/decisions.md` for
+the decision record and rationale.
 
 ### Happy path
 
@@ -61,7 +62,7 @@ cycle.
 
 | Command | Input | Output |
 |---------|-------|--------|
-| `/relay-execute <prd-path>` | approved PRD | opened PR. Composes `/relay-plan → /relay-plan-review → /relay-worktree → /relay-tdd → /relay-tdd-review → /relay-implement → /relay-code-review → /relay-test → /relay-test-review → /relay-pr`. On any `CHANGES_REQUESTED`, loops back to the corresponding writer with feedback until the stage's retry budget is exhausted |
+| `/relay-execute <prd-path>` ✅ **implemented** | approved PRD | opened PR (or a HALT code on unrecoverable failure). Serial orchestration via source PRD's Implementation Phases table as state machine (D6 — idempotent on re-invocation; re-reads table on every run; no separate state file). Inline command-protocol adoption via `Read` (D7 — LLM reads each downstream command file and executes its protocol in the same conversation context; zero logic duplication; no sub-agents). Two new orchestration-layer budgets: `max_plan_review_retries` and `max_orchestrator_minutes` (D3 — each downstream command owns its internal loop budget; orchestrator adds session-level wall-clock; first-to-expire wins). Seven distinct HALT outcome codes: `FAILED_PLAN_REVIEW_BUDGET_EXCEEDED`, `FAILED_ORCHESTRATOR_TIME_BUDGET_EXCEEDED`, `FAILED_TEST_REVIEW_REJECTED`, plus four propagated from `/relay-implement` and one from `/relay-test`. Audit artifact at `PRPs/reports/<feature>/orchestrator-run.json`. TDD routing (B7/B8) is dead-code in MVP — D5 routing decision reserved; B7/B8 are unshipped. `/relay-pr` integration surfaces a "ready for PR" message; Pillar 3 `/relay-approve` is a separate future command. Composes: `/relay-plan → /relay-plan-review → /relay-worktree → /relay-tdd → /relay-tdd-review → /relay-implement → /relay-code-review → /relay-test → /relay-test-review → /relay-pr`. |
 
 #### Pillar 3 (approval cycle — exact naming TBD)
 
@@ -122,10 +123,9 @@ The PRD Authoring pair (PRD Writer + PRD Reviewer + the two research
 subagents) shipped in v0.6.0 (Phase 3 of the rollout). The Plan
 Authoring pair (Plan Writer + Plan Reviewer) shipped in v0.7.0. The
 Implementation Authoring pair (Implementer + Code Reviewer +
-`/relay-implement` + `/relay-code-review`) shipped in v0.8.0. With
-implementation-authoring complete, the orchestrator (`/relay-execute`)
-becomes the next Phase 3 piece pending; it composes the four
-shipped writer/reviewer pairs through the canonical pipeline order.
+`/relay-implement` + `/relay-code-review`) shipped in v0.8.0. The
+`/relay-execute` orchestrator shipped in v0.9.0, completing project Phase 3.
+Remaining pending pieces are the B7/B8 TDD pair and `/relay-pr` (Pillar 3).
 
 ## Hooks (planned)
 

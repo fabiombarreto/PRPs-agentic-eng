@@ -1,0 +1,15 @@
+{
+  "outcome": "FAILED_PLAN_REVIEW_BUDGET_EXCEEDED",
+  "phase_N": 1,
+  "failing_rubric_items": [
+    "R4: VALIDATE line missing on Task 1 — plan-template.md mandates a non-empty VALIDATE: command on every Step-by-Step Task; the phase details note 'VALIDATE commands are intentionally omitted from all tasks' directed the plan-writer to omit VALIDATE lines on all 3 tasks",
+    "R4: VALIDATE line missing on Task 2 — same cause as Task 1",
+    "R4: VALIDATE line missing on Task 3 — same cause as Task 1"
+  ],
+  "plan_review_attempts": 3,
+  "orchestrator_run_log": [
+    {"phase": 1, "stage": "plan", "outcome": "CHANGES_REQUESTED", "attempt": 1, "rubric_failures": ["R4"]},
+    {"phase": 1, "stage": "plan", "outcome": "CHANGES_REQUESTED", "attempt": 2, "rubric_failures": ["R4"], "prior_feedback": "R4: VALIDATE line missing on Task 1; R4: VALIDATE line missing on Task 2; R4: VALIDATE line missing on Task 3"},
+    {"phase": 1, "stage": "plan", "outcome": "CHANGES_REQUESTED", "attempt": 3, "rubric_failures": ["R4"], "prior_feedback": "R4: VALIDATE line missing on Task 1; R4: VALIDATE line missing on Task 2; R4: VALIDATE line missing on Task 3 — structural defect in phase details cannot be resolved without removing the 'VALIDATE commands are intentionally omitted' note"}
+  ]
+}

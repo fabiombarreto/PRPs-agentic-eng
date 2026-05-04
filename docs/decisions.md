@@ -391,6 +391,33 @@ This supersedes the prior framing in `documentation/AGENTS.md` §7.1 ("the doc s
 
 ---
 
+## [2026-05-01] Dispatch model: inline command-protocol adoption via Read (D7)
+
+**Context:** The `/relay-execute` orchestrator needs to sequence five downstream command protocols (`/relay-plan`, `/relay-plan-review`, `/relay-implement`, `/relay-code-review`, `/relay-test`) without duplicating their logic. Two approaches were considered: (a) sub-agent replication — copy each command's protocol into a dedicated sub-agent; (b) inline `Read`-based adoption — the LLM reads each command file and executes its protocol in the same conversation context.
+**Decision:** Inline command-protocol adoption via `Read`. The orchestrator reads each downstream command file at runtime and executes the protocol it describes within the same LLM conversation context. No sub-agents are spawned for the orchestration layer itself; each downstream command's own internal agents (e.g., `implementer`, `code-reviewer`) are dispatched by their commands as usual.
+**Reason:** (a) Sub-agent replication forks the protocol logic — any change to `/relay-implement`'s internal loop would require a matching update to a replication sub-agent, creating a maintenance liability. (b) The manual-execution pattern relay's developer runs today (reading a command file then following it) IS this model formalized as an autonomous loop. (c) Zero new agents, zero new logic — the orchestrator is a thin sequencer that delegates all heavy lifting to the commands it composes.
+**Areas affected:** `/relay-execute` command, five referenced downstream command files, future orchestrator evolution when new pipeline stages are added.
+
+---
+
+## [2026-05-01] State machine: source PRD's Implementation Phases table IS the state machine (D6)
+
+**Context:** The `/relay-execute` orchestrator needs a phase-state representation that enables idempotent re-entry without a separate state file. When re-invoked mid-pipeline (e.g., after a budget-exceeded halt), the orchestrator must determine which phases are complete and which remain pending without ambiguity.
+**Decision:** The source PRD's Implementation Phases table IS the canonical state machine for `/relay-execute`. Each row's `Status` cell (`pending` / `in-progress` / `complete`) is the authoritative phase-state representation. On every invocation, the orchestrator re-reads the table from the PRD file to determine the current state. No separate state file (e.g., `orchestrator-state.json`) is maintained.
+**Reason:** The PRD table is already the canonical phase-state representation per plan-writer's back-fill discipline (plan-writer sets row N `Status` to `in-progress` on plan generation; `/relay-implement` flips it to `complete` on D8 post-approval). Idempotency follows naturally from re-reading the table on each invocation — the orchestrator skips rows with `Status: complete` and resumes from the first `pending` or `in-progress` row. Trade-off vs Temporal-style event-sourced durable execution is acknowledged: the PRD-table model is lightweight and appropriate for relay's single-developer scale; a durable execution engine would be over-engineering for the current use case.
+**Areas affected:** `/relay-execute` command, plan-writer back-fill discipline (Status cell transitions), future `/relay-execute` re-invocations (idempotency guarantee), `docs/context/architecture.md` §"Orchestrator state machine" sub-section.
+
+---
+
+## [2026-05-01] Per-stage retry budget composition: each downstream command owns its internal loop budget; orchestrator adds two session-level budgets (D3)
+
+**Context:** The `/relay-execute` orchestrator composes commands each with their own internal loop budget (`/relay-implement`: `max_implement_retries=3` + `max_implement_minutes=45`; `/relay-test`: `max_test_retries=3` + `max_test_minutes=30`). The orchestrator needs to add session-level budgets without violating the per-stage budget contracts — overly long orchestrator runs must be terminable without requiring changes to per-stage logic.
+**Decision:** Each downstream command owns its internal loop budget exclusively; the orchestrator does not override or aggregate these. The orchestrator adds exactly two new budgets at the orchestration layer: `max_plan_review_retries` (caps the `/relay-plan` → `/relay-plan-review` loop when the plan reviewer returns `CHANGES_REQUESTED`) and `max_orchestrator_minutes` (wall-clock budget for the entire orchestration session; first-to-expire wins). Both values must be non-zero; `0` is forbidden. Distinct HALT outcome codes (`FAILED_PLAN_REVIEW_BUDGET_EXCEEDED`, `FAILED_ORCHESTRATOR_TIME_BUDGET_EXCEEDED`) make the failing budget layer unambiguous in the audit artifact.
+**Reason:** Per-stage budgets are authoritative within their stage — the orchestrator has no basis to override them without knowing each stage's internal retry semantics. The orchestrator budget is a session-level wall-clock that prevents runaway multi-hour pipeline runs independently of any single stage's behavior. Distinct outcome codes make post-hoc debugging unambiguous: a developer reading `orchestrator-run.json` can immediately identify whether the halt was caused by a plan-review loop or a wall-clock overrun.
+**Areas affected:** `/relay-execute` command, per-stage HALT codes (propagated from `/relay-implement` and `/relay-test`), `orchestrator-run.json` schema, future orchestrator evolution.
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision

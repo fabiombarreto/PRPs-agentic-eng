@@ -182,12 +182,12 @@
 
       <h2 id="orchestrator">Orchestrator</h2>
 
-      <h3 id="relay-execute"><code>/relay-execute &lt;prd-path&gt;</code></h3>
+      <h3 id="relay-execute"><code>/relay-execute &lt;prd-path&gt;</code> <span class="badge badge--done">implemented</span></h3>
       <div class="kv">
         <dt>Input</dt>
         <dd>An approved PRD.</dd>
         <dt>Output</dt>
-        <dd>Opened PR, or a clean abort with diagnostic.</dd>
+        <dd>Opened PR, or a HALT code with diagnostic. Audit artifact at <code>PRPs/reports/&lt;feature&gt;/orchestrator-run.json</code>.</dd>
         <dt>Composes</dt>
         <dd>
           <code>/relay-plan</code> → <code>/relay-plan-review</code> → <code>/relay-worktree</code> → <code>/relay-tdd</code> → <code>/relay-tdd-review</code> → <code>/relay-implement</code> → <code>/relay-code-review</code> → <code>/relay-test</code> → <code>/relay-test-review</code> → <code>/relay-pr</code>.
@@ -195,7 +195,14 @@
         <dt>Loop behavior</dt>
         <dd>Each writer/reviewer pair loops on <code>CHANGES_REQUESTED</code> until approved or the stage's retry budget is exhausted. Any unrecoverable abort is surfaced with the underlying command's exit reason.</dd>
         <dt>Notes</dt>
-        <dd>Name deliberately distinct from <code>/relay-implement</code> (which is the code-writing stage) to avoid collision.</dd>
+        <dd>
+          <strong>Dispatch model (D7):</strong> inline <code>Read</code>-based command-protocol adoption — the LLM reads each downstream command file and executes its protocol in the same conversation context. No sub-agents spawned at the orchestration layer; zero logic duplication.<br><br>
+          <strong>State machine (D6):</strong> the source PRD's Implementation Phases table is the canonical state machine. Row <code>Status</code> cells (<code>pending</code> / <code>in-progress</code> / <code>complete</code>) are the authoritative phase-state. Re-invocation after a halt is idempotent — the table is re-read on every invocation; complete rows are skipped automatically.<br><br>
+          <strong>Orchestration budgets (D3):</strong> two session-level budgets: <code>max_plan_review_retries</code> (caps the plan→plan-review loop on repeated <code>CHANGES_REQUESTED</code>) and <code>max_orchestrator_minutes</code> (wall-clock; first-to-expire wins). Each downstream command retains its own internal loop budget unchanged.<br><br>
+          <strong>HALT outcome codes (7):</strong> <code>FAILED_PLAN_REVIEW_BUDGET_EXCEEDED</code>, <code>FAILED_ORCHESTRATOR_TIME_BUDGET_EXCEEDED</code>, <code>FAILED_TEST_REVIEW_REJECTED</code>, plus four propagated from <code>/relay-implement</code> (<code>FAILED_AFTER_N_RETRIES</code>, <code>FAILED_TIME_BUDGET_EXCEEDED</code>, <code>FAILED_OSCILLATION_DETECTED</code>, <code>FAILED_DISPUTE_CAP_EXCEEDED</code>) and one from <code>/relay-test</code> (<code>FAILED_INFRA_UNRECOVERABLE</code>).<br><br>
+          <strong>TDD routing:</strong> B7/B8 TDD pair is dead-code in MVP — D5 routing decision reserved; <code>/relay-tdd</code> and <code>/relay-tdd-review</code> self-skip when <code>tdd: false</code>.<br><br>
+          Name deliberately distinct from <code>/relay-implement</code> (which is the code-writing stage) to avoid collision.
+        </dd>
       </div>
 
       <h2 id="approval">Pillar 3 — Approval</h2>

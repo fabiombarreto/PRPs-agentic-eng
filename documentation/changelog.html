@@ -30,7 +30,28 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <p>No in-flight changes since the v0.8.0 cut on 2026-04-30. Future docs work accumulates here.</p>
+      <p>No in-flight changes since the v0.9.0 cut on 2026-05-01. Future docs work accumulates here.</p>
+
+      <h2 id="v0-9-0">0.9.0 — 2026-05-01</h2>
+
+      <p><code>/relay-execute</code> orchestrator command shipped — serial multi-phase orchestration using inline <code>Read</code>-based command-protocol adoption (D7: LLM reads each downstream command file and executes its protocol in the same conversation context; zero logic duplication; no new agents); source PRD's Implementation Phases table as the state machine (D6: row Status cells <code>pending</code>/<code>in-progress</code>/<code>complete</code> are the authoritative phase-state; re-invocation is idempotent); two new orchestration-layer budgets <code>max_plan_review_retries</code> + <code>max_orchestrator_minutes</code> (D3: each downstream command owns its internal loop budget; orchestrator adds session-level wall-clock; first-to-expire wins); seven distinct HALT outcome codes; <code>orchestrator-run.json</code> audit artifact at <code>PRPs/reports/&lt;feature&gt;/</code>. This is the first release cut after the §7.5 plugin manifest version-sync rule was codified (commit 26860fc 2026-04-30); <code>plugins/relay/.claude-plugin/plugin.json</code> bumped from <code>0.8.0</code> → <code>0.9.0</code> in this same commit. Three new architectural decisions pinned to <code>docs/decisions.md</code> (D7 dispatch model, D6 state-machine model, D3 retry-budget composition).</p>
+
+      <h3 id="v0-9-0-added">Added</h3>
+
+      <ul>
+        <li><strong><code>docs/decisions.md</code></strong> &mdash; three new <code>[2026-05-01]</code> entries recording: D7 dispatch model (inline command-protocol adoption via <code>Read</code>); D6 state-machine model (source PRD's Implementation Phases table IS the state machine); D3 retry-budget composition (each downstream command owns its internal loop budget; orchestrator adds <code>max_plan_review_retries</code> + <code>max_orchestrator_minutes</code>). Each entry follows the canonical four-field shape (Context / Decision / Reason / Areas affected).</li>
+        <li><strong><code>docs/context/architecture.md</code></strong> &mdash; new §&ldquo;Orchestrator state machine&rdquo; sub-section explaining the D6 source-PRD-table-as-state model, idempotency guarantee, state-transition discipline, and the lightweight Airflow-style idempotency-by-convention rationale.</li>
+      </ul>
+
+      <h3 id="v0-9-0-changed">Changed</h3>
+
+      <ul>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong> &mdash; version bumped <code>0.8.0</code> &rarr; <code>0.9.0</code> to match this release; users running <code>/plugin</code> after pulling this version will get a fresh <code>relay/0.9.0/</code> cache directory with all newly-shipped commands and agents registered.</li>
+        <li><strong><code>docs/api-reference.md</code></strong> &mdash; <code>/relay-execute</code> row promoted to &#10003; implemented with full behavioral notes (inline Read dispatch, D6 state machine, two orchestration budgets, seven HALT codes, audit artifact path, TDD dead-code note); &ldquo;Commands (planned &mdash; not yet implemented)&rdquo; heading changed to &ldquo;Commands&rdquo;; Planned narrative updated to reflect <code>/relay-execute</code> shipped and remaining pending pieces (B7/B8 TDD pair, <code>/relay-pr</code>).</li>
+        <li><strong><code>docs/context/architecture.md</code></strong> &mdash; Phased rollout Phase 3 row promoted from <code>partial</code> to <code>shipped</code>, naming <code>/relay-execute</code> orchestrator v0.9.0 among shipped pieces; B7/B8 TDD pair + <code>/relay-pr</code> noted as still pending.</li>
+        <li><strong><code>documentation/reference/commands.html</code></strong> &mdash; <code>badge--done</code> &ldquo;implemented&rdquo; marker added to <code>/relay-execute</code> heading; Notes kv-block expanded with shipped behavioral details (inline Read dispatch, D6 state machine, two orchestration budgets, seven HALT codes, audit artifact path).</li>
+        <li><strong><code>documentation/roadmap/status.html</code></strong> &mdash; project Phase 3 row promoted from <code>badge--partial</code> to <code>badge--done</code>; Scope annotation updated to list all shipped pieces including <code>/relay-execute</code> v0.9.0, with B7/B8 TDD pair and <code>/relay-pr</code> noted as pending.</li>
+      </ul>
 
       <h2 id="v0-8-0">0.8.0 — 2026-04-30</h2>
 
