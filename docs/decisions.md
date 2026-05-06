@@ -418,6 +418,25 @@ This supersedes the prior framing in `documentation/AGENTS.md` §7.1 ("the doc s
 
 ---
 
+## [2026-05-06] TDD pair is the authorized mechanism for creating test files in the autonomous pipeline (R-X strict preserved)
+
+**Context:** Three real-world halts on the user's `/relay-execute` runs (Phase 2 xfail removal, Phase 3 AC-5 test addition, Phase 4 manual fallback) demonstrated empirically that the R-X strict rule in `code-reviewer` (D17 of `implementation-authoring.prd.md`) — which blocks ANY test-file edit by the `implementer` in standard mode — leaves no autonomous path forward when a feature's Acceptance Criteria require new test files. The plan-reviewer's APPROVAL of a plan that lists test files in "Files to Change" was NOT being treated as an authorized bypass. The `tdd-writer-reviewer` PRD (`PRPs/prds/tdd-writer-reviewer.prd.md`, APPROVED 2026-05-06) ships B7/B8 + commands + `/relay-execute` integration as the structural unblock.
+
+**Decision:** The TDD pair (B7 `tdd-writer` + B8 `tdd-reviewer` + `/relay-tdd` + `/relay-tdd-review`) is the **only** authorized mechanism for creating new test files in the autonomous pipeline. R-X strict (D17 of `implementation-authoring.prd.md`) is preserved verbatim — the `code-reviewer` continues to reject any test-file edit by the `implementer` in standard mode, and the plan-reviewer's APPROVAL is still NOT treated as a bypass. The mechanism works in two complementary directions:
+
+- **Forward direction (R-X strict, unchanged):** the `implementer` cannot edit test files. Any test-file edit in the implementer's diff causes `code-reviewer` to reject the diff in standard mode (or, with the `TEST_CONTRACT_DISPUTE` escape valve under D9 Layer 1, escalate to arbitration mode for the structured `disputed_tests` payload).
+- **Inverse direction (B7 authorized):** the `tdd-writer` agent (B7) is the only agent allowed to create new test files. The `tdd-writer` is symmetrically forbidden from writing production code — its tool allowlist is `Task, Read, Write, Edit, Glob` but its prompt enforces "test files only" and "never modify existing test files" (always emit `AMBIGUOUS` or `EXISTING_TEST_COVERS` instead). The `tdd-reviewer` agent (B8) explicitly lacks `Edit` per the same D11 read-only invariant as `code-reviewer`.
+
+`/relay-execute` Phase A.3.5 wires the B7→B8 loop with budget `max_tdd_review_retries=2` (0 forbidden; 3 total TDD-write attempts including the initial). On budget exhaustion, the orchestrator HALTs with the new outcome code `FAILED_TDD_REVIEW_BUDGET_EXCEEDED`; the implementer is NOT invoked when A.3.5 halted (running it against an unapproved TDD suite would violate R-X strict in the test-file write direction).
+
+When `tdd: false` or `methodology.md` is missing, A.3.5 self-skips silently as a live no-op — the v0.9.0 dead-code routing branch is now a live integration with the same observable behavior on the no-TDD path. The previous "TDD routing reserved but unshipped" framing in `relay-execute.prd.md` D5 is **superseded** by this entry; future agents consulting the Decision Gate find this entry as the operative contract.
+
+**Reason:** R-X strict's purpose is to prevent the implementer from "passing" tests by weakening or modifying them — the failure mode the post-green-reviewer (B5) was created to catch and that plagued the early Test Runner. That purpose is invariant to who *creates* test files; introducing an authorized author (B7) for new tests preserves the invariant while unblocking the autonomous pipeline. The bidirectional symmetry — B7 writes tests but not production code; the `implementer` writes production code but not tests — is enforceable at the tool level (B7 has `Edit` but its prompt restricts it; the `implementer` has `Edit` and `code-reviewer` rejects test-file changes downstream). Per-stage retry budget composition (D3 of `relay-execute.prd.md`, 2026-05-01) extends naturally to the new B7↔B8 loop with the same shape as the existing `max_plan_review_retries=2`.
+
+**Areas affected:** `plugins/relay/agents/tdd-writer.md` (NEW); `plugins/relay/agents/tdd-reviewer.md` (NEW); `plugins/relay/commands/relay-tdd.md` (NEW); `plugins/relay/commands/relay-tdd-review.md` (NEW); `plugins/relay/commands/relay-execute.md` (Phase A.3.5 inserted; P5 routing note rewritten; `max_tdd_review_retries` budget added; new `FAILED_TDD_REVIEW_BUDGET_EXCEEDED` HALT outcome; hard-rule 9 rewritten); `plugins/relay/.claude-plugin/plugin.json` (bumped `0.9.0` → `0.10.0` per the 2026-04-30 §7.5 binding contract); the future `/relay-pr` command (consumes the B8-APPROVED suite as part of the final report); future Phase 5 dogfood against phoenix and sisalfa (validates the unblock empirically against ≥3 features per project); the `R-X` strict rule in `code-reviewer.md` (preserved verbatim — explicit non-mutation is the load-bearing contract).
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision

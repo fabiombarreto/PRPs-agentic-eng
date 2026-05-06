@@ -66,17 +66,17 @@
         <dd>Autonomous.</dd>
       </div>
 
-      <h3 id="relay-tdd"><code>/relay-tdd &lt;plan-path&gt;</code> <span class="badge badge--info">opt-in</span></h3>
+      <h3 id="relay-tdd"><code>/relay-tdd &lt;plan-path&gt;</code> <span class="badge badge--done">implemented</span></h3>
 
       <div class="kv">
         <dt>Input</dt>
-        <dd>An approved plan.</dd>
+        <dd>A plan ending with <code>*Status: APPROVED*</code> whose source PRD's Implementation Phases row N has <code>Status: in-progress</code>.</dd>
         <dt>Output</dt>
-        <dd>Test files committed to the worktree (framework-native). The suite is red at this stage — the Implementer hasn't written the production code yet.</dd>
+        <dd><code>PRPs/reports/&lt;feature&gt;/tdd-initial-suite.diff</code> manifest with aggregate verdict <code>SUITE_DRAFT_WRITTEN</code> or <code>EXISTING_COVERAGE_SUFFICIENT</code> (the latter when every in-scope AC is already covered by existing tests). Test files (when verdict is <code>SUITE_DRAFT_WRITTEN</code>) committed to the framework-native test root in the target project. Suite manifest carries <code>*Status: DRAFT*</code> for <code>/relay-tdd-review</code> to flip.</dd>
         <dt>Mode</dt>
-        <dd>Autonomous, opt-in. Activated only when <code>docs/context/methodology.md</code> declares <code>tdd: true</code>. When <code>tdd: false</code>, silently self-skips.</dd>
+        <dd>Autonomous, opt-in. Three P4 branches based on <code>docs/context/methodology.md</code>: (a) <code>tdd: false</code> or file absent → silent self-skip exiting 0 with the verbatim line <code>TDD track inactive (tdd: false). Skipping.</code>; (b) <code>tdd: true</code> + empty <code>test_frameworks</code> → hard-abort with <code>TDD track active but no test framework declared. Run context-builder *update or remove tdd:true.</code>; (c) <code>tdd: true</code> + non-empty → adopts <code>tdd-writer</code> protocol inline.</dd>
         <dt>Notes</dt>
-        <dd>Reads the PRD's Acceptance Criteria section to derive tests. Never writes production code.</dd>
+        <dd>Reads the source PRD's Acceptance Criteria section to derive tests. Walks each AC and emits one of three per-AC outcomes (<code>NEW_TEST_REQUIRED</code> writes a framework-idiomatic test, <code>EXISTING_TEST_COVERS path:line</code> records the mapping without writing a duplicate, <code>AMBIGUOUS</code> aborts the suite asking the user to tighten the PRD). Prompt parametrized by <code>methodology.md test_frameworks[]</code> — supports pytest, vitest, jest, ExUnit, RSpec, playwright. Never writes production code (R-X strict's symmetric inverse). Never modifies existing test files. See <code>PRPs/prds/tdd-writer-reviewer.prd.md</code>.</dd>
       </div>
 
       <h3 id="relay-implement"><code>/relay-implement &lt;plan-path&gt;</code> <span class="badge badge--done">implemented</span></h3>
@@ -104,14 +104,16 @@
         <dd>Plan status flipped to <code>APPROVED</code>, or <code>CHANGES_REQUESTED</code> with a list of concerns.</dd>
       </div>
 
-      <h3 id="relay-tdd-review"><code>/relay-tdd-review &lt;suite-path&gt;</code> <span class="badge badge--info">opt-in</span></h3>
+      <h3 id="relay-tdd-review"><code>/relay-tdd-review &lt;suite-path&gt;</code> <span class="badge badge--done">implemented</span></h3>
       <div class="kv">
         <dt>Input</dt>
-        <dd>A TDD suite in <code>DRAFT</code>.</dd>
+        <dd>A TDD suite manifest at <code>PRPs/reports/&lt;feature&gt;/tdd-initial-suite.diff</code> ending with <code>*Status: DRAFT*</code>.</dd>
         <dt>Output</dt>
-        <dd><code>APPROVED</code> or <code>CHANGES_REQUESTED</code>. Self-skips when <code>tdd: false</code>.</dd>
+        <dd><code>APPROVED</code> or <code>CHANGES_REQUESTED</code> appended to <code>PRPs/plans/&lt;basename&gt;.tdd-review.jsonl</code> (append-only Read+concat+Write). On APPROVED, the suite manifest is flipped <code>*Status: DRAFT*</code> → <code>*Status: APPROVED*</code> via the command's own <code>Edit</code>. Symmetric self-skip with <code>/relay-tdd</code> on <code>tdd: false</code> / missing <code>methodology.md</code>.</dd>
+        <dt>Mode</dt>
+        <dd>Autonomous, single-shot. Mirrors the <code>/relay-code-review</code> shape: <code>Task</code>-dispatches <code>tdd-reviewer</code>; reads the just-appended JSONL line; flips suite status on APPROVED. Explicit no-D8-mutation no-op step preserved (the reviewer command does not modify the source PRD's Implementation Phases table or move plans to <code>completed/</code>).</dd>
         <dt>Notes</dt>
-        <dd>Specifically looks for tests that mirror imagined implementation, mocks that hide behavior, trivial asserts, and gaps against the PRD's Acceptance Criteria.</dd>
+        <dd>Six rubric ids evaluated per run with no short-circuit: <code>R-IMPL-LEAK</code> (asserts on private symbols, call-count assertions, test names matching internal method names), <code>R-TRIVIAL-ASSERT</code> (tautologies, existence-only, strict-subset of AC properties), <code>R-MOCK-ABUSE</code> (mock-of-SUT, mock of concrete type when interface exists, chained mocks ≥3 deep, <code>was_called</code>-only assertions), <code>R-AC-COVERAGE</code> (every in-scope AC has ≥1 test reference), <code>R-DUPLICATE</code> (two tests asserting the same property without discriminative input variance), and the hybrid <code>R-RED-LEGITIMATE</code> (dynamic <code>Bash</code> execution distinguishing assertion-failure red from broken-setup red from green-pre-impl; <code>passed: null</code> graceful degradation when framework unavailable per AC-13). The orchestrator (<code>/relay-execute</code>) decides retry vs HALT per <code>max_tdd_review_retries=2</code>. See <code>PRPs/prds/tdd-writer-reviewer.prd.md</code>.</dd>
       </div>
 
       <h3 id="relay-code-review"><code>/relay-code-review &lt;plan-path&gt;</code> <span class="badge badge--done">implemented</span></h3>
@@ -200,7 +202,7 @@
           <strong>State machine (D6):</strong> the source PRD's Implementation Phases table is the canonical state machine. Row <code>Status</code> cells (<code>pending</code> / <code>in-progress</code> / <code>complete</code>) are the authoritative phase-state. Re-invocation after a halt is idempotent — the table is re-read on every invocation; complete rows are skipped automatically.<br><br>
           <strong>Orchestration budgets (D3):</strong> two session-level budgets: <code>max_plan_review_retries</code> (caps the plan→plan-review loop on repeated <code>CHANGES_REQUESTED</code>) and <code>max_orchestrator_minutes</code> (wall-clock; first-to-expire wins). Each downstream command retains its own internal loop budget unchanged.<br><br>
           <strong>HALT outcome codes (7):</strong> <code>FAILED_PLAN_REVIEW_BUDGET_EXCEEDED</code>, <code>FAILED_ORCHESTRATOR_TIME_BUDGET_EXCEEDED</code>, <code>FAILED_TEST_REVIEW_REJECTED</code>, plus four propagated from <code>/relay-implement</code> (<code>FAILED_AFTER_N_RETRIES</code>, <code>FAILED_TIME_BUDGET_EXCEEDED</code>, <code>FAILED_OSCILLATION_DETECTED</code>, <code>FAILED_DISPUTE_CAP_EXCEEDED</code>) and one from <code>/relay-test</code> (<code>FAILED_INFRA_UNRECOVERABLE</code>).<br><br>
-          <strong>TDD routing:</strong> B7/B8 TDD pair is dead-code in MVP — D5 routing decision reserved; <code>/relay-tdd</code> and <code>/relay-tdd-review</code> self-skip when <code>tdd: false</code>.<br><br>
+          <strong>TDD routing:</strong> shipped v0.10.0. The TDD pair (B7 + B8) is engaged in Phase A.3.5 of <code>/relay-execute</code> when <code>docs/context/methodology.md</code> declares <code>tdd: true</code>; the orchestrator-level loop is bounded by <code>max_tdd_review_retries=2</code> with HALT outcome <code>FAILED_TDD_REVIEW_BUDGET_EXCEEDED</code>. R-X strict (D17 of <code>implementation-authoring.prd.md</code>) is preserved — the implementer never edits test files; B7 is the authorized author of new test files. When <code>tdd: false</code> or <code>methodology.md</code> is missing, A.3.5 self-skips silently as a live no-op.<br><br>
           Name deliberately distinct from <code>/relay-implement</code> (which is the code-writing stage) to avoid collision.
         </dd>
       </div>

@@ -1,0 +1,25 @@
+# TDD initial suite — phase 1 (synthetic clean variant)
+# Source PRD: PRPs/reports/tdd-writer-reviewer/synthetic-b8-fixture-1/clean/mini-prd.md
+# Source plan: (synthetic — no real plan)
+# Aggregate verdict: SUITE_DRAFT_WRITTEN
+# Generated: 2026-05-06
+
+## AC outcomes
+
+| AC | Outcome | Path / mapping |
+|---|---|---|
+| AC-1 | NEW_TEST_REQUIRED | tests/test_ac1_rejects_expired.py |
+| AC-2 | NEW_TEST_REQUIRED | tests/test_ac2_accepts_valid.py |
+| AC-3 | NEW_TEST_REQUIRED | tests/test_ac3_isolated_with_protocol.py |
+| AC-4 | NEW_TEST_REQUIRED | tests/test_ac4_invalid_format.py |
+
+## Test files written this session
+
+- tests/test_ac1_rejects_expired.py
+- tests/test_ac2_accepts_valid.py
+- tests/test_ac3_isolated_with_protocol.py
+- tests/test_ac4_invalid_format.py
+
+## Status
+
+*Status: DRAFT*

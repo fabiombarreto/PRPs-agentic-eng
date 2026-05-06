@@ -1,0 +1,33 @@
+# TDD initial suite — phase 1 (synthetic dirty variant)
+# Source PRD: PRPs/reports/tdd-writer-reviewer/synthetic-b8-fixture-1/dirty/mini-prd.md
+# Source plan: (synthetic — no real plan)
+# Aggregate verdict: SUITE_DRAFT_WRITTEN
+# Generated: 2026-05-06
+
+## AC outcomes
+
+| AC | Outcome | Path / mapping |
+|---|---|---|
+| AC-1 | NEW_TEST_REQUIRED | tests/test_ac1_impl_leak.py |
+| AC-2 | NEW_TEST_REQUIRED | tests/test_ac2_trivial.py |
+| AC-3 | NEW_TEST_REQUIRED | tests/test_ac3_mock_abuse.py |
+| AC-4 | (no test — deliberate gap for R-AC-COVERAGE) | — |
+
+## Additional planted pathologies
+
+| File | Plants id |
+|---|---|
+| tests/test_duplicate_ac1.py | R-DUPLICATE (duplicates test_ac1_impl_leak.py) |
+| tests/test_broken_setup.py | R-RED-LEGITIMATE (broken-setup branch via nonexistent import) |
+
+## Test files written this session
+
+- tests/test_ac1_impl_leak.py
+- tests/test_ac2_trivial.py
+- tests/test_ac3_mock_abuse.py
+- tests/test_duplicate_ac1.py
+- tests/test_broken_setup.py
+
+## Status
+
+*Status: DRAFT*

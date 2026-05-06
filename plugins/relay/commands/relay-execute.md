@@ -142,16 +142,18 @@ If any is missing, HALT with the byte-exact AC-9 message:
 
 Read `docs/context/methodology.md` in the target project. Extract the `tdd:` frontmatter value.
 
-- If `tdd: true`: emit startup note (AC-11 dead-code routing visibility):
+- If `tdd: true`: emit startup note (AC-11 live-routing visibility):
 
-  > TDD routing note: docs/context/methodology.md has tdd: true, but the TDD
-  > routing branch (B7 TDD Writer + B8 TDD Reviewer integration) is currently
-  > dead code in /relay-execute MVP (B7/B8 are unshipped per implementation-
-  > authoring.prd.md "What We're NOT Building"). The integration point is
-  > reserved. Proceeding with the non-TDD path: /relay-plan → /relay-plan-review
-  > → /relay-implement → /relay-test → /relay-test-review.
+  > TDD routing note: docs/context/methodology.md has tdd: true. Proceeding
+  > with the TDD path: /relay-plan → /relay-plan-review → /relay-tdd →
+  > /relay-tdd-review → /relay-implement → /relay-test → /relay-test-review.
+  > B7 TDD Writer + B8 TDD Reviewer engaged via Phase A.3.5 with budget
+  > max_tdd_review_retries=2 (HALT code FAILED_TDD_REVIEW_BUDGET_EXCEEDED on
+  > exhaustion). R-X strict invariant of code-reviewer is preserved — the
+  > implementer never edits test files; B7 is the authorized author.
 
-- If `tdd: false` or file absent: no note required; proceed silently.
+- If `tdd: false` or file absent: no note required; proceed silently. Phase
+  A.3.5 self-skips per AC-10 (live no-op path).
 
 Concurrency soft-fail diagnostic (D18): `Glob` `PRPs/reports/<feature>/orchestrator-run.json` for an existing file without a terminal `outcome` entry (heuristic: file exists but does not contain `"outcome":` or contains `"outcome": null`). If found:
 
@@ -173,6 +175,7 @@ This phase holds the entire orchestration loop logic. Each iteration picks one a
 Set the budget caps and counters:
 
 - `max_plan_review_retries = 2` (0 forbidden; 3 total plan attempts including the initial)
+- `max_tdd_review_retries = 2` (0 forbidden; 3 total TDD-write attempts including the initial; only consulted in Phase A.3.5 when `tdd: true`)
 - `max_orchestrator_minutes = 240` (session-level wall-clock; 0 forbidden)
 - `deadline_ts = now() + max_orchestrator_minutes minutes`
 - `orchestrator_run_log = []` — accumulator for `orchestrator-run.json`
@@ -201,6 +204,7 @@ Write `PRPs/reports/<feature>/orchestrator-run.json` with the final summary:
   "started_at": "<ISO timestamp>",
   "ended_at": "<ISO timestamp>",
   "max_plan_review_retries": 2,
+  "max_tdd_review_retries": 2,
   "max_orchestrator_minutes": 240,
   "phases": <orchestrator_run_log>,
   "outcome": "ALL_PHASES_COMPLETE",
@@ -292,6 +296,97 @@ HALT with verbatim message:
 > or invoke /relay-plan with prior_feedback and /relay-plan-review manually.
 
 Else: re-adopt `/relay-plan` role passing `prior_feedback = <captured defect list>`. Loop back to Step A.3.2.
+
+### Phase A.3.5 — Per-phase TDD sub-flow (tdd-review retry loop)
+
+Conditional on `methodology.md` `tdd:` value read in P5.
+
+#### Step A.3.5.0 — methodology.md gate (live no-op when `tdd: false`)
+
+Re-read `<target_root>/docs/context/methodology.md` (already read in P5 — re-read here protects against mid-flow mutations).
+
+- If file absent or `tdd: false`: A.3.5 self-skips. Append to `orchestrator_run_log`:
+  ```json
+  {"phase": <N>, "stage": "tdd", "outcome": "skipped_tdd_false"}
+  ```
+  Proceed directly to Phase A.4. No suite manifest is produced.
+
+- If `tdd: true`: proceed to Step A.3.5.1.
+
+Set `tdd_review_attempts = 0`.
+
+#### Step A.3.5.1 — Adopt /relay-tdd role
+
+Read `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-tdd.md` and execute its full protocol inline against `current_plan_path`. Pass context:
+
+- `plan_path`: `current_plan_path`
+- `target_root`: the cwd
+- `prior_feedback`: null on first attempt; the captured B8 JSONL line on retry attempts (orchestrator-side feedback channel)
+
+The Writer either:
+- Produces a DRAFT suite manifest at `PRPs/reports/<feature>/tdd-initial-suite.diff` with aggregate verdict `SUITE_DRAFT_WRITTEN` or `EXISTING_COVERAGE_SUFFICIENT` → continue to Step A.3.5.2.
+- Halts on `AMBIGUOUS` ACs → surface the verbatim halt; write `orchestrator-halt.json`:
+  ```json
+  {
+    "outcome": "FAILED_TDD_AMBIGUOUS_ACS",
+    "phase_N": <N>,
+    "halting_stage": "tdd_writer",
+    "ambiguous_acs": <captured AC list from B7 halt>,
+    "orchestrator_run_log": <orchestrator_run_log>
+  }
+  ```
+  HALT the orchestrator (the user must tighten the PRD ACs and re-run).
+
+Record the suite path as `current_suite_path`.
+
+#### Step A.3.5.2 — Adopt /relay-tdd-review role
+
+Read `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-tdd-review.md` and execute its full protocol inline against `current_suite_path`.
+
+**On APPROVED:**
+
+Append to `orchestrator_run_log`:
+```json
+{"phase": <N>, "stage": "tdd", "outcome": "APPROVED", "suite_path": "<current_suite_path>"}
+```
+
+Proceed to Phase A.4. The implementer's contract for this phase is now the B8-APPROVED suite — R-X strict guarantees no test-file edits in the implementer's diff.
+
+**On CHANGES_REQUESTED:**
+
+Capture the rubric defect bullet-list (failing rubric ids + reasons) from the JSONL line just appended to `PRPs/plans/<basename>.tdd-review.jsonl`. This is the structured feedback for the next /relay-tdd attempt.
+
+Increment `tdd_review_attempts`.
+
+If `tdd_review_attempts > max_tdd_review_retries`:
+
+Write `PRPs/reports/<feature>/orchestrator-halt.json`:
+
+```json
+{
+  "outcome": "FAILED_TDD_REVIEW_BUDGET_EXCEEDED",
+  "phase_N": <N>,
+  "halting_stage": "tdd_reviewer",
+  "failing_rubric_items": <captured defect list>,
+  "tdd_review_attempts": <tdd_review_attempts>,
+  "suite_path": "<current_suite_path>",
+  "orchestrator_run_log": <orchestrator_run_log>
+}
+```
+
+HALT with verbatim message:
+
+> FAILED_TDD_REVIEW_BUDGET_EXCEEDED. /relay-execute exhausted TDD-review
+> retries for phase <N> (max_tdd_review_retries=2, attempts=<tdd_review_attempts>).
+> Failing rubric items: <captured defect list>.
+> Suite manifest left at *Status: DRAFT* at <current_suite_path>.
+> Halt state at PRPs/reports/<feature>/orchestrator-halt.json.
+> Manual recovery: tighten the PRD ACs (likely AMBIGUOUS root cause), or hand-
+> edit the suite, then re-run /relay-execute. The implementer is NOT invoked
+> on TDD-budget exhaustion — running /relay-implement against an unapproved
+> TDD suite would violate R-X strict in the test-file write direction.
+
+Else: re-adopt `/relay-tdd` role passing `prior_feedback = <captured defect list>`. Loop back to Step A.3.5.2.
 
 ### Phase A.4 — Per-phase implement sub-flow
 
@@ -455,6 +550,7 @@ Write / overwrite `PRPs/reports/<feature>/orchestrator-run.json` with the full l
   "started_at": "<ISO timestamp>",
   "ended_at": null,
   "max_plan_review_retries": 2,
+  "max_tdd_review_retries": 2,
   "max_orchestrator_minutes": 240,
   "phases": <orchestrator_run_log>,
   "outcome": null,
@@ -504,7 +600,7 @@ On any HALT path (one of `FAILED_PLAN_REVIEW_BUDGET_EXCEEDED`, `FAILED_ORCHESTRA
 
 8. **Never orchestrate multiple PRDs in one invocation.** One PRD per `/relay-execute` invocation. Cross-PRD orchestration is a separate future concern.
 
-9. **When `tdd: true` but B7/B8 are unshipped — emit the dead-code routing note (P5) and proceed with the non-TDD path (AC-11).** Do not attempt to invoke `/relay-tdd` or any TDD-track command.
+9. **When `tdd: true`, the orchestrator invokes `/relay-tdd` and `/relay-tdd-review` in Phase A.3.5 with budget `max_tdd_review_retries=2`; on budget exhaustion, HALT with `FAILED_TDD_REVIEW_BUDGET_EXCEEDED`.** When `tdd: false` or `methodology.md` is missing, A.3.5 self-skips silently per AC-10 (live no-op path). The implementer is NEVER invoked when A.3.5 halted — running it against an unapproved TDD suite would violate R-X strict in the test-file write direction.
 
 ---
 
