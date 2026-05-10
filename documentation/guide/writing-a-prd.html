@@ -52,7 +52,7 @@
 
       <h3 id="from-description">Starting from a description</h3>
 
-      <pre><code class="language-default">/relay-prd "add a weekly digest email for every active user summarizing their completed assessments in the last 7 days"</code></pre>
+      <pre><code class="language-default">/relay-prd add a weekly digest email for every active user summarizing their completed assessments in the last 7 days</code></pre>
 
       <p>Short is fine. A paragraph is also fine. The PRD Writer expands it during the Q&amp;A.</p>
 
@@ -154,7 +154,7 @@
         <li><strong>Acceptance Criteria (test scenarios)</strong> — the concrete <code>given ... when ... then</code> behaviors the implementation must satisfy.</li>
         <li><strong>Users &amp; Context</strong>, <strong>Solution Detail (MoSCoW)</strong>, <strong>MVP Scope</strong>, <strong>User Flow</strong>.</li>
         <li><strong>Technical Approach</strong> (feasibility, architecture notes, TDD routing, technical risks).</li>
-        <li><strong>Implementation Phases</strong> — a table with phase number, name, description, status, parallelism hints, dependencies.</li>
+        <li><strong>Implementation Phases</strong> — a table with phase number, name, description, status, parallelism hints, dependencies, and a <code>PRP Plan</code> column the Plan Writer back-fills with the relative plan path when planning that row (codified in <code>docs/decisions.md</code> 2026-04-25).</li>
         <li><strong>Decisions Log</strong>, <strong>Research Summary</strong>.</li>
       </ul>
 

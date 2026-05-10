@@ -55,15 +55,19 @@
         <dd>The only command on the interactive side of the <a href="../concepts/interactivity-boundary.html">interactivity boundary</a>. Always runs the PRD Reviewer at the end; the PRD is not persisted as <code>APPROVED</code> until the reviewer's 7-item rubric passes <strong>and</strong> the user explicitly approves in dialogue.</dd>
       </div>
 
-      <h3 id="relay-plan"><code>/relay-plan &lt;prd-path&gt;</code></h3>
+      <h3 id="relay-plan"><code>/relay-plan &lt;prd-path&gt;</code> <span class="badge badge--done">implemented</span></h3>
 
       <div class="kv">
         <dt>Input</dt>
-        <dd>A PRD file with status <code>APPROVED</code>.</dd>
+        <dd>A PRD file with status <code>APPROVED</code> (ending with <code>*Status: APPROVED*</code>) containing a parseable Implementation Phases table with at least one row whose <code>Status</code> is <code>pending</code> and whose <code>Depends</code> cell is empty or references only <code>complete</code> rows.</dd>
         <dt>Output</dt>
-        <dd><code>PRPs/plans/&lt;feature&gt;.plan.md</code> with status <code>DRAFT</code> (awaiting <code>/relay-plan-review</code>).</dd>
+        <dd><code>PRPs/plans/&lt;feature&gt;-phase-&lt;N&gt;-&lt;slug&gt;.plan.md</code> with status <code>*Status: DRAFT*</code> (one plan per actionable Implementation Phases row; codified in <code>docs/decisions.md</code> 2026-04-25). Plan-writer back-fills the source PRD's row N (<code>Status</code> flipped from <code>pending</code> to <code>in-progress</code>; <code>PRP Plan</code> cell populated with the relative plan path).</dd>
         <dt>Mode</dt>
-        <dd>Autonomous.</dd>
+        <dd>Autonomous, single-role. <code>/relay-plan</code> never adopts the reviewer; <code>/relay-plan-review</code> is the separate reviewer surface (per the writer/reviewer split decision).</dd>
+        <dt>Agents</dt>
+        <dd>Delegates plan generation to <a href="agents.html#plan-writer"><code>plan-writer</code></a>, which dispatches <a href="agents.html#research-codebase"><code>research-codebase</code></a> + <a href="agents.html#research-web"><code>research-web</code></a> in parallel during GROUNDING, consults the three Decision Gate sources, writes the DRAFT with all 15 mandatory sections, and performs the source PRD back-fill via a verbatim-row <code>Edit</code>.</dd>
+        <dt>Notes</dt>
+        <dd>Four preconditions (PRD readable, PRD APPROVED, Decision Gate sources readable, at least one actionable phase exists with satisfied dependencies); writer halts surface verbatim through the command. Collisions on the per-phase filename resolved with numeric suffix; APPROVED plans never overwritten. See <code>PRPs/prds/plan-authoring.prd.md</code>.</dd>
       </div>
 
       <h3 id="relay-tdd"><code>/relay-tdd &lt;plan-path&gt;</code> <span class="badge badge--done">implemented</span></h3>
@@ -96,12 +100,18 @@
 
       <p>Validate an existing artifact. Reviewers accept <strong>hand-edited artifacts</strong> — if you edit a plan manually and want to re-validate, <code>/relay-plan-review</code> is the right tool. Reviewers never modify the artifact; they emit <code>APPROVED</code> or <code>CHANGES_REQUESTED</code> with an actionable list.</p>
 
-      <h3 id="relay-plan-review"><code>/relay-plan-review &lt;plan-path&gt;</code></h3>
+      <h3 id="relay-plan-review"><code>/relay-plan-review &lt;plan-path&gt;</code> <span class="badge badge--done">implemented</span></h3>
       <div class="kv">
         <dt>Input</dt>
-        <dd>A plan in <code>DRAFT</code> status (from <code>/relay-plan</code> or hand-edited).</dd>
+        <dd>A plan ending with <code>*Status: DRAFT*</code> (from <code>/relay-plan</code> or hand-edited).</dd>
         <dt>Output</dt>
-        <dd>Plan status flipped to <code>APPROVED</code>, or <code>CHANGES_REQUESTED</code> with a list of concerns.</dd>
+        <dd>On rubric pass: plan trailing block flipped to <code>*Status: APPROVED*</code> via two-line <code>Edit</code> with an inserted <code>*Approved: &lt;YYYY-MM-DD&gt;*</code> line. On any failure: <code>CHANGES_REQUESTED</code> with the failing rubric items by ID + reason. Every verdict appended to <code>PRPs/plans/&lt;basename&gt;.review.jsonl</code> with all 8 R1&ndash;R8 outcomes plus zero or more R-COH-* outcomes (no short-circuit).</dd>
+        <dt>Mode</dt>
+        <dd>Autonomous, single-shot. <code>CHANGES_REQUESTED</code> is terminal for the run; the orchestrator (<code>/relay-execute</code>) decides regeneration via <code>/relay-plan</code> per <code>max_plan_review_retries=2</code>.</dd>
+        <dt>Agents</dt>
+        <dd>Delegates rubric validation and the DRAFT&rarr;APPROVED flip to <a href="agents.html#plan-reviewer"><code>plan-reviewer</code></a>, which runs the 8-item structural rubric (R1 Decision Gate, R2 mandatory sections, R3 no TBD, R4 ≥3 atomic tasks with VALIDATE, R5 TDD routing, R6 no <code>.claude/</code> writes, R7 Files-to-Change row, R8 PRD↔plan traceability with R8a/R8b/R8c) plus the additive <code>R-COH-*</code> coherence layer (5 deterministic intra-plan checks + a bounded K=5 LLM judgment pass).</dd>
+        <dt>Notes</dt>
+        <dd>Three preconditions (plan readable, plan ends with <code>*Status: DRAFT*</code>, Decision Gate sources readable). Diverges from <code>/relay-prd</code>'s reviewer in three ways: auto-flips without user dialogue (interactivity boundary), evaluates all 8 items every run (no short-circuit), no Step 5 dialogue loop (CHANGES_REQUESTED is terminal). See <code>PRPs/prds/plan-authoring.prd.md</code>.</dd>
       </div>
 
       <h3 id="relay-tdd-review"><code>/relay-tdd-review &lt;suite-path&gt;</code> <span class="badge badge--done">implemented</span></h3>
@@ -237,15 +247,28 @@
 
       <pre><code class="language-bash">PRPs/
 ├── prds/&lt;feature&gt;.prd.md
-├── plans/&lt;feature&gt;.plan.md
+├── plans/
+│   ├── &lt;feature&gt;-phase-&lt;N&gt;-&lt;slug&gt;.plan.md       # DRAFT or APPROVED
+│   ├── &lt;basename&gt;.review.jsonl                  # plan-reviewer audit log
+│   ├── &lt;basename&gt;.code-review.jsonl             # code-reviewer audit log
+│   ├── &lt;basename&gt;.tdd-review.jsonl              # tdd-reviewer audit log
+│   └── completed/
+│       └── &lt;feature&gt;-phase-&lt;N&gt;-&lt;slug&gt;.plan.md   # IMPLEMENTED (archived by /relay-implement)
 └── reports/&lt;feature&gt;/
-    ├── run.json
-    ├── test-review.json
-    ├── final-report.md
-    └── attempts/&lt;N&gt;/
-        ├── record.json
-        ├── stdout.log
-        └── diff.patch</code></pre>
+    ├── run.json                                 # /relay-test outcome
+    ├── test-review.json                         # /relay-test-review verdict
+    ├── final-report.md                          # /relay-pr report (planned)
+    ├── orchestrator-run.json                    # /relay-execute audit (v0.9.0)
+    ├── tdd-initial-suite.diff                   # /relay-tdd suite manifest (v0.10.0)
+    ├── attempts/&lt;N&gt;/                          # /relay-test per-attempt
+    │   ├── record.json
+    │   ├── stdout.log
+    │   └── diff.patch
+    └── phase-&lt;N&gt;/                             # /relay-implement per-phase (v0.8.0)
+        ├── halt.json                            # on D8 partial failure
+        └── attempts/&lt;i&gt;/
+            ├── record.json
+            └── diff.patch                       # cumulative diff vs base commit</code></pre>
 
       <p>Worktrees live at <code>.worktrees/&lt;feature&gt;/</code> relative to the target-repo root.</p>
 

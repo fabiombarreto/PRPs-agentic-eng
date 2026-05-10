@@ -48,11 +48,11 @@
 
       <div class="kv">
         <dt>Input</dt><dd>Approved PRD.</dd>
-        <dt>Output</dt><dd><code>PRPs/plans/&lt;feature&gt;.plan.md</code> with status <code>APPROVED</code>.</dd>
+        <dt>Output</dt><dd><code>PRPs/plans/&lt;feature&gt;-phase-&lt;N&gt;-&lt;slug&gt;.plan.md</code> with status <code>APPROVED</code> (one plan per actionable Implementation Phases row; codified in <code>docs/decisions.md</code> 2026-04-25).</dd>
         <dt>Writer</dt><dd><code>Plan Writer</code> — produces a phased implementation plan with explicit test cases.</dd>
         <dt>Reviewer</dt><dd><code>Plan Reviewer</code> — runs an 8-item structural rubric (phases concrete, dependencies declared, test scenarios map to AC, PRD↔plan traceability) <strong>plus an additive <code>R-COH-*</code> coherence layer</strong> that catches intra-plan contradictions: tasks that don't reference any AC, Files-to-Change rows untouched by tasks, VALIDATE commands mismatching declared frameworks, Patterns-to-Mirror SOURCE paths missing, Mandatory Reading paths missing, plus K=5 LLM-detected drift between Summary / Solution Statement and Tasks. See the <a href="../reference/agents.html#plan-reviewer-coherence">coherence layer reference</a>.</dd>
         <dt>Loop</dt><dd>Writer → Reviewer. <code>CHANGES_REQUESTED</code> loops back up to <code>max_plan_review_retries</code>.</dd>
-        <dt>Failure mode</dt><dd>Retry exhausted → pipeline halts; orchestrator writes reason to <code>run.json</code>.</dd>
+        <dt>Failure mode</dt><dd>Retry exhausted → pipeline halts with <code>FAILED_PLAN_REVIEW_BUDGET_EXCEEDED</code>; orchestrator writes reason to <code>PRPs/reports/&lt;feature&gt;/orchestrator-run.json</code>.</dd>
       </div>
 
       <h2 id="stage-3">3 — Worktree</h2>
@@ -83,7 +83,7 @@
         <dt>Writer</dt><dd><code>Implementer</code> — executes the plan; when TDD is active, writes code to make the red tests green.</dd>
         <dt>Reviewer</dt><dd><code>Code Reviewer</code> — checks against <code>decisions.md</code>, <code>anti-patterns.md</code>, relevant domain files via an 8-item three-layer rubric (R-S* structural, R-L* lint/type/build, R-SEM semantic, R-X test-modification guard) <strong>plus an additive <code>R-COH-*</code> coherence layer</strong> with 4 deterministic intra-diff checks (dead imports, signature drift to callers within diff + 1-hop imports, config references missing, new files unregistered) and a bounded sub-agent dispatch to <code>code-reviewer-semantic</code> via <code>Task</code> for the K=5 LLM judgment pass (comment-vs-code, test-name-vs-assert, code-vs-task contradictions). Not a style reviewer; focuses on correctness + rule violations + intra-diff coherence. See the <a href="../reference/agents.html#code-reviewer-coherence">coherence layer reference</a>.</dd>
         <dt>Loop</dt><dd>Writer → Reviewer. <code>CHANGES_REQUESTED</code> loops back.</dd>
-        <dt>Failure mode</dt><dd>Retry exhausted halts with <code>CODE_REVIEW_FAILED</code>.</dd>
+        <dt>Failure mode</dt><dd>Retry exhausted halts with <code>FAILED_AFTER_N_RETRIES</code>; wall-clock exhaustion halts with <code>FAILED_TIME_BUDGET_EXCEEDED</code>; oscillation halts with <code>FAILED_OSCILLATION_DETECTED</code>; dispute cap halts with <code>FAILED_DISPUTE_CAP_EXCEEDED</code>; arbitration may resolve via <code>DISPUTE_UPHELD_TEST_WRONG</code> or <code>DISPUTE_UPHELD_PRD_AMBIGUOUS</code>; D8 atomicity violation surfaces <code>PARTIAL_D8_FAILURE</code>.</dd>
       </div>
 
       <h2 id="stage-6">6 — Test Runner loop</h2>
@@ -137,15 +137,17 @@
       </p>
 
       <div class="kv">
-        <dt>max_plan_review_retries</dt><dd>3 (not yet implemented; placeholder)</dd>
-        <dt>max_tdd_review_retries</dt><dd>2 (not yet implemented)</dd>
-        <dt>max_code_review_retries</dt><dd>3 (not yet implemented)</dd>
-        <dt>max_test_retries</dt><dd>3 (implemented)</dd>
-        <dt>max_test_minutes</dt><dd>30 (implemented)</dd>
+        <dt>max_plan_review_retries</dt><dd>2 (orchestrator-level, v0.9.0; 0 forbidden). Caps the <code>/relay-plan</code> ↔ <code>/relay-plan-review</code> re-plan loop when the rubric returns <code>CHANGES_REQUESTED</code>. Exhaustion halts the orchestrator with <code>FAILED_PLAN_REVIEW_BUDGET_EXCEEDED</code>.</dd>
+        <dt>max_tdd_review_retries</dt><dd>2 (orchestrator-level, v0.10.0; 0 forbidden). Caps the <code>/relay-tdd</code> ↔ <code>/relay-tdd-review</code> loop in Phase A.3.5 of <code>/relay-execute</code>. Exhaustion halts with <code>FAILED_TDD_REVIEW_BUDGET_EXCEEDED</code>.</dd>
+        <dt>max_implement_retries</dt><dd>3 (implemented v0.8.0). Caps the internal writer↔reviewer loop inside <code>/relay-implement</code> (4 attempts total: 1 initial + 3 retries). Wall-clock companion: <code>max_implement_minutes = 45</code>; first-to-expire wins.</dd>
+        <dt>max_disputes_per_session</dt><dd>2 (implemented v0.8.0). Caps the <code>TEST_CONTRACT_DISPUTE</code> escape valve per <code>/relay-implement</code> session; exhaustion halts with <code>FAILED_DISPUTE_CAP_EXCEEDED</code>.</dd>
+        <dt>max_test_retries</dt><dd>3 (implemented).</dd>
+        <dt>max_test_minutes</dt><dd>30 (implemented).</dd>
+        <dt>max_orchestrator_minutes</dt><dd>240 (orchestrator-level, v0.9.0; 0 forbidden). Session-level wall-clock for the entire <code>/relay-execute</code> run; first to expire wins independently of per-stage budgets.</dd>
       </div>
 
       <p>
-        The reasoning behind the numbers is the same as for <code>max_test_retries</code>: fewer than 3 aborts on legitimate second-pass corrections; more than 3 wastes time on stuck loops that aren't converging. See the <a href="../governance/decisions.html#max-test-retries">max_test_retries decision</a> for the full reasoning.
+        The reasoning behind the numbers is the same as for <code>max_test_retries</code>: fewer than 3 aborts on legitimate second-pass corrections; more than 3 wastes time on stuck loops that aren't converging. See the <a href="../governance/decisions.html#max-test-retries">max_test_retries decision</a> for the full reasoning. The per-stage budgets and the two orchestrator-level budgets compose per D3 of <code>relay-execute.prd.md</code> — each downstream command owns its internal loop budget; the orchestrator adds <code>max_plan_review_retries</code> + <code>max_tdd_review_retries</code> + <code>max_orchestrator_minutes</code>; first-to-expire wins makes the failing layer unambiguous in the audit log.
       </p>
 
       <div class="page-footer"></div>

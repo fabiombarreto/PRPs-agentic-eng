@@ -75,7 +75,7 @@
 
       <h2 id="test-runner-prd">Test Runner PRD phases</h2>
 
-      <p>The Test Runner is the first feature dogfooded through relay's own workflow. Its PRD (at <code>PRPs/prds/test-runner.prd.md</code> in the plugin repo) has nine implementation phases. Status as of 2026-04-21:</p>
+      <p>The Test Runner is the first feature dogfooded through relay's own workflow. Its PRD (at <code>PRPs/prds/test-runner.prd.md</code> in the plugin repo) has nine implementation phases. Status as of 2026-05-10:</p>
 
       <table>
         <thead>
@@ -134,7 +134,7 @@
             <td>9</td>
             <td>Dogfood integration</td>
             <td>Run end-to-end against phoenix and tune heuristics from real data</td>
-            <td><span class="badge badge--partial">partial</span> (MVP done; full pending orchestrator)</td>
+            <td><span class="badge badge--partial">partial</span> (MVP done; full phoenix/sisalfa dogfood pending operator runs — see <code>tdd-writer-reviewer.prd.md</code> Phase 5)</td>
           </tr>
         </tbody>
       </table>
@@ -147,11 +147,11 @@
 
       <ul>
         <li><strong>Skill:</strong> <code>skills/context-builder/SKILL.md</code> — initializes / updates the documentation tree for any target project</li>
-        <li><strong>Agents:</strong> <code>agents/test-runner.md</code>, <code>agents/post-green-reviewer.md</code>, <code>agents/prd-writer.md</code>, <code>agents/prd-reviewer.md</code>, <code>agents/research-web.md</code>, <code>agents/research-codebase.md</code>, <code>agents/plan-writer.md</code> (v0.7.0), <code>agents/plan-reviewer.md</code> (v0.7.0), <code>agents/implementer.md</code> (v0.8.0), <code>agents/code-reviewer.md</code> (v0.8.0; R-COH-* coherence layer added 2026-04-28), <code>agents/code-reviewer-semantic.md</code> (sub-agent shipped 2026-04-28)</li>
-        <li><strong>Commands:</strong> <code>commands/relay-test.md</code>, <code>commands/relay-test-review.md</code>, <code>commands/relay-prd.md</code>, <code>commands/relay-plan.md</code> (v0.7.0), <code>commands/relay-plan-review.md</code> (v0.7.0), <code>commands/relay-implement.md</code> (v0.8.0), <code>commands/relay-code-review.md</code> (v0.8.0)</li>
+        <li><strong>Agents:</strong> <code>agents/test-runner.md</code>, <code>agents/post-green-reviewer.md</code>, <code>agents/prd-writer.md</code>, <code>agents/prd-reviewer.md</code>, <code>agents/research-web.md</code>, <code>agents/research-codebase.md</code>, <code>agents/plan-writer.md</code> (v0.7.0), <code>agents/plan-reviewer.md</code> (v0.7.0), <code>agents/implementer.md</code> (v0.8.0), <code>agents/code-reviewer.md</code> (v0.8.0; R-COH-* coherence layer added 2026-04-28), <code>agents/code-reviewer-semantic.md</code> (sub-agent shipped 2026-04-28), <code>agents/tdd-writer.md</code> (v0.10.0), <code>agents/tdd-reviewer.md</code> (v0.10.0)</li>
+        <li><strong>Commands:</strong> <code>commands/relay-test.md</code>, <code>commands/relay-test-review.md</code>, <code>commands/relay-prd.md</code>, <code>commands/relay-plan.md</code> (v0.7.0), <code>commands/relay-plan-review.md</code> (v0.7.0), <code>commands/relay-implement.md</code> (v0.8.0), <code>commands/relay-code-review.md</code> (v0.8.0), <code>commands/relay-execute.md</code> (v0.9.0), <code>commands/relay-tdd.md</code> (v0.10.0), <code>commands/relay-tdd-review.md</code> (v0.10.0)</li>
       </ul>
 
-      <p>Other agents and commands from the 12-command surface (<a href="../reference/commands.html">Commands</a>) are <span class="badge badge--pending">pending</span>; their implementations are the main deliverables of project phases 3 and 4.</p>
+      <p>Of the 12-command surface (<a href="../reference/commands.html">Commands</a>), only <code>/relay-worktree</code> and <code>/relay-pr</code> remain <span class="badge badge--pending">pending</span> from Pillar 2; the Pillar 3 commands (<code>/relay-approve</code> + Docs Updater / Reviewer agents) are the main deliverables of project phase 4.</p>
 
       <h3 id="shared-scripts">Shared scripts</h3>
 
@@ -183,24 +183,25 @@
 
       <h3 id="next-phase-3">Phase 3 (Agents — Orchestrator)</h3>
 
-      <p>The big one. The PRD authoring stage shipped (<code>/relay-prd</code> + <code>prd-writer</code> + <code>prd-reviewer</code>, plus the reusable <code>research-web</code> and <code>research-codebase</code> subagents); the rest of the pipeline is still pending. The PRD for the next stage — Plan authoring (<code>/relay-plan</code> + <code>/relay-plan-review</code>) — is APPROVED at <code>PRPs/prds/plan-authoring.prd.md</code> and queued for implementation.</p>
+      <p>Shipped end-to-end. The capstone <code>/relay-execute</code> orchestrator (v0.9.0) now serially drives an APPROVED PRD through every actionable Implementation Phases row, composing the four writer/reviewer pairs (PRD, Plan, Implementation, TDD) plus the Test Runner via inline command-protocol adoption (D7). The TDD pair (B7/B8, v0.10.0) is the structural unblock for any feature whose Acceptance Criteria require new test files — R-X strict in the implementer is preserved verbatim.</p>
 
       <p><strong>Shipped:</strong></p>
       <ul>
-        <li><code>/relay-prd</code> — interactive entry point of the pipeline; produces APPROVED PRDs from descriptions or draft markdown</li>
+        <li><code>/relay-prd</code> (v0.6.0) — interactive entry point; produces APPROVED PRDs</li>
+        <li><code>/relay-plan</code> + <code>/relay-plan-review</code> (v0.7.0) — per-phase plan generation and structural rubric review</li>
+        <li><code>/relay-implement</code> + <code>/relay-code-review</code> (v0.8.0) — internal writer↔reviewer loop with three-layer rubric and D8 post-approval mutations</li>
+        <li>reviewer-coherence-layer R-COH-* (v0.7.3, 2026-04-28) — additive coherence checks across all three reviewers</li>
+        <li><code>/relay-execute</code> (v0.9.0) — multi-phase orchestrator with source-PRD-table state machine (D6) and two session-level budgets (D3)</li>
+        <li><code>/relay-tdd</code> + <code>/relay-tdd-review</code> (v0.10.0) — B7/B8 TDD pair; the only authorized creator of new test files in the autonomous pipeline</li>
       </ul>
 
-      <p><strong>Pending:</strong></p>
+      <p><strong>Pending (Pillar 2 leftovers):</strong></p>
       <ul>
-        <li><code>/relay-plan</code> + <code>/relay-plan-review</code> — PRD APPROVED; implementation next</li>
-        <li><code>/relay-worktree</code></li>
-        <li><code>/relay-tdd</code> + <code>/relay-tdd-review</code> (opt-in)</li>
-        <li><code>/relay-implement</code> + <code>/relay-code-review</code></li>
-        <li><code>/relay-pr</code></li>
-        <li><code>/relay-execute</code> — the actual orchestrator</li>
+        <li><code>/relay-worktree</code> — <code>/relay-implement</code>'s D4 graceful degradation works against the current cwd today; the standalone command is deferred</li>
+        <li><code>/relay-pr</code> — <code>/relay-execute</code> currently emits a "ready for PR" message at the end; the command that opens the PR and writes <code>final-report.md</code> is unshipped</li>
       </ul>
 
-      <p>When Phase 3 fully lands, Phase 5 of the Test Runner PRD (no-prompts autonomous run) and AC-2/3/4 (auto-correction succeeds / budget exhausted / oscillation) become validatable, closing out the remaining Test Runner ACs.</p>
+      <p>With <code>/relay-execute</code> shipped, the Test Runner PRD's AC-2/3/4 (auto-correction succeeds / budget exhausted / oscillation) and Phase 5's "no prompts during autonomous run" signal are now validatable end-to-end — pending the operator-driven phoenix/sisalfa dogfood runs (Phase 5 of <code>tdd-writer-reviewer.prd.md</code>).</p>
 
       <h3 id="next-phase-4">Phase 4 (Approval cycle)</h3>
 
@@ -212,14 +213,14 @@
 
       <h2 id="dogfood-status">Dogfood status</h2>
 
-      <p>The <strong>phoenix</strong> project (Django + React SaaS for MEC higher-education assessments) is relay's first target. Status as of 2026-04-21:</p>
+      <p>The <strong>phoenix</strong> project (Django + React SaaS for MEC higher-education assessments) is relay's first target. Status as of 2026-05-10:</p>
 
       <ul>
         <li><span class="badge badge--done">done</span> Context-builder run: <code>docs/</code>, <code>docs/context/methodology.md</code>, <code>.claude/settings.json</code>, <code>PRPs/redaction-extensions.txt</code> all produced. Team edits preserved on <code>*update</code>.</li>
         <li><span class="badge badge--done">done</span> Infra formalized: <code>Makefile</code> with <code>make test-bootstrap / test-pytest / test-playwright / test-e2e / test-down</code>. Existing docker-compose.test.yml was 90% of Phase 1 already.</li>
         <li><span class="badge badge--done">done</span> Governance additions: tmpfs isolation decision, "no production creds in test env" anti-pattern.</li>
         <li><span class="badge badge--done">done</span> Vitest configured to emit JUnit XML (pytest and Playwright already did).</li>
-        <li><span class="badge badge--partial">partial</span> Phase 9 dogfood MVP: synthetic run exercised the real normalizer + report generator end-to-end. Artifacts at <code>phoenix/PRPs/reports/dogfood-2026-04-21/</code>. Remaining validations (AC-2/3/4, real "no prompts" signal, 20-session Success Metric measurement) wait for the orchestrator.</li>
+        <li><span class="badge badge--partial">partial</span> Phase 9 dogfood MVP: synthetic run exercised the real normalizer + report generator end-to-end. Artifacts at <code>phoenix/PRPs/reports/dogfood-2026-04-21/</code>. With <code>/relay-execute</code> shipped (v0.9.0) and the TDD pair shipped (v0.10.0), the remaining validations (AC-2/3/4, real "no prompts" signal, 20-session Success Metric measurement, ≥3-feature end-to-end traversal) are now operator-pending — tracked as Phase 5 of <code>tdd-writer-reviewer.prd.md</code>.</li>
       </ul>
 
       <p>See <a href="../examples/phoenix-dogfood.html">Phoenix dogfood</a> for the detailed report.</p>
@@ -227,13 +228,6 @@
       <h2 id="known-gaps">Known gaps</h2>
 
       <p>Honest list of things documented but not yet realized:</p>
-
-      <div class="callout callout--warn">
-        <div class="callout__title">/relay-implement gap</div>
-        <p>
-          The <code>/relay-test</code> command's auto-correction loop, when it hits <code>RETRY_NEEDED</code>, is designed to invoke the Implementer. The Implementer agent is part of Phase 3 (Orchestrator), not yet implemented. Until it lands, <code>/relay-test</code> HALTS on first <code>RETRY_NEEDED</code> with a clear message and writes failure feedback to disk. Users apply the fix manually and re-run. This is documented behavior, not a bug.
-        </p>
-      </div>
 
       <div class="callout callout--warn">
         <div class="callout__title">Coverage baseline</div>
