@@ -148,10 +148,10 @@
       <ul>
         <li><strong>Skill:</strong> <code>skills/context-builder/SKILL.md</code> — initializes / updates the documentation tree for any target project</li>
         <li><strong>Agents:</strong> <code>agents/test-runner.md</code>, <code>agents/post-green-reviewer.md</code>, <code>agents/prd-writer.md</code>, <code>agents/prd-reviewer.md</code>, <code>agents/research-web.md</code>, <code>agents/research-codebase.md</code>, <code>agents/plan-writer.md</code> (v0.7.0), <code>agents/plan-reviewer.md</code> (v0.7.0), <code>agents/implementer.md</code> (v0.8.0), <code>agents/code-reviewer.md</code> (v0.8.0; R-COH-* coherence layer added 2026-04-28), <code>agents/code-reviewer-semantic.md</code> (sub-agent shipped 2026-04-28), <code>agents/tdd-writer.md</code> (v0.10.0), <code>agents/tdd-reviewer.md</code> (v0.10.0)</li>
-        <li><strong>Commands:</strong> <code>commands/relay-test.md</code>, <code>commands/relay-test-review.md</code>, <code>commands/relay-prd.md</code>, <code>commands/relay-plan.md</code> (v0.7.0), <code>commands/relay-plan-review.md</code> (v0.7.0), <code>commands/relay-implement.md</code> (v0.8.0), <code>commands/relay-code-review.md</code> (v0.8.0), <code>commands/relay-execute.md</code> (v0.9.0), <code>commands/relay-tdd.md</code> (v0.10.0), <code>commands/relay-tdd-review.md</code> (v0.10.0)</li>
+        <li><strong>Commands:</strong> <code>commands/relay-test.md</code>, <code>commands/relay-test-review.md</code>, <code>commands/relay-prd.md</code>, <code>commands/relay-plan.md</code> (v0.7.0), <code>commands/relay-plan-review.md</code> (v0.7.0), <code>commands/relay-implement.md</code> (v0.8.0), <code>commands/relay-code-review.md</code> (v0.8.0), <code>commands/relay-execute.md</code> (v0.9.0), <code>commands/relay-tdd.md</code> (v0.10.0), <code>commands/relay-tdd-review.md</code> (v0.10.0), <code>commands/relay-worktree.md</code> (v0.11.0)</li>
       </ul>
 
-      <p>Of the 12-command surface (<a href="../reference/commands.html">Commands</a>), only <code>/relay-worktree</code> and <code>/relay-pr</code> remain <span class="badge badge--pending">pending</span> from Pillar 2; the Pillar 3 commands (<code>/relay-approve</code> + Docs Updater / Reviewer agents) are the main deliverables of project phase 4.</p>
+      <p>Of the 12-command surface (<a href="../reference/commands.html">Commands</a>), only <code>/relay-pr</code> remains <span class="badge badge--pending">pending</span> from Pillar 2; the Pillar 3 commands (<code>/relay-approve</code> + Docs Updater / Reviewer agents) are the main deliverables of project phase 4.</p>
 
       <h3 id="shared-scripts">Shared scripts</h3>
 
@@ -197,7 +197,6 @@
 
       <p><strong>Pending (Pillar 2 leftovers):</strong></p>
       <ul>
-        <li><code>/relay-worktree</code> — <code>/relay-implement</code>'s D4 graceful degradation works against the current cwd today; the standalone command is deferred</li>
         <li><code>/relay-pr</code> — <code>/relay-execute</code> currently emits a "ready for PR" message at the end; the command that opens the PR and writes <code>final-report.md</code> is unshipped</li>
       </ul>
 

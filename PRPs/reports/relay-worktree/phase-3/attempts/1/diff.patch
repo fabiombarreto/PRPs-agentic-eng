@@ -1,0 +1,122 @@
+diff --git a/plugins/relay/commands/relay-execute.md b/plugins/relay/commands/relay-execute.md
+index a0987cd..03d7abe 100644
+--- a/plugins/relay/commands/relay-execute.md
++++ b/plugins/relay/commands/relay-execute.md
+@@ -46,7 +46,7 @@ Emit the canonical six-line shape:
+   - Bypassing the writer/reviewer split — orchestrator dispatches existing pairs; never bundles
+   - Relying on interactive permission prompts in the autonomous loop (docs/anti-patterns.md:79-84)
+ - Applicable architectural rules:
+-  - Three-pillar Pillar 2 (Implementation); interactivity boundary; PRPs/ artifact paths; writer/reviewer split; graceful degradation when /relay-worktree absent (cwd against current branch)
++  - Three-pillar Pillar 2 (Implementation); interactivity boundary; PRPs/ artifact paths; writer/reviewer split; graceful degradation when /relay-worktree fails OR --no-worktree passed (cwd against current branch)
+ - Result: PROCEED | HALT (reason)
+ ```
+ 
+@@ -67,6 +67,8 @@ If the argument is non-empty but does not resolve to an existing readable file,
+ 
+ Record `prd_path` as the resolved absolute path. Record `target_root` as the current working directory. Parse `<feature>` as the PRD basename minus `.prd.md`.
+ 
++Also scan `$ARGUMENTS` for the optional flag `--no-worktree`. If `--no-worktree` is present, record `no_worktree_flag = true`; otherwise record `no_worktree_flag = false`. When `no_worktree_flag = true`, Phase A.3.3 is entirely skipped and all downstream stages operate against cwd on the current branch — exactly preserving the pre-Phase-3 behavior. The `--no-worktree` flag is extracted before the PRD path token; the PRD path is always the first non-flag token in `$ARGUMENTS`.
++
+ ---
+ 
+ ## Preconditions
+@@ -208,7 +210,10 @@ Write `PRPs/reports/<feature>/orchestrator-run.json` with the final summary:
+   "max_orchestrator_minutes": 240,
+   "phases": <orchestrator_run_log>,
+   "outcome": "ALL_PHASES_COMPLETE",
+-  "phases_completed": <phases_completed>
++  "phases_completed": <phases_completed>,
++  "worktree_attempted": <boolean | null>,
++  "worktree_succeeded": <boolean | null>,
++  "fallback_reason": "<string | null>"
+ }
+ ```
+ 
+@@ -226,7 +231,10 @@ Write `PRPs/reports/<feature>/orchestrator-halt.json`:
+   "phases_completed": <phases_completed>,
+   "partial_state_note": "Source PRD Implementation Phases table reflects phase states at the time of timeout. Phases that reached complete are recorded; remaining pending rows can be retried.",
+   "manual_recovery": "re-invoke /relay-execute <prd_path>; picks up at next pending row with satisfied dependencies",
+-  "orchestrator_run_log": <orchestrator_run_log>
++  "orchestrator_run_log": <orchestrator_run_log>,
++  "worktree_attempted": <boolean | null>,
++  "worktree_succeeded": <boolean | null>,
++  "fallback_reason": "<string | null>"
+ }
+ ```
+ 
+@@ -297,6 +305,47 @@ HALT with verbatim message:
+ 
+ Else: re-adopt `/relay-plan` role passing `prior_feedback = <captured defect list>`. Loop back to Step A.3.2.
+ 
++### Phase A.3.3 — Per-phase worktree creation sub-flow
++
++#### Step A.3.3.0 — `--no-worktree` gate
++
++If `no_worktree_flag = true`: skip this phase entirely. Append to `orchestrator_run_log`:
++```json
++{"phase": <N>, "stage": "worktree", "outcome": "skipped_no_worktree_flag", "worktree_attempted": false}
++```
++Proceed directly to Phase A.3.5.
++
++#### Step A.3.3.1 — Adopt /relay-worktree role
++
++Read `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-worktree.md` and execute its full protocol inline for feature `<feature>`. Pass context:
++
++- `feature`: `<feature>` (derived from the PRD basename in the Parse arguments section)
++- `target_root`: the cwd
++
++#### Step A.3.3.2 — Record outcome
++
++**On success (exit 0 / worktree created or idempotently re-used):**
++
++Append to `orchestrator_run_log`:
++```json
++{"phase": <N>, "stage": "worktree", "outcome": "CREATED", "worktree_path": ".worktrees/<feature>/", "worktree_attempted": true, "worktree_succeeded": true, "fallback_reason": null}
++```
++
++Proceed to Phase A.3.5. All subsequent stages (A.3.5 TDD, A.4 implement, A.5 test) operate with the worktree context established in A.3.3.
++
++**On failure (non-zero exit / /relay-worktree returns a named HALT code):**
++
++Log a structured warning:
++
++> Warning: worktree-creation failure — falling through to cwd-based execution per D3/D4 graceful-degradation. /relay-worktree returned: `<exit-code or error message>`. All subsequent stages will operate against cwd on the current branch.
++
++Append to `orchestrator_run_log`:
++```json
++{"phase": <N>, "stage": "worktree", "outcome": "FALLBACK_CWD", "worktree_attempted": true, "worktree_succeeded": false, "fallback_reason": "<exit-code or error message>"}
++```
++
++Continue to Phase A.3.5. The pipeline does NOT halt on worktree-creation failure — only on downstream stage failure (per D8 of relay-worktree.prd.md).
++
+ ### Phase A.3.5 — Per-phase TDD sub-flow (tdd-review retry loop)
+ 
+ Conditional on `methodology.md` `tdd:` value read in P5.
+@@ -554,7 +603,10 @@ Write / overwrite `PRPs/reports/<feature>/orchestrator-run.json` with the full l
+   "max_orchestrator_minutes": 240,
+   "phases": <orchestrator_run_log>,
+   "outcome": null,
+-  "phases_completed": <phases_completed>
++  "phases_completed": <phases_completed>,
++  "worktree_attempted": <boolean | null>,
++  "worktree_succeeded": <boolean | null>,
++  "fallback_reason": "<string | null>"
+ }
+ ```
+ 
+@@ -602,13 +654,14 @@ On any HALT path (one of `FAILED_PLAN_REVIEW_BUDGET_EXCEEDED`, `FAILED_ORCHESTRA
+ 
+ 9. **When `tdd: true`, the orchestrator invokes `/relay-tdd` and `/relay-tdd-review` in Phase A.3.5 with budget `max_tdd_review_retries=2`; on budget exhaustion, HALT with `FAILED_TDD_REVIEW_BUDGET_EXCEEDED`.** When `tdd: false` or `methodology.md` is missing, A.3.5 self-skips silently per AC-10 (live no-op path). The implementer is NEVER invoked when A.3.5 halted — running it against an unapproved TDD suite would violate R-X strict in the test-file write direction.
+ 
++10. **`/relay-worktree` is invoked in Phase A.3.3 by default before Phase A.3.5.** When `--no-worktree` is passed, Phase A.3.3 is entirely skipped. When `/relay-worktree` returns a non-zero exit code, the orchestrator logs a warning, records `worktree_succeeded: false` and `fallback_reason` in `orchestrator-run.json`, and continues against cwd — the pipeline does NOT halt on worktree-creation failure (D8 of relay-worktree.prd.md). The worktree at `.worktrees/<feature>/` and its branch `feature/<feature>` persist on disk even if /relay-execute halts mid-pipeline (AC-15).
++
+ ---
+ 
+ ## What you do NOT do
+ 
+ - **Re-implementing plan-writer logic** — the orchestrator adopts `/relay-plan` inline via Read; it does not paste or summarize plan-writer's step bodies.
+ - **Running the plan rubric inline** — the orchestrator adopts `/relay-plan-review` inline via Read; it does not evaluate R1–R8 or R-COH-* rubric items itself.
+-- **Wiring `/relay-worktree`** — deferred per 2026-04-19 surface decision; the orchestrator runs against cwd until `/relay-worktree` ships.
+ - **Wiring `/relay-pr`** — separate future command; the orchestrator surfaces "ready for /relay-pr" on success but does not invoke it.
+ - **Auto-recovering from `/relay-implement` HALT** — the orchestrator surfaces the halt and exits. Manual intervention is required.
+ - **Auto-recovering from `/relay-test-review` CHANGES_REQUESTED** — HALT with `FAILED_TEST_REVIEW_REJECTED`; no auto-correction path. B5 exists precisely to gate human review.

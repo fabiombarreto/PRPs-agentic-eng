@@ -1,0 +1,184 @@
+diff --git a/docs/api-reference.md b/docs/api-reference.md
+index 6a11cd6..85b8c13 100644
+--- a/docs/api-reference.md
++++ b/docs/api-reference.md
+@@ -54,7 +54,7 @@ cycle.
+ 
+ | Command | Input | Output |
+ |---------|-------|--------|
+-| `/relay-worktree <feature-name>` | feature name | worktree at `.worktrees/<feature>/` + branch `feature/<name>` |
++| `/relay-worktree <feature-name>` ✅ **implemented** | feature name (free argument); or PRD-derived slug when invoked internally by `/relay-execute`. Sanitized to `[a-z0-9-]` max 64 chars; empty result after sanitization → HALT. `--base <ref>` flag overrides the base ref (default: `origin/main` → `origin/master` → `HEAD` fallback chain). `--no-worktree` on `/relay-execute` skips invocation entirely. | worktree at `.worktrees/<feature>/` + branch `feature/<feature>`. Idempotent: silently reuses an existing worktree when the branch matches; halts loud (`FAILED_BRANCH_DIVERGENCE`) when the worktree exists on a different branch. Bootstrap log at `PRPs/reports/<feature>/worktree-bootstrap.log` when `scripts/worktree-bootstrap.sh` runs (non-fatal on failure). Precondition halts: `FAILED_NOT_A_GIT_REPO`, `FAILED_BASE_REF_MISSING`, `FAILED_BRANCH_CONFLICT`, `FAILED_PATH_OCCUPIED`. Creation failure inside `/relay-execute` triggers graceful fallback to cwd per D3/D4 — pipeline does NOT halt on worktree creation failure. See `PRPs/prds/relay-worktree.prd.md` AC-1 through AC-9. |
+ | `/relay-test <worktree>` ✅ **implemented** | worktree with code | green state or `FAILED_AFTER_N_RETRIES` / `FAILED_TIME_BUDGET_EXCEEDED` / `FAILED_OSCILLATION` / `FAILED_INFRA_UNRECOVERABLE`. Encapsulates B1–B4: suite execution, failure classification, auto-correction loop (see `docs/decisions.md` on `max_test_retries`, `max_test_minutes`). Delegates per-attempt work to the `test-runner` agent (`plugins/relay/agents/test-runner.md`). Produces `PRPs/reports/<feature>/run.json` plus per-attempt `record.json` and `stdout.log`. |
+ | `/relay-pr <feature-name>` | worktree with green tests + all reviews `APPROVED` | PR opened + `PRPs/reports/<feature>/final-report.md` |
+ 
+diff --git a/docs/context/architecture.md b/docs/context/architecture.md
+index 1871248..710f04d 100644
+--- a/docs/context/architecture.md
++++ b/docs/context/architecture.md
+@@ -90,6 +90,7 @@ All pipeline artifacts live under `PRPs/` at the repository root:
+ | `PRPs/plans/<feature>-phase-<N>-<slug>.plan.md` | Implementation plans, one per PRD phase (`plan-writer` writes DRAFT; `plan-reviewer` flips to APPROVED). Per-phase pattern recorded in `docs/decisions.md` 2026-04-25. |
+ | `PRPs/plans/completed/<basename>.plan.md` | Archived implementation plans after `/relay-implement` reaches APPROVED rubric and performs D8 Mutation b. Archive path codified in `docs/decisions.md` 2026-04-30; relay equivalent of prp-core's `.claude/PRPs/plans/completed/` (the upstream path violates the no-`.claude/`-writes rule). |
+ | `PRPs/reports/<feature>/` | Test Runner execution reports, attempts log, per-attempt diffs, final report; when TDD is active, also `tdd-initial-suite.diff` and `tdd-reviews.md`; per-attempt diffs from `/relay-implement` at `phase-<N>/attempts/<i>/diff.patch` plus `record.json` (recorded in `docs/decisions.md` 2026-04-30). |
++| `.worktrees/<feature>/` | Per-feature isolated git worktrees created by `/relay-worktree`. Each worktree checks out branch `feature/<feature>` from the base ref (default `origin/main` → `origin/master` → `HEAD` fallback chain). Idempotent: silently reused when the worktree exists on the expected branch; HALT loud on branch divergence. Worktrees persist until Pillar 3 (`/relay-approve`) removes them post-merge. Path sidesteps the `.claude/` permission gate — documented in `docs/decisions.md` 2026-05-11 D1. |
+ 
+ Artifacts are NEVER written under `.claude/`. Claude Code enforces
+ hardcoded permission prompts on writes to that folder; those prompts
+diff --git a/docs/decisions.md b/docs/decisions.md
+index ecd67d1..35c9f7a 100644
+--- a/docs/decisions.md
++++ b/docs/decisions.md
+@@ -437,6 +437,53 @@ When `tdd: false` or `methodology.md` is missing, A.3.5 self-skips silently as a
+ 
+ ---
+ 
++## [2026-05-11] relay-worktree architecture decisions: path, shell-out primitive, bootstrap contract, .gitignore evolution, graceful fallback
++
++### D1 — `.worktrees/<feature>/` path (not `.claude/worktrees/`)
++
++**Context:** Claude Code's native `EnterWorktree` tool hardcodes the worktree location to `.claude/worktrees/<name>/`. The 2026-04-19 surface decision pins the output path to `.worktrees/<feature>/` (sibling directory at repo root, not under `.claude/`). The `.claude/` permission gate documented in `docs/anti-patterns.md:60-66` also makes any autonomous write to `.claude/` an interactive-prompt risk.
++**Decision:** Worktrees are created at `.worktrees/<feature>/` relative to the repo root. `EnterWorktree` is not used.
++**Reason:** Honors the 2026-04-19 surface decision; avoids the `.claude/` permission gate entirely — no exception entry needed since `.worktrees/<feature>/` sits outside `.claude/`; keeps the path convention grep-friendly and version-visible in `git worktree list`.
++**Areas affected:** `/relay-worktree` command, `context-builder` `.gitignore` append, `docs/context/architecture.md` PRP artifact paths table.
++
++---
++
++### D2 — Shell-out `git worktree add` via `Bash` rather than `EnterWorktree`
++
++**Context:** `EnterWorktree` has two misalignments with relay's requirements: (a) its hardcoded `.claude/worktrees/<name>/` path conflicts with D1; (b) its auto-cleanup-on-session-exit lifecycle removes the worktree when the Claude Code session ends, which conflicts with relay's pipeline lifecycle (the worktree must survive across multiple `/relay-execute` invocations and persist until Pillar 3 post-merge cleanup).
++**Decision:** The `/relay-worktree` command invokes `git worktree add .worktrees/<feature>/ -b feature/<feature> <base>` directly via `Bash`. Idempotency detection uses `git worktree list --porcelain` (locale-independent; git's authoritative state) rather than path-existence check (which has false positives from stale directories).
++**Reason:** Path contract preserved (D1); lifecycle survives across `/relay-execute` invocations; `--porcelain` flag avoids locale-dependent output parse failures. Trade-off acknowledged: relay loses the native cwd-switching behavior of `EnterWorktree`; downstream commands continue to receive the worktree path as an argument (existing contract).
++**Areas affected:** `/relay-worktree` command.
++
++---
++
++### D6 — Bootstrap-hook contract (project-owned script; context-builder emits template; failure is non-fatal)
++
++**Context:** Per-worktree environment setup (env-file replication, Docker Compose project name override, dependency installation, port allocation) is stack-specific and varies across every target project. Relay cannot become a Docker/dependency orchestrator without losing its stack-agnostic character.
++**Decision:** The bootstrap contract is a single project-owned shell script at `scripts/worktree-bootstrap.sh` (Unix) or `scripts/worktree-bootstrap.ps1` (Windows). `/relay-worktree` invokes whichever is present as `scripts/worktree-bootstrap.sh <absolute-worktree-path>` with a 60-second timeout. Stdout/stderr are captured to `PRPs/reports/<feature>/worktree-bootstrap.log` with secret redaction. `context-builder *init` emits the initial template (shebang + four commented-out TODO blocks); `*update` is a no-op for the script (PRESERVE ENTIRELY per SKILL.md:861-868). Bootstrap failure is non-fatal — worktree creation is the load-bearing outcome; a warning is logged naming the bootstrap log path.
++**Reason:** Delegating to a project-owned script keeps relay out of Docker/dependency orchestration; mirrors the precedent of `.claude/settings.json` allowlist (template + customize + preserve-on-update); non-fatal failure preserves the worktree as the load-bearing outcome for the graceful-degradation contract (D3/D4).
++**Areas affected:** `/relay-worktree` command, `context-builder` SKILL.md.
++
++---
++
++### D7 — `.gitignore` auto-write by `context-builder *init`
++
++**Context:** `SKILL.md:1090-1106` previously advised users to add `.worktrees/` to `.gitignore` but did not auto-write the entry. Codebase research confirmed this was advisory-only. Without the entry, git tracks the worktree directory, causing spurious status noise and diff pollution across all concurrent pipeline invocations.
++**Decision:** `context-builder *init` auto-appends `.worktrees/` to `.gitignore` with a comment line `# relay — per-feature worktrees (ephemeral)` immediately above it. `*init` and `*update` re-runs on a `.gitignore` that already contains `.worktrees/` are no-ops (no duplicate entry appended).
++**Reason:** Zero-risk single-line append; closes the advisory-vs-auto gap; the PRESERVE ENTIRELY rule at `SKILL.md:861-868` applies to `*update` mode, meaning team edits to `.gitignore` (including deliberate removal of the `.worktrees/` line) are never overwritten by subsequent `*update` invocations.
++**Areas affected:** `context-builder` SKILL.md, target project `.gitignore`.
++
++---
++
++### D8 — Worktree-creation-failure graceful fallback to cwd (D3/D4 graceful-degradation preserved)
++
++**Context:** `/relay-execute`'s D3 graceful-degradation rule (2026-05-01 decision) mandates that the pipeline works against the cwd when no worktree is set up. D4 of the same decision preserves this as the fallback for worktree creation failures. Without an explicit D8 decision, a worktree creation failure (disk full, permission denied, transient git error) would halt the entire pipeline on a non-requirement-related infrastructure issue.
++**Decision:** When `/relay-worktree` returns a non-zero exit code during a `/relay-execute` run and `--no-worktree` was not passed, the orchestrator logs a warning, falls through to cwd-based execution, and records the fallback in `orchestrator-run.json` with fields `worktree_attempted: true`, `worktree_succeeded: false`, `fallback_reason: <code>`. The pipeline does NOT halt on worktree creation failure — only on downstream stage failure.
++**Reason:** Worktree is an optimization (isolation, parallelism), not a correctness requirement. The pipeline's correctness invariants (implementer writes the right files, tests pass, code review approves) hold equally against the cwd as against a worktree. Halting on a transient infrastructure failure would block users on issues the AI cannot resolve autonomously — the antithesis of relay's graceful-degradation philosophy.
++**Areas affected:** `/relay-execute` D4 live wiring, `orchestrator-run.json` `worktree_attempted` / `worktree_succeeded` / `fallback_reason` fields.
++
++---
++
+ <!-- Template for future entries:
+ 
+ ## [YYYY-MM-DD] Title of the decision
+diff --git a/documentation/changelog.html b/documentation/changelog.html
+index 5f5bf3a..de6b00e 100644
+--- a/documentation/changelog.html
++++ b/documentation/changelog.html
+@@ -30,7 +30,28 @@
+ 
+       <h2 id="unreleased">Unreleased</h2>
+ 
+-      <p>No in-flight changes since the v0.10.1 cut on 2026-05-10. Future docs work accumulates here.</p>
++      <p>No in-flight changes since the v0.11.0 cut on 2026-05-11. Future docs work accumulates here.</p>
++
++      <h2 id="v0-11-0">0.11.0 — 2026-05-11</h2>
++
++      <p><code>/relay-worktree</code> command ships, completing the 12-command Pillar 2 surface. The command creates an isolated git worktree at <code>.worktrees/&lt;feature&gt;/</code> on branch <code>feature/&lt;feature&gt;</code>, executes a project-owned bootstrap script (non-fatal on failure), and integrates into <code>/relay-execute</code> between <code>/relay-plan-review</code> and <code>/relay-tdd</code> with graceful fallback to cwd per D3/D4 on creation failure. Five architecture decisions recorded in <code>docs/decisions.md</code>: D1 (path confirmation: <code>.worktrees/&lt;feature&gt;/</code> over <code>EnterWorktree</code>'s <code>.claude/worktrees/</code>), D2 (shell-out <code>git worktree add</code> over native <code>EnterWorktree</code>), D6 (bootstrap-hook contract: project-owned script + context-builder template + non-fatal failure), D7 (<code>.gitignore</code> auto-write by <code>context-builder *init</code>), D8 (worktree-creation-failure graceful fallback preserving D3/D4). Plugin manifest version bumped <code>0.10.0</code> &rarr; <code>0.11.0</code> per the 2026-04-30 &sect;7.5 binding contract.</p>
++
++      <h3 id="v0-11-0-added">Added</h3>
++
++      <ul>
++        <li><strong><code>plugins/relay/commands/relay-worktree.md</code></strong> &mdash; new deterministic infra command (no LLM, no agent). Preconditions: cwd is a git repo, base ref resolvable, branch <code>feature/&lt;feature&gt;</code> available or idempotent re-use. Slug sanitization to <code>[a-z0-9-]</code> max 64 chars. Idempotency via <code>git worktree list --porcelain</code>. Four HALT codes: <code>FAILED_NOT_A_GIT_REPO</code>, <code>FAILED_BASE_REF_MISSING</code>, <code>FAILED_BRANCH_CONFLICT</code>, <code>FAILED_PATH_OCCUPIED</code>. Bootstrap hook execution with 60s timeout and secret-redacted log. Satisfies AC-1 through AC-9 of <code>PRPs/prds/relay-worktree.prd.md</code>.</li>
++        <li><strong><code>docs/decisions.md</code></strong> &mdash; new <code>[2026-05-11]</code> entry covering five architecture decisions (D1/D2/D6/D7/D8) made during relay-worktree Phases 1&ndash;3. Each decision uses the canonical four-field shape (Context / Decision / Reason / Areas affected).</li>
++      </ul>
++
++      <h3 id="v0-11-0-changed">Changed</h3>
++
++      <ul>
++        <li><strong><code>documentation/reference/commands.html</code></strong> &mdash; <code>/relay-worktree</code> promoted from bare two-row stub (Input + Output only, no badge) to full canonical kv-block with <code>badge--done</code> "implemented" badge; kv-block contains Input, Output, Mode, Preconditions, Bootstrap, Flags, and Notes rows documenting idempotency semantics, HALT codes, bootstrap contract, and the <code>--no-worktree</code> opt-out behavior on <code>/relay-execute</code>.</li>
++        <li><strong><code>documentation/roadmap/status.html</code></strong> &mdash; <code>/relay-worktree</code> removed from the "Pending (Pillar 2 leftovers)" bullet list; <code>commands/relay-worktree.md (v0.11.0)</code> added to the "What's shipped &gt; Plugin artifacts &gt; Commands" list; the "12-command surface" paragraph updated from "only <code>/relay-worktree</code> and <code>/relay-pr</code> remain pending" to "only <code>/relay-pr</code> remains pending".</li>
++        <li><strong><code>docs/api-reference.md</code></strong> &mdash; <code>/relay-worktree</code> row in the Infrastructure / execution table promoted to &#10003; implemented with full behavioral notes covering slug sanitization, idempotency, HALT codes, bootstrap hook, graceful fallback, and the <code>--base</code> / <code>--no-worktree</code> flags.</li>
++        <li><strong><code>docs/context/architecture.md</code></strong> &mdash; new <code>.worktrees/&lt;feature&gt;/</code> row added to the PRP artifact paths table describing the worktree location, idempotency semantics, lifecycle (persists until Pillar 3 removes it post-merge), and D1 cross-reference.</li>
++        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong> &mdash; version bumped <code>0.10.0</code> &rarr; <code>0.11.0</code> per the 2026-04-30 &sect;7.5 binding contract. Users running <code>/plugin</code> after pulling will get a fresh <code>relay/0.11.0/</code> cache directory with <code>/relay-worktree</code> registered.</li>
++      </ul>
+ 
+       <h2 id="v0-10-1">0.10.1 — 2026-05-10</h2>
+ 
+diff --git a/documentation/reference/commands.html b/documentation/reference/commands.html
+index f9d94e7..bb0b5b4 100644
+--- a/documentation/reference/commands.html
++++ b/documentation/reference/commands.html
+@@ -152,12 +152,22 @@
+ 
+       <h2 id="infra-execution">Infra &amp; execution</h2>
+ 
+-      <h3 id="relay-worktree"><code>/relay-worktree &lt;feature-name&gt;</code></h3>
++      <h3 id="relay-worktree"><code>/relay-worktree &lt;feature-name&gt;</code> <span class="badge badge--done">implemented</span></h3>
+       <div class="kv">
+         <dt>Input</dt>
+-        <dd>Feature name.</dd>
++        <dd>Feature name (free argument); or PRD-derived slug when invoked internally by <code>/relay-execute</code>. Sanitized to <code>[a-z0-9-]</code> max 64 chars; characters outside the set are dropped; leading/trailing hyphens stripped. Empty result after sanitization &rarr; HALT with actionable message.</dd>
+         <dt>Output</dt>
+-        <dd>Worktree at <code>.worktrees/&lt;feature&gt;/</code> + branch <code>feature/&lt;name&gt;</code>.</dd>
++        <dd>Worktree at <code>.worktrees/&lt;feature&gt;/</code> and branch <code>feature/&lt;feature&gt;</code>. Bootstrap log at <code>PRPs/reports/&lt;feature&gt;/worktree-bootstrap.log</code> when <code>scripts/worktree-bootstrap.sh</code> runs.</dd>
++        <dt>Mode</dt>
++        <dd>Deterministic infra command (no LLM, no agent). Idempotent: silently reuses an existing worktree when the branch matches; halts loud (<code>FAILED_BRANCH_DIVERGENCE</code>) when the worktree exists on a different branch, naming both the expected and actual branch and instructing the user to resolve manually or choose a different feature name.</dd>
++        <dt>Preconditions</dt>
++        <dd>cwd is a git repo (<code>FAILED_NOT_A_GIT_REPO</code>); base ref resolvable (<code>FAILED_BASE_REF_MISSING</code>); branch <code>feature/&lt;feature&gt;</code> available or already on expected worktree (<code>FAILED_BRANCH_CONFLICT</code>); path <code>.worktrees/&lt;feature&gt;/</code> either empty or a registered git worktree (<code>FAILED_PATH_OCCUPIED</code>). Idempotency detection via <code>git worktree list --porcelain</code> (locale-independent; authoritative git state).</dd>
++        <dt>Bootstrap</dt>
++        <dd>Invokes <code>scripts/worktree-bootstrap.sh &lt;abs-worktree-path&gt;</code> (or <code>.ps1</code> on Windows) with a 60-second timeout when the script exists. Stdout/stderr captured to <code>PRPs/reports/&lt;feature&gt;/worktree-bootstrap.log</code> with secret redaction. Failure is non-fatal &mdash; worktree creation is the load-bearing outcome; a warning is logged naming the log path. Script absent: silent, no log written.</dd>
++        <dt>Flags</dt>
++        <dd><code>--base &lt;ref&gt;</code> &mdash; base ref for the new branch (default: <code>origin/main</code> &rarr; <code>origin/master</code> &rarr; <code>HEAD</code> fallback chain).</dd>
++        <dt>Notes</dt>
++        <dd>Invoked automatically by <code>/relay-execute</code> between <code>/relay-plan-review</code> and <code>/relay-tdd</code>. <code>--no-worktree</code> flag on <code>/relay-execute</code> skips invocation and preserves the current cwd-based behavior. Creation failure inside <code>/relay-execute</code> falls through to graceful degradation per D3/D4 &mdash; pipeline does NOT halt on worktree creation failure; fallback recorded in <code>orchestrator-run.json</code> with <code>worktree_attempted: true</code>, <code>worktree_succeeded: false</code>, <code>fallback_reason: &lt;code&gt;</code>. See <code>PRPs/prds/relay-worktree.prd.md</code>.</dd>
+       </div>
+ 
+       <h3 id="relay-test"><code>/relay-test &lt;worktree&gt;</code> <span class="badge badge--done">implemented</span></h3>
+diff --git a/documentation/roadmap/status.html b/documentation/roadmap/status.html
+index 5109640..9d3ba84 100644
+--- a/documentation/roadmap/status.html
++++ b/documentation/roadmap/status.html
+@@ -148,10 +148,10 @@
+       <ul>
+         <li><strong>Skill:</strong> <code>skills/context-builder/SKILL.md</code> — initializes / updates the documentation tree for any target project</li>
+         <li><strong>Agents:</strong> <code>agents/test-runner.md</code>, <code>agents/post-green-reviewer.md</code>, <code>agents/prd-writer.md</code>, <code>agents/prd-reviewer.md</code>, <code>agents/research-web.md</code>, <code>agents/research-codebase.md</code>, <code>agents/plan-writer.md</code> (v0.7.0), <code>agents/plan-reviewer.md</code> (v0.7.0), <code>agents/implementer.md</code> (v0.8.0), <code>agents/code-reviewer.md</code> (v0.8.0; R-COH-* coherence layer added 2026-04-28), <code>agents/code-reviewer-semantic.md</code> (sub-agent shipped 2026-04-28), <code>agents/tdd-writer.md</code> (v0.10.0), <code>agents/tdd-reviewer.md</code> (v0.10.0)</li>
+-        <li><strong>Commands:</strong> <code>commands/relay-test.md</code>, <code>commands/relay-test-review.md</code>, <code>commands/relay-prd.md</code>, <code>commands/relay-plan.md</code> (v0.7.0), <code>commands/relay-plan-review.md</code> (v0.7.0), <code>commands/relay-implement.md</code> (v0.8.0), <code>commands/relay-code-review.md</code> (v0.8.0), <code>commands/relay-execute.md</code> (v0.9.0), <code>commands/relay-tdd.md</code> (v0.10.0), <code>commands/relay-tdd-review.md</code> (v0.10.0)</li>
++        <li><strong>Commands:</strong> <code>commands/relay-test.md</code>, <code>commands/relay-test-review.md</code>, <code>commands/relay-prd.md</code>, <code>commands/relay-plan.md</code> (v0.7.0), <code>commands/relay-plan-review.md</code> (v0.7.0), <code>commands/relay-implement.md</code> (v0.8.0), <code>commands/relay-code-review.md</code> (v0.8.0), <code>commands/relay-execute.md</code> (v0.9.0), <code>commands/relay-tdd.md</code> (v0.10.0), <code>commands/relay-tdd-review.md</code> (v0.10.0), <code>commands/relay-worktree.md</code> (v0.11.0)</li>
+       </ul>
+ 
+-      <p>Of the 12-command surface (<a href="../reference/commands.html">Commands</a>), only <code>/relay-worktree</code> and <code>/relay-pr</code> remain <span class="badge badge--pending">pending</span> from Pillar 2; the Pillar 3 commands (<code>/relay-approve</code> + Docs Updater / Reviewer agents) are the main deliverables of project phase 4.</p>
++      <p>Of the 12-command surface (<a href="../reference/commands.html">Commands</a>), only <code>/relay-pr</code> remains <span class="badge badge--pending">pending</span> from Pillar 2; the Pillar 3 commands (<code>/relay-approve</code> + Docs Updater / Reviewer agents) are the main deliverables of project phase 4.</p>
+ 
+       <h3 id="shared-scripts">Shared scripts</h3>
+ 
+@@ -197,7 +197,6 @@
+ 
+       <p><strong>Pending (Pillar 2 leftovers):</strong></p>
+       <ul>
+-        <li><code>/relay-worktree</code> — <code>/relay-implement</code>'s D4 graceful degradation works against the current cwd today; the standalone command is deferred</li>
+         <li><code>/relay-pr</code> — <code>/relay-execute</code> currently emits a "ready for PR" message at the end; the command that opens the PR and writes <code>final-report.md</code> is unshipped</li>
+       </ul>
+ 
+diff --git a/plugins/relay/.claude-plugin/plugin.json b/plugins/relay/.claude-plugin/plugin.json
+index cb01a81..181bd3d 100644
+--- a/plugins/relay/.claude-plugin/plugin.json
++++ b/plugins/relay/.claude-plugin/plugin.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "relay",
+-  "version": "0.10.0",
++  "version": "0.11.0",
+   "description": "Autonomous feature delivery for Claude Code: a single prompt takes a feature from PRD to merged PR via orchestrated writer/reviewer agent pairs and a Test Runner that closes the loop.",
+   "author": {
+     "name": "Fabio Martins Barreto",

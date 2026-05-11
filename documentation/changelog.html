@@ -30,7 +30,28 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <p>No in-flight changes since the v0.10.1 cut on 2026-05-10. Future docs work accumulates here.</p>
+      <p>No in-flight changes since the v0.11.0 cut on 2026-05-11. Future docs work accumulates here.</p>
+
+      <h2 id="v0-11-0">0.11.0 — 2026-05-11</h2>
+
+      <p><code>/relay-worktree</code> command ships, completing the 12-command Pillar 2 surface. The command creates an isolated git worktree at <code>.worktrees/&lt;feature&gt;/</code> on branch <code>feature/&lt;feature&gt;</code>, executes a project-owned bootstrap script (non-fatal on failure), and integrates into <code>/relay-execute</code> between <code>/relay-plan-review</code> and <code>/relay-tdd</code> with graceful fallback to cwd per D3/D4 on creation failure. Five architecture decisions recorded in <code>docs/decisions.md</code>: D1 (path confirmation: <code>.worktrees/&lt;feature&gt;/</code> over <code>EnterWorktree</code>'s <code>.claude/worktrees/</code>), D2 (shell-out <code>git worktree add</code> over native <code>EnterWorktree</code>), D6 (bootstrap-hook contract: project-owned script + context-builder template + non-fatal failure), D7 (<code>.gitignore</code> auto-write by <code>context-builder *init</code>), D8 (worktree-creation-failure graceful fallback preserving D3/D4). Plugin manifest version bumped <code>0.10.0</code> &rarr; <code>0.11.0</code> per the 2026-04-30 &sect;7.5 binding contract.</p>
+
+      <h3 id="v0-11-0-added">Added</h3>
+
+      <ul>
+        <li><strong><code>plugins/relay/commands/relay-worktree.md</code></strong> &mdash; new deterministic infra command (no LLM, no agent). Preconditions: cwd is a git repo, base ref resolvable, branch <code>feature/&lt;feature&gt;</code> available or idempotent re-use. Slug sanitization to <code>[a-z0-9-]</code> max 64 chars. Idempotency via <code>git worktree list --porcelain</code>. Four HALT codes: <code>FAILED_NOT_A_GIT_REPO</code>, <code>FAILED_BASE_REF_MISSING</code>, <code>FAILED_BRANCH_CONFLICT</code>, <code>FAILED_PATH_OCCUPIED</code>. Bootstrap hook execution with 60s timeout and secret-redacted log. Satisfies AC-1 through AC-9 of <code>PRPs/prds/relay-worktree.prd.md</code>.</li>
+        <li><strong><code>docs/decisions.md</code></strong> &mdash; new <code>[2026-05-11]</code> entry covering five architecture decisions (D1/D2/D6/D7/D8) made during relay-worktree Phases 1&ndash;3. Each decision uses the canonical four-field shape (Context / Decision / Reason / Areas affected).</li>
+      </ul>
+
+      <h3 id="v0-11-0-changed">Changed</h3>
+
+      <ul>
+        <li><strong><code>documentation/reference/commands.html</code></strong> &mdash; <code>/relay-worktree</code> promoted from bare two-row stub (Input + Output only, no badge) to full canonical kv-block with <code>badge--done</code> "implemented" badge; kv-block contains Input, Output, Mode, Preconditions, Bootstrap, Flags, and Notes rows documenting idempotency semantics, HALT codes, bootstrap contract, and the <code>--no-worktree</code> opt-out behavior on <code>/relay-execute</code>.</li>
+        <li><strong><code>documentation/roadmap/status.html</code></strong> &mdash; <code>/relay-worktree</code> removed from the "Pending (Pillar 2 leftovers)" bullet list; <code>commands/relay-worktree.md (v0.11.0)</code> added to the "What's shipped &gt; Plugin artifacts &gt; Commands" list; the "12-command surface" paragraph updated from "only <code>/relay-worktree</code> and <code>/relay-pr</code> remain pending" to "only <code>/relay-pr</code> remains pending".</li>
+        <li><strong><code>docs/api-reference.md</code></strong> &mdash; <code>/relay-worktree</code> row in the Infrastructure / execution table promoted to &#10003; implemented with full behavioral notes covering slug sanitization, idempotency, HALT codes, bootstrap hook, graceful fallback, and the <code>--base</code> / <code>--no-worktree</code> flags.</li>
+        <li><strong><code>docs/context/architecture.md</code></strong> &mdash; new <code>.worktrees/&lt;feature&gt;/</code> row added to the PRP artifact paths table describing the worktree location, idempotency semantics, lifecycle (persists until Pillar 3 removes it post-merge), and D1 cross-reference.</li>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong> &mdash; version bumped <code>0.10.0</code> &rarr; <code>0.11.0</code> per the 2026-04-30 &sect;7.5 binding contract. Users running <code>/plugin</code> after pulling will get a fresh <code>relay/0.11.0/</code> cache directory with <code>/relay-worktree</code> registered.</li>
+      </ul>
 
       <h2 id="v0-10-1">0.10.1 — 2026-05-10</h2>
 

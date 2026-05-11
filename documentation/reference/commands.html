@@ -152,12 +152,22 @@
 
       <h2 id="infra-execution">Infra &amp; execution</h2>
 
-      <h3 id="relay-worktree"><code>/relay-worktree &lt;feature-name&gt;</code></h3>
+      <h3 id="relay-worktree"><code>/relay-worktree &lt;feature-name&gt;</code> <span class="badge badge--done">implemented</span></h3>
       <div class="kv">
         <dt>Input</dt>
-        <dd>Feature name.</dd>
+        <dd>Feature name (free argument); or PRD-derived slug when invoked internally by <code>/relay-execute</code>. Sanitized to <code>[a-z0-9-]</code> max 64 chars; characters outside the set are dropped; leading/trailing hyphens stripped. Empty result after sanitization &rarr; HALT with actionable message.</dd>
         <dt>Output</dt>
-        <dd>Worktree at <code>.worktrees/&lt;feature&gt;/</code> + branch <code>feature/&lt;name&gt;</code>.</dd>
+        <dd>Worktree at <code>.worktrees/&lt;feature&gt;/</code> and branch <code>feature/&lt;feature&gt;</code>. Bootstrap log at <code>PRPs/reports/&lt;feature&gt;/worktree-bootstrap.log</code> when <code>scripts/worktree-bootstrap.sh</code> runs.</dd>
+        <dt>Mode</dt>
+        <dd>Deterministic infra command (no LLM, no agent). Idempotent: silently reuses an existing worktree when the branch matches; halts loud (<code>FAILED_BRANCH_DIVERGENCE</code>) when the worktree exists on a different branch, naming both the expected and actual branch and instructing the user to resolve manually or choose a different feature name.</dd>
+        <dt>Preconditions</dt>
+        <dd>cwd is a git repo (<code>FAILED_NOT_A_GIT_REPO</code>); base ref resolvable (<code>FAILED_BASE_REF_MISSING</code>); branch <code>feature/&lt;feature&gt;</code> available or already on expected worktree (<code>FAILED_BRANCH_CONFLICT</code>); path <code>.worktrees/&lt;feature&gt;/</code> either empty or a registered git worktree (<code>FAILED_PATH_OCCUPIED</code>). Idempotency detection via <code>git worktree list --porcelain</code> (locale-independent; authoritative git state).</dd>
+        <dt>Bootstrap</dt>
+        <dd>Invokes <code>scripts/worktree-bootstrap.sh &lt;abs-worktree-path&gt;</code> (or <code>.ps1</code> on Windows) with a 60-second timeout when the script exists. Stdout/stderr captured to <code>PRPs/reports/&lt;feature&gt;/worktree-bootstrap.log</code> with secret redaction. Failure is non-fatal &mdash; worktree creation is the load-bearing outcome; a warning is logged naming the log path. Script absent: silent, no log written.</dd>
+        <dt>Flags</dt>
+        <dd><code>--base &lt;ref&gt;</code> &mdash; base ref for the new branch (default: <code>origin/main</code> &rarr; <code>origin/master</code> &rarr; <code>HEAD</code> fallback chain).</dd>
+        <dt>Notes</dt>
+        <dd>Invoked automatically by <code>/relay-execute</code> between <code>/relay-plan-review</code> and <code>/relay-tdd</code>. <code>--no-worktree</code> flag on <code>/relay-execute</code> skips invocation and preserves the current cwd-based behavior. Creation failure inside <code>/relay-execute</code> falls through to graceful degradation per D3/D4 &mdash; pipeline does NOT halt on worktree creation failure; fallback recorded in <code>orchestrator-run.json</code> with <code>worktree_attempted: true</code>, <code>worktree_succeeded: false</code>, <code>fallback_reason: &lt;code&gt;</code>. See <code>PRPs/prds/relay-worktree.prd.md</code>.</dd>
       </div>
 
       <h3 id="relay-test"><code>/relay-test &lt;worktree&gt;</code> <span class="badge badge--done">implemented</span></h3>

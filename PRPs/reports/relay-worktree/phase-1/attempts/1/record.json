@@ -1,0 +1,8 @@
+{
+  "attempt": 1,
+  "verdict": "IMPLEMENTATION_COMPLETE",
+  "files_changed": ["plugins/relay/commands/relay-worktree.md"],
+  "validation": {"level_1": "PASS", "level_2": "PASS", "level_3": "PASS"},
+  "base_commit": "HEAD (development branch tip)",
+  "timestamp": "2026-05-10"
+}

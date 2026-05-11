@@ -1,0 +1,50 @@
+{
+  "feature": "relay-worktree",
+  "prd_path": "PRPs/prds/relay-worktree.prd.md",
+  "started_at": "2026-05-10T22:00:00Z",
+  "ended_at": "2026-05-11T01:00:00Z",
+  "max_plan_review_retries": 2,
+  "max_tdd_review_retries": 2,
+  "max_orchestrator_minutes": 240,
+  "worktree_attempted": false,
+  "worktree_succeeded": false,
+  "fallback_reason": "self-bootstrap: /relay-worktree was being built by this orchestrator run; cwd fallback per D8",
+  "phases": [
+    {"phase": 1, "stage": "plan", "outcome": "APPROVED", "plan_path": "PRPs/plans/completed/relay-worktree-phase-1-relay-worktree-command-file.plan.md", "attempts": 1},
+    {"phase": 1, "stage": "tdd", "outcome": "skipped_tdd_false"},
+    {"phase": 1, "stage": "implement", "outcome": "APPROVED", "attempts": 1, "diff": "PRPs/reports/relay-worktree/phase-1/attempts/1/diff.patch"},
+    {"phase": 1, "stage": "test", "outcome": "skipped_no_test_framework"},
+    {"phase": 1, "status": "complete", "plan_path": "PRPs/plans/completed/relay-worktree-phase-1-relay-worktree-command-file.plan.md", "timestamp": "2026-05-10"},
+
+    {"phase": 2, "stage": "plan", "outcome": "APPROVED", "plan_path": "PRPs/plans/completed/relay-worktree-phase-2-context-builder-extension.plan.md", "attempts": 2, "note": "attempt 1 CHANGES_REQUESTED (R-COH-TASK-AC-MISSING + R-COH-PATTERN-TASK-DRIFT); attempt 2 APPROVED"},
+    {"phase": 2, "stage": "tdd", "outcome": "skipped_tdd_false"},
+    {"phase": 2, "stage": "implement", "outcome": "APPROVED", "attempts": 1, "diff": "PRPs/reports/relay-worktree/phase-2/attempts/1/diff.patch"},
+    {"phase": 2, "stage": "test", "outcome": "skipped_no_test_framework"},
+    {"phase": 2, "status": "complete", "plan_path": "PRPs/plans/completed/relay-worktree-phase-2-context-builder-extension.plan.md", "timestamp": "2026-05-11"},
+
+    {"phase": 3, "stage": "plan", "outcome": "APPROVED", "plan_path": "PRPs/plans/completed/relay-worktree-phase-3-relay-execute-d4-live-wiring.plan.md", "attempts": 1},
+    {"phase": 3, "stage": "tdd", "outcome": "skipped_tdd_false"},
+    {"phase": 3, "stage": "implement", "outcome": "APPROVED", "attempts": 2, "diff": "PRPs/reports/relay-worktree/phase-3/attempts/2/diff.patch", "note": "attempt 1 CHANGES_REQUESTED (R-SEM line 274 jump target); attempt 2 surgical fix APPROVED"},
+    {"phase": 3, "stage": "test", "outcome": "skipped_no_test_framework"},
+    {"phase": 3, "status": "complete", "plan_path": "PRPs/plans/completed/relay-worktree-phase-3-relay-execute-d4-live-wiring.plan.md", "timestamp": "2026-05-11"},
+
+    {"phase": 4, "stage": "plan", "outcome": "APPROVED", "plan_path": "PRPs/plans/completed/relay-worktree-phase-4-synthetic-dogfood.plan.md", "attempts": 2, "note": "attempt 1 CHANGES_REQUESTED (R-COH-TASK-AC-MISSING); attempt 2 APPROVED"},
+    {"phase": 4, "stage": "tdd", "outcome": "skipped_tdd_false"},
+    {"phase": 4, "stage": "implement", "outcome": "APPROVED", "attempts": 1, "diff": "PRPs/reports/relay-worktree/phase-4/attempts/1/diff.patch", "note": "TIER A artifacts (2 fixture PRDs + dogfood.md skeleton); TIER B (parallel /relay-execute runs) operator-pending"},
+    {"phase": 4, "stage": "test", "outcome": "skipped_no_test_framework"},
+    {"phase": 4, "status": "complete", "plan_path": "PRPs/plans/completed/relay-worktree-phase-4-synthetic-dogfood.plan.md", "timestamp": "2026-05-11"},
+
+    {"phase": 5, "stage": "plan", "outcome": "APPROVED", "plan_path": "PRPs/plans/completed/relay-worktree-phase-5-docs-v0-11-0.plan.md", "attempts": 2, "note": "attempt 1 CHANGES_REQUESTED (R8b + R-COH-TASK-AC-MISSING + R-COH-AC-TASK-DECOUPLED); attempt 2 APPROVED"},
+    {"phase": 5, "stage": "tdd", "outcome": "skipped_tdd_false"},
+    {"phase": 5, "stage": "implement", "outcome": "APPROVED", "attempts": 1, "diff": "PRPs/reports/relay-worktree/phase-5/attempts/1/diff.patch"},
+    {"phase": 5, "stage": "test", "outcome": "skipped_no_test_framework"},
+    {"phase": 5, "status": "complete", "plan_path": "PRPs/plans/completed/relay-worktree-phase-5-docs-v0-11-0.plan.md", "timestamp": "2026-05-11"}
+  ],
+  "outcome": "ALL_PHASES_COMPLETE",
+  "phases_completed": [1, 2, 3, 4, 5],
+  "operator_action_required": [
+    "Phase 4 TIER B: run /relay-execute against PRPs/prds/worktree-dogfood-A.prd.md and PRPs/prds/worktree-dogfood-B.prd.md in parallel shell sessions; capture observed outcomes in PRPs/reports/relay-worktree/dogfood.md (33 *operator-pending* markers across 7 AC scenarios)",
+    "Phase 4 TIER B: run the 5 negative-path scenarios documented in the dogfood.md (AC-3 idempotent re-use, AC-4 branch divergence, AC-7 bootstrap failure, AC-8 bootstrap absent, AC-13 --no-worktree, AC-14 worktree creation failure)",
+    "Cement decision on dogfood.md after live runs: PASS or FAIL"
+  ]
+}

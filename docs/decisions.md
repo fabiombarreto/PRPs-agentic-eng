@@ -437,6 +437,53 @@ When `tdd: false` or `methodology.md` is missing, A.3.5 self-skips silently as a
 
 ---
 
+## [2026-05-11] relay-worktree architecture decisions: path, shell-out primitive, bootstrap contract, .gitignore evolution, graceful fallback
+
+### D1 — `.worktrees/<feature>/` path (not `.claude/worktrees/`)
+
+**Context:** Claude Code's native `EnterWorktree` tool hardcodes the worktree location to `.claude/worktrees/<name>/`. The 2026-04-19 surface decision pins the output path to `.worktrees/<feature>/` (sibling directory at repo root, not under `.claude/`). The `.claude/` permission gate documented in `docs/anti-patterns.md:60-66` also makes any autonomous write to `.claude/` an interactive-prompt risk.
+**Decision:** Worktrees are created at `.worktrees/<feature>/` relative to the repo root. `EnterWorktree` is not used.
+**Reason:** Honors the 2026-04-19 surface decision; avoids the `.claude/` permission gate entirely — no exception entry needed since `.worktrees/<feature>/` sits outside `.claude/`; keeps the path convention grep-friendly and version-visible in `git worktree list`.
+**Areas affected:** `/relay-worktree` command, `context-builder` `.gitignore` append, `docs/context/architecture.md` PRP artifact paths table.
+
+---
+
+### D2 — Shell-out `git worktree add` via `Bash` rather than `EnterWorktree`
+
+**Context:** `EnterWorktree` has two misalignments with relay's requirements: (a) its hardcoded `.claude/worktrees/<name>/` path conflicts with D1; (b) its auto-cleanup-on-session-exit lifecycle removes the worktree when the Claude Code session ends, which conflicts with relay's pipeline lifecycle (the worktree must survive across multiple `/relay-execute` invocations and persist until Pillar 3 post-merge cleanup).
+**Decision:** The `/relay-worktree` command invokes `git worktree add .worktrees/<feature>/ -b feature/<feature> <base>` directly via `Bash`. Idempotency detection uses `git worktree list --porcelain` (locale-independent; git's authoritative state) rather than path-existence check (which has false positives from stale directories).
+**Reason:** Path contract preserved (D1); lifecycle survives across `/relay-execute` invocations; `--porcelain` flag avoids locale-dependent output parse failures. Trade-off acknowledged: relay loses the native cwd-switching behavior of `EnterWorktree`; downstream commands continue to receive the worktree path as an argument (existing contract).
+**Areas affected:** `/relay-worktree` command.
+
+---
+
+### D6 — Bootstrap-hook contract (project-owned script; context-builder emits template; failure is non-fatal)
+
+**Context:** Per-worktree environment setup (env-file replication, Docker Compose project name override, dependency installation, port allocation) is stack-specific and varies across every target project. Relay cannot become a Docker/dependency orchestrator without losing its stack-agnostic character.
+**Decision:** The bootstrap contract is a single project-owned shell script at `scripts/worktree-bootstrap.sh` (Unix) or `scripts/worktree-bootstrap.ps1` (Windows). `/relay-worktree` invokes whichever is present as `scripts/worktree-bootstrap.sh <absolute-worktree-path>` with a 60-second timeout. Stdout/stderr are captured to `PRPs/reports/<feature>/worktree-bootstrap.log` with secret redaction. `context-builder *init` emits the initial template (shebang + four commented-out TODO blocks); `*update` is a no-op for the script (PRESERVE ENTIRELY per SKILL.md:861-868). Bootstrap failure is non-fatal — worktree creation is the load-bearing outcome; a warning is logged naming the bootstrap log path.
+**Reason:** Delegating to a project-owned script keeps relay out of Docker/dependency orchestration; mirrors the precedent of `.claude/settings.json` allowlist (template + customize + preserve-on-update); non-fatal failure preserves the worktree as the load-bearing outcome for the graceful-degradation contract (D3/D4).
+**Areas affected:** `/relay-worktree` command, `context-builder` SKILL.md.
+
+---
+
+### D7 — `.gitignore` auto-write by `context-builder *init`
+
+**Context:** `SKILL.md:1090-1106` previously advised users to add `.worktrees/` to `.gitignore` but did not auto-write the entry. Codebase research confirmed this was advisory-only. Without the entry, git tracks the worktree directory, causing spurious status noise and diff pollution across all concurrent pipeline invocations.
+**Decision:** `context-builder *init` auto-appends `.worktrees/` to `.gitignore` with a comment line `# relay — per-feature worktrees (ephemeral)` immediately above it. `*init` and `*update` re-runs on a `.gitignore` that already contains `.worktrees/` are no-ops (no duplicate entry appended).
+**Reason:** Zero-risk single-line append; closes the advisory-vs-auto gap; the PRESERVE ENTIRELY rule at `SKILL.md:861-868` applies to `*update` mode, meaning team edits to `.gitignore` (including deliberate removal of the `.worktrees/` line) are never overwritten by subsequent `*update` invocations.
+**Areas affected:** `context-builder` SKILL.md, target project `.gitignore`.
+
+---
+
+### D8 — Worktree-creation-failure graceful fallback to cwd (D3/D4 graceful-degradation preserved)
+
+**Context:** `/relay-execute`'s D3 graceful-degradation rule (2026-05-01 decision) mandates that the pipeline works against the cwd when no worktree is set up. D4 of the same decision preserves this as the fallback for worktree creation failures. Without an explicit D8 decision, a worktree creation failure (disk full, permission denied, transient git error) would halt the entire pipeline on a non-requirement-related infrastructure issue.
+**Decision:** When `/relay-worktree` returns a non-zero exit code during a `/relay-execute` run and `--no-worktree` was not passed, the orchestrator logs a warning, falls through to cwd-based execution, and records the fallback in `orchestrator-run.json` with fields `worktree_attempted: true`, `worktree_succeeded: false`, `fallback_reason: <code>`. The pipeline does NOT halt on worktree creation failure — only on downstream stage failure.
+**Reason:** Worktree is an optimization (isolation, parallelism), not a correctness requirement. The pipeline's correctness invariants (implementer writes the right files, tests pass, code review approves) hold equally against the cwd as against a worktree. Halting on a transient infrastructure failure would block users on issues the AI cannot resolve autonomously — the antithesis of relay's graceful-degradation philosophy.
+**Areas affected:** `/relay-execute` D4 live wiring, `orchestrator-run.json` `worktree_attempted` / `worktree_succeeded` / `fallback_reason` fields.
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision

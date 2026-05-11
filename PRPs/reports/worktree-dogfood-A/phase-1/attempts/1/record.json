@@ -1,0 +1,16 @@
+{
+  "attempt": 1,
+  "verdict": "IMPLEMENTATION_COMPLETE",
+  "files_changed": ["plugins/relay/commands/dogfood/dogfood-A.md"],
+  "validation": {
+    "level_1": "PASS",
+    "level_2": "PASS",
+    "level_3": "PASS"
+  },
+  "validation_outputs": {
+    "level_1": "file exists\n# Dogfood A",
+    "level_2": "1\ndogfood-A.md\ndogfood-file-1.md\ndogfood-file-2.md\npath OK",
+    "level_3": "dogfood-A.md\ndogfood-file-1.md\ndogfood-file-2.md\ncontent OK"
+  },
+  "base_commit": "7537ffaf4f03f1c743e53e048bf97b81ab246e86"
+}

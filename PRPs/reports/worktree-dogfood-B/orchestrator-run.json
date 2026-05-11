@@ -1,0 +1,18 @@
+{
+  "feature": "worktree-dogfood-B",
+  "prd_path": "C:/repos/PRPs-agentic-eng/PRPs/prds/worktree-dogfood-B.prd.md",
+  "started_at": "2026-05-11T00:00:00Z",
+  "ended_at": "2026-05-11T00:06:00Z",
+  "max_plan_review_retries": 2,
+  "max_tdd_review_retries": 2,
+  "max_orchestrator_minutes": 240,
+  "phases": [
+    {"phase": 1, "stage": "plan", "outcome": "APPROVED", "plan_path": "PRPs/plans/worktree-dogfood-B-phase-1-create-dogfood-b-md.plan.md"},
+    {"phase": 1, "stage": "tdd", "outcome": "skipped_tdd_false"},
+    {"phase": 1, "stage": "implement", "outcome": "APPROVED"},
+    {"phase": 1, "stage": "test", "outcome": "skipped_command_absent"},
+    {"phase": 1, "status": "complete", "plan_path": "PRPs/plans/completed/worktree-dogfood-B-phase-1-create-dogfood-b-md.plan.md", "timestamp": "2026-05-11T00:05:00Z"}
+  ],
+  "outcome": "ALL_PHASES_COMPLETE",
+  "phases_completed": [1]
+}
