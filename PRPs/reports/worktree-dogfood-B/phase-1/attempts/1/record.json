@@ -7,5 +7,10 @@
     "level_2": "PASS",
     "level_3": "PASS"
   },
-  "base_commit": "7537ffaf4f03f1c743e53e048bf97b81ab246e86"
+  "validation_outputs": {
+    "level_1": "Test-Path returned True — file exists at expected path",
+    "level_2": "PASS — first non-empty line is exactly '# Dogfood B'",
+    "level_3": "git status --short returned no output (exit 0) — file is clean tracked file in git working tree"
+  },
+  "base_commit": "e0c8c857a79dbbff0775bbf5de104e2f525448b7"
 }

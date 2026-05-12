@@ -101,7 +101,7 @@ Current value of `tdd` in `docs/context/methodology.md`: **false**. TDD track in
 
 | # | Phase | Description | Status | Parallel | Depends | PRP Plan |
 |---|-------|-------------|--------|----------|---------|----------|
-| 1 | create dogfood-A.md | Create `plugins/relay/commands/dogfood/dogfood-A.md` as a no-op markdown file with a single `# Dogfood A` heading. | in-progress | - | - | PRPs/plans/worktree-dogfood-A-phase-1-create-dogfood-amd.plan.md |
+| 1 | create dogfood-A.md | Create `plugins/relay/commands/dogfood/dogfood-A.md` as a no-op markdown file with a single `# Dogfood A` heading. | complete | - | - | PRPs/plans/worktree-dogfood-A-phase-1-create-dogfood-amd.plan.md |
 
 ### Phase Details
 

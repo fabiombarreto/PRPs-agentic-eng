@@ -24,13 +24,15 @@
 
 ## Summary
 
-This phase creates `plugins/relay/commands/dogfood/dogfood-B.md` as a no-op markdown file containing a single level-1 heading `# Dogfood B`. The file is the observable artifact proving the relay-execute pipeline ran end-to-end for the `worktree-dogfood-B` fixture PRD. The approach mirrors the canonical pattern established by the two existing dogfood fixtures (`dogfood-file-1.md` and `dogfood-file-2.md`): a plain markdown file with exactly one line, no YAML frontmatter, no body content.
+This phase creates `plugins/relay/commands/dogfood/dogfood-B.md` as a no-op markdown file containing a single level-1 heading `# Dogfood B`. The file is the observable artifact proving the relay-execute pipeline ran end-to-end for the `worktree-dogfood-B` fixture PRD. The approach mirrors the canonical pattern established by the two existing dogfood fixtures (`dogfood-file-1.md` and `dogfood-file-2.md`): a plain markdown file with exactly one line, no YAML frontmatter, no body content. Note: this file already exists from a prior pipeline run — the implementer will verify the content is correct and confirm idempotency.
 
 ## User Story
 
+```
 As a relay developer running Phase 4 dogfood validation of the relay-worktree feature,
-I want `plugins/relay/commands/dogfood/dogfood-B.md` to exist with a `# Dogfood B` heading,
-So that I have observable evidence that the `/relay-execute` pipeline ran end-to-end against Fixture B.
+I want plugins/relay/commands/dogfood/dogfood-B.md to exist with a # Dogfood B heading,
+So that I have observable evidence that the /relay-execute pipeline ran end-to-end against Fixture B.
+```
 
 ## Problem Statement
 
@@ -38,7 +40,7 @@ The relay-worktree feature (AC-16 of `PRPs/prds/relay-worktree.prd.md`) requires
 
 ## Solution Statement
 
-Create `plugins/relay/commands/dogfood/dogfood-B.md` with content `# Dogfood B` as its first and only line. The `plugins/relay/commands/dogfood/` directory already exists (confirmed by `dogfood-file-1.md` and `dogfood-file-2.md`). No directory creation is needed. The file requires no frontmatter, no body, and no trailing content — matching the existing fixture pattern exactly.
+Create (or verify) `plugins/relay/commands/dogfood/dogfood-B.md` with content `# Dogfood B` as its first and only line. The `plugins/relay/commands/dogfood/` directory already exists (confirmed by `dogfood-file-1.md`, `dogfood-file-2.md`, and `dogfood-A.md`). The file already exists from a prior run — Task 2 verifies content is exactly `# Dogfood B`. No frontmatter, no body, no trailing content — matching the existing fixture pattern exactly.
 
 ## Metadata
 
@@ -78,13 +80,13 @@ Task 2 second confirmation: the pattern is identical across all fixtures in the 
 
 | File | Action | Justification |
 |------|--------|---------------|
-| `plugins/relay/commands/dogfood/dogfood-B.md` | CREATE | Observable artifact proving the pipeline ran end-to-end for Fixture B; mirrors pattern from dogfood-file-1.md and dogfood-file-2.md |
+| `plugins/relay/commands/dogfood/dogfood-B.md` | CREATE (idempotent verify) | Observable artifact proving the pipeline ran end-to-end for Fixture B; mirrors pattern from dogfood-file-1.md and dogfood-file-2.md; file already exists from prior run — verify content matches |
 
 ## NOT Building (Scope Limits)
 
 - YAML frontmatter in dogfood-B.md — dogfood fixtures are inert content files, not registered slash-commands
 - Additional headings, body content, or metadata in the file — single line only, per the PRD scope
-- worktree cleanup — out of scope per relay-worktree.prd.md Won't items; Pillar 3 owns removal
+- Worktree cleanup — out of scope per relay-worktree.prd.md Won't items; Pillar 3 owns removal
 - TDD integration — `tdd: false`; no test suite for this dogfood fixture
 - Multi-PRD orchestration — single fixture scope
 
@@ -92,33 +94,28 @@ Task 2 second confirmation: the pattern is identical across all fixtures in the 
 
 ### Task 1: VERIFY dogfood directory exists
 
-**ACTION:** Infrastructure scaffolding step — confirm `plugins/relay/commands/dogfood/` exists and is writable before writing the new file (prerequisite for AC-A1). The directory should already exist (dogfood-file-1.md and dogfood-file-2.md are confirmed present), but an explicit check prevents a silent Create failure if the directory is missing.
+- **ACTION:** Infrastructure scaffolding step — confirm `plugins/relay/commands/dogfood/` exists and is writable before writing the new file (prerequisite for AC-A1). The directory already exists (dogfood-file-1.md, dogfood-file-2.md, and dogfood-A.md are confirmed present), but an explicit check prevents a silent Create failure if the directory is missing.
+- **MIRROR:** Pattern from `plugins/relay/commands/dogfood/dogfood-file-1.md:1` (directory presence confirmed by sibling file existence).
+- **VALIDATE:** `Test-Path plugins/relay/commands/dogfood/dogfood-file-1.md`
 
-**MIRROR:** Pattern from `plugins/relay/commands/dogfood/dogfood-file-1.md:1` (directory presence confirmed by sibling file existence).
+### Task 2: CREATE (or verify) plugins/relay/commands/dogfood/dogfood-B.md
 
-**VALIDATE:** `Test-Path plugins/relay/commands/dogfood/dogfood-file-1.md`
-
-### Task 2: CREATE plugins/relay/commands/dogfood/dogfood-B.md
-
-**ACTION:** Write a new file at `plugins/relay/commands/dogfood/dogfood-B.md` with exactly the following content — satisfies AC-A1 (file exists at expected path), AC-A2 (first line is `# Dogfood B`), AC-A3 (no frontmatter, no additional content):
+- **ACTION:** Write (or confirm) the file at `plugins/relay/commands/dogfood/dogfood-B.md` with exactly the following content — satisfies AC-A1 (file exists at expected path), AC-A2 (first line is `# Dogfood B`), AC-A3 (no frontmatter, no additional content). If the file already exists with correct content, the Write tool overwrites idempotently. Content:
 
 ```
 # Dogfood B
 ```
 
-No trailing newline required beyond what the Write tool appends. No frontmatter. No additional body. The heading text is `# Dogfood B` — exactly as specified in the PRD success signal.
+No frontmatter. No additional body. The heading text is `# Dogfood B` — exactly as specified in the PRD success signal.
 
-**MIRROR:** `plugins/relay/commands/dogfood/dogfood-file-1.md:1` — `# Dogfood file 1` shape: single level-1 heading, no frontmatter, no additional content.
-
-**VALIDATE:** `Test-Path plugins/relay/commands/dogfood/dogfood-B.md`
+- **MIRROR:** `plugins/relay/commands/dogfood/dogfood-file-1.md:1` — `# Dogfood file 1` shape: single level-1 heading, no frontmatter, no additional content.
+- **VALIDATE:** `Test-Path plugins/relay/commands/dogfood/dogfood-B.md`
 
 ### Task 3: VERIFY file content matches expected heading
 
-**ACTION:** Read the first line of the newly created `plugins/relay/commands/dogfood/dogfood-B.md` and confirm it equals `# Dogfood B` — satisfies AC-A2 (first non-empty line = `# Dogfood B`). This validation step satisfies the PRD success signal: "its first (and only) non-empty line is `# Dogfood B`".
-
-**MIRROR:** `plugins/relay/commands/dogfood/dogfood-file-1.md:1` — same structure; the sibling fixture's heading is its first and only line.
-
-**VALIDATE:** `Select-String -Path plugins/relay/commands/dogfood/dogfood-B.md -Pattern '^# Dogfood B$'`
+- **ACTION:** Read the first line of `plugins/relay/commands/dogfood/dogfood-B.md` and confirm it equals `# Dogfood B` — satisfies AC-A2 (first non-empty line = `# Dogfood B`). This validation step satisfies the PRD success signal: "its first (and only) non-empty line is `# Dogfood B`".
+- **MIRROR:** `plugins/relay/commands/dogfood/dogfood-file-1.md:1` — same structure; the sibling fixture's heading is its first and only line.
+- **VALIDATE:** `Select-String -Path plugins/relay/commands/dogfood/dogfood-B.md -Pattern '^# Dogfood B$'`
 
 ## Validation Commands
 
@@ -140,7 +137,7 @@ if ($firstLine -eq '# Dogfood B') { Write-Host 'PASS' } else { Write-Host "FAIL:
 ### Level 3 — INTEGRATION
 
 ```powershell
-# Confirm file appears in git status (new file in working tree)
+# Confirm file appears in git working tree
 git status --short plugins/relay/commands/dogfood/dogfood-B.md
 ```
 
@@ -155,8 +152,8 @@ git status --short plugins/relay/commands/dogfood/dogfood-B.md
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| Directory `plugins/relay/commands/dogfood/` does not exist | Low | High (Write would create file at wrong path) | Task 1 explicitly confirms directory existence via sibling file check before Task 2 writes |
-| File content drifts from `# Dogfood B` (e.g., trailing space, wrong capitalisation) | Low | Medium (PRD success signal fails) | Task 3 validates first non-empty line against exact regex `^# Dogfood B$` |
+| Directory `plugins/relay/commands/dogfood/` does not exist | Low | High (Write would fail) | Task 1 explicitly confirms directory existence via sibling file check before Task 2 writes |
+| File content drifts from `# Dogfood B` (e.g., trailing space, wrong capitalisation) | Low | Medium (PRD success signal fails) | Task 3 validates first non-empty line against exact pattern `^# Dogfood B$` |
 
 ## Notes
 

@@ -1,18 +1,21 @@
 {
   "feature": "worktree-dogfood-B",
-  "prd_path": "C:/repos/PRPs-agentic-eng/PRPs/prds/worktree-dogfood-B.prd.md",
+  "prd_path": "PRPs/prds/worktree-dogfood-B.prd.md",
   "started_at": "2026-05-11T00:00:00Z",
-  "ended_at": "2026-05-11T00:06:00Z",
+  "ended_at": "2026-05-11T00:10:00Z",
   "max_plan_review_retries": 2,
   "max_tdd_review_retries": 2,
   "max_orchestrator_minutes": 240,
   "phases": [
     {"phase": 1, "stage": "plan", "outcome": "APPROVED", "plan_path": "PRPs/plans/worktree-dogfood-B-phase-1-create-dogfood-b-md.plan.md"},
+    {"phase": 1, "stage": "worktree", "outcome": "CREATED", "worktree_path": ".worktrees/worktree-dogfood-B/", "worktree_attempted": true, "worktree_succeeded": true, "fallback_reason": null},
     {"phase": 1, "stage": "tdd", "outcome": "skipped_tdd_false"},
-    {"phase": 1, "stage": "implement", "outcome": "APPROVED"},
-    {"phase": 1, "stage": "test", "outcome": "skipped_command_absent"},
-    {"phase": 1, "status": "complete", "plan_path": "PRPs/plans/completed/worktree-dogfood-B-phase-1-create-dogfood-b-md.plan.md", "timestamp": "2026-05-11T00:05:00Z"}
+    {"phase": 1, "stage": "implement", "outcome": "APPROVED", "attempt": 1, "plan_path": "PRPs/plans/completed/worktree-dogfood-B-phase-1-create-dogfood-b-md.plan.md"},
+    {"phase": 1, "stage": "test", "outcome": "FAILED_INFRA_UNRECOVERABLE", "reason": "relay-test precondition 2 failed: .claude/settings.json absent from worktree .worktrees/worktree-dogfood-B/; relay repo has no test framework (test_frameworks: [] in docs/context/methodology.md); implementation D8 mutations already complete, phase marked complete"}
   ],
   "outcome": "ALL_PHASES_COMPLETE",
-  "phases_completed": [1]
+  "phases_completed": [1],
+  "worktree_attempted": true,
+  "worktree_succeeded": true,
+  "fallback_reason": null
 }

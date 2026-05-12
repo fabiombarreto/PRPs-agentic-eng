@@ -1,0 +1,21 @@
+{
+  "feature": "worktree-dogfood-A",
+  "prd_path": "PRPs/prds/worktree-dogfood-A.prd.md",
+  "started_at": "2026-05-11T00:00:00Z",
+  "ended_at": "2026-05-11T00:00:00Z",
+  "max_plan_review_retries": 2,
+  "max_tdd_review_retries": 2,
+  "max_orchestrator_minutes": 240,
+  "phases": [
+    {"phase": 1, "stage": "plan", "outcome": "APPROVED", "plan_path": "PRPs/plans/worktree-dogfood-A-phase-1-create-dogfood-amd.plan.md"},
+    {"phase": 1, "stage": "worktree", "outcome": "CREATED", "worktree_path": ".worktrees/worktree-dogfood-A/", "worktree_attempted": true, "worktree_succeeded": true, "fallback_reason": null},
+    {"phase": 1, "stage": "tdd", "outcome": "skipped_tdd_false"},
+    {"phase": 1, "stage": "implement", "outcome": "APPROVED", "attempt": 1, "diff_patch": "PRPs/reports/worktree-dogfood-A/phase-1/attempts/1/diff.patch", "code_review_jsonl": "PRPs/plans/worktree-dogfood-A-phase-1-create-dogfood-amd.code-review.jsonl", "note": "Empty diff — dogfood-A.md already committed in HEAD; idempotent phase; all 8 rubric items PASS"},
+    {"phase": 1, "stage": "test", "outcome": "skipped_no_test_framework", "reason": "test_frameworks: [] in methodology.md; relay plugin has no test suite"}
+  ],
+  "outcome": "ALL_PHASES_COMPLETE",
+  "phases_completed": [1],
+  "worktree_attempted": true,
+  "worktree_succeeded": true,
+  "fallback_reason": null
+}
