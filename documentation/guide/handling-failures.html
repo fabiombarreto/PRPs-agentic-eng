@@ -191,11 +191,13 @@ cat PRPs/reports/&lt;feature&gt;/attempts/3/diff.patch</code></pre>
 
       <p><strong>Fix:</strong> add a Makefile target or npm script the Test Runner can find. Re-run <code>*update</code> to refresh <code>.claude/settings.json</code> allow patterns if needed.</p>
 
-      <h3 id="no-test-framework">no_test_framework</h3>
+      <h3 id="no-test-framework">no_test_framework <span class="muted">(defensive — superseded by Phase 0 self-skip in v0.11.1)</span></h3>
 
-      <p>The project has no pytest, no Vitest, no Playwright, no Go test — nothing detectable.</p>
+      <p>As of <a href="../changelog.html#v0-11-1">v0.11.1</a> (2026-05-12), projects with <code>test_frameworks: []</code> in <code>docs/context/methodology.md</code> (or no <code>methodology.md</code> at all) self-skip at <code>/relay-test</code>'s Phase 0 gate. The command emits the verbatim line <code>Test framework inactive (test_frameworks: []). Skipping.</code> and exits 0; <code>orchestrator_run_log</code> records <code>{"stage": "test", "outcome": "skipped_no_test_framework"}</code>. No <code>run.json</code> is produced; <code>/relay-test-review</code> inherits the self-skip. This eliminates the dogfood-A vs dogfood-B path divergence observed on 2026-05-11.</p>
 
-      <p><strong>Not a bug.</strong> The Test Runner exits cleanly and the final report marks the PR as "not verified by tests." If you want test coverage, add a test framework first.</p>
+      <p>This <code>FAILED_INFRA_UNRECOVERABLE</code> sub-reason is retained in the agent's verdict enum for defensive symmetry, but it is no longer reachable when <code>methodology.md</code> declares the framework state correctly. If you genuinely want test coverage, add a test framework, then re-run <code>context-builder *update</code> to declare it in <code>test_frameworks</code>.</p>
+
+      <p>Symmetric precedent: <code>/relay-tdd</code>'s <code>tdd: false</code> self-skip (P4.a) — see <code>docs/decisions.md</code> entries 2026-05-06 and 2026-05-12.</p>
 
       <h2 id="halted-retry-needed">HALTED on <code>RETRY_NEEDED</code> (known gap)</h2>
 

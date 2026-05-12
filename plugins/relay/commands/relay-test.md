@@ -49,6 +49,27 @@ a directory.
 
 ---
 
+## Phase 0 — methodology.md self-skip gate
+
+Read `<worktree-path>/docs/context/methodology.md`. Two branches:
+
+### Phase 0.a — self-skip (PRD AC-1, AC-2)
+
+If the file is missing OR its frontmatter `test_frameworks` key is missing OR is an empty list (`[]`):
+
+Emit verbatim and exit 0:
+
+> Test framework inactive (test_frameworks: []). Skipping.
+
+Do NOT initialize loop state. Do NOT write any artifact.
+
+### Phase 0.b — proceed (PRD AC-3)
+
+If `test_frameworks` is non-empty: fall through to the existing
+Preconditions check unchanged.
+
+---
+
 ## Preconditions check
 
 Before the loop starts:
@@ -231,7 +252,7 @@ report-generator) read.
 | Scenario | Outcome code | What happens |
 |----------|--------------|--------------|
 | `.claude/settings.json` missing | HALT at precondition check | User re-runs context-builder |
-| Worktree has no test framework | `FAILED_INFRA_UNRECOVERABLE` (via agent `ABORT_INFRA`) | "Not verified by tests" noted in run.json |
+| Worktree has no test framework (`test_frameworks: []` or `methodology.md` absent) | `skipped_no_test_framework` (Phase 0 self-skip, exit 0) | Phase 0 gate fires before preconditions; verbatim line emitted; no artifacts written |
 | Docker not running | Recovery once via `make test-down && make test-bootstrap`; if still fails, `FAILED_INFRA_UNRECOVERABLE` | User checks docker daemon |
 | Time budget exceeded mid-attempt | `FAILED_TIME_BUDGET_EXCEEDED` | Run stops, partial record preserved |
 | Retry budget exhausted | `FAILED_AFTER_N_RETRIES` | Run stops with attempt history |

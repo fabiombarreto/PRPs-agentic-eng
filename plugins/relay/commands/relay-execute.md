@@ -483,6 +483,18 @@ Surface `/relay-implement`'s halt message verbatim. HALT the orchestrator (AC-3)
 
 ### Phase A.5 — Per-phase test sub-flow (guarded by command-exists check)
 
+#### Step A.5.0 — methodology.md gate (self-skip when `test_frameworks: []` or file absent)
+
+Re-read `<target_root>/docs/context/methodology.md` (already read in P5 — re-read here protects against mid-flow mutations).
+
+- If file absent or `test_frameworks: []` (empty list): A.5 self-skips. Append to `orchestrator_run_log`:
+  ```json
+  {"phase": <N>, "stage": "test", "outcome": "skipped_no_test_framework"}
+  ```
+  Proceed directly to Phase A.6. Steps A.5.1–A.5.3 are not reached.
+
+- If `test_frameworks` is non-empty: proceed to Step A.5.1.
+
 #### Step A.5.1 — Command-exists check
 
 Check that both `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-test.md` and `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-test-review.md` are readable.
@@ -577,6 +589,8 @@ HALT with verbatim message (AC-5):
 > precisely to gate human review; future B7/B8 integration may introduce
 > a recovery path).
 > Halt state at PRPs/reports/<feature>/orchestrator-halt.json.
+
+> **Note — de-facto contradictory path now structurally impossible:** Prior to Step A.5.0, a framework-less project could reach Phase A.5 and receive a `FAILED_INFRA_UNRECOVERABLE` outcome from `/relay-test` while the session still declared `ALL_PHASES_COMPLETE` (observed in dogfood-B, 2026-05-11). This path is now structurally impossible: Step A.5.0 intercepts the `test_frameworks: []` or file-absent case before any command dispatch, logs `skipped_no_test_framework`, and proceeds directly to Phase A.6 — bypassing Steps A.5.1–A.5.3 entirely. A framework-declared project that encounters genuine infra failure (missing `settings.json`, docker not running, container failure, normalizer failure) still reaches Step A.5.2 and HALTs with `FAILED_INFRA_UNRECOVERABLE` before reaching Phase A.6 or `ALL_PHASES_COMPLETE`. The two paths are mutually exclusive at the structural level; a session cannot simultaneously enter the A.5.0 self-skip branch and the A.5.2 strict-halt branch.
 
 ### Phase A.6 — State-transition record + loop
 

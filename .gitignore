@@ -19,3 +19,4 @@ wheels/
 # Claude Code — per-user local overrides (project-wide settings.json stays committed)
 .claude/settings.local.json
 .claude/
+PRPs/reports/

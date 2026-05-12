@@ -84,6 +84,7 @@ function outcomeBadge(outcome) {
     FAILED_OSCILLATION: '🔁 FAILED_OSCILLATION',
     FAILED_INFRA_UNRECOVERABLE: '⚠ FAILED_INFRA_UNRECOVERABLE',
     SKIPPED_UPSTREAM_FAILURE: '⏭ SKIPPED_UPSTREAM_FAILURE',
+    skipped_no_test_framework: '⏭ skipped_no_test_framework',
   };
   return map[outcome] || outcome || '—';
 }

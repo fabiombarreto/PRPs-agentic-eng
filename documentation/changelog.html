@@ -30,7 +30,20 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <p>No in-flight changes since the v0.11.0 cut on 2026-05-11. Future docs work accumulates here.</p>
+      <p>No in-flight changes since the v0.11.1 cut on 2026-05-12. Future docs work accumulates here.</p>
+
+      <h2 id="v0-11-1">0.11.1 — 2026-05-12</h2>
+
+      <p>Patch release formalizing the <code>skipped_no_test_framework</code> graceful self-skip outcome for <code>/relay-test</code> and <code>/relay-execute</code>. Surfaced by 2026-05-11 relay-worktree dogfood, sessions A vs B: session A self-skipped gracefully with <code>skipped_no_test_framework</code> while session B took the strict <code>FAILED_INFRA_UNRECOVERABLE</code> path yet still declared <code>ALL_PHASES_COMPLETE</code> &mdash; a determinism violation now closed by Phases 1&ndash;3 of <code>PRPs/prds/test-frameworks-empty-self-skip.prd.md</code>. The new outcome is symmetric in shape with <code>/relay-tdd</code> P4.a (<code>tdd: false</code> &rarr; silent self-skip exiting 0). The operative rule is codified in the new <code>2026-05-12</code> entry in <code>docs/decisions.md</code>. Plugin manifest version bumped <code>0.11.0</code> &rarr; <code>0.11.1</code> per the 2026-04-30 &sect;7.5 binding contract.</p>
+
+      <h3 id="v0-11-1-changed">Changed</h3>
+
+      <ul>
+        <li><strong><code>docs/api-reference.md</code></strong> &mdash; <code>/relay-test</code> Output cell updated to list <code>skipped_no_test_framework</code> as a graceful outcome alongside the four HALT codes, with a parenthetical noting no <code>run.json</code> is written and the symmetric self-skip condition (<code>test_frameworks: []</code> or <code>methodology.md</code> absent). <code>/relay-execute</code> row updated with a Phase A.5.0 cross-reference explaining the structured log entry for framework-less projects as a non-HALT graceful path.</li>
+        <li><strong><code>documentation/reference/commands.html</code></strong> &mdash; <code>/relay-test</code> kv-block Output <code>&lt;dd&gt;</code> extended with <code>skipped_no_test_framework</code> as a listed graceful outcome; <code>/relay-execute</code> Notes block updated with a &ldquo;Test stage self-skip (v0.11.1)&rdquo; paragraph describing Phase A.5.0 <code>skipped_no_test_framework</code> structured log path as a non-HALT outcome symmetric with A.3.5&rsquo;s <code>skipped_tdd_false</code>.</li>
+        <li><strong><code>documentation/changelog.html</code></strong> &mdash; this entry; Unreleased paragraph updated to reference the v0.11.1 cut date (2026-05-12).</li>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong> &mdash; version bumped <code>0.11.0</code> &rarr; <code>0.11.1</code> per the 2026-04-30 &sect;7.5 binding contract. Behavior changes to <code>relay-test.md</code> and <code>relay-execute.md</code> (Phases 1&ndash;3) satisfy the &ldquo;ships plugin asset&rdquo; condition.</li>
+      </ul>
 
       <h2 id="v0-11-0">0.11.0 — 2026-05-11</h2>
 

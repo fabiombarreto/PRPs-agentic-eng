@@ -157,7 +157,7 @@
         <li><code>docker_not_running</code> — start Docker Desktop, then rerun.</li>
         <li><code>db_unreachable</code> — check <code>docker-compose.test.yml</code>; usually a port conflict or a stale container.</li>
         <li><code>normalizer_failure</code> — the test framework didn't produce JUnit XML. Verify the framework config (pytest <code>--junitxml</code>, Playwright <code>reporter: junit</code>, Vitest <code>reporters: junit</code>).</li>
-        <li><code>no_test_framework</code> — the project has no test framework relay could detect. Not a bug — document it in the final report.</li>
+        <li><code>no_test_framework</code> — defensive only. Projects with <code>test_frameworks: []</code> (or no <code>methodology.md</code>) self-skip at <code>/relay-test</code>'s Phase 0 gate with outcome <code>skipped_no_test_framework</code> (exit 0, no <code>run.json</code>), so this <code>FAILED_INFRA_UNRECOVERABLE</code> sub-reason is no longer reachable in practice. See <a href="../changelog.html#v0-11-1">v0.11.1</a>.</li>
       </ul>
 
       <h2 id="running-against-orchestrator">Running inside the orchestrator</h2>

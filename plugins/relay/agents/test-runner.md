@@ -278,7 +278,7 @@ the attempt itself exceeded a reasonable per-attempt budget:
 
 If the target project is missing parts of the expected setup:
 
-- **No test framework detected** → `ABORT_INFRA` reason `no_test_framework`; command surfaces "not verified by tests" in final report.
+- **No test framework declared** (`docs/context/methodology.md` has `test_frameworks: []` or the file is absent) → intercepted upstream by `/relay-test`'s Phase 0 self-skip gate; this agent is never invoked. The agent's `ABORT_INFRA` reason `no_test_framework` branch is defensive dead code retained for symmetry — if reached, the command surfaces "not verified by tests" in the final report. See `docs/decisions.md` 2026-05-12.
 - **Docker unavailable but compose required** → try native command (e.g., `pytest` directly from `backend/`). Include `degraded: true` in the record. If that also fails, `ABORT_INFRA`.
 - **`.claude/settings.json` absent** → `ABORT_INFRA` reason `missing_settings_json` before running anything. The caller is the one that can fix this (re-run context-builder).
 - **JUnit XML not produced** → attempt a direct stdout parse? No — MVP requires structured output. `ABORT_INFRA` reason `no_junit_output`.
