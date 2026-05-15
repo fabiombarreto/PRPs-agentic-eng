@@ -358,7 +358,24 @@ Assemble in this order:
    Statement, narrowed to the phase's scope.
 4. `## Solution Statement` — narrowed to the phase's scope.
 5. `## Metadata` — table: Type, Complexity, Systems Affected,
-   Dependencies, Estimated Tasks, Source PRD line ref.
+   Dependencies, Estimated Tasks, Source PRD line ref, and
+   `phase_type`. Infer `phase_type` from the phase Goal and task
+   bodies using these signals (first match wins):
+   - `scaffold` — project bootstrap, dependency installation,
+     config-only, or initialisation phases whose VALIDATE commands
+     are filesystem/OS-oriented (Test-Path, npm install, npx, git
+     check-ignore, etc.) and where no test-framework invocation is
+     the natural validation mechanism.
+   - `docs` — phases whose `## Files to Change` table contains only
+     documentation files (`.md`, `.html`, `.txt`, doc config) with
+     no application source files.
+   - `refactor` — phases whose primary action is restructuring
+     existing code without adding capability (move, rename, extract).
+   - `feature` — default; any phase not matching the above signals.
+   The `phase_type` field is consumed by `plan-reviewer` Phase 0 and
+   the `R-COH-VALIDATE-FRAMEWORK-MISMATCH` exemption branch. Populate
+   it accurately: an incorrect `phase_type: scaffold` on a feature
+   phase would bypass the framework-mismatch check incorrectly.
 6. `## Mandatory Reading` — table of files (priority, path, lines,
    why) drawn from research-codebase findings + the PRD's Phase
    Details. Every row's path must come from a real research finding

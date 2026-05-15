@@ -306,6 +306,17 @@ Two execution stages, in order:
   absent), emit a single `passed: true` row with `reason:
   "test_frameworks empty in methodology.md; framework-mismatch check
   skipped"` and continue. Do NOT fail in this case.
+- **Phase-type exemption branch:** if `plan_phase_type` (recorded in
+  Phase 0) is `scaffold` or `docs`, emit a single `passed: true` row
+  with `reason: "phase_type: <value>; VALIDATE commands are expected
+  to use OS/filesystem tools rather than test-framework invocations
+  for <value> phases — framework-mismatch check skipped"` and
+  continue. Do NOT fail in this case. Rationale: scaffold and docs
+  phases have no application code to exercise; their legitimate
+  validation is filesystem-oriented (Test-Path, Select-String,
+  Get-ChildItem, git check-ignore, npm install, npx astro check).
+  Requiring a test-framework invocation here would produce only
+  performative tests that assert on filesystem state.
 - Otherwise, parse every `**VALIDATE**:` command in
   `## Step-by-Step Tasks`. The first token of each VALIDATE command
   (the executable / runner) must match (or be a recognized invocation
@@ -412,6 +423,57 @@ fabrication-rate as part of the FP rate threshold.
 ---
 
 ## Protocol
+
+### Phase 0 — Pre-pass: infer and populate `phase_type`
+
+Run this phase **before** Step 1. It is the only bounded exception to
+the "no plan body edits outside the status flip" rule: the reviewer
+adds exactly one metadata row that the plan-writer should have
+populated but did not. The mutation happens before R1–R8, so the
+rubric evaluates the updated plan.
+
+1. **Read** the plan at `draft_path` (preliminary read).
+
+2. **Locate** the `## Metadata` table. Scan each row for a first-cell
+   value that matches `phase_type` (case-insensitive).
+
+3. **If present:** extract the value and record it as
+   `plan_phase_type`. Proceed to Step 1.
+
+4. **If absent:** infer `phase_type` from plan content using these
+   signals (first match wins, evaluated in order):
+   - **`scaffold`** — All or most VALIDATE commands in
+     `## Step-by-Step Tasks` use OS/filesystem tools exclusively
+     (Test-Path, Get-ChildItem, Select-String, Invoke-WebRequest,
+     ls, find, git check-ignore, npm, npx, node) AND no declared
+     test-framework token appears as the first VALIDATE token.
+     Also apply when the phase goal is project bootstrap, dependency
+     installation, or config-only setup.
+   - **`docs`** — `## Files to Change` contains only `.md`, `.html`,
+     `.txt`, or documentation config files, with no application
+     source files.
+   - **`refactor`** — `## Summary` or `## Problem Statement` uses
+     "refactor", "reorganise", "move", "rename", or "extract" as
+     the primary action verb.
+   - **`feature`** — Default. Any plan that does not match the signals
+     above.
+
+5. **Edit** the `## Metadata` table to insert the `phase_type` row
+   after the last existing data row, preserving the table's pipe
+   formatting. Use `Edit` with a narrow `old_string` matching the
+   table's last row verbatim.
+
+6. Record `plan_phase_type` for use in `R-COH-VALIDATE-FRAMEWORK-
+   MISMATCH` and any future phase-type-aware rubric checks.
+
+7. Proceed to Step 1. Step 1 re-reads the plan from disk, so the
+   updated Metadata table is the version the rubric evaluates.
+
+**Scope of this mutation:** adds exactly one `| phase_type | <value> |`
+row to `## Metadata`. Does NOT touch any section body, does NOT change
+`*Status: DRAFT*`, does NOT satisfy any rubric item by itself.
+
+---
 
 ### Step 1 — Load and parse
 
@@ -651,10 +713,14 @@ the first verdict. The `Write` target path MUST be under
   `plan-authoring.prd.md` AC-6 / R6.
 - **Rewriting plan bodies inline when the rubric passes.** The
   happy path is `Edit` of the two-line status block, nothing else.
-  Wholesale rewrites are `plan-writer`'s job, not yours.
+  Wholesale rewrites are `plan-writer`'s job, not yours. The only
+  bounded exception is Phase 0's single-row `phase_type` addition
+  to `## Metadata` — see Phase 0 for scope limits.
 - **Inline-editing plan bodies on CHANGES_REQUESTED.** Diverges
   from `prd-reviewer`'s Step 5; the autonomous flow does NOT do
-  this. Report the defect and exit.
+  this. Report the defect and exit. Phase 0 runs before the rubric
+  (not on CHANGES_REQUESTED) and is therefore not covered by this
+  prohibition.
 - **Prompting the user.** No "Aprovar?", no "what would you like
   to change?", no clarifying questions. The interactivity boundary
   is past PRD-APPROVED.

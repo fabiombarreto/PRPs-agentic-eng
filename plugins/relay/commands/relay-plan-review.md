@@ -25,7 +25,7 @@ See:
   pass, jsonl logging, CHANGES_REQUESTED on fail.
 - `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/plan-writer.md` —
   the sibling Writer; informational only, not dispatched here.
-- `docs/context/prd-template.md` (in the target project) —
+- `${CLAUDE_PLUGIN_ROOT}/docs/context/prd-template.md` —
   canonical PRD shape; R8 traceability cross-reads from the
   source PRD's Implementation Phases table.
 

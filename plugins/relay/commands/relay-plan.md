@@ -24,7 +24,7 @@ See:
 - `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/research-codebase.md`
   and `research-web.md` — subagents the Writer invokes via `Task`
   during its Phase 2 GROUNDING.
-- `docs/context/prd-template.md` (in the target project) —
+- `${CLAUDE_PLUGIN_ROOT}/docs/context/prd-template.md` —
   canonical PRD shape; the command reads the Implementation Phases
   table from a PRD that conforms to this template.
 
@@ -275,3 +275,9 @@ and the command exits without writing any plan file. The
   the lowest-numbered actionable phase deterministically.
 - **Cross-PRD planning** — the command operates on exactly one
   PRD per invocation. Multi-PRD coordination is out of scope.
+- **Operating without an APPROVED PRD** — PRD-less mode
+  (accepting a short feature description directly, analogous to
+  how `prp-plan` works) is a registered future capability; see
+  `docs/decisions.md` 2026-05-15. The PRD-required contract
+  (P1–P4) is the only operative contract. Do not implement or
+  approximate a bypass.

@@ -28,7 +28,7 @@ See:
 - `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/research-web.md` and
   `research-codebase.md` — subagents invoked via `Task` during
   grounding.
-- `docs/context/prd-template.md` (in the target project) — canonical
+- `${CLAUDE_PLUGIN_ROOT}/docs/context/prd-template.md` — canonical
   PRD shape; the Writer assembles the DRAFT against this template.
 
 ---
@@ -85,14 +85,7 @@ If any is missing, HALT with:
 > `*update` mode) to generate the missing governance files, then
 > re-run `/relay-prd`.
 
-### P2 — PRD template readable
-
-- `docs/context/prd-template.md` must exist at `target_root`.
-
-If missing, HALT with an equivalent "run context-builder" message
-citing the template path.
-
-### P3 — Draft-path specific preconditions
+### P2 — Draft-path specific preconditions
 
 These checks apply only when `mode == draft-path`:
 

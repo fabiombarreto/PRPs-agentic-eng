@@ -216,6 +216,58 @@ cat PRPs/reports/&lt;feature&gt;/attempts/3/diff.patch</code></pre>
 
       <p>The loop picks up with attempt N+1. If the fix was correct, you get GREEN; if not, another <code>RETRY_NEEDED</code> with updated feedback.</p>
 
+      <h2 id="failed-plan-review-stuck">FAILED_PLAN_REVIEW_STUCK</h2>
+
+      <p>
+        Consecutive plan-review attempts failed on the <strong>identical</strong> set of rubric item IDs. The orchestrator detected that a re-plan did not change the failing items, indicating the plan-writer cannot resolve the issue mechanically, so it halts before burning the full retry budget.
+      </p>
+
+      <h3 id="diagnose-stuck">Diagnose</h3>
+
+      <p>Open <code>PRPs/reports/&lt;feature&gt;/orchestrator-halt.json</code>:</p>
+
+      <pre><code class="language-json">{
+  "outcome": "FAILED_PLAN_REVIEW_STUCK",
+  "stuck_rubric_items": ["R-COH-VALIDATE-FRAMEWORK-MISMATCH"],
+  "stuck_attempts_count": 2
+}</code></pre>
+
+      <p>The <code>stuck_rubric_items</code> array names exactly which rubric items could not be resolved. The most common cause after v0.12.0 is a missing <code>phase_type</code> annotation combined with a scaffold phase:</p>
+
+      <ul>
+        <li><strong><code>R-COH-VALIDATE-FRAMEWORK-MISMATCH</code></strong> — the plan's VALIDATE commands use OS/filesystem tools (e.g. <code>Test-Path</code>, <code>Get-ChildItem</code>, <code>npm install</code>) but the rubric requires a declared test-framework invocation as the first token. This is expected for <code>scaffold</code> or <code>docs</code> phases where no test-framework invocation is meaningful. The plan-reviewer's Phase 0 pre-pass auto-populates <code>phase_type</code> from the plan body signals, but when the plan body is ambiguous the wrong type may be inferred — verify the <code>## Metadata</code> table in the plan file.</li>
+      </ul>
+
+      <h3 id="recover-stuck">Recover</h3>
+
+      <div class="kv">
+        <dt>Wrong or missing <code>phase_type</code></dt>
+        <dd>Open the plan's <code>## Metadata</code> table and add or correct the <code>phase_type</code> row. For a bootstrap/config/install phase use <code>scaffold</code>; for a docs-only phase use <code>docs</code>. Re-run <code>/relay-plan-review &lt;plan-path&gt;</code> to validate, then re-run <code>/relay-execute</code> (the PRD state machine re-reads on every invocation; no manual reset needed).</dd>
+        <dt>Genuine framework-mismatch on a feature phase</dt>
+        <dd>If the plan is a <code>feature</code> or <code>refactor</code> phase but its VALIDATE commands don't invoke a declared test framework, update the VALIDATE lines in the plan to call the declared framework (e.g. <code>npx vitest run</code> or <code>pytest</code>). Re-run <code>/relay-plan-review</code>.</dd>
+        <dt>Implement manually (scaffold phases)</dt>
+        <dd>If the plan is structurally sound but the rubric still cannot be satisfied, follow Path 1 from the halt artifact's <code>manual_recovery_paths</code> — implement the plan tasks manually. This is the recommended path for scaffold phases where test-framework VALIDATE invocations would be performative boilerplate.</dd>
+      </div>
+
+      <h2 id="failed-plan-review-budget">FAILED_PLAN_REVIEW_BUDGET_EXCEEDED</h2>
+
+      <p>
+        The plan-review retry budget (<code>max_plan_review_retries = 2</code>) exhausted before the plan reached <code>APPROVED</code>. Unlike <code>FAILED_PLAN_REVIEW_STUCK</code>, the failing rubric items <em>changed</em> between attempts (the writer was making partial progress) but ran out of attempts before converging.
+      </p>
+
+      <h3 id="diagnose-plan-budget">Diagnose</h3>
+
+      <p>Open <code>PRPs/plans/&lt;basename&gt;.review.jsonl</code>. Each line is a verdict; the last line shows which items were still failing. Compare across lines to confirm the item set varied.</p>
+
+      <h3 id="recover-plan-budget">Recover</h3>
+
+      <div class="kv">
+        <dt>Minor rubric items outstanding</dt>
+        <dd>Open the plan file and fix the remaining issues directly (e.g. a missing AC reference, a TBD in a mandatory section). Re-run <code>/relay-plan-review &lt;plan-path&gt;</code> to validate without regenerating.</dd>
+        <dt>Structural problems</dt>
+        <dd>Delete the DRAFT plan file and re-run <code>/relay-plan &lt;prd-path&gt;</code>. The PRD state machine will pick up from the same pending phase. Adjust the PRD or add grounding notes in the source PRD's Open Questions section to guide the plan-writer on the next attempt.</dd>
+      </div>
+
       <h2 id="nothing-matches">When nothing matches</h2>
 
       <p>If <code>run.json.outcome</code> is something not listed above, check the <code>troubleshooting</code> page and the GitHub issues. File a report with <code>run.json</code> + the last attempt's <code>stdout.log</code> (already redacted).</p>

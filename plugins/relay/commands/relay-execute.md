@@ -1,5 +1,5 @@
 ---
-description: 'Autonomous multi-phase orchestrator for relay pipeline. Takes an APPROVED PRD and serially drives every actionable Implementation Phases row through plan → plan-review → implement → test → test-review by adopting each downstream command protocol inline via Read (D7 dispatch model; zero logic duplication per D15). Adds exactly two orchestration-layer budgets: max_plan_review_retries=2 (re-runs /relay-plan when /relay-plan-review returns CHANGES_REQUESTED, bounded retry) and max_orchestrator_minutes=240 (session-level wall-clock; 0 forbidden). Maintains orchestrator-run.json audit artifact at PRPs/reports/<feature>/. Seven HALT outcome codes: FAILED_PLAN_REVIEW_BUDGET_EXCEEDED, FAILED_ORCHESTRATOR_TIME_BUDGET_EXCEEDED, FAILED_TEST_REVIEW_REJECTED, plus four propagated from /relay-implement (FAILED_AFTER_N_RETRIES, FAILED_TIME_BUDGET_EXCEEDED, FAILED_OSCILLATION_DETECTED, FAILED_DISPUTE_CAP_EXCEEDED, PARTIAL_D8_FAILURE) and two from /relay-test. State machine is the source PRD Implementation Phases table (D6); re-invocation is idempotent — picks up at next pending row. TDD routing read at startup; dead code in MVP (B7/B8 unshipped).'
+description: 'Autonomous multi-phase orchestrator for relay pipeline. Takes an APPROVED PRD and serially drives every actionable Implementation Phases row through plan → plan-review → implement → test → test-review by adopting each downstream command protocol inline via Read (D7 dispatch model; zero logic duplication per D15). Adds exactly two orchestration-layer budgets: max_plan_review_retries=2 (re-runs /relay-plan when /relay-plan-review returns CHANGES_REQUESTED, bounded retry) and max_orchestrator_minutes=240 (session-level wall-clock; 0 forbidden). Maintains orchestrator-run.json audit artifact at PRPs/reports/<feature>/. Eight HALT outcome codes: FAILED_PLAN_REVIEW_BUDGET_EXCEEDED, FAILED_PLAN_REVIEW_STUCK (same rubric items fail across consecutive attempts — early halt before budget exhaustion), FAILED_ORCHESTRATOR_TIME_BUDGET_EXCEEDED, FAILED_TEST_REVIEW_REJECTED, plus four propagated from /relay-implement (FAILED_AFTER_N_RETRIES, FAILED_TIME_BUDGET_EXCEEDED, FAILED_OSCILLATION_DETECTED, FAILED_DISPUTE_CAP_EXCEEDED, PARTIAL_D8_FAILURE) and two from /relay-test. State machine is the source PRD Implementation Phases table (D6); re-invocation is idempotent — picks up at next pending row. TDD routing read at startup; dead code in MVP (B7/B8 unshipped).'
 argument-hint: <prd-path>
 ---
 
@@ -182,6 +182,7 @@ Set the budget caps and counters:
 - `deadline_ts = now() + max_orchestrator_minutes minutes`
 - `orchestrator_run_log = []` — accumulator for `orchestrator-run.json`
 - `phases_completed = []` — list of phase numbers that reached `complete` this session
+- `last_plan_review_failing_ids = null` — set of failing rubric item IDs from the previous plan-review attempt; used by stuck-loop detection in Step A.3.2. Reset to `null` at the start of each phase iteration (Phase A.1).
 
 Read the source PRD's Implementation Phases table in full for the initial snapshot. Hold this snapshot for Phase A.1's first iteration.
 
@@ -194,6 +195,8 @@ A row is **actionable** when:
 - Its `Depends` cell is `-` (empty) OR every comma-separated phase number listed has `Status == complete`.
 
 Pick the lowest-numbered actionable row. Record `current_phase_N` and `current_phase_slug`.
+
+Reset `last_plan_review_failing_ids = null` at the start of each new phase iteration so stuck-loop detection does not carry state across phases.
 
 If **no** actionable row is found (all phases are `complete` or all remaining `pending` rows have unsatisfied dependencies):
 
@@ -278,6 +281,59 @@ Proceed to Phase A.3.3.
 Capture the rubric defect bullet-list output (format documented at `plugins/relay/agents/plan-reviewer.md:459-483`). This is the structured list of failing rubric item IDs + reasons.
 
 Increment `plan_review_attempts`.
+
+**Stuck-loop detection (before budget check):**
+
+Extract the set of failing rubric item IDs from the current verdict
+(the `id` values of all `passed: false` rows in the JSONL entry just
+appended). Call this `current_failing_ids`.
+
+If `last_plan_review_failing_ids` is **not null** AND
+`current_failing_ids` is identical to `last_plan_review_failing_ids`
+(same set of IDs regardless of order), the plan-writer made zero
+progress on the failing items — the loop is stuck.
+
+Write `PRPs/reports/<feature>/orchestrator-halt.json`:
+
+```json
+{
+  "outcome": "FAILED_PLAN_REVIEW_STUCK",
+  "phase_N": <N>,
+  "plan_path": "<current_plan_path>",
+  "stuck_rubric_items": <current_failing_ids>,
+  "stuck_attempts_count": <plan_review_attempts>,
+  "plan_review_attempts": <plan_review_attempts>,
+  "max_plan_review_retries": <max_plan_review_retries>,
+  "failing_rubric_items": <captured defect list>,
+  "orchestrator_run_log": <orchestrator_run_log>,
+  "worktree_attempted": <boolean | null>,
+  "worktree_succeeded": <boolean | null>,
+  "fallback_reason": "<string | null>",
+  "halt_reason_summary": "The same rubric items failed across two consecutive plan-review attempts with no change. The plan-writer cannot resolve these items mechanically within the current retry budget. Manual intervention is required — inspect the stuck rubric items for a rubric edge case (e.g., R-COH-VALIDATE-FRAMEWORK-MISMATCH on a scaffold phase without phase_type set).",
+  "manual_recovery_paths": [
+    "Inspect the stuck_rubric_items list. If the failure is a rubric edge case for this phase type, add `phase_type: scaffold` (or the appropriate value) to the plan's ## Metadata table and re-run /relay-execute — the plan-reviewer Phase 0 pre-pass will detect it on the next invocation.",
+    "Edit the plan manually to resolve the stuck rubric items, then re-run /relay-execute.",
+    "Implement the phase manually, bypassing the orchestrator for this phase only."
+  ]
+}
+```
+
+HALT with verbatim message:
+
+> FAILED_PLAN_REVIEW_STUCK. /relay-execute detected a stuck plan-review
+> loop for phase <N>: the same rubric items failed in two consecutive
+> attempts without progress.
+> Stuck items: <current_failing_ids>.
+> plan_review_attempts=<plan_review_attempts>, max_plan_review_retries=<max_plan_review_retries>.
+> Halting early rather than burning the remaining retry budget.
+> Halt state at PRPs/reports/<feature>/orchestrator-halt.json.
+> Manual recovery: inspect the stuck rubric items. If the root cause
+> is a rubric edge case (e.g., R-COH-VALIDATE-FRAMEWORK-MISMATCH on
+> a scaffold phase), add `phase_type: scaffold` to the plan's
+> ## Metadata table and re-run /relay-execute.
+
+Set `last_plan_review_failing_ids = current_failing_ids` before any
+retry (so the next attempt has a valid baseline for comparison).
 
 If `plan_review_attempts > max_plan_review_retries`:
 

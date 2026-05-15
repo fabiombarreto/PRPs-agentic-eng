@@ -502,6 +502,60 @@ and exits 0. This is symmetric in shape and position to `/relay-tdd`'s P4.a (`TD
 
 ---
 
+## [2026-05-14] phase_type annotation enables rubric differentiation for scaffold phases
+
+**Context:** Three consecutive `/relay-execute` runs on `web-docs-site` Phase 1 (Bootstrap — an Astro + Starlight project scaffold) all failed `R-COH-VALIDATE-FRAMEWORK-MISMATCH`. The rubric requires every VALIDATE command's first token to match a declared test framework (`vitest`, `pytest`, etc.). But scaffold phases have no application code to exercise; their legitimate validation is filesystem-oriented (`Test-Path`, `Select-String`, `Get-ChildItem`, `npm run build`). No mechanical fix existed short of replacing all PowerShell VALIDATE blocks with synthetic Vitest/Playwright assertions over filesystem state — performative tests that exist only to pass the rubric, not to validate the deliverable. The orchestrator exhausted its `max_plan_review_retries=2` budget without the plan-writer being able to fix an irresolvable structural mismatch between the rubric's assumption (every phase has testable application code) and the phase's reality (config-only bootstrap). The halt artifact's `halt_reason_summary` field explicitly identified this as a rubric edge case. Additionally, the orchestrator spent its full retry budget on a stuck loop rather than detecting early that no progress was being made.
+
+**Decision:** Three coordinated changes:
+
+1. **`phase_type` field in plan Metadata.** `plan-writer` populates a `phase_type` row in the `## Metadata` table for every plan it generates, using inference signals: `scaffold` (filesystem-only VALIDATE commands; bootstrap/install/config-only goals), `docs` (only documentation files in Files to Change), `refactor` (primary action is move/rename/extract), `feature` (default). The field is the canonical per-plan annotation that downstream rubric checks consult.
+
+2. **Phase 0 pre-pass in `plan-reviewer`.** Before running R1–R8, the reviewer checks whether the plan's `## Metadata` table contains a `phase_type` row. If absent, it infers the value using the same signals the plan-writer uses and adds the row via a bounded `Edit`. This is the only plan body mutation the reviewer performs outside the happy-path status flip. The `R-COH-VALIDATE-FRAMEWORK-MISMATCH` check then consults `plan_phase_type`: if the value is `scaffold` or `docs`, the check emits `passed: true` with an explicit rationale and skips the framework-first-token matching entirely.
+
+3. **Stuck-loop detection in `/relay-execute`.** The plan-review retry loop now tracks the set of failing rubric item IDs from the previous attempt (`last_plan_review_failing_ids`). If two consecutive attempts produce an identical failing ID set, the orchestrator halts early with `FAILED_PLAN_REVIEW_STUCK` rather than exhausting the full `max_plan_review_retries` budget. The halt artifact includes `stuck_rubric_items` and a `manual_recovery_paths` entry that names the `phase_type` fix as the first recovery option.
+
+**Reason:** The rubric's framework-first-token requirement was calibrated for feature phases where test-framework invocations are the natural validation. Scaffold phases have a fundamentally different validation surface; forcing them to use test frameworks produces meaningless tests that inflate test count without verifying the deliverable. The `phase_type` field is the right abstraction: it is a per-plan annotation the writer sets once, and downstream checks use it to select the appropriate rubric variant. The Phase 0 auto-population ensures backwards compatibility with existing DRAFT plans that were written before this decision. The stuck-loop detection is a complementary improvement: when a rubric item cannot be mechanically resolved (as R-COH-VALIDATE-FRAMEWORK-MISMATCH was for scaffold phases), burning the full retry budget is wasteful and produces a less informative halt artifact than an early `FAILED_PLAN_REVIEW_STUCK` with named stuck items and recovery guidance.
+
+**Areas affected:** `plugins/relay/agents/plan-writer.md` (Step 4.4 item 5: `phase_type` added to Metadata table); `plugins/relay/agents/plan-reviewer.md` (new Phase 0 pre-pass before Step 1; `R-COH-VALIDATE-FRAMEWORK-MISMATCH` phase-type exemption branch; anti-patterns section updated); `plugins/relay/commands/relay-execute.md` (Phase A.0 init: `last_plan_review_failing_ids`; Phase A.1: reset on new phase; Phase A.3.2 CHANGES_REQUESTED branch: stuck detection before budget check; new `FAILED_PLAN_REVIEW_STUCK` halt code; frontmatter description updated to eight HALT codes).
+
+---
+
+## [2026-05-15] /relay-plan PRD-less mode: registered future capability, not yet implemented
+
+**Context:** `prp-plan` (the upstream reference plugin) operates without a formal PRD — the user passes a short feature description directly and the planner generates a plan from it. The current `/relay-plan` contract requires a full APPROVED PRD as input (preconditions P1–P4). Users working on small, well-scoped features sometimes want to skip the full PRD authoring flow and go directly to planning, using only a feature description as input.
+
+**Decision:** PRD-less mode for `/relay-plan` — accepting a short feature description string instead of an APPROVED PRD path, analogous to how `prp-plan` operates — is a **registered future capability**. It is NOT implemented. The current PRD-required contract (P1–P4 preconditions) is the only operative contract. No agent should implement, approximate, or bypass the PRD requirement before a dedicated PRD for this capability has been authored and approved.
+
+**Reason:** Recording the intention in decisions.md prevents premature implementation (agents must not add ad-hoc PRD-bypass logic without a formal design pass), aligns the team on the roadmap direction, and establishes `prp-plan`'s description-only input model as the explicit design reference for when the capability is formally designed.
+
+**Out of scope until a dedicated PRD is approved:**
+- Passing a free-form description string to `/relay-plan` instead of a PRD path.
+- Automatically generating a lightweight PRD from the description before planning.
+- A `--no-prd` flag, an alternative precondition branch, or any other bypass of P1/P2.
+- Merging or aliasing `/relay-prd` + `/relay-plan` into a single shortcut command.
+
+**Areas affected (when eventually shipped):** `/relay-plan` command (new input mode), `plan-writer` agent (new entrypoint without Implementation Phases table), preconditions P1/P2 (alternative branch or replacement), command-surface documentation, `docs/api-reference.md`.
+
+---
+
+## [2026-05-15] Runnable worktree environments: registered future feature (picks up relay-worktree's deferred "What We're NOT Building" items)
+
+**Context:** `relay-worktree` (shipped v0.11.0) established the worktree as a *file-isolation* boundary: `git worktree add .worktrees/<feature>/` plus a project-owned `scripts/worktree-bootstrap.sh` hook (D6, 2026-05-11). It explicitly deferred everything that makes the application actually *runnable* inside that folder — its "What We're NOT Building" section lists container orchestration / port allocation, dependency installation, Docker Compose project-name management, and per-stack bootstrap content as out of scope. Today the bootstrap-hook contract (D6) delegates all of this to the project's script with no relay-level strategy; two parallel `/relay-execute` runs are isolated for file writes but cannot reliably start a dev server, a test stack, or a database inside their own worktree folders without manual, collision-prone setup. The autonomous agents (`implementer`, `test-runner`) have no contract for discovering or binding to a worktree-local runnable environment.
+
+**Decision:** "Runnable worktree environments" is a **registered future feature**, not yet implemented. Its goal is to evolve each `.worktrees/<feature>/` from a file-isolation boundary into a self-contained runnable environment so the autonomous pipeline's agents can start and exercise the application inside the worktree with zero cross-pipeline collision. The feature's PRD MUST define explicit strategies for: (1) per-worktree env/secret replication; (2) per-worktree dependency installation; (3) deterministic per-worktree port allocation (the cksum-from-branch-name pattern surfaced in relay-worktree's research is the design reference); (4) per-worktree container / Compose project-name isolation; (5) per-worktree data/DB isolation; (6) how the runnable-environment handle is discovered and threaded through `/relay-execute` down to the `implementer` and `test-runner` agents. No agent may implement, approximate, or partially build any of these six strategies before a dedicated PRD is authored (via `/relay-prd`) and approved. Until then, the D6 project-owned-script delegation remains the only operative contract.
+
+**Reason:** Registering the feature prevents the relay-worktree deferrals from being silently re-decided ad-hoc inside bootstrap scripts or agent prompts; it names the full strategy surface so the future PRD starts from a scoped problem rather than rediscovering it; and it preserves the D6 boundary (project owns stack-specific setup) as the explicit default until the PRD consciously decides which of the six strategies relay owns versus continues to delegate. This mirrors the registration pattern used for the 2026-05-15 PRD-less `/relay-plan` entry — record the intention so the roadmap is shared and premature implementation is blocked.
+
+**Out of scope until a dedicated PRD is approved:**
+- Implementing any of the six strategies above.
+- Changing or extending the D6 bootstrap-hook contract.
+- Modifying `implementer` / `test-runner` to assume a runnable worktree environment exists.
+- Any automatic port-allocation, Compose project-name, or dependency-install logic in `/relay-worktree` or `context-builder`.
+
+**Areas affected (when eventually shipped):** `/relay-worktree` (or a new companion command), `context-builder` bootstrap template (D6 evolution), `implementer` + `test-runner` agents (runnable-env discovery contract), `/relay-execute` orchestrator (threading the env handle through the pipeline), `docs/context/architecture.md`, `docs/api-reference.md`.
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision

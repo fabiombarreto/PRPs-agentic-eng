@@ -210,6 +210,17 @@
 
       <p>Integration with real CI: GitHub Actions workflows that invoke relay, external-service gating, automated merge rules. Last phase, furthest out.</p>
 
+      <h3 id="planned-runnable-worktrees">Planned: runnable worktree environments <span class="badge badge--pending">planned</span></h3>
+
+      <p><code>/relay-worktree</code> (v0.11.0) established the worktree as a <em>file-isolation</em> boundary. It explicitly deferred everything that makes the application actually <em>runnable</em> inside that folder — port allocation, dependency installation, Docker Compose project-name isolation, and per-stack environment replication are all delegated to a project-owned <code>scripts/worktree-bootstrap.sh</code> hook with no relay-level strategy.</p>
+
+      <p>A registered future feature picks those deferrals back up: evolve each <code>.worktrees/&lt;feature&gt;/</code> into a self-contained runnable environment so the autonomous agents (<code>implementer</code>, <code>test-runner</code>) can start and exercise the application inside the worktree with zero cross-pipeline collision. The feature's PRD must define explicit strategies for per-worktree env/secret replication, dependency installation, deterministic port allocation, container / Compose project-name isolation, data/DB isolation, and how the runnable-environment handle is threaded through <code>/relay-execute</code> down to the agents.</p>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Registered, not scheduled</div>
+        <p>Recorded in <code>docs/decisions.md</code> (2026-05-15, "Runnable worktree environments"). Not implemented and not yet placed in a numbered project phase. No agent builds any of the six strategies ahead of a dedicated PRD authored via <code>/relay-prd</code> and approved; until then the project-owned bootstrap-script delegation (D6, 2026-05-11) remains the only operative contract.</p>
+      </div>
+
       <h2 id="dogfood-status">Dogfood status</h2>
 
       <p>The <strong>phoenix</strong> project (Django + React SaaS for MEC higher-education assessments) is relay's first target. Status as of 2026-05-10:</p>
