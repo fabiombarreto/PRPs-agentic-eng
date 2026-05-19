@@ -556,6 +556,43 @@ and exits 0. This is symmetric in shape and position to `/relay-tdd`'s P4.a (`TD
 
 ---
 
+## [2026-05-18] Pillar 3 command surface: `/relay-commit` + `/relay-pr` + `/relay-approve` (three-command split)
+
+**Context:** The initial 2026-04-19 command surface decision listed `/relay-pr` as a single "creator" command responsible for commit, push, and PR creation in one shot. The 2026-05-18 boundary decision (next entry below) clarified that `/relay-execute` terminates with uncommitted changes — but still left Pillar 3 as a monolithic `/relay-pr`. During Pillar 3 planning it became clear that commit and PR creation are meaningfully separate user actions: the user reviews the changes and commits locally first; only after reviewing the commit does the user push and create the PR. A single command conflating both operations offers no recovery point between "local commit" and "PR opened", and the commit is a local reversible operation whereas push + PR creation are network operations with external visibility.
+
+**Decision:** Pillar 3 is split into three commands:
+- `/relay-commit <feature>` — stages + commits all working-tree changes in `.worktrees/<feature>/`. Local only; no push. Commit message generated from the orchestrator audit log and source PRD title. Idempotent: clean worktree exits 0 with a structured message. Deterministic infra command — no writer/reviewer split, no LLM.
+- `/relay-pr <feature>` — verifies branch state (checks whether ahead of origin); pushes if needed; runs `gh pr create` with the final report as the PR description; writes `PRPs/reports/<feature>/final-report.md`.
+- `/relay-approve <pr>` — merges the PR, deletes branch + worktree, runs Docs Updater and Docs Reviewer. (Placeholder — Phase 4.)
+
+The 2026-04-19 command surface's single `/relay-pr` (commit + push + PR) is **superseded** by this three-command split. Total command surface: **13 commands** + 1 Pillar 3 placeholder (`/relay-approve`).
+
+Happy path: `/relay-prd` → `/relay-execute` → (human validates + manual testing) → `/relay-commit` → (review commit) → `/relay-pr` → (after PR review + merge) → `/relay-approve`.
+
+**Reason:** Separating commit from push + PR gives the user a local, reversible checkpoint before taking network-visible actions. `git reset HEAD~1` undoes a commit harmlessly; a prematurely-opened PR requires closing or a revert commit. The deterministic nature of `/relay-commit` (no LLM, no rubric) means it can run safely and repeatedly with no autonomy risk. `/relay-pr`'s branch-state check before push also handles idempotency at the push layer (branch already pushed but PR not yet created).
+
+**Areas affected:** `docs/api-reference.md` (`/relay-commit` added to Pillar 3; `/relay-pr` scoped to push + PR only; count updated to 13); `docs/context/architecture.md` (happy path, Pillar 3 description, command count); `plugins/relay/commands/relay-execute.md` (success message updated to point to `/relay-commit`); `documentation/reference/commands.html` (Pillar 3 restructured with `/relay-commit` + scoped `/relay-pr`); `documentation/changelog.html` (Unreleased); `documentation/roadmap/status.html` (What's next).
+
+---
+
+## [2026-05-18] Pillar 2/3 boundary: `/relay-execute` does NOT commit or create a PR; Pillar 3 owns commit and PR creation
+
+**Context:** The 2026-04-19 command surface decision described `/relay-execute`'s output as "PR opened". During implementation and dogfood runs it became clear that the autonomous pipeline must not commit the working tree or open a PR without an explicit human validation gate: (a) for `test_frameworks: []` projects the test stage is a no-op (self-skip, v0.11.1), leaving unverified changes in the worktree with no automated signal; (b) even when automated tests pass, the pipeline may produce changes requiring manual inspection or functional testing before a PR is appropriate; (c) opening a PR before manual review bypasses the human gate that relay's interactivity boundary deliberately preserves at PRD approval.
+
+**Decision:** `/relay-execute` terminates at "all phases complete" state — all PRD Implementation Phases rows reach `Status: complete`, all plans are archived under `PRPs/plans/completed/`, and the working tree inside `.worktrees/<feature>/` carries uncommitted implementation changes. `/relay-execute` does NOT execute `git add`, `git commit`, `gh pr create`, or any equivalent. A new hard rule (#11) in the command file makes this prohibition explicit and permanent.
+
+Pillar 3 owns the full commit + PR lifecycle:
+- `/relay-pr <feature>` — commits the worktree changes, pushes the branch, opens the PR, and generates `PRPs/reports/<feature>/final-report.md`.
+- `/relay-approve <pr>` — merges the PR, runs the docs-update cycle, and deletes branch and worktree post-merge.
+
+The 2026-04-19 command surface decision's description of `/relay-execute` output as "PR opened" is **superseded** by this entry. The operative happy path is: `/relay-prd` → `/relay-execute` → (human validates + manual testing) → `/relay-pr` → (after merge) `/relay-approve`.
+
+**Reason:** Manual testing before committing is a non-negotiable gate that the autonomous pipeline cannot replace. The `relay-execute` orchestrator already implemented the spirit of this decision (the success message says "Ready for /relay-pr"; the "What you do NOT do" section lists "Wiring `/relay-pr`" as deferred) — this entry formalizes that design-time pattern as a permanent architectural boundary rather than a temporary deferral. The boundary also prevents the pipeline from committing partial-phase changes when the wall-clock budget expires (`FAILED_ORCHESTRATOR_TIME_BUDGET_EXCEEDED`) — uncommitted working-tree state is recoverable; a bad commit requires force-push or a revert PR to undo in a team environment.
+
+**Areas affected:** `plugins/relay/commands/relay-execute.md` (new hard rule #11: never commit, never create PR; "What you do NOT do" entry updated; success-message note clarified); `docs/api-reference.md` (`/relay-execute` output description fixed; command surface table updated); `docs/context/architecture.md` (Pillar 2/3 boundary text; interactivity boundary section; happy-path description); `documentation/reference/commands.html` (`/relay-execute` Output and Composes rows fixed); `documentation/changelog.html` (patch entry v0.11.3).
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision

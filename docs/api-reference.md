@@ -14,7 +14,7 @@ Modes for `context-builder`: `*init`, `*update`, `*validate`, `*domain`,
 
 ## Commands
 
-12 commands organized by role, plus 1 placeholder for Pillar 3. All core
+13 commands organized by role, plus 1 placeholder for Pillar 3. All core
 pipeline commands are now implemented; `/relay-execute` ✅ orchestrator
 shipped in v0.9.0 completing project Phase 3. See `docs/decisions.md` for
 the decision record and rationale.
@@ -56,18 +56,20 @@ cycle.
 |---------|-------|--------|
 | `/relay-worktree <feature-name>` ✅ **implemented** | feature name (free argument); or PRD-derived slug when invoked internally by `/relay-execute`. Sanitized to `[a-z0-9-]` max 64 chars; empty result after sanitization → HALT. `--base <ref>` flag overrides the base ref (default: `origin/main` → `origin/master` → `HEAD` fallback chain). `--no-worktree` on `/relay-execute` skips invocation entirely. | worktree at `.worktrees/<feature>/` + branch `feature/<feature>`. Idempotent: silently reuses an existing worktree when the branch matches; halts loud (`FAILED_BRANCH_DIVERGENCE`) when the worktree exists on a different branch. Bootstrap log at `PRPs/reports/<feature>/worktree-bootstrap.log` when `scripts/worktree-bootstrap.sh` runs (non-fatal on failure). Precondition halts: `FAILED_NOT_A_GIT_REPO`, `FAILED_BASE_REF_MISSING`, `FAILED_BRANCH_CONFLICT`, `FAILED_PATH_OCCUPIED`. Creation failure inside `/relay-execute` triggers graceful fallback to cwd per D3/D4 — pipeline does NOT halt on worktree creation failure. See `PRPs/prds/relay-worktree.prd.md` AC-1 through AC-9. |
 | `/relay-test <worktree>` ✅ **implemented** | worktree with code | green state or `FAILED_AFTER_N_RETRIES` / `FAILED_TIME_BUDGET_EXCEEDED` / `FAILED_OSCILLATION` / `FAILED_INFRA_UNRECOVERABLE`, or `skipped_no_test_framework` (graceful self-skip when `test_frameworks: []` or `methodology.md` absent; no `run.json` written; symmetric with `/relay-tdd` P4.a). Encapsulates B1–B4: suite execution, failure classification, auto-correction loop (see `docs/decisions.md` on `max_test_retries`, `max_test_minutes`). Delegates per-attempt work to the `test-runner` agent (`plugins/relay/agents/test-runner.md`). Produces `PRPs/reports/<feature>/run.json` plus per-attempt `record.json` and `stdout.log`. |
-| `/relay-pr <feature-name>` | worktree with green tests + all reviews `APPROVED` | PR opened + `PRPs/reports/<feature>/final-report.md` |
+| `/relay-pr <feature-name>` | worktree (`.worktrees/<feature>/`) with uncommitted implementation changes, green tests, and all reviews `APPROVED` | git commit + branch push + PR opened + `PRPs/reports/<feature>/final-report.md` |
 
 #### Orchestrator
 
 | Command | Input | Output |
 |---------|-------|--------|
-| `/relay-execute <prd-path>` ✅ **implemented** | approved PRD | opened PR (or a HALT code on unrecoverable failure). Serial orchestration via source PRD's Implementation Phases table as state machine (D6 — idempotent on re-invocation; re-reads table on every run; no separate state file). Inline command-protocol adoption via `Read` (D7 — LLM reads each downstream command file and executes its protocol in the same conversation context; zero logic duplication; no sub-agents). Two new orchestration-layer budgets: `max_plan_review_retries` and `max_orchestrator_minutes` (D3 — each downstream command owns its internal loop budget; orchestrator adds session-level wall-clock; first-to-expire wins). Seven distinct HALT outcome codes: `FAILED_PLAN_REVIEW_BUDGET_EXCEEDED`, `FAILED_ORCHESTRATOR_TIME_BUDGET_EXCEEDED`, `FAILED_TEST_REVIEW_REJECTED`, plus four propagated from `/relay-implement` and one from `/relay-test`. Phase A.5.0 (v0.11.1): when `test_frameworks: []` or `methodology.md` absent, the orchestrator logs `{"phase": <N>, "stage": "test", "outcome": "skipped_no_test_framework"}` to `orchestrator_run_log` and proceeds to Phase A.6 without halting — not a HALT code but a structured outcome entry (symmetric with A.3.5's `skipped_tdd_false`). Audit artifact at `PRPs/reports/<feature>/orchestrator-run.json`. TDD routing (B7/B8) is dead-code in MVP — D5 routing decision reserved; B7/B8 are unshipped. `/relay-pr` integration surfaces a "ready for PR" message; Pillar 3 `/relay-approve` is a separate future command. Composes: `/relay-plan → /relay-plan-review → /relay-worktree → /relay-tdd → /relay-tdd-review → /relay-implement → /relay-code-review → /relay-test → /relay-test-review → /relay-pr`. |
+| `/relay-execute <prd-path>` ✅ **implemented** | approved PRD | all phases complete — working tree in `.worktrees/<feature>/` carries uncommitted implementation changes, ready for `/relay-pr`; or a HALT code on unrecoverable failure. Does NOT commit or create a PR (see `docs/decisions.md` 2026-05-18). Serial orchestration via source PRD's Implementation Phases table as state machine (D6 — idempotent on re-invocation; re-reads table on every run; no separate state file). Inline command-protocol adoption via `Read` (D7 — LLM reads each downstream command file and executes its protocol in the same conversation context; zero logic duplication; no sub-agents). Two new orchestration-layer budgets: `max_plan_review_retries` and `max_orchestrator_minutes` (D3 — each downstream command owns its internal loop budget; orchestrator adds session-level wall-clock; first-to-expire wins). Nine distinct HALT outcome codes: `FAILED_PLAN_REVIEW_BUDGET_EXCEEDED`, `FAILED_PLAN_REVIEW_STUCK`, `FAILED_ORCHESTRATOR_TIME_BUDGET_EXCEEDED`, `FAILED_TEST_REVIEW_REJECTED`, plus four propagated from `/relay-implement` and one from `/relay-test`. Phase A.5.0 (v0.11.1): when `test_frameworks: []` or `methodology.md` absent, the orchestrator logs `{"phase": <N>, "stage": "test", "outcome": "skipped_no_test_framework"}` to `orchestrator_run_log` and proceeds to Phase A.6 without halting — not a HALT code but a structured outcome entry (symmetric with A.3.5's `skipped_tdd_false`). Audit artifact at `PRPs/reports/<feature>/orchestrator-run.json`. TDD routing (B7/B8) shipped v0.10.0. Composes: `/relay-plan → /relay-plan-review → /relay-worktree → /relay-tdd → /relay-tdd-review → /relay-implement → /relay-code-review → /relay-test → /relay-test-review`. |
 
-#### Pillar 3 (approval cycle — exact naming TBD)
+#### Pillar 3 (commit + PR + approval cycle)
 
 | Command | Input | Output |
 |---------|-------|--------|
+| `/relay-commit <feature-name>` *(planned)* | worktree (`.worktrees/<feature>/`) with uncommitted implementation changes | git commit (local only; no push). Idempotent: clean worktree exits 0. Commit message generated from orchestrator audit log + source PRD title. |
+| `/relay-pr <feature-name>` *(planned)* | worktree with a committed branch (produced by `/relay-commit`) + green tests + all reviews `APPROVED` | branch pushed to origin (if not already) + PR opened via `gh pr create` + `PRPs/reports/<feature>/final-report.md` |
 | `/relay-approve <pr>` *(placeholder)* | PR number or URL | merge PR, delete branch + worktree, run Docs Updater and Docs Reviewer |
 
 ### Preconditions
@@ -117,15 +119,15 @@ prompts are designed during Phase 2/3 implementation.
 
 ### Planned
 
-TDD Writer (B7), TDD Reviewer (B8), Report + PR Creator, Docs Updater,
-Docs Reviewer — all to be written during their corresponding phases.
+Docs Updater, Docs Reviewer — to be written during Phase 4 (Approval cycle).
 The PRD Authoring pair (PRD Writer + PRD Reviewer + the two research
-subagents) shipped in v0.6.0 (Phase 3 of the rollout). The Plan
-Authoring pair (Plan Writer + Plan Reviewer) shipped in v0.7.0. The
-Implementation Authoring pair (Implementer + Code Reviewer +
-`/relay-implement` + `/relay-code-review`) shipped in v0.8.0. The
-`/relay-execute` orchestrator shipped in v0.9.0, completing project Phase 3.
-Remaining pending pieces are the B7/B8 TDD pair and `/relay-pr` (Pillar 3).
+subagents) shipped in v0.6.0. The Plan Authoring pair (Plan Writer +
+Plan Reviewer) shipped in v0.7.0. The Implementation Authoring pair
+(Implementer + Code Reviewer + `/relay-implement` + `/relay-code-review`)
+shipped in v0.8.0. The `/relay-execute` orchestrator shipped in v0.9.0.
+The TDD pair (B7 `tdd-writer` + B8 `tdd-reviewer`) shipped in v0.10.0.
+Remaining pending pieces are the Pillar 3 commands (`/relay-commit`,
+`/relay-pr`, `/relay-approve`) and the Docs Updater + Docs Reviewer agents.
 
 ## Hooks (planned)
 

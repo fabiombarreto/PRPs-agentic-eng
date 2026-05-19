@@ -21,16 +21,19 @@
       </div>
 
       <h1>Commands</h1>
-      <p class="page-subtitle">The full slash-command surface of the relay plugin. Twelve commands plus one Pillar 3 placeholder, organized by role (writer / reviewer / infra / orchestrator). Each command is invocable on its own for testing or manual intervention; the orchestrator (<code>/relay-execute</code>) composes them into a full run.</p>
+      <p class="page-subtitle">The full slash-command surface of the relay plugin. Thirteen commands plus one Pillar 3 placeholder, organized by role (writer / reviewer / infra / orchestrator / Pillar 3). Each command is invocable on its own for testing or manual intervention; the orchestrator (<code>/relay-execute</code>) composes the Pillar 2 stages into a full run.</p>
 
       <h2 id="happy-path">The happy path</h2>
 
-      <p>Day-to-day feature delivery only uses three commands:</p>
+      <p>Day-to-day feature delivery uses five commands:</p>
 
       <pre><code class="language-bash">/relay-prd     "a short description of the feature"   # interactive — produces approved PRD
-/relay-execute PRPs/prds/&lt;feature&gt;.prd.md              # autonomous — drives PRD to PR
-# ...review the PR, then:
-/relay-approve &lt;pr-number&gt;                              # merge + docs update</code></pre>
+/relay-execute PRPs/prds/&lt;feature&gt;.prd.md              # autonomous — drives PRD through plan/implement/test
+# ...review the output, run manual tests, then:
+/relay-commit  &lt;feature&gt;                                # local git commit (no push; reversible)
+/relay-pr      &lt;feature&gt;                                # push branch + open PR
+# ...PR review + approval, then:
+/relay-approve &lt;pr-number&gt;                              # merge + worktree cleanup + docs update</code></pre>
 
       <p>Everything else exists for <strong>granular invocation</strong> — running a single stage for debugging, re-running a reviewer on a hand-edited artifact, or composing a custom flow.</p>
 
@@ -197,16 +200,6 @@
         <dd>Delegates per-attempt execution to the <a href="agents.html"><code>test-runner</code> agent</a>.</dd>
       </div>
 
-      <h3 id="relay-pr"><code>/relay-pr &lt;feature-name&gt;</code></h3>
-      <div class="kv">
-        <dt>Input</dt>
-        <dd>A worktree with green tests and all reviews <code>APPROVED</code>.</dd>
-        <dt>Output</dt>
-        <dd>Pull request opened on GitHub. <code>PRPs/reports/&lt;feature&gt;/final-report.md</code> embedded as the PR description.</dd>
-        <dt>Notes</dt>
-        <dd>Invokes <code>scripts/generate-final-report.mjs</code> to produce the report Markdown. Uses <code>gh</code> CLI under the hood.</dd>
-      </div>
-
       <h2 id="orchestrator">Orchestrator</h2>
 
       <h3 id="relay-execute"><code>/relay-execute &lt;prd-path&gt;</code> <span class="badge badge--done">implemented</span></h3>
@@ -214,10 +207,10 @@
         <dt>Input</dt>
         <dd>An approved PRD.</dd>
         <dt>Output</dt>
-        <dd>Opened PR, or a HALT code with diagnostic. Audit artifact at <code>PRPs/reports/&lt;feature&gt;/orchestrator-run.json</code>.</dd>
+        <dd>All phases complete &mdash; working tree in <code>.worktrees/&lt;feature&gt;/</code> carries uncommitted implementation changes, ready for <code>/relay-pr</code>. Does <strong>not</strong> commit or create a PR (Pillar 3 owns that boundary; see <code>docs/decisions.md</code> 2026-05-18). Or a HALT code with diagnostic. Audit artifact at <code>PRPs/reports/&lt;feature&gt;/orchestrator-run.json</code>.</dd>
         <dt>Composes</dt>
         <dd>
-          <code>/relay-plan</code> → <code>/relay-plan-review</code> → <code>/relay-worktree</code> → <code>/relay-tdd</code> → <code>/relay-tdd-review</code> → <code>/relay-implement</code> → <code>/relay-code-review</code> → <code>/relay-test</code> → <code>/relay-test-review</code> → <code>/relay-pr</code>.
+          <code>/relay-plan</code> → <code>/relay-plan-review</code> → <code>/relay-worktree</code> → <code>/relay-tdd</code> → <code>/relay-tdd-review</code> → <code>/relay-implement</code> → <code>/relay-code-review</code> → <code>/relay-test</code> → <code>/relay-test-review</code>.
         </dd>
         <dt>Loop behavior</dt>
         <dd>Each writer/reviewer pair loops on <code>CHANGES_REQUESTED</code> until approved or the stage's retry budget is exhausted. Any unrecoverable abort is surfaced with the underlying command's exit reason.</dd>
@@ -233,7 +226,33 @@
         </dd>
       </div>
 
-      <h2 id="approval">Pillar 3 — Approval</h2>
+      <h2 id="pillar3">Pillar 3 — Commit, PR &amp; Approval</h2>
+
+      <p>Pillar 3 commands are triggered by the human after reviewing <code>/relay-execute</code>&rsquo;s output and running any manual tests. Each command is local and reversible before the next one is run.</p>
+
+      <h3 id="relay-commit"><code>/relay-commit &lt;feature-name&gt;</code></h3>
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>Worktree at <code>.worktrees/&lt;feature&gt;/</code> with uncommitted implementation changes (produced by <code>/relay-execute</code>).</dd>
+        <dt>Output</dt>
+        <dd>A single git commit in the worktree branch. Local only &mdash; no push, no network operation. Commit message generated from the orchestrator audit log and the source PRD title.</dd>
+        <dt>Idempotency</dt>
+        <dd>If the worktree is already clean (nothing to commit), exits 0 with a structured message. Safe to re-run.</dd>
+        <dt>Status</dt>
+        <dd>Planned &mdash; not yet implemented.</dd>
+      </div>
+
+      <h3 id="relay-pr"><code>/relay-pr &lt;feature-name&gt;</code></h3>
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>Worktree branch with a committed implementation (produced by <code>/relay-commit</code>), green tests, and all reviews <code>APPROVED</code>.</dd>
+        <dt>Output</dt>
+        <dd>Branch pushed to origin (if not already ahead); pull request opened on GitHub via <code>gh pr create</code>; <code>PRPs/reports/&lt;feature&gt;/final-report.md</code> embedded as the PR description.</dd>
+        <dt>Notes</dt>
+        <dd>Verifies branch state before pushing &mdash; idempotent if branch was already pushed. Uses <code>gh</code> CLI under the hood.</dd>
+        <dt>Status</dt>
+        <dd>Planned &mdash; not yet implemented.</dd>
+      </div>
 
       <h3 id="relay-approve"><code>/relay-approve &lt;pr&gt;</code></h3>
       <div class="kv">
@@ -242,7 +261,7 @@
         <dt>Output</dt>
         <dd>PR merged, branch + worktree deleted, <code>docs/context/</code> and <code>docs/domain/</code> updated by the Docs Updater, ambiguities flagged by the Docs Reviewer.</dd>
         <dt>Status</dt>
-        <dd>Placeholder — not yet implemented. Name is subject to change when Pillar 3 lands.</dd>
+        <dd>Placeholder &mdash; not yet implemented.</dd>
       </div>
 
       <h2 id="preconditions">Preconditions (every command)</h2>

@@ -696,7 +696,10 @@ When Phase A.1 finds no more actionable rows and `phases_completed` is non-empty
 > Phases completed: <list of phase numbers in order>.
 > Plans archived at PRPs/plans/completed/.
 > Orchestrator audit log at PRPs/reports/<feature>/orchestrator-run.json.
-> Ready for /relay-pr <feature> (when shipped) or manual git push + PR creation.
+> Working tree in .worktrees/<feature>/ carries uncommitted implementation changes.
+> Next step (Pillar 3): review the changes, run any manual tests, then:
+>   1. /relay-commit <feature>  — commit locally (reversible; no push)
+>   2. /relay-pr <feature>      — push branch + open PR
 
 ### HALT paths
 
@@ -726,18 +729,20 @@ On any HALT path (one of `FAILED_PLAN_REVIEW_BUDGET_EXCEEDED`, `FAILED_ORCHESTRA
 
 10. **`/relay-worktree` is invoked in Phase A.3.3 by default before Phase A.3.5.** When `--no-worktree` is passed, Phase A.3.3 is entirely skipped. When `/relay-worktree` returns a non-zero exit code, the orchestrator logs a warning, records `worktree_succeeded: false` and `fallback_reason` in `orchestrator-run.json`, and continues against cwd — the pipeline does NOT halt on worktree-creation failure (D8 of relay-worktree.prd.md). The worktree at `.worktrees/<feature>/` and its branch `feature/<feature>` persist on disk even if /relay-execute halts mid-pipeline (AC-15).
 
+11. **Never commit working-tree changes or create a PR.** `/relay-execute` terminates at "all phases complete" state with implementation changes uncommitted in the worktree. `git add`, `git commit`, `git push`, `gh pr create`, and any equivalent operations are Pillar 3's exclusive responsibility (`/relay-commit` then `/relay-pr`). This is a permanent architectural boundary, not a deferral — see `docs/decisions.md` 2026-05-18.
+
 ---
 
 ## What you do NOT do
 
 - **Re-implementing plan-writer logic** — the orchestrator adopts `/relay-plan` inline via Read; it does not paste or summarize plan-writer's step bodies.
 - **Running the plan rubric inline** — the orchestrator adopts `/relay-plan-review` inline via Read; it does not evaluate R1–R8 or R-COH-* rubric items itself.
-- **Wiring `/relay-pr`** — separate future command; the orchestrator surfaces "ready for /relay-pr" on success but does not invoke it.
+- **Committing working-tree changes or creating a PR** — permanently out of scope (see hard rule 11 and `docs/decisions.md` 2026-05-18). Pillar 3 (`/relay-pr`) owns commit and PR creation exclusively. The success message points to `/relay-pr` as the next manual step.
 - **Auto-recovering from `/relay-implement` HALT** — the orchestrator surfaces the halt and exits. Manual intervention is required.
 - **Auto-recovering from `/relay-test-review` CHANGES_REQUESTED** — HALT with `FAILED_TEST_REVIEW_REJECTED`; no auto-correction path. B5 exists precisely to gate human review.
 - **Targeting a specific phase via `--phase <N>` flag** — Could-item; deferred. Idempotency via D6 state machine (re-invocation picks up at next pending row) is sufficient for MVP.
 - **Persisting research blobs** — research subagents invoked during `/relay-plan` adoption write to the plan file via the plan-writer protocol; no separate research artifact is written by the orchestrator.
-- **Committing between phases** — Could-item (`--auto-commit` flag); deferred. The developer or `/relay-pr` decides when to commit.
+- **Committing between phases or at the end** — permanently out of scope (covered by hard rule 11). Commit discipline belongs to Pillar 3.
 - **Re-running a `complete` phase** — refused via P3 (zero actionable rows with status `complete` are not re-picked). Manual hand-edit of the row's `Status` cell back to `pending` is the documented escape hatch.
 - **Parallel phase orchestration** — MVP is strictly serial. The `Parallel` cell is read but not acted upon.
 - **Multi-PRD orchestration** — one PRD per invocation; cross-PRD coordination is a separate orchestrator's job.
