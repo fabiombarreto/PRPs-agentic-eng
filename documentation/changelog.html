@@ -21,7 +21,7 @@
       </div>
 
       <h1>Changelog</h1>
-      <p class="page-subtitle">History of every user-visible change to the documentation site. Versioning is independent of the relay plugin version (see <a href="AGENTS.md">AGENTS.md §7</a> for the rules). Entries follow the <a href="https://keepachangelog.com/">Keep a Changelog</a> convention: Added / Changed / Deprecated / Removed / Fixed.</p>
+      <p class="page-subtitle">History of every user-visible change to the documentation site. The doc-site version and the relay plugin version are conceptually distinct but kept in lock-step — they share the same value (since 2026-04-30) so Claude Code's plugin cache invalidation stays aligned with shipped contracts (see <a href="AGENTS.md">AGENTS.md §7</a> for the rules). Entries follow the <a href="https://keepachangelog.com/">Keep a Changelog</a> convention: Added / Changed / Deprecated / Removed / Fixed.</p>
 
       <div class="callout callout--note">
         <div class="callout__title">How to read</div>
@@ -30,7 +30,10 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <p>No changes yet since 0.12.0.</p>
+      <h3 id="unreleased-fixed">Fixed</h3>
+      <ul>
+        <li><strong><code>documentation/changelog.html</code></strong> &mdash; page subtitle corrected. It claimed &ldquo;versioning is independent of the relay plugin version&rdquo;, which has been stale since the 2026-04-30 &sect;7.5 lock-step contract; it now states the doc-site and plugin versions are conceptually distinct but share the same value. Pure doc-site copy fix &mdash; no plugin bump per &sect;7.5.</li>
+      </ul>
 
       <h2 id="v0-12-0">0.12.0 — 2026-06-14</h2>
 
