@@ -99,7 +99,7 @@
     "title": "Skills",
     "path": "reference/skills.html",
     "category": "Reference",
-    "excerpt": "Claude Code skills loaded on demand. relay ships one: context-builder. Initializes (or updates) a target project's documentation tree, permission allowlist, and methodology declaration."
+    "excerpt": "Claude Code skills loaded on demand. relay ships one: context-builder. Initializes a target project's docs tree, permission allowlist, methodology declaration, and the mandatory test guardrail (testing.md + CLAUDE.md) that keeps e2e and other suites green on every change."
   },
   {
     "title": "Scripts",

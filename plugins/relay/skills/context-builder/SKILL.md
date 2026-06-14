@@ -75,6 +75,7 @@ START
     integrations.md        → external APIs and services (no secret values)
     constraints.md         → tech limitations, tech debt, what NOT to do
     methodology.md         → declared methodology (TDD opt-in) — contract read by the orchestrator and TDD agents
+    testing.md             → mandatory test guardrail: keep existing suites green on EVERY change, + detected run commands
   /domain
     glossary.md            → business terms with precise definitions
     flows.md               → main user flows in non-technical language
@@ -211,8 +212,36 @@ Read and analyze (if present):
 - 3-5 representative code files per main layer
 - Migration files or DB schema
 - Route files (routes/, router/, pages/, app/)
+- Test setup: e2e/test config files (`playwright.config.*`,
+  `cypress.config.*`, `wdio.conf.*`, `nightwatch.conf.*`, `jest.config.*`,
+  `vitest.config.*`, `pytest.ini` / `[tool.pytest]` in `pyproject.toml`,
+  `phpunit.xml`, `*_test.go`, etc.), test directories (`tests/`, `e2e/`,
+  `cypress/`, `__tests__/`, `spec/`), the run commands wired in
+  `package.json` "scripts", `Makefile`, `composer.json`, `tox.ini`, or CI
+  workflows, and the prerequisites those commands need (browser install,
+  a running dev server, a test database, env vars).
 
-Identify: project type (app, lib, monorepo), tech stack, main domain areas, external integrations, existing test patterns.
+Identify: project type (app, lib, monorepo), tech stack, main domain areas, external integrations, and the **test suites** present.
+
+### Test-suite detection (feeds Phase 2 `testing.md` + Phase 7 `CLAUDE.md`)
+
+For every automated test suite found, capture four facts:
+
+1. **Tier** — unit / integration / e2e. An **e2e** suite is anything
+   driving the real app end-to-end through a browser or HTTP surface:
+   Playwright, Cypress, Puppeteer, Selenium, WebdriverIO, Nightwatch,
+   TestCafe, or a project-specific harness.
+2. **Framework** — the tool name.
+3. **Run command** — exact, as wired in scripts/CI. Never guess one when
+   a real command exists; copy it verbatim.
+4. **Prerequisites** — what the command needs before it can pass (e.g.
+   `npx playwright install`, a dev server on a port, a seeded test DB,
+   specific env vars).
+
+These four facts are the payload for `docs/context/testing.md` (Phase 2,
+Step 6) and the Test Guardrail block in `CLAUDE.md` (Phase 7). If **no**
+test suite is found, record that fact explicitly — it changes the wording
+emitted by both phases and by the Final Report.
 
 Phase 1 runs identically in init and update — the scan is the input to
 every downstream phase. In update mode, the detected stack may have
@@ -437,9 +466,9 @@ Report in the Final Report:
 
 ## Phase 2: Create/update docs/context
 
-Five files in this folder: `architecture.md`, `conventions.md`,
-`integrations.md`, `constraints.md`, `methodology.md`. Each has its own
-spec below.
+Six files in this folder: `architecture.md`, `conventions.md`,
+`integrations.md`, `constraints.md`, `methodology.md`, `testing.md`. Each
+has its own spec below.
 
 ### Universal update protocol (applies to all four of architecture, conventions, integrations, constraints)
 
@@ -452,7 +481,8 @@ spec below.
   detected drift in these areas: ..."), but the file itself is not
   modified.
 
-`methodology.md` has a more specific update protocol below (Step 5).
+`methodology.md` (Step 5) and `testing.md` (Step 6) have more specific
+update protocols below.
 
 ### Step 1 — docs/context/architecture.md
 
@@ -572,6 +602,135 @@ in CONTRIBUTING.md / README.md. None of these activate TDD on their own.]
   "Items requiring human validation".
 - If `tdd: true` was set because of an explicit declaration, list it under
   "Declared state" (no validation required).
+
+### Step 6 — docs/context/testing.md
+
+Mandatory. This file is a **binding behavioral contract** that closes the
+gap the TDD track does NOT cover: keeping the project's **existing** test
+suites green after **every** change — including manual edits and "simple"
+one-liners made *without* any relay command. It must exist after every
+`*init` run.
+
+`methodology.md` (Step 5) decides whether tests are written *first*
+(`tdd:` opt-in). `testing.md` is independent and **always in force**:
+even with `tdd: false`, code must not ship having silently broken or
+skipped its tests. The two files cross-reference each other.
+
+The guardrail is written **strongly on purpose** so an agent cannot skip
+it silently: it applies to every change, it is NOT exempted by the
+Decision Gate scope exemptions (a single-file "exempt" change still
+requires the test steps), and it mandates an explicit end-of-run warning
+whenever the tests could not be run.
+
+**Template (init generation):**
+
+```markdown
+# Testing — mandatory guardrail for every change
+
+This file is a binding behavioral contract, not a reference doc. Any
+agent or human who changes code in this project MUST follow the guardrail
+below on EVERY change — including small, single-file, or "quick" ones,
+and whether or not a relay command was used. Skipping any step silently
+is a violation.
+
+`docs/context/methodology.md` governs whether the TDD track (writing
+tests first) is active. THIS file governs keeping the existing suites
+green afterward. They are independent: even with `tdd: false`, the
+guardrail below is always in force. This guardrail is also NOT subject to
+the `docs/decision-gate.md` scope exemptions — a change that is "exempt"
+from the gate still requires every step here.
+
+## The guardrail (every code change)
+
+1. Detect. Before finishing, state explicitly whether automated tests
+   exist for the code you touched (see "Detected test suites" below) and
+   which suites cover it.
+2. Keep tests in sync. If your change alters behavior a test asserts,
+   UPDATE that test to match the intended new behavior. Never leave a
+   test asserting the old behavior. Never delete, skip, comment out, or
+   weaken a test just to get a green run — that is a separate
+   anti-pattern (see docs/anti-patterns.md).
+3. Run. Run the suites that cover the changed code. Treat all tiers
+   (unit, integration, e2e) with equal weight — at minimum run the e2e
+   suite; a green unit run does not excuse an unrun e2e suite.
+4. Report honestly. State which suites ran, the pass/fail result, and
+   what you changed in the tests and why.
+
+## Fallback — when you CANNOT run the tests
+
+If for ANY reason a suite cannot run (missing dependency, no browser or
+display for e2e, services not up, unknown command, timeout, sandbox or
+permission limit, etc.), you MUST NOT stay silent. At the END of your
+response:
+
+1. Warn the user, in plain language, that the tests were not run.
+2. Name which suite(s) could not run and the specific reason (the actual
+   error or the missing precondition).
+3. Give exact, copy-pasteable commands to run them manually, including
+   any setup required first (install browsers, start services, set env
+   vars, seed the database).
+
+A change that touched test-covered code and ends with neither a test run
+nor this explicit warning is incomplete.
+
+## Detected test suites
+
+<!-- [DYNAMIC] One row per test suite detected in Phase 1. Replace this
+comment with the rows. If no suite was detected, delete the table and
+keep only the "none detected" note below. -->
+
+| Tier | Framework | Config / location | Run command | Prerequisites |
+|------|-----------|-------------------|-------------|---------------|
+| e2e | [framework] | [path] | `[command]` | [browsers/services/env, or "none"] |
+| unit | [framework] | [path] | `[command]` | [or "none"] |
+
+If a tier is absent above, no suite of that type was detected at `*init`
+time. When you add the first suite of a tier, record its run command and
+prerequisites here so future changes can find them.
+```
+
+**No-suite variant:** when Phase 1 found no automated tests, replace the
+`## Detected test suites` table with:
+
+```markdown
+## Detected test suites
+
+No automated test suites were detected at `*init` time. The guardrail
+above still applies the moment any suite is added: record its run command
+and prerequisites here, then keep it green on every subsequent change. If
+you believe this project should have tests (especially e2e), say so to
+the user rather than proceeding silently.
+```
+
+**Init behavior:**
+
+- Always create `docs/context/testing.md` with the full guardrail and
+  fallback prose (those sections are fixed template — never inferred).
+- Fill the `Detected test suites` table from the Phase 1 Test-suite
+  detection output: one row per suite, with the exact run command and the
+  prerequisites. Order e2e first.
+- If no suite was detected, emit the no-suite variant. Still create the
+  file — the guardrail is in force the moment a test is added.
+- Detected run commands / prerequisites that the scan could only infer
+  (not read verbatim from scripts/CI) get an `[INFERRED - VALIDATE]`
+  marker so the team confirms them.
+
+**Update behavior:**
+
+- If the file exists: **PRESERVE the guardrail and fallback prose
+  entirely** (human-validated). Additive exception only: if Phase 1
+  detected a NEW suite/framework not already listed in the `Detected test
+  suites` table, APPEND a row. Never remove, reorder, or rewrite existing
+  rows, and never touch the prose sections.
+- If the file is missing: run Init behavior.
+
+**Reporting (both modes):**
+
+- Phase 8 Final Report MUST include a "Test guardrail" section listing the
+  suites detected and whether `testing.md` was created/updated.
+- If no test framework was detected, surface it the same way Phase 1.5
+  does for `settings.json` — an explicit warning that the project has no
+  detectable tests and the guardrail will bind the moment one is added.
 
 ## Phase 3: Create/update docs/domain
 
@@ -1082,7 +1241,7 @@ Must include entries for:
   `api-reference.md`, `troubleshooting.md`)
 - `docs/context/` folder — one entry per file:
   `architecture.md`, `conventions.md`, `integrations.md`,
-  `constraints.md`, `methodology.md`
+  `constraints.md`, `methodology.md`, `testing.md`
 - `docs/domain/` — entries for `glossary.md`, `flows.md`, and one entry
   per `docs/domain/areas/*.md` file
 - `docs/libs/` folder — one collective entry
@@ -1127,24 +1286,55 @@ Before implementing anything, read:
 - docs/context/conventions.md — naming and code standards
 - docs/context/constraints.md — what NOT to do
 - docs/context/methodology.md — methodology declaration (TDD opt-in)
+- docs/context/testing.md — mandatory test guardrail (see section below)
 - docs/domain/areas/[relevant-area].md — business rules for the area being changed
 - docs/decision-gate.md — mandatory gate before planning or coding
 
 Domain areas: [list area names here, one per line]
 ```
 
+- **Required `Test Guardrail` section** (always loaded — this is the
+  Tier-1 surface that prevents silent test-skipping on non-pipeline
+  changes; emit it verbatim, it is essential content and MUST NOT be
+  dropped by Emergency Compression):
+
+```markdown
+## Test Guardrail (mandatory — every change)
+
+Applies to EVERY code change, including small or single-file ones, and
+whether or not a relay command was used. Do NOT skip this silently. It is
+NOT waived by the Decision Gate scope exemptions.
+
+- Before finishing, check which test suites cover the code you changed
+  (see docs/context/testing.md) and state whether tests exist.
+- If your change alters tested behavior, UPDATE those tests to match —
+  never leave them stale, never delete/skip/weaken them to force a pass.
+- Run the suites covering your change; treat all tiers equally and at a
+  minimum run the e2e suite.
+- If you CANNOT run them for any reason, do not stay silent: at the end of
+  your response warn the user, say exactly why, and give copy-pasteable
+  manual run instructions. Full protocol: docs/context/testing.md
+```
+
 ### Init behavior
 
 Create `CLAUDE.md` with the sections above, scanned from Phase 1 output.
 Summary of project, stack (as list), commands (essentials only), 2-3 key
-patterns inferred from code, domain areas from Phase 3 output.
+patterns inferred from code, domain areas from Phase 3 output, the
+`Context & Domain` section (including the `docs/context/testing.md`
+pointer), and the `Test Guardrail` section emitted verbatim.
 
 ### Update behavior
 
 - **If the file exists**:
   - Scan the `Context & Domain` section for the required pointers
-    (architecture, conventions, constraints, methodology, decision-gate).
-    If any is missing, APPEND it at the end of that section.
+    (architecture, conventions, constraints, methodology, testing,
+    decision-gate). If any is missing, APPEND it at the end of that
+    section.
+  - Scan for the `## Test Guardrail (mandatory — every change)` section.
+    If it is absent, APPEND the full block verbatim (it is the always-on
+    surface that stops silent test-skipping; never leave it out on an
+    existing CLAUDE.md that predates this rule).
   - Scan the Domain areas list. If Phase 3 detected new areas, APPEND
     them at the end of the list.
   - **Preserve all other content** — project summary, stack entries,
@@ -1180,6 +1370,9 @@ confirm nothing was silently touched]
 
 ### Methodology declaration
 [show docs/context/methodology.md state: `tdd: true|false`, `tdd_evidence`, `test_frameworks`. If signals were observed but `tdd: false`, explicitly prompt the human to confirm.]
+
+### Test guardrail
+[show docs/context/testing.md state: the test suites detected (tier + framework + run command), and whether the file was created (init) or had rows appended (update). If NO test suite was detected, warn explicitly: "no automated tests detected — the guardrail in docs/context/testing.md and the CLAUDE.md Test Guardrail section bind the moment a suite is added; consider adding e2e coverage." List any [INFERRED - VALIDATE] run commands/prerequisites here so the team confirms them.]
 
 ### Autonomous-pipeline permissions
 [show the stack signals detected and the resulting categories emitted into `.claude/settings.json` (e.g., "pnpm test execution allowed; docker compose allowed via compose.test.yml"). If no test framework was detected, explicitly warn: "no test commands pre-approved; pipeline will prompt until settings.json is extended".]
@@ -1245,7 +1438,9 @@ Phase 0 existing-artifacts prompt in init mode.
 Check limits (see 3-Tier table), no @ triggers, no ASCII trees, no
 `[INFERRED - VALIDATE]` items in CLAUDE.md or KNOWLEDGE_BASE.md (they
 belong only in `docs/domain/areas/`, `docs/decisions.md`,
-`docs/anti-patterns.md`, or `docs/context/architecture.md`).
+`docs/anti-patterns.md`, `docs/context/architecture.md`, or
+`docs/context/testing.md`). Also verify the CLAUDE.md `Test Guardrail`
+section is present (it must survive Emergency Compression).
 
 # Content Placement
 
@@ -1259,6 +1454,7 @@ belong only in `docs/domain/areas/`, `docs/decisions.md`,
 | Integrations | ❌ | 1-2 line summary | ❌ | Full in integrations.md | ❌ |
 | Constraints | ❌ | 1-2 line summary | ❌ | Full in constraints.md | ❌ |
 | Methodology declaration | ❌ | 1-line summary | ❌ | Full in methodology.md | ❌ |
+| Test guardrail | Mandatory rules (short, always loaded) | 1-line summary | ❌ | Full protocol in testing.md | ❌ |
 | Business rules | ❌ | ❌ | ❌ | ❌ | Full in /areas/*.md |
 | Domain glossary | ❌ | 1-line summary | ❌ | ❌ | Full in glossary.md |
 | User flows | ❌ | 1-line summary | ❌ | ❌ | Full in flows.md |
@@ -1271,6 +1467,6 @@ belong only in `docs/domain/areas/`, `docs/decisions.md`,
 
 # Emergency Compression
 
-If over limits: Remove non-essentials, compress to 1 sentence, use tables, combine topics. For docs/*.md >500 lines: split by topic. Never compress docs/domain/areas/ files — they are authoritative, not summaries.
+If over limits: Remove non-essentials, compress to 1 sentence, use tables, combine topics. For docs/*.md >500 lines: split by topic. Never compress docs/domain/areas/ files — they are authoritative, not summaries. Never drop or thin the CLAUDE.md `Test Guardrail` section or the `Context & Domain` pointers — they are essential always-on rules, not non-essentials; compress elsewhere first.
 
 You create lightweight indexes (Tier 1-2) that point to comprehensive docs (Tier 3) and authoritative domain/context files. Never bloat CLAUDE.md or KNOWLEDGE_BASE.md.

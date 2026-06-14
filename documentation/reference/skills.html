@@ -60,7 +60,8 @@
 │   │   ├── conventions.md        # naming, file structure, imports
 │   │   ├── integrations.md       # external services (no secret values)
 │   │   ├── constraints.md        # runtime versions, tech debt, what NOT to do
-│   │   └── methodology.md        # TDD opt-in frontmatter (default: tdd: false)
+│   │   ├── methodology.md        # TDD opt-in frontmatter (default: tdd: false)
+│   │   └── testing.md            # mandatory test guardrail + detected run commands
 │   ├── domain/
 │   │   ├── glossary.md           # business terms
 │   │   ├── flows.md              # main user flows
@@ -85,7 +86,7 @@
 
       <h3 id="phase-1">Phase 1 — Project scan</h3>
 
-      <p>Reads package manifests (<code>package.json</code>, <code>pyproject.toml</code>, <code>Gemfile</code>, <code>Cargo.toml</code>), README, folder structure 2 levels deep, config files (<code>docker-compose.yml</code>, CI configs), 3–5 representative code files per layer, migration files or DB schema, route files. Identifies: project type, stack, main domain areas, integrations, test patterns.</p>
+      <p>Reads package manifests (<code>package.json</code>, <code>pyproject.toml</code>, <code>Gemfile</code>, <code>Cargo.toml</code>), README, folder structure 2 levels deep, config files (<code>docker-compose.yml</code>, CI configs), 3–5 representative code files per layer, migration files or DB schema, route files, and the test setup (e2e/test config files, test directories, the run commands wired in scripts/CI, and their prerequisites). Identifies: project type, stack, main domain areas, integrations, and the test suites present — capturing tier (unit / integration / e2e), framework, exact run command, and prerequisites for each, which feed <code>testing.md</code> (Phase 2) and the <code>CLAUDE.md</code> Test Guardrail (Phase 7).</p>
 
       <h3 id="phase-1-5">Phase 1.5 — Generate <code>.claude/settings.json</code></h3>
 
@@ -97,7 +98,9 @@
 
       <h3 id="phase-2">Phase 2 — Create <code>docs/context</code></h3>
 
-      <p>Generates 5 files: <code>architecture.md</code>, <code>conventions.md</code>, <code>integrations.md</code>, <code>constraints.md</code>, <code>methodology.md</code>. Each inferred from the Phase 1 scan with <code>[INFERRED - VALIDATE]</code> markers where the skill couldn't be confident. <code>methodology.md</code> defaults to <code>tdd: false</code> regardless of signals — heuristic activation is an <a href="../governance/anti-patterns.html">anti-pattern</a>.</p>
+      <p>Generates 6 files: <code>architecture.md</code>, <code>conventions.md</code>, <code>integrations.md</code>, <code>constraints.md</code>, <code>methodology.md</code>, <code>testing.md</code>. Each inferred from the Phase 1 scan with <code>[INFERRED - VALIDATE]</code> markers where the skill couldn't be confident. <code>methodology.md</code> defaults to <code>tdd: false</code> regardless of signals — heuristic activation is an <a href="../governance/anti-patterns.html">anti-pattern</a>.</p>
+
+      <p><code>testing.md</code> is a binding test guardrail, independent of the TDD opt-in: it requires every change — including small, single-file edits made without any relay command — to keep the existing test suites green, update tests that assert changed behavior, run the covering suites (at minimum the e2e suite), and, when the tests cannot be run, end the response with an explicit warning plus manual run instructions. It carries a table of the test suites detected in Phase 1 (tier, framework, run command, prerequisites). The guardrail is not waived by the Decision Gate scope exemptions, so "exempt" single-file changes still run it.</p>
 
       <h3 id="phase-3">Phase 3 — Create <code>docs/domain</code></h3>
 
@@ -127,7 +130,7 @@
 
       <h3 id="phase-7">Phase 7 — Tier 1 <code>CLAUDE.md</code></h3>
 
-      <p>Project summary + stack list + essential commands + top 3 patterns + Context &amp; Domain section. Hard size limit: &lt; 95 lines, &lt; 2000 tokens. Update-mode: preserves hand-edited commands/patterns/stack; only appends missing Context &amp; Domain pointers.</p>
+      <p>Project summary + stack list + essential commands + top 3 patterns + Context &amp; Domain section + a mandatory <strong>Test Guardrail</strong> section (the always-loaded Tier-1 surface that stops silent test-skipping on non-pipeline changes; it points at <code>docs/context/testing.md</code> for the full protocol). Hard size limit: &lt; 95 lines, &lt; 2000 tokens, but the Test Guardrail and Context &amp; Domain blocks are essential and survive Emergency Compression. Update-mode: preserves hand-edited commands/patterns/stack; appends the Test Guardrail section and any missing Context &amp; Domain pointers when an older <code>CLAUDE.md</code> predates them.</p>
 
       <h3 id="phase-8">Phase 8 — Final Report</h3>
 
@@ -137,6 +140,7 @@
         <li>Files created / updated / preserved</li>
         <li>Domain areas identified</li>
         <li>Methodology declaration state</li>
+        <li>Test guardrail state — suites detected (tier, framework, run command), and an explicit warning when no tests were found</li>
         <li>Autonomous-pipeline permissions summary</li>
         <li>Items requiring human validation (all <code>[INFERRED - VALIDATE]</code> markers)</li>
         <li>Open questions from domain area files</li>
@@ -152,6 +156,7 @@
         <li><strong>Plain text paths only</strong> in Tier 1 and 2 — no <code>@</code> triggers that bloat the context window.</li>
         <li><strong>No <code>[INFERRED - VALIDATE]</code></strong> markers in Tier 1 or 2 — they belong only in Tier 3 and domain area files.</li>
         <li><strong>Never activate TDD heuristically.</strong> <code>methodology.md</code> defaults to <code>tdd: false</code>.</li>
+        <li><strong>The Test Guardrail is always emitted and always in force.</strong> It is independent of the TDD opt-in, binds every change (not just pipeline runs), and is not waived by the Decision Gate scope exemptions.</li>
         <li><strong>Business rules belong in <code>docs/domain/areas/</code></strong>, not in <code>CLAUDE.md</code>.</li>
       </ul>
 
