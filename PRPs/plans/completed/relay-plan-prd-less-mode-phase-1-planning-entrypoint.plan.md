@@ -419,4 +419,5 @@ grep -A3 "P2 — PRD ends" plugins/relay/commands/relay-plan.md | grep "APPROVED
 
 *Generated: 2026-06-16*
 *Approved: 2026-06-16*
-*Status: APPROVED*
+*Implemented: 2026-06-16*
+*Status: IMPLEMENTED*

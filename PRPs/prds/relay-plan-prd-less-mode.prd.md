@@ -162,7 +162,7 @@ Current value of `tdd` in `docs/context/methodology.md`: **false**. TDD track in
 
 | # | Phase | Description | Status | Parallel | Depends | PRP Plan |
 |---|-------|-------------|--------|----------|---------|----------|
-| 1 | Planning entrypoint | `/relay-plan` Phase 0 input-type detection + description-mode precondition branch; `plan-writer` description-only entrypoint | in-progress | - | - | PRPs/plans/relay-plan-prd-less-mode-phase-1-planning-entrypoint.plan.md |
+| 1 | Planning entrypoint | `/relay-plan` Phase 0 input-type detection + description-mode precondition branch; `plan-writer` description-only entrypoint | complete | - | - | PRPs/plans/relay-plan-prd-less-mode-phase-1-planning-entrypoint.plan.md |
 | 2 | Review + template | `plan-template` `## Source` generalization + description-mode AC format; `plan-reviewer` R8 description-mode variant | pending | - | 1 | - |
 | 3 | Implementation chain | `/relay-implement` P3 branch + D8 Mutation c no-op; `implementer` source-read tolerance + flat-filename parse tolerance; `code-reviewer`/`code-reviewer-semantic` AC-source substitution | pending | - | 2 | - |
 | 4 | Docs + release | api-reference, commands.html, changelog, `plugin.json` bump, new decisions.md entry superseding 2026-05-15 framing | pending | - | 1,2,3 | - |

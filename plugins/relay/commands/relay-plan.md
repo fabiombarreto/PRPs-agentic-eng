@@ -1,6 +1,6 @@
 ---
-description: Autonomous plan generation from an APPROVED PRD. Validates the PRD path, runs preconditions, then dispatches the plan-writer agent which selects the next actionable Implementation Phases row, runs research grounding in parallel, consults the Decision Gate, and writes a DRAFT plan to PRPs/plans/<feature>-phase-<N>-<slug>.plan.md while back-filling the source PRD's row N. Reviewer adoption is OUT of scope — the separate /relay-plan-review command (Phase 4 of plan-authoring) owns the DRAFT→APPROVED flip.
-argument-hint: <prd-path>
+description: Autonomous plan generation from an APPROVED PRD or a free-text feature description. In PRD mode (argument ends with .prd.md): validates the PRD path, runs preconditions P1–P4, then dispatches the plan-writer agent which selects the next actionable Implementation Phases row, runs research grounding in parallel, consults the Decision Gate, and writes a DRAFT plan to PRPs/plans/<feature>-phase-<N>-<slug>.plan.md while back-filling the source PRD's row N. In description mode (any other non-empty argument): skips P2 and P4, keeps P3 Decision Gate sources check, and dispatches plan-writer's description-only entrypoint which derives a flat PRPs/plans/<slug>.plan.md with no PRD back-fill. Reviewer adoption is OUT of scope — the separate /relay-plan-review command owns the DRAFT→APPROVED flip.
+argument-hint: <prd-path> | "<description>"
 ---
 
 # /relay-plan
@@ -44,34 +44,34 @@ planned*.
 
 ---
 
-## Parse arguments
+## Phase 0 — Input-type detection
 
-`$ARGUMENTS` MUST be a single non-empty path-like string. Treat
-the argument as the PRD path; resolve it as absolute, or as
-relative to the current working directory. If the argument is
+`$ARGUMENTS` MUST be a single non-empty string. If the argument is
 blank/whitespace, HALT with:
 
-> /relay-plan requires a PRD path. Usage:
+> /relay-plan requires a PRD path or a feature description. Usage:
 >   /relay-plan PRPs/prds/<feature>.prd.md
+>   /relay-plan "<description>"
 > Example:
 >   /relay-plan PRPs/prds/plan-authoring.prd.md
+>   /relay-plan "Add dark mode toggle to the settings panel"
 
-If the argument is non-empty but does not resolve to an existing
-readable file, fall through to P1 below for the canonical
-file-not-readable HALT message.
+**Detection step** — examine the argument value:
 
-Record `prd_path` as the resolved absolute path. Record
-`target_root` as the current working directory (the repository
-from which the user invoked the command). The Writer will use
-`target_root` as the root for all documentation reads and for the
-output path.
+- If the argument ends with `.prd.md` → set `mode = prd`, record
+  `prd_path` as the resolved absolute path, and proceed to the
+  existing P1–P4 preconditions then **Phase A**.
+- Otherwise → set `mode = description`, record `description =
+  $ARGUMENTS` (the raw free-text string), record `target_root` as
+  the current working directory, and proceed to P1.D and P3.D then
+  **Phase B**.
 
 ---
 
-## Preconditions
+## Preconditions (PRD mode)
 
 HALT with a clear user-facing message (and do not proceed) if any
-of these fail.
+of these fail. These preconditions apply only when `mode = prd`.
 
 ### P1 — PRD path resolves to a readable file
 
@@ -153,7 +153,41 @@ resolution.
 
 ---
 
-## Phase A — Adopt the Writer role
+## Preconditions (description mode)
+
+These preconditions apply only when `mode = description`.
+
+### P1.D — Non-empty argument
+
+The blank/whitespace HALT fires before the detection step. If
+execution reaches P1.D, the argument is guaranteed non-empty.
+No additional file-existence check is required — the argument is
+the description text itself, not a file path.
+
+### P3.D — Decision Gate sources readable
+
+Same as P3 above — all three files must exist and be readable at
+`target_root`:
+
+- `docs/decisions.md`
+- `docs/anti-patterns.md`
+- `docs/context/architecture.md`
+
+If any is missing, HALT with:
+
+> I cannot dispatch the plan-writer without `<missing-file>`.
+> The Decision Gate consultation in plan-writer's Phase 3
+> requires all three mandatory sources. Run the
+> `context-builder` skill (`*init` or `*update` mode) to
+> generate the missing governance files, then re-run
+> /relay-plan.
+
+P2 (APPROVED status) and P4 (Implementation Phases table) are
+**skipped** in description mode — there is no PRD to check.
+
+---
+
+## Phase A — Adopt the Writer role (PRD mode)
 
 Follow the protocol in
 `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/plan-writer.md`.
@@ -179,13 +213,44 @@ gap, unparseable partial) per its Phase 2 prose.
 The Writer's Phase 5.2 confirmation (`DRAFT plan written to ...`)
 is the terminal signal. Surface it verbatim to the user and exit.
 
-**There is no Phase B.** Reviewer adoption is the
-`/relay-plan-review` command's job (Phase 4 of `plan-authoring`).
+Reviewer adoption is the `/relay-plan-review` command's job.
 This command is single-role by design — the writer/reviewer split
 is the canonical post-PRD command-surface decision
 (`plan-authoring.prd.md` Decision Gate, 2026-04-19 row).
 
-### If the Writer halts
+---
+
+## Phase B — Adopt the Writer role (description mode)
+
+Follow the protocol in
+`${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/plan-writer.md`,
+entering at the description-mode entrypoint **Phase 0.B**.
+
+Execution context to pass into the Writer's Phase 0.B setup:
+
+- `description`: the raw free-text string from `$ARGUMENTS`.
+- `target_root`: the cwd.
+
+Run Phase 0.B then Phase 1.B (flat filename + collision check),
+then Phases 2–4 (grounding, Decision Gate, plan body), then
+Phase 5 (where Phase 5.1 is a documented no-op for description
+mode). At Phase 2 GROUNDING, the Writer invokes the research
+subagents in a single parallel dispatch (same as Phase A).
+
+The Writer's Phase 5.2 description-mode confirmation is the
+terminal signal:
+
+> DRAFT plan written to `PRPs/plans/<slug>.plan.md`.
+> Decision Gate: **PROCEED**.
+> Run `/relay-plan-review PRPs/plans/<slug>.plan.md` to validate.
+
+Surface it verbatim to the user and exit. (No "Source PRD row N
+marked in-progress" line — there is no PRD row in description
+mode.)
+
+Reviewer adoption is still the `/relay-plan-review` command's job.
+
+### If the Writer halts (PRD mode)
 
 Possible Writer halt conditions (all specified in
 `plan-writer.md`):
@@ -208,6 +273,22 @@ Possible Writer halt conditions (all specified in
   Surface the soft-fail message; the plan is still on disk
   and can be reviewed.
 
+### If the Writer halts (description mode)
+
+Possible halt conditions in description mode:
+
+- **Decision Gate consultation fails** (Writer's Phase 3.1) —
+  one of the three sources became unreadable mid-flow despite
+  P3.D passing. Surface the verbatim halt message and exit.
+- **Decision Gate `HALT (reason)`** (Writer's Phase 3.2) — a
+  rule conflict emerged between the description and the Decision
+  Gate sources. Surface the conflict verbatim and exit; do NOT
+  prompt the user, do NOT auto-resolve.
+- **Phase 5.1 no-op** — this is not a halt; it is an expected
+  documented no-op. No PRD back-fill is attempted in description
+  mode; the Writer logs "description mode: no PRD row back-fill"
+  and proceeds to Phase 5.2.
+
 In all halt cases, do NOT invoke `/relay-plan-review`. The user
 (or orchestrator) decides next steps.
 
@@ -215,13 +296,23 @@ In all halt cases, do NOT invoke `/relay-plan-review`. The user
 
 ## Final output surface
 
-On success, the last user-facing message is plan-writer's Phase
-5.2 confirmation:
+**PRD mode** — on success, the last user-facing message is
+plan-writer's Phase 5.2 confirmation:
 
 > DRAFT plan written to `PRPs/plans/<feature>-phase-<N>-<slug>.plan.md`.
 > Decision Gate: **PROCEED**.
 > Source PRD row <N> marked `in-progress`.
 > Run `/relay-plan-review PRPs/plans/<feature>-phase-<N>-<slug>.plan.md` to validate.
+
+**Description mode** — on success, the last user-facing message is
+plan-writer's Phase 5.2 description-mode confirmation:
+
+> DRAFT plan written to `PRPs/plans/<slug>.plan.md`.
+> Decision Gate: **PROCEED**.
+> Run `/relay-plan-review PRPs/plans/<slug>.plan.md` to validate.
+
+Note the flat `<slug>.plan.md` filename — no `-phase-<N>-` segment
+because there is no PRD phase row in description mode.
 
 Surface it verbatim. Do not append anything.
 
@@ -235,23 +326,28 @@ and the command exits without writing any plan file. The
 ## Constraints (hard rules)
 
 - **Never write anything under `.claude/`.** Plans live at
-  `PRPs/plans/<feature>-phase-<N>-<slug>.plan.md`. Nothing else
+  `PRPs/plans/<feature>-phase-<N>-<slug>.plan.md` (PRD mode) or
+  `PRPs/plans/<slug>.plan.md` (description mode). Nothing else
   goes on disk from this command. The plan-writer enforces this
-  at the agent level too; this command is the first guard.
+  at the agent level too; this command is the first guard. The
+  `.claude/PRPs/` write prohibition applies equally to
+  description-mode plans — they go to `PRPs/plans/<slug>.plan.md`,
+  never under `.claude/`.
 - **Never adopt the Reviewer role.** Reviewer is
   `/relay-plan-review` (separate command, Phase 4 of the PRD).
-  This command file MUST NOT contain a Phase B section, and MUST
-  NOT invoke `plan-reviewer` via `Task` or otherwise.
+  This command MUST NOT invoke `plan-reviewer` via `Task` or
+  otherwise.
 - **Never prompt the user.** Past the interactivity boundary
   (`docs/context/architecture.md` §Interactivity boundary). HALTs
   are surfaced verbatim and the command exits.
 - **Never overwrite an APPROVED plan.** plan-writer's Phase 1.5
-  collision-suffix rule handles the write-time case.
+  (PRD mode) and Phase 1.B (description mode) collision-suffix
+  rules handle the write-time case.
 - **Never invoke the Writer when a precondition failed.** HALT
   before adopting the Writer role.
 - **Never skip the Decision Gate evidence block.** Both the
   command-level gate (above) and the Writer's in-plan Decision
-  Gate block are mandatory.
+  Gate block are mandatory in both PRD mode and description mode.
 - **Never re-run the Writer on CHANGES_REQUESTED.** That is the
   orchestrator's call (`/relay-execute`), not this command's. A
   single `/relay-plan` invocation produces zero or one DRAFT plan;
@@ -275,9 +371,5 @@ and the command exits without writing any plan file. The
   the lowest-numbered actionable phase deterministically.
 - **Cross-PRD planning** — the command operates on exactly one
   PRD per invocation. Multi-PRD coordination is out of scope.
-- **Operating without an APPROVED PRD** — PRD-less mode
-  (accepting a short feature description directly, analogous to
-  how `prp-plan` works) is a registered future capability; see
-  `docs/decisions.md` 2026-05-15. The PRD-required contract
-  (P1–P4) is the only operative contract. Do not implement or
-  approximate a bypass.
+- **Operating without any argument** — blank arguments HALT
+  before any mode is entered (Phase 0 detection fires first).
