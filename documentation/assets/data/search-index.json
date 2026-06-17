@@ -87,7 +87,7 @@
     "title": "Commands",
     "path": "reference/commands.html",
     "category": "Reference",
-    "excerpt": "Twelve commands plus one placeholder: /relay-prd (interactive PRD), /relay-execute (orchestrator), /relay-test, /relay-test-review, /relay-implement, and writer/reviewer pairs for each pipeline stage."
+    "excerpt": "Thirteen commands plus one Pillar 3 placeholder. /relay-plan now supports a description-only (PRD-less) mode in addition to the standard APPROVED-PRD mode. Full command surface by role: writers, reviewers, infra, orchestrator, and Pillar 3."
   },
   {
     "title": "Agents",

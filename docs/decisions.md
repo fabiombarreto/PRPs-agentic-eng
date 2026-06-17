@@ -538,6 +538,38 @@ and exits 0. This is symmetric in shape and position to `/relay-tdd`'s P4.a (`TD
 
 ---
 
+## [2026-06-16] /relay-plan PRD-less mode: SHIPPED — supersedes the 2026-05-15 "not yet implemented" framing
+
+**Context:** The 2026-05-15 entry above registered PRD-less mode for `/relay-plan` as a future capability and explicitly forbade any implementation before a dedicated PRD was approved. That precondition is now satisfied: `PRPs/prds/relay-plan-prd-less-mode.prd.md` (APPROVED 2026-06-16) authorized the design, and Phases 1–3 of that PRD have been implemented and completed. The 2026-05-15 entry's "Out of scope until a dedicated PRD is approved" list is now fully in scope and shipped. The 2026-05-15 entry is left intact as the historical record of the prior state.
+
+**Decision:** PRD-less mode for `/relay-plan` IS now implemented. The shipped contract covers five behavior changes across the planning and implementation chain:
+
+1. **Phase 0 input-type detection in `/relay-plan`** (`plugins/relay/commands/relay-plan.md`): an argument that resolves to a `.prd.md` file or whose content contains an "Implementation Phases" table runs the existing PRD mode unchanged; any other non-empty free-text argument enters description mode. PRD mode is behaviorally identical (AC-2 regression-safe).
+
+2. **`plan-writer` description-only entrypoint** (`plugins/relay/agents/plan-writer.md`): no Implementation Phases table parse, no PRD back-fill; description captured verbatim in the plan's `## Source` section; derived `AC-A<i>` items (no `(PRD AC-N)` token); flat `PRPs/plans/<slug>.plan.md` filename (no phase number); mandatory "NOT Building" scope section. `plan-reviewer` R8a/R8b/R8c emit `passed: true` with explicit "description-only mode" rationale recorded in `PRPs/plans/<basename>.review.jsonl`.
+
+3. **`/relay-implement` P3 branch + D8 Mutation c no-op** (`plugins/relay/commands/relay-implement.md`): the P3 precondition check ("source PRD row N is in-progress") is branched to skip for PRD-less plans; D8 Mutation c (source PRD row N flip from `in-progress` to `complete`) is skipped as a documented no-op — no `PARTIAL_D8_FAILURE` for the absent PRD row. D8 Mutations a (plan trailing-block flip `APPROVED` → `IMPLEMENTED`) and b (move to `PRPs/plans/completed/`) are preserved.
+
+4. **`implementer` flat-filename parse tolerance** (`plugins/relay/agents/implementer.md`): the implementer no longer HALTs when the plan filename does not match the `<feature>-phase-<N>-<slug>` pattern. For a flat `<slug>.plan.md`, it derives artifact/report paths from the basename (e.g., `PRPs/reports/<slug>/attempts/`) instead of HALTing. Source-read tolerance: reads the plan's `## Source` description and `AC-A<i>` items when no source PRD is present; does not HALT on the absent mandatory-source-PRD read.
+
+5. **`code-reviewer`/`code-reviewer-semantic` AC-source substitution** (`plugins/relay/agents/code-reviewer.md`, `plugins/relay/agents/code-reviewer-semantic.md`): when no source PRD is present, the `<prd_acs>` payload handed to `code-reviewer-semantic` is sourced from the plan's `AC-A<i>` items rather than from a source PRD. No finding citing a missing/absent source PRD is emitted.
+
+**Flat filename convention:** Description-mode plans use `PRPs/plans/<slug>.plan.md` (flat, no `-phase-<N>-` segment). This is a conscious divergence from the 2026-04-25 "Plan filenames carry the source PRD phase number and slug" decision, which applies only to PRD-mode plans. The divergence is recorded here per that decision's requirement.
+
+**Mutation c no-op:** D8 Mutation c (source PRD row N flip) is skipped for PRD-less plans because there is no source PRD row to flip. This is not a `PARTIAL_D8_FAILURE`; it is a documented architectural no-op. Mutations a and b are unchanged.
+
+**Description-mode R8 exemption:** `plan-reviewer` R8a/R8b/R8c emit `passed: true` with rationale rather than HALT for PRD-less plans. This follows the `phase_type=scaffold` precedent (2026-05-14): the reviewer detects PRD-less plans (absence of `## Source PRD` section or APPROVED `.prd.md` reference) and records the exemption in `PRPs/plans/<basename>.review.jsonl` without short-circuiting the rubric audit trail.
+
+**`/relay-execute` integration deferred:** Description-mode plans have no PRD row to drive the orchestrator's state machine (D6, 2026-05-01). Description-mode plans are a manual single-stage flow; they are not consumable by `/relay-execute`. This is an explicit Won't per the source PRD.
+
+**TDD track deferred:** The `tdd-writer` (B7) reads a source PRD's Acceptance Criteria; a PRD-less plan lacks these. Description mode supports `tdd: false` target projects only in MVP. A description-mode branch for the TDD pair is a future feature.
+
+**Reason:** The 2026-05-15 entry's stated precondition — "before a dedicated PRD for this capability has been authored and approved" — is now satisfied. The dedicated PRD (`relay-plan-prd-less-mode.prd.md`) was authored, reviewed, and approved, and Phases 1–3 of its Implementation Phases table are complete. The 2026-05-15 "Out of scope" list is now in-scope and shipped; agents must no longer refuse to operate in description mode.
+
+**Areas affected:** `/relay-plan` (Phase 0 detection, precondition branch); `plan-writer` (description-only entrypoint, flat filename, `## Source` capture, derived AC format, "NOT Building" section); `plan-reviewer` (R8a/R8b/R8c description-mode variant); `/relay-implement` (P3 branch, D8 Mutation c no-op); `implementer` (source-read tolerance, flat-filename parse tolerance); `code-reviewer`/`code-reviewer-semantic` (AC-source substitution); `docs/api-reference.md` (Input cell updated); `documentation/reference/commands.html` ("Planned" callout replaced with "Shipped" callout); `documentation/changelog.html` (v0.13.0 release entry); `plugins/relay/.claude-plugin/plugin.json` (version bumped `0.12.0` → `0.13.0` per §7.5).
+
+---
+
 ## [2026-05-15] Runnable worktree environments: registered future feature (picks up relay-worktree's deferred "What We're NOT Building" items)
 
 **Context:** `relay-worktree` (shipped v0.11.0) established the worktree as a *file-isolation* boundary: `git worktree add .worktrees/<feature>/` plus a project-owned `scripts/worktree-bootstrap.sh` hook (D6, 2026-05-11). It explicitly deferred everything that makes the application actually *runnable* inside that folder — its "What We're NOT Building" section lists container orchestration / port allocation, dependency installation, Docker Compose project-name management, and per-stack bootstrap content as out of scope. Today the bootstrap-hook contract (D6) delegates all of this to the project's script with no relay-level strategy; two parallel `/relay-execute` runs are isolated for file writes but cannot reliably start a dev server, a test stack, or a database inside their own worktree folders without manual, collision-prone setup. The autonomous agents (`implementer`, `test-runner`) have no contract for discovering or binding to a worktree-local runnable environment.

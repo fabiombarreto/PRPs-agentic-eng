@@ -30,9 +30,28 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <h3 id="unreleased-fixed">Fixed</h3>
+      <h2 id="v0-13-0">0.13.0 — 2026-06-16</h2>
+
+      <p><code>/relay-plan</code> gains a description-only (PRD-less) input mode, completing the four-phase <code>relay-plan-prd-less-mode</code> PRD. Phase 0 input-type detection routes a <code>.prd.md</code> path (or text containing an &ldquo;Implementation Phases&rdquo; table) to the existing PRD mode unchanged, and any other non-empty free-text argument to description mode &mdash; generating a flat <code>PRPs/plans/&lt;slug&gt;.plan.md</code> with derived <code>AC-A&lt;i&gt;</code> items, no PRD back-fill, and full Decision Gate preservation. The plan is consumable end-to-end by <code>/relay-implement</code> (P3 PRD-row check branched; D8 Mutation c no-op; <code>code-reviewer</code>/<code>code-reviewer-semantic</code> source plan-derived ACs). The 2026-05-15 decisions.md entry registering this as a future capability is superseded by a new [2026-06-16] entry recording the shipped contract. Plugin manifest version bumped <code>0.12.0</code> &rarr; <code>0.13.0</code> per the 2026-04-30 &sect;7.5 binding contract.</p>
+
+      <h3 id="v0-13-0-added">Added</h3>
       <ul>
-        <li><strong><code>documentation/changelog.html</code></strong> &mdash; page subtitle corrected. It claimed &ldquo;versioning is independent of the relay plugin version&rdquo;, which has been stale since the 2026-04-30 &sect;7.5 lock-step contract; it now states the doc-site and plugin versions are conceptually distinct but share the same value. Pure doc-site copy fix &mdash; no plugin bump per &sect;7.5.</li>
+        <li><strong>PRD-less mode for <code>/relay-plan</code></strong> &mdash; Phase 0 input-type detection (shipped in <code>plugins/relay/commands/relay-plan.md</code>): argument resolves to a <code>.prd.md</code> file or contains an &ldquo;Implementation Phases&rdquo; table &rarr; PRD mode (unchanged); any other non-empty free-text argument &rarr; description mode. Description mode runs the <code>plan-writer</code> description-only entrypoint, skips preconditions P2/P4 (no PRD required), keeps P3 (Decision Gate consultation), and writes a flat <code>PRPs/plans/&lt;slug&gt;.plan.md</code> DRAFT with derived <code>AC-A&lt;i&gt;</code> items and no PRD back-fill. <code>plan-reviewer</code> R8a/R8b/R8c emit <code>passed: true</code> with explicit &ldquo;description-only mode&rdquo; rationale. <code>/relay-implement</code> P3 branch skips the PRD-row check; D8 Mutation c is a documented no-op; <code>implementer</code> flat-filename tolerance derives artifact paths from <code>&lt;slug&gt;.plan.md</code>. <code>code-reviewer</code>/<code>code-reviewer-semantic</code> source plan-derived ACs as <code>&lt;prd_acs&gt;</code>.</li>
+      </ul>
+
+      <h3 id="v0-13-0-changed">Changed</h3>
+      <ul>
+        <li><strong><code>documentation/reference/commands.html</code></strong> &mdash; <code>/relay-plan</code> section updated: &ldquo;Planned: PRD-less mode&rdquo; <code>callout--note</code> replaced with &ldquo;Shipped: PRD-less mode (v0.13.0)&rdquo; <code>callout--success</code> block describing input-type detection, flat filename output, Decision Gate preservation, full <code>/relay-implement</code> chain support, and the <code>tdd: true</code> deferral. Input and Output <code>&lt;dd&gt;</code> rows extended to document both modes.</li>
+        <li><strong><code>docs/api-reference.md</code></strong> &mdash; <code>/relay-plan</code> Input cell extended to document both input modes: PRD mode (existing APPROVED-PRD contract) and description mode (free-text argument not resolving to <code>.prd.md</code> and not containing an Implementation Phases table &rarr; flat <code>PRPs/plans/&lt;slug&gt;.plan.md</code>). Output cell updated to cover both filename patterns.</li>
+        <li><strong><code>docs/decisions.md</code></strong> &mdash; new <code>[2026-06-16]</code> entry: &ldquo;<code>/relay-plan</code> PRD-less mode: SHIPPED &mdash; supersedes the 2026-05-15 &lsquo;not yet implemented&rsquo; framing&rdquo;. Records the full implementation chain (Phase 0 detection, <code>plan-writer</code>, <code>plan-reviewer</code> R8 variant, <code>/relay-implement</code> P3 branch + D8 Mutation c no-op, <code>implementer</code> flat-filename tolerance, <code>code-reviewer</code>/<code>code-reviewer-semantic</code> AC-source substitution). The 2026-05-15 entry is left intact as the historical record.</li>
+        <li><strong><code>documentation/assets/data/search-index.json</code></strong> &mdash; Commands page excerpt corrected from the stale &ldquo;Twelve commands plus one placeholder&rdquo; to an accurate description including 13 commands and the PRD-less mode.</li>
+        <li><strong><code>documentation/changelog.html</code></strong> &mdash; Unreleased &ldquo;Fixed&rdquo; item (changelog subtitle correction, accumulated since v0.12.0) folded into this release.</li>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong> &mdash; version bumped <code>0.12.0</code> &rarr; <code>0.13.0</code> per the 2026-04-30 &sect;7.5 binding contract. Users running <code>/plugin</code> after pulling this version will get a fresh <code>relay/0.13.0/</code> cache directory with all newly-shipped commands and agents registered (Phase 1&ndash;3 assets: <code>relay-plan.md</code>, <code>plan-writer.md</code>, <code>plan-reviewer.md</code>, <code>relay-implement.md</code>, <code>implementer.md</code>, <code>code-reviewer.md</code>, <code>code-reviewer-semantic.md</code>).</li>
+      </ul>
+
+      <h3 id="v0-13-0-fixed">Fixed</h3>
+      <ul>
+        <li><strong><code>documentation/changelog.html</code></strong> &mdash; page subtitle corrected. It claimed &ldquo;versioning is independent of the relay plugin version&rdquo;, which has been stale since the 2026-04-30 &sect;7.5 lock-step contract; it now states the doc-site and plugin versions are conceptually distinct but share the same value. Pure doc-site copy fix accumulated since v0.12.0.</li>
       </ul>
 
       <h2 id="v0-12-0">0.12.0 — 2026-06-14</h2>

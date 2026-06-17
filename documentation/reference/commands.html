@@ -58,13 +58,13 @@
         <dd>The only command on the interactive side of the <a href="../concepts/interactivity-boundary.html">interactivity boundary</a>. Always runs the PRD Reviewer at the end; the PRD is not persisted as <code>APPROVED</code> until the reviewer's 7-item rubric passes <strong>and</strong> the user explicitly approves in dialogue.</dd>
       </div>
 
-      <h3 id="relay-plan"><code>/relay-plan &lt;prd-path&gt;</code> <span class="badge badge--done">implemented</span></h3>
+      <h3 id="relay-plan"><code>/relay-plan &lt;prd-path | description&gt;</code> <span class="badge badge--done">implemented</span></h3>
 
       <div class="kv">
         <dt>Input</dt>
-        <dd>A PRD file with status <code>APPROVED</code> (ending with <code>*Status: APPROVED*</code>) containing a parseable Implementation Phases table with at least one row whose <code>Status</code> is <code>pending</code> and whose <code>Depends</code> cell is empty or references only <code>complete</code> rows.</dd>
+        <dd><strong>PRD mode:</strong> A PRD file with status <code>APPROVED</code> (ending with <code>*Status: APPROVED*</code>) containing a parseable Implementation Phases table with at least one row whose <code>Status</code> is <code>pending</code> and whose <code>Depends</code> cell is empty or references only <code>complete</code> rows. <strong>Description mode (new, v0.13.0):</strong> Any non-empty free-text argument that does not resolve to a <code>.prd.md</code> file and does not contain an &ldquo;Implementation Phases&rdquo; table &mdash; plan written to <code>PRPs/plans/&lt;slug&gt;.plan.md</code> (flat filename, no PRD back-fill).</dd>
         <dt>Output</dt>
-        <dd><code>PRPs/plans/&lt;feature&gt;-phase-&lt;N&gt;-&lt;slug&gt;.plan.md</code> with status <code>*Status: DRAFT*</code> (one plan per actionable Implementation Phases row; codified in <code>docs/decisions.md</code> 2026-04-25). Plan-writer back-fills the source PRD's row N (<code>Status</code> flipped from <code>pending</code> to <code>in-progress</code>; <code>PRP Plan</code> cell populated with the relative plan path).</dd>
+        <dd><strong>PRD mode:</strong> <code>PRPs/plans/&lt;feature&gt;-phase-&lt;N&gt;-&lt;slug&gt;.plan.md</code> with status <code>*Status: DRAFT*</code> (one plan per actionable Implementation Phases row; codified in <code>docs/decisions.md</code> 2026-04-25). Plan-writer back-fills the source PRD's row N (<code>Status</code> flipped from <code>pending</code> to <code>in-progress</code>; <code>PRP Plan</code> cell populated with the relative plan path). <strong>Description mode:</strong> <code>PRPs/plans/&lt;slug&gt;.plan.md</code> with status <code>*Status: DRAFT*</code> (flat filename; no PRD row back-filled; description captured verbatim in the plan's <code>## Source</code> section; derived <code>AC-A&lt;i&gt;</code> items used throughout).</dd>
         <dt>Mode</dt>
         <dd>Autonomous, single-role. <code>/relay-plan</code> never adopts the reviewer; <code>/relay-plan-review</code> is the separate reviewer surface (per the writer/reviewer split decision).</dd>
         <dt>Agents</dt>
@@ -73,9 +73,9 @@
         <dd>Four preconditions (PRD readable, PRD APPROVED, Decision Gate sources readable, at least one actionable phase exists with satisfied dependencies); writer halts surface verbatim through the command. Collisions on the per-phase filename resolved with numeric suffix; APPROVED plans never overwritten. See <code>PRPs/prds/plan-authoring.prd.md</code>.</dd>
       </div>
 
-      <div class="callout callout--note">
-        <div class="callout__title">Planned: PRD-less mode</div>
-        <p>A future version of <code>/relay-plan</code> will accept a short feature description string directly &mdash; no APPROVED PRD required &mdash; analogous to how <code>prp-plan</code> (the upstream reference plugin) works. The intention is registered in <code>docs/decisions.md</code> (2026-05-15). The current PRD-required contract (preconditions P1&ndash;P4) remains the only operative behavior until a dedicated PRD for this capability is authored and approved.</p>
+      <div class="callout callout--success">
+        <div class="callout__title">Shipped: PRD-less mode (v0.13.0)</div>
+        <p><code>/relay-plan</code> now supports a description-only (PRD-less) input mode in addition to the standard APPROVED-PRD mode. <strong>Input-type detection (Phase 0):</strong> if the argument resolves to a <code>.prd.md</code> file or its content contains an &ldquo;Implementation Phases&rdquo; table, the command runs the existing PRD mode unchanged. Any other non-empty free-text argument enters description mode. <strong>Output:</strong> a flat <code>PRPs/plans/&lt;slug&gt;.plan.md</code> (no phase number, no PRD back-fill). <strong>Decision Gate preserved:</strong> the three Decision Gate sources are consulted in both modes. <strong>Full chain supported:</strong> the generated plan is consumable by <code>/relay-implement</code> end-to-end (P3 PRD-row check branched; D8 Mutation c no-op for absent PRD row; <code>code-reviewer</code>/<code>code-reviewer-semantic</code> use plan-derived ACs). <strong>Note:</strong> <code>tdd: true</code> targets are deferred to a future branch; description mode supports <code>tdd: false</code> projects only. Supersedes the 2026-05-15 decision entry. See <code>docs/decisions.md</code> [2026-06-16].</p>
       </div>
 
       <h3 id="relay-tdd"><code>/relay-tdd &lt;plan-path&gt;</code> <span class="badge badge--done">implemented</span></h3>

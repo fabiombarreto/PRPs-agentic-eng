@@ -42,7 +42,14 @@ Parse them deterministically:
   `## Step-by-Step Tasks` section relevant to the diff. The literal
   task description the implementer was supposed to execute against.
 - `<prd_acs>` — verbatim excerpt of the source PRD's
-  `## Acceptance Criteria` items the diff is implementing.
+  `## Acceptance Criteria` items the diff is implementing (PRD mode);
+  OR the plan's derived `AC-A<i>` items substituted by the parent
+  `code-reviewer` (PRD-less / description mode — no source PRD is
+  referenced). In PRD-less mode, the parent has already performed the
+  AC-source substitution; these `AC-A<i>` items carry no `(PRD AC-N)`
+  token. Apply the same K=5 judgment pass over them. Do NOT raise a
+  finding solely because no source PRD is cited — the substitution
+  has already been performed by the parent.
 - `<instructions>` — the parent's instruction stanza; typically
   "run K=5 + R-COH-TASK-CONTRADICTION; return strict JSON; no
   commentary outside JSON".
