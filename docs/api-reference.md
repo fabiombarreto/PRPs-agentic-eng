@@ -14,10 +14,11 @@ Modes for `context-builder`: `*init`, `*update`, `*validate`, `*domain`,
 
 ## Commands
 
-13 commands organized by role, plus 1 placeholder for Pillar 3. All core
-pipeline commands are now implemented; `/relay-execute` ✅ orchestrator
-shipped in v0.9.0 completing project Phase 3. See `docs/decisions.md` for
-the decision record and rationale.
+13 commands organized by role (12 Pillar 1–2 plus `/relay-commit` as the
+first Pillar 3 command, shipped v0.14.0), plus 1 placeholder for the
+remaining Pillar 3. All core pipeline commands are now implemented;
+`/relay-execute` ✅ orchestrator shipped in v0.9.0 completing project
+Phase 3. See `docs/decisions.md` for the decision record and rationale.
 
 ### Happy path
 
@@ -68,7 +69,7 @@ cycle.
 
 | Command | Input | Output |
 |---------|-------|--------|
-| `/relay-commit <feature-name>` *(planned)* | worktree (`.worktrees/<feature>/`) with uncommitted implementation changes | git commit (local only; no push). Idempotent: clean worktree exits 0. Commit message generated from orchestrator audit log + source PRD title. |
+| `/relay-commit <feature-name>` ✅ **implemented** | worktree at `.worktrees/<feature>/` on branch `feature/<feature>` with uncommitted changes | local git commit (no push). Phase 0: P0 argument non-empty; P1 worktree exists (`FAILED_MISSING_WORKTREE` with instruction to run `/relay-worktree`); P2 branch is `feature/<feature>` (`FAILED_WRONG_BRANCH` showing actual vs expected). Phase 1 idempotency via `git status --porcelain` — clean worktree exits 0 with "Nothing to commit". Phase 2 commit message from `PRPs/reports/<feature>/orchestrator-run.json` + PRD title; fallback `feat(<feature>): implement via relay`. Phase 3 `git -C .worktrees/<feature>/ add -A` + `git commit` (pre-commit hooks run; `--no-verify` never passed). Deterministic infra — no LLM, no writer/reviewer split. See `plugins/relay/commands/relay-commit.md`. |
 | `/relay-pr <feature-name>` *(planned)* | worktree with a committed branch (produced by `/relay-commit`) + green tests + all reviews `APPROVED` | branch pushed to origin (if not already) + PR opened via `gh pr create` + `PRPs/reports/<feature>/final-report.md` |
 | `/relay-approve <pr>` *(placeholder)* | PR number or URL | merge PR, delete branch + worktree, run Docs Updater and Docs Reviewer |
 
@@ -126,8 +127,9 @@ Plan Reviewer) shipped in v0.7.0. The Implementation Authoring pair
 (Implementer + Code Reviewer + `/relay-implement` + `/relay-code-review`)
 shipped in v0.8.0. The `/relay-execute` orchestrator shipped in v0.9.0.
 The TDD pair (B7 `tdd-writer` + B8 `tdd-reviewer`) shipped in v0.10.0.
-Remaining pending pieces are the Pillar 3 commands (`/relay-commit`,
-`/relay-pr`, `/relay-approve`) and the Docs Updater + Docs Reviewer agents.
+The first Pillar 3 command, `/relay-commit`, shipped in v0.14.0. Remaining
+pending pieces are the other Pillar 3 commands (`/relay-pr`,
+`/relay-approve`) and the Docs Updater + Docs Reviewer agents.
 
 ## Hooks (planned)
 

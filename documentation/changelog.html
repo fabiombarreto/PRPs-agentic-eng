@@ -30,6 +30,23 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
+      <h2 id="v0-14-0">0.14.0 — 2026-06-17</h2>
+
+      <p>Ships <code>/relay-commit</code>, the first Pillar 3 command, completing the operator&rsquo;s commit step between <code>/relay-execute</code> (which terminates with uncommitted changes) and <code>/relay-pr</code>. It is a deterministic infra command &mdash; no LLM, no writer/reviewer split: it resolves <code>.worktrees/&lt;feature&gt;/</code>, verifies the worktree is on branch <code>feature/&lt;feature&gt;</code> (<code>FAILED_WRONG_BRANCH</code>) and exists (<code>FAILED_MISSING_WORKTREE</code>), checks idempotency via <code>git status --porcelain</code> (clean worktree exits 0 with &ldquo;Nothing to commit&rdquo;), generates a commit message from <code>PRPs/reports/&lt;feature&gt;/orchestrator-run.json</code> + the source PRD title (fallback <code>feat(&lt;feature&gt;): implement via relay</code>), stages with <code>git -C .worktrees/&lt;feature&gt;/ add -A</code>, and commits without ever passing <code>--no-verify</code>. Local only &mdash; no push, no network calls. The success-path next-command pointer uses the plugin-namespaced <code>/relay:relay-pr</code> form per the 0.13.1 convention. The <code>relay-commit-command</code> PRD and plans were already <code>APPROVED</code> and archived on this branch; this release ports the previously-unmerged command implementation onto <code>development</code> and flips every documentation surface from planned to shipped. Plugin manifest version bumped <code>0.13.1</code> &rarr; <code>0.14.0</code> per the 2026-04-30 &sect;7.5 binding contract (the change ships a plugin asset).</p>
+
+      <h3 id="v0-14-0-added">Added</h3>
+      <ul>
+        <li><strong><code>plugins/relay/commands/relay-commit.md</code></strong> &mdash; the <code>/relay-commit &lt;feature-name&gt;</code> command. Four-phase protocol (ASSESS &rarr; COMMIT MESSAGE &rarr; STAGE+COMMIT &rarr; OUTPUT) prefixed by Phase 0 worktree preconditions; analogous to <code>prp-commit</code>, adapted for relay worktree conventions via the <code>git -C .worktrees/&lt;feature&gt;/</code> pattern.</li>
+      </ul>
+
+      <h3 id="v0-14-0-changed">Changed</h3>
+      <ul>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong> &mdash; version bumped <code>0.13.1</code> &rarr; <code>0.14.0</code> per the 2026-04-30 &sect;7.5 binding contract. Users running <code>/plugin</code> after pulling this version will get a fresh <code>relay/0.14.0/</code> cache directory with <code>/relay-commit</code> registered.</li>
+        <li><strong><code>documentation/reference/commands.html</code></strong> &mdash; the <code>/relay-commit</code> entry flipped from &ldquo;planned&rdquo; to a <code>badge--done</code> implemented entry with full Input / Output / Mode / Preconditions detail.</li>
+        <li><strong><code>documentation/roadmap/status.html</code></strong> &mdash; project phase 4 badge moved <code>pending</code> &rarr; <code>partial</code>; <code>/relay-commit</code> moved from the pending list to the shipped list; the 13-command tally updated to 12 shipped.</li>
+        <li><strong><code>docs/api-reference.md</code></strong> and <strong><code>docs/context/architecture.md</code></strong> &mdash; <code>/relay-commit</code> row flipped to implemented; Commands asset-type row corrected from &ldquo;planned&rdquo; to &ldquo;13 implemented&rdquo;; phased-rollout Phase 4 row marked partial.</li>
+      </ul>
+
       <h2 id="v0-13-1">0.13.1 — 2026-06-17</h2>
 
       <p>Patch release fixing the next-command suggestions that every relay pipeline command surfaces on success. They previously named the bare command (e.g. <code>/relay-plan</code>), which only resolves when no other installed plugin defines a colliding command name; they now use the fully-qualified plugin-namespaced form (<code>/relay:relay-plan</code>), which is always unambiguous. The fix touches only the success-path &ldquo;run this next&rdquo; strings in the agent and command bodies &mdash; the linear pipeline handoff chain <code>/relay:relay-prd</code> &rarr; <code>/relay:relay-plan</code> &rarr; <code>/relay:relay-plan-review</code> &rarr; <code>/relay:relay-tdd</code> &rarr; <code>/relay:relay-tdd-review</code> &rarr; <code>/relay:relay-implement</code> &rarr; <code>/relay:relay-test</code> &rarr; <code>/relay:relay-test-review</code>, plus the Pillar 3 pointer to <code>/relay:relay-commit</code> &rarr; <code>/relay:relay-pr</code>. Error-path re-run hints and in-prose cross-references are intentionally out of scope. Plugin manifest version bumped <code>0.13.0</code> &rarr; <code>0.13.1</code> per the 2026-04-30 &sect;7.5 binding contract (the change ships plugin assets).</p>

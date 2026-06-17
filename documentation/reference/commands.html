@@ -230,16 +230,16 @@
 
       <p>Pillar 3 commands are triggered by the human after reviewing <code>/relay-execute</code>&rsquo;s output and running any manual tests. Each command is local and reversible before the next one is run.</p>
 
-      <h3 id="relay-commit"><code>/relay-commit &lt;feature-name&gt;</code></h3>
+      <h3 id="relay-commit"><code>/relay-commit &lt;feature-name&gt;</code> <span class="badge badge--done">implemented</span></h3>
       <div class="kv">
         <dt>Input</dt>
-        <dd>Worktree at <code>.worktrees/&lt;feature&gt;/</code> with uncommitted implementation changes (produced by <code>/relay-execute</code>).</dd>
+        <dd>Feature name matching an existing worktree at <code>.worktrees/&lt;feature&gt;/</code> on branch <code>feature/&lt;feature&gt;</code> with uncommitted implementation changes (produced by <code>/relay-execute</code>).</dd>
         <dt>Output</dt>
-        <dd>A single git commit in the worktree branch. Local only &mdash; no push, no network operation. Commit message generated from the orchestrator audit log and the source PRD title.</dd>
-        <dt>Idempotency</dt>
-        <dd>If the worktree is already clean (nothing to commit), exits 0 with a structured message. Safe to re-run.</dd>
-        <dt>Status</dt>
-        <dd>Planned &mdash; not yet implemented.</dd>
+        <dd>A single local git commit on <code>feature/&lt;feature&gt;</code> (no push, no network operation). Commit message <code>feat(&lt;feature&gt;): &lt;prd-title&gt;</code> sourced from <code>PRPs/reports/&lt;feature&gt;/orchestrator-run.json</code> + the PRD first heading; fallback <code>feat(&lt;feature&gt;): implement via relay</code> when the audit log is unreadable. Output block shows commit hash, branch, and &ldquo;Next: <code>/relay:relay-pr &lt;feature&gt;</code>&rdquo;. Clean worktree exits 0 with &ldquo;Nothing to commit&rdquo; (idempotent &mdash; safe to re-run).</dd>
+        <dt>Mode</dt>
+        <dd>Deterministic infra command (no LLM, no agent, no writer/reviewer split). Analogous to <code>/relay-worktree</code> &mdash; pure git operations scoped to the worktree via <code>git -C .worktrees/&lt;feature&gt;/</code>. Never passes <code>--no-verify</code>; pre-commit hooks run. See <code>plugins/relay/commands/relay-commit.md</code>.</dd>
+        <dt>Preconditions</dt>
+        <dd>P0: argument non-empty; P1: <code>.worktrees/&lt;feature&gt;/</code> exists (<code>FAILED_MISSING_WORKTREE</code> with instruction to run <code>/relay-worktree &lt;feature&gt;</code> first); P2: worktree branch is <code>feature/&lt;feature&gt;</code> (<code>FAILED_WRONG_BRANCH</code> showing actual branch vs expected).</dd>
       </div>
 
       <h3 id="relay-pr"><code>/relay-pr &lt;feature-name&gt;</code></h3>
