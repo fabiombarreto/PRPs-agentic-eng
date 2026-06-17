@@ -27,17 +27,24 @@ command-surface decision).
    code block immediately below the plan title. A plan without this
    block fails plan-reviewer R1.
 
-2. **PRD↔plan back-reference.** Every plan opens with a `## Source
-   PRD` section that names the source PRD path and the row number
-   being planned. Symmetrically, the `plan-writer` back-fills the
-   source PRD's Implementation Phases row N (`Status` cell from
-   `pending` to `in-progress`; `PRP Plan` cell to the relative plan
-   path). This bidirectional surface is the orchestrator's single
-   source of truth for phase progress. plan-reviewer R8 enforces
-   both directions (R8a source PRD exists and is APPROVED;
-   R8b every plan AC-A item references a real PRD AC-N; R8c source
-   PRD's row N is `in-progress`/`complete` with this plan's path
-   in its `PRP Plan` cell).
+2. **Source reference (dual-branch).** Every plan opens with a
+   `## Source` section. In **PRD mode** (the standard case), this
+   section names the source PRD path and the row number being
+   planned. Symmetrically, the `plan-writer` back-fills the source
+   PRD's Implementation Phases row N (`Status` cell from `pending`
+   to `in-progress`; `PRP Plan` cell to the relative plan path).
+   This bidirectional surface is the orchestrator's single source of
+   truth for phase progress. plan-reviewer R8 enforces both
+   directions (R8a source PRD exists and is APPROVED; R8b every
+   plan AC-A item references a real PRD AC-N; R8c source PRD's row N
+   is `in-progress`/`complete` with this plan's path in its `PRP
+   Plan` cell). In **description mode** (PRD-less plans, per
+   `/relay-plan PRD-less mode`), the `## Source` section holds the
+   verbatim feature description instead of a PRD path; no back-fill
+   is attempted; plan-reviewer detects description mode by the absence
+   of a `.prd.md` reference in the section body and emits R8a/R8b/R8c
+   as `passed: true` with explicit rationale (see R8 description-mode
+   variant in `plugins/relay/agents/plan-reviewer.md`).
 
 3. **Per-task VALIDATE invariant.** Every entry under
    `## Step-by-Step Tasks` MUST contain a `VALIDATE:` line followed
@@ -89,11 +96,10 @@ mandatory fields.
 > **Section count reconciliation:** the source PRD
 > (`PRPs/prds/plan-authoring.prd.md` lines 70 and 206) refers to
 > "14 mandatory sections". That wording counts the **14 body
-> sections** (Summary through Notes) AFTER the `## Source PRD`
-> prefix. Including the prefix as section #1 yields **15** in
-> total — and that is what plan-reviewer R2 walks. Both views are
-> consistent; the template treats Source PRD as a first-class
-> section.
+> sections** (Summary through Notes) AFTER the `## Source` prefix.
+> Including the prefix as section #1 yields **15** in total — and
+> that is what plan-reviewer R2 walks. Both views are consistent;
+> the template treats Source as a first-class section.
 
 ```markdown
 # Feature: {Phase Name} ({Phase N} of {feature})
@@ -112,15 +118,38 @@ mandatory fields.
 - Result: PROCEED | HALT (reason)
 ```
 
-1. `## Source PRD`
+1. `## Source`
 
-   Bullet pointing at the PRD path + row N + Goal + Success signal.
-   plan-reviewer R8a verifies the file exists and is APPROVED.
+   Two-branch definition:
 
-   Example:
+   **PRD mode** (standard): bullet pointing at the PRD path + row N
+   + Goal + Success signal. plan-reviewer R8a verifies the file
+   exists and is APPROVED; R8b verifies AC-A items carry `(PRD
+   AC-N)` tokens; R8c verifies back-fill.
+
+   PRD-mode example:
    - `PRPs/prds/<feature>.prd.md` — Implementation Phases row N:
      "{Phase Name}" — Goal: {Goal line from PRD Phase Details} —
      Success signal: {Success signal line from PRD Phase Details}.
+
+   **Description mode** (PRD-less plans, per `/relay-plan PRD-less
+   mode`): the verbatim feature description provided to `/relay-plan`.
+   No PRD path; no row number; no back-fill attempted.
+   plan-reviewer detects description mode by the absence of a
+   `.prd.md` reference in the section body. In description mode,
+   R8a/R8b/R8c do not apply — plan-reviewer emits each as
+   `passed: true` with explicit "description-only mode" rationale
+   (see R8 description-mode variant in `plan-reviewer.md`).
+
+   Description-mode example:
+   ```
+   ## Source
+
+   <verbatim description text from the $ARGUMENTS string>
+   ```
+
+   Note: "R8b does not apply in description mode — no (PRD AC-N)
+   token required."
 
 2. `## Summary`
 
@@ -208,9 +237,20 @@ mandatory fields.
 
 13. `## Acceptance Criteria`
 
-    Bulleted list. Every bullet must reference at least one PRD
-    `AC-N` it derives from (R8b enforces). Format:
+    Bulleted list. Two-branch definition:
+
+    **PRD mode** (standard): every bullet must reference at least one
+    PRD `AC-N` it derives from (R8b enforces). Format:
     `**AC-A<i> (PRD AC-<N>):** <statement>`.
+
+    **Description mode** (PRD-less plans): bullets carry no `(PRD
+    AC-N)` token — the format is simply `**AC-A<i>:** <statement>`.
+    A minimum of 3 `AC-A<i>` items is required in description mode
+    (R4 parity floor; plan-reviewer's description-mode R8 variant
+    enforces this via the `R8-desc-min-ac` check). R8b (PRD AC-N
+    token check) does not apply in description mode — plan-reviewer
+    emits `passed: true` with rationale for R8b when the plan's
+    `## Source` section does not reference a `.prd.md` file.
 
 14. `## Risks and Mitigations`
 

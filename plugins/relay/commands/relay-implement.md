@@ -62,13 +62,29 @@ If the Decision Gate cannot be emitted because one of the three sources is unrea
 
 If the argument is non-empty but does not resolve to an existing readable file, fall through to P1 below for the canonical file-not-readable HALT message.
 
-Record `plan_path` as the resolved absolute path. Record `target_root` as the current working directory (the repository from which the user invoked the command). Parse `<feature>` and `<N>` from the plan filename pattern `<feature>-phase-<N>-<slug>.plan.md`:
+Record `plan_path` as the resolved absolute path. Record `target_root` as the current working directory (the repository from which the user invoked the command).
 
-- `<feature>` = basename of `<plan_path>` minus `-phase-<N>-<slug>.plan.md`.
-- `<N>` = the integer between `-phase-` and the next `-`.
-- `<slug>` = the kebab-cased remainder before `.plan.md`.
+**PRD-less detection (flat filename):** Inspect the plan's basename before attempting the canonical pattern parse.
 
-If the filename does not match this pattern, HALT with:
+- If the basename matches `<slug>.plan.md` — that is, it does NOT contain the literal substring `-phase-` followed by one or more digits followed by `-` — then:
+  - Set `is_prd_less = true`.
+  - Set `slug = basename minus .plan.md`.
+  - Set `feature = slug` (used for artifact paths and messages).
+  - Set `N = null`.
+  - Set `artifact_root = PRPs/reports/<slug>/attempts/` (flat, no `/phase-<N>/` tier).
+  - Set `completed_target = PRPs/plans/completed/<basename>.plan.md`.
+  - Do NOT HALT. Proceed to Preconditions.
+
+- If the basename matches the canonical `<feature>-phase-<N>-<slug>.plan.md` pattern — that is, it contains `-phase-<digits>-` as a literal segment — then:
+  - Set `is_prd_less = false`.
+  - Parse `<feature>` = basename minus `-phase-<N>-<slug>.plan.md`.
+  - Parse `<N>` = the integer between `-phase-` and the next `-`.
+  - Parse `<slug>` = the kebab-cased remainder before `.plan.md`.
+  - Set `artifact_root = PRPs/reports/<feature>/phase-<N>/attempts/`.
+  - Set `completed_target = PRPs/plans/completed/<basename>.plan.md`.
+  - Continue to Preconditions.
+
+- If the basename matches neither pattern (unrecognised shape), HALT with:
 
 > Plan filename does not match the canonical pattern
 > `<feature>-phase-<N>-<slug>.plan.md`. The plan was not produced by
@@ -76,7 +92,7 @@ If the filename does not match this pattern, HALT with:
 > regenerate the plan with the canonical filename, or rename the
 > plan file to match the pattern.
 
-These derived values are used to locate the source PRD (`PRPs/prds/<feature>.prd.md`), the per-attempt artifact root (`PRPs/reports/<feature>/phase-<N>/attempts/<i>/`), and the completed-plan target (`PRPs/plans/completed/<basename>.plan.md`).
+These derived values are used to locate the source PRD (`PRPs/prds/<feature>.prd.md` — PRD mode only), the per-attempt artifact root (`<artifact_root><i>/`), and the completed-plan target (`<completed_target>`).
 
 ---
 
@@ -113,7 +129,13 @@ Trim trailing whitespace and newlines before comparison; the check is "the last 
 
 ### P3 — Source PRD row N status cell is `in-progress`
 
-`Read` `PRPs/prds/<feature>.prd.md`. Locate the Implementation Phases table by exact-match header line:
+**PRD-less gate:** If `is_prd_less == true`, skip this entire precondition — no source PRD exists to check. Emit a structured skip note:
+
+> P3 skipped: PRD-less plan detected (no source PRD exists to check).
+
+Proceed to P4.
+
+**PRD mode only (`is_prd_less == false`):** `Read` `PRPs/prds/<feature>.prd.md`. Locate the Implementation Phases table by exact-match header line:
 
 | # | Phase | Description | Status | Parallel | Depends | PRP Plan |
 
@@ -187,47 +209,44 @@ Set the budget caps and counters:
 - `files_changed_by_attempt: dict<int, set<str>> = {}` — populated from each attempt's diff.patch
 - `last_reviewer_feedback: list<{rubric_id, reason}> = []` — carried into the next attempt's implementer prompt
 
-Soft-fail concurrency diagnostic per source PRD D18: `Glob` `PRPs/reports/<feature>/phase-<N>/attempts/*/diff.patch` for any in-flight attempt (heuristic: a `diff.patch` whose corresponding `<basename>.code-review.jsonl` line shows neither APPROVED nor a final HALT). If found, emit warning `"concurrent /relay-implement detected for <feature> phase <N>; orchestrator must serialize"` and **continue** (do not block). Robust file-lock semantics deferred until `/relay-execute` is designed.
+Soft-fail concurrency diagnostic per source PRD D18: `Glob` `<artifact_root>*/diff.patch` for any in-flight attempt (heuristic: a `diff.patch` whose corresponding `<basename>.code-review.jsonl` line shows neither APPROVED nor a final HALT). If found, emit warning `"concurrent /relay-implement detected for <feature> (is_prd_less=<is_prd_less>); orchestrator must serialize"` and **continue** (do not block). Robust file-lock semantics deferred until `/relay-execute` is designed.
 
 ### Phase A.1 — Per-attempt pre-flight checks (in order)
 
 Run before each implementer/code-reviewer dispatch. The checks are ordered: time budget first, then retry budget, then oscillation, then dispute cap. First-to-trip wins.
 
 1. **Time budget check.** If `now() >= deadline_ts`:
-   - Write `PRPs/reports/<feature>/phase-<N>/halt.json` with `{outcome: "FAILED_TIME_BUDGET_EXCEEDED", attempts_completed: <attempt-1>, deadline_ts, elapsed_minutes, remaining_retries: <max_implement_retries + 1 - attempt>, attempt_history: [...], dispute_history: [...], actionable_recommendation: "..."}`.
+   - Write `<artifact_root>../halt.json` (i.e. `PRPs/reports/<feature>/phase-<N>/halt.json` in PRD mode; `PRPs/reports/<slug>/halt.json` in PRD-less mode) with `{outcome: "FAILED_TIME_BUDGET_EXCEEDED", attempts_completed: <attempt-1>, deadline_ts, elapsed_minutes, remaining_retries: <max_implement_retries + 1 - attempt>, attempt_history: [...], dispute_history: [...], actionable_recommendation: "..."}`.
    - HALT with verbatim message:
      > FAILED_TIME_BUDGET_EXCEEDED. /relay-implement aborted after
      > <elapsed_minutes> wall-clock minutes (max_implement_minutes=45)
      > with <max_implement_retries + 1 - attempt> retries unused.
-     > Per-attempt diffs preserved at
-     > PRPs/reports/<feature>/phase-<N>/attempts/. Halt state at
-     > PRPs/reports/<feature>/phase-<N>/halt.json.
+     > Per-attempt diffs preserved at <artifact_root>. Halt state at
+     > <artifact_root>../halt.json.
 
 2. **Retry budget check.** If `attempt > max_implement_retries + 1` (i.e., we have used all 4 attempts):
-   - Write `halt.json` with `{outcome: "FAILED_AFTER_N_RETRIES", attempts_completed: max_implement_retries + 1, last_reviewer_verdict, attempt_history, dispute_history, actionable_recommendation}`.
+   - Write `<artifact_root>../halt.json` with `{outcome: "FAILED_AFTER_N_RETRIES", attempts_completed: max_implement_retries + 1, last_reviewer_verdict, attempt_history, dispute_history, actionable_recommendation}`.
    - HALT with verbatim message:
      > FAILED_AFTER_N_RETRIES. /relay-implement aborted after 4
      > attempts (max_implement_retries=3). Last reviewer verdict:
      > <last_reviewer_verdict>. Per-attempt diffs preserved at
-     > PRPs/reports/<feature>/phase-<N>/attempts/. Halt state at
-     > PRPs/reports/<feature>/phase-<N>/halt.json.
+     > <artifact_root>. Halt state at <artifact_root>../halt.json.
 
 3. **Oscillation check** (only when `attempt >= 3`). For each prior attempt `k` in `[1, attempt-1]`:
    - Compute `intersection_k = files_changed_by_attempt[k] ∩ files_changed_by_attempt[attempt-1]`.
    - If `intersection_k` is non-empty AND, for at least one file in `intersection_k`, the diff in attempt `attempt-1` semantically reverses the diff in attempt `k` (heuristic: same file modified to a state byte-equal to the file's content at attempt `k-1` or earlier base):
-     - Write `halt.json` with `{outcome: "FAILED_OSCILLATION_DETECTED", oscillation_pair: [k, attempt-1], reverting_files: [...], attempt_history, actionable_recommendation}`.
+     - Write `<artifact_root>../halt.json` with `{outcome: "FAILED_OSCILLATION_DETECTED", oscillation_pair: [k, attempt-1], reverting_files: [...], attempt_history, actionable_recommendation}`.
      - HALT with verbatim message:
        > FAILED_OSCILLATION_DETECTED. Attempt <attempt-1> reverts
        > files changed in attempt <k>: <reverting_files>. The loop
        > is stuck oscillating. Per-attempt diffs preserved at
-       > PRPs/reports/<feature>/phase-<N>/attempts/. Halt state at
-       > PRPs/reports/<feature>/phase-<N>/halt.json. Manual
-       > recovery: inspect the diffs and either resolve the
+       > <artifact_root>. Halt state at <artifact_root>../halt.json.
+       > Manual recovery: inspect the diffs and either resolve the
        > underlying tension by hand or re-run /relay-plan against
-       > the source PRD to clarify the contract.
+       > the source PRD (or description) to clarify the contract.
 
 4. **Dispute cap check** (only at the start of an arbitration step — not before the implementer dispatch). If `disputes_used >= max_disputes_per_session`:
-   - Write `halt.json` with `{outcome: "FAILED_DISPUTE_CAP_EXCEEDED", disputes_used, max_disputes_per_session, dispute_history, actionable_recommendation}`.
+   - Write `<artifact_root>../halt.json` with `{outcome: "FAILED_DISPUTE_CAP_EXCEEDED", disputes_used, max_disputes_per_session, dispute_history, actionable_recommendation}`.
    - HALT with verbatim message:
      > FAILED_DISPUTE_CAP_EXCEEDED. /relay-implement aborted after
      > <disputes_used> TEST_CONTRACT_DISPUTE attempts
@@ -235,7 +254,7 @@ Run before each implementer/code-reviewer dispatch. The checks are ordered: time
      > to dispute; either the disputed tests are correct (the
      > implementer must produce code addressing them) or the PRD
      > needs revision. Dispute history preserved at
-     > PRPs/reports/<feature>/phase-<N>/halt.json.
+     > <artifact_root>../halt.json.
 
 If all four checks pass, proceed to Phase A.2.
 
@@ -262,9 +281,9 @@ The implementer reads the plan, executes its Step-by-Step Tasks via `Edit`/`Writ
 After every attempt regardless of verdict:
 
 1. Run `git add -A` (the implementer uses `Edit`/`Write` and may leave files unstaged; the diff against `<base_commit>` would otherwise miss those files).
-2. Run `git diff <base_commit>` and write the result to `PRPs/reports/<feature>/phase-<N>/attempts/<attempt>/diff.patch` (creating parent directories as needed).
+2. Run `git diff <base_commit>` and write the result to `<artifact_root><attempt>/diff.patch` (creating parent directories as needed).
 3. Parse the diff to extract `files_changed_by_attempt[attempt] = set(<paths>)`.
-4. Write `PRPs/reports/<feature>/phase-<N>/attempts/<attempt>/record.json` with `{attempt: <attempt>, verdict: "<IMPLEMENTATION_COMPLETE | TEST_CONTRACT_DISPUTE>", files_changed: [...], validation?: {...}, dispute_evidence?: {...}, base_commit: <base_commit>}`.
+4. Write `<artifact_root><attempt>/record.json` with `{attempt: <attempt>, verdict: "<IMPLEMENTATION_COMPLETE | TEST_CONTRACT_DISPUTE>", files_changed: [...], validation?: {...}, dispute_evidence?: {...}, base_commit: <base_commit>}`.
 
 Branch on the verdict:
 
@@ -286,7 +305,7 @@ Task(subagent_type="code-reviewer",
        target_root: <target_root>,
        mode: "standard",
        attempt: <attempt>,
-       diff_target: "PRPs/reports/<feature>/phase-<N>/attempts/<attempt>/diff.patch",
+       diff_target: "<artifact_root><attempt>/diff.patch",
      })
 ```
 
@@ -309,7 +328,7 @@ Task(subagent_type="code-reviewer",
        mode: "arbitration",
        attempt: <attempt>,
        dispute_payload: <implementer's structured TEST_CONTRACT_DISPUTE evidence>,
-       diff_target: "PRPs/reports/<feature>/phase-<N>/attempts/<attempt>/diff.patch",
+       diff_target: "<artifact_root><attempt>/diff.patch",
      })
 ```
 
@@ -317,7 +336,7 @@ The code-reviewer arbitrates the dispute. It appends one verdict line to `code-r
 
 - **`DISPUTE_REJECTED`** → next attempt mandates code (the implementer cannot dispute the same tests again). Carry `last_reviewer_feedback = [{rubric_id: "arbitration", reason: "dispute rejected: <reason>; produce code addressing the disputed tests"}]`. Increment `attempt`. Restart pre-flight checks.
 
-- **`DISPUTE_UPHELD_TEST_WRONG`** → the disputed tests are wrong. B7/B8 bounce-back is deferred per source PRD D14 (placeholder protocol reserved). Write `halt.json` with `{outcome: "DISPUTE_UPHELD_TEST_WRONG", dispute_payload, arbitration_verdict, attempt_history, dispute_history, actionable_recommendation: "Surface dispute to user; user decides whether to update tests or re-author the PRD. When B7/B8 ship, re-invoke via Task(subagent_type='tdd-writer', prompt={attempt_history, dispute_evidence})."}`. HALT with verbatim message:
+- **`DISPUTE_UPHELD_TEST_WRONG`** → the disputed tests are wrong. B7/B8 bounce-back is deferred per source PRD D14 (placeholder protocol reserved). Write `<artifact_root>../halt.json` with `{outcome: "DISPUTE_UPHELD_TEST_WRONG", dispute_payload, arbitration_verdict, attempt_history, dispute_history, actionable_recommendation: "Surface dispute to user; user decides whether to update tests or re-author the PRD. When B7/B8 ship, re-invoke via Task(subagent_type='tdd-writer', prompt={attempt_history, dispute_evidence})."}`. HALT with verbatim message:
   > DISPUTE_UPHELD_TEST_WRONG. The code-reviewer agreed the
   > disputed tests contradict the PRD. B7/B8 bounce-back is
   > deferred in MVP per source PRD D14 (placeholder protocol
@@ -328,7 +347,7 @@ The code-reviewer arbitrates the dispute. It appends one verdict line to `code-r
   > be: Task(subagent_type='tdd-writer',
   > prompt={attempt_history, dispute_evidence}).
 
-- **`DISPUTE_UPHELD_PRD_AMBIGUOUS`** → the PRD itself is ambiguous; tests and proposed code both have legitimate readings. Write `halt.json` with the same shape, `actionable_recommendation: "Hand-edit the PRD to disambiguate; flip its status back to DRAFT; re-run /relay-prd."`. HALT with verbatim message:
+- **`DISPUTE_UPHELD_PRD_AMBIGUOUS`** → the PRD itself is ambiguous; tests and proposed code both have legitimate readings. Write `<artifact_root>../halt.json` with the same shape, `actionable_recommendation: "Hand-edit the PRD to disambiguate; flip its status back to DRAFT; re-run /relay-prd."`. HALT with verbatim message:
   > DISPUTE_UPHELD_PRD_AMBIGUOUS. The code-reviewer agreed the
   > PRD itself is ambiguous on the disputed point. Manual
   > recovery: hand-edit `PRPs/prds/<feature>.prd.md` per the
@@ -361,7 +380,9 @@ Record `mutation_b_success: true|false`. On `false`, capture the error message a
 
 #### Mutation c — Source PRD row N status flip
 
-`Edit` `PRPs/prds/<feature>.prd.md`:
+**PRD-less gate:** If `is_prd_less == true`, skip Mutation c entirely — no source PRD row exists to flip. Record `mutation_c_skipped: true`. This is NOT a failure; do not raise `PARTIAL_D8_FAILURE` for this skip. Proceed directly to the atomicity discipline section.
+
+**PRD mode only (`is_prd_less == false`):** `Edit` `PRPs/prds/<feature>.prd.md`:
 - `old_string`: the verbatim full row N line copied from the source PRD (including all leading and trailing pipes and whitespace; the full line guarantees a unique match).
 - `new_string`: the same row line with `Status` cell `in-progress` → `complete`. The `PRP Plan` cell is left unchanged (plan-writer already populated it with the relative path; that path now resolves under `PRPs/plans/completed/` after Mutation b, but the cell is not updated to reflect the move — the row's PRP Plan cell carries the *original* plan name as a stable reference).
 - `replace_all`: `false`
@@ -370,14 +391,17 @@ Record `mutation_c_success: true|false`. On `false`, capture the error message.
 
 #### Atomicity discipline
 
-If all three mutations succeed → success path; emit the final summary (Final output surface below) and exit.
+**PRD mode (`is_prd_less == false`):** All three mutations a, b, c are attempted. If all succeed → success path; emit the final summary (Final output surface below) and exit.
 
-If any mutation fails: write `PRPs/reports/<feature>/phase-<N>/halt.json` with:
+**PRD-less mode (`is_prd_less == true`):** Only mutations a and b are attempted; Mutation c is always `mutation_c_skipped: true`. If both succeed → success path. The `mutations_attempted` list for PRD-less plans is `["a", "b"]` — Mutation c is not listed as attempted because it was never attempted (it is intentionally absent for PRD-less plans, not a failure).
+
+If any attempted mutation fails: write `<artifact_root>../halt.json` with:
 
 ```json
 {
   "outcome": "PARTIAL_D8_FAILURE",
   "mutations_attempted": ["a", "b", "c"],
+  "mutation_c_skipped": false,
   "mutations_succeeded": ["a", "b" or just "a" or empty],
   "mutation_failed": "a" | "b" | "c",
   "error": "<the failing mutation's error message>",
@@ -391,27 +415,61 @@ If any mutation fails: write `PRPs/reports/<feature>/phase-<N>/halt.json` with:
 }
 ```
 
+For PRD-less plans, the schema is:
+
+```json
+{
+  "outcome": "PARTIAL_D8_FAILURE",
+  "mutations_attempted": ["a", "b"],
+  "mutation_c_skipped": true,
+  "mutations_succeeded": ["a" or empty],
+  "mutation_failed": "a" | "b",
+  "error": "<the failing mutation's error message>",
+  "manual_recovery_steps": [
+    "<step 1 — e.g., re-run Edit on plan trailing block>",
+    "<step 2 — e.g., move plan to completed/ by hand>"
+  ],
+  "attempt_history": [...],
+  "dispute_history": [...]
+}
+```
+
+Note: `mutation_c_skipped: true` is an advisory field, not a failure flag. Its presence in the halt.json schema for PRD-less plans does NOT constitute a `PARTIAL_D8_FAILURE` condition — only a genuinely failed Mutation a or b raises that outcome.
+
 Per source PRD D8: best-effort atomic. The command does **not** roll back successful mutations; recovery is documented, not automatic. Emit a structured rollback note message naming the next manual step:
 
 > PARTIAL_D8_FAILURE. Mutation <which> failed: <error>. Mutations
 > succeeded: <list>. Manual recovery steps recorded at
-> PRPs/reports/<feature>/phase-<N>/halt.json. The implementation
+> <artifact_root>../halt.json. The implementation
 > diff is preserved in the working tree (or in
 > PRPs/plans/completed/ if Mutation b succeeded). The Test Runner
 > can still be run against the worktree; the per-phase state
 > machine in the source PRD will be inconsistent until the
-> manual recovery steps are taken.
+> manual recovery steps are taken (PRD-less plans: no PRD row
+> exists; only Mutations a and b require manual recovery).
 
 ---
 
 ## Final output surface
 
-On the success path (Phase A.3 standard-mode APPROVED + all three D8 mutations succeeded), emit verbatim per source PRD AC-1:
+On the success path (Phase A.3 standard-mode APPROVED + all applicable D8 mutations succeeded), emit per source PRD AC-1:
+
+**PRD mode (`is_prd_less == false`):**
 
 > ✅ Plan **IMPLEMENTED** at `PRPs/plans/completed/<basename>.plan.md`.
 > Source PRD `PRPs/prds/<feature>.prd.md` row <N> marked `complete`.
 > Implementation diff (final attempt) at
-> `PRPs/reports/<feature>/phase-<N>/attempts/<attempt>/diff.patch`.
+> `<artifact_root><attempt>/diff.patch`.
+> Code-review verdict at
+> `PRPs/plans/<basename>.code-review.jsonl` (line <line_index>).
+> Worktree ready for `/relay-test PRPs/plans/completed/<basename>.plan.md`.
+
+**PRD-less mode (`is_prd_less == true`):**
+
+> ✅ Plan **IMPLEMENTED** at `PRPs/plans/completed/<basename>.plan.md`.
+> PRD-less mode: Mutation c skipped (no source PRD row to flip).
+> Implementation diff (final attempt) at
+> `<artifact_root><attempt>/diff.patch`.
 > Code-review verdict at
 > `PRPs/plans/<basename>.code-review.jsonl` (line <line_index>).
 > Worktree ready for `/relay-test PRPs/plans/completed/<basename>.plan.md`.
@@ -434,7 +492,7 @@ In all cases, the per-attempt artifacts at `PRPs/reports/<feature>/phase-<N>/att
 
 5. **Never overwrite an APPROVED plan.** P2 catches this at command entry. Phase A.4 Mutation a only operates on `*Status: APPROVED*` (not `*Status: IMPLEMENTED*` or any other state); subsequent re-invocations against an IMPLEMENTED plan fail at P2.
 
-6. **Never bypass D8.** All three mutations (a, b, c) are attempted on APPROVED rubric. On partial failure, the command writes `halt.json` and emits a structured rollback note; it does **not** silently skip a mutation or claim success.
+6. **Never bypass D8.** In PRD mode (`is_prd_less == false`): all three mutations (a, b, c) are attempted on APPROVED rubric. In PRD-less mode (`is_prd_less == true`): mutations a and b are attempted; Mutation c is a documented no-op (`mutation_c_skipped: true` — not a failure) because no source PRD row exists to flip. On partial failure of an attempted mutation, the command writes `halt.json` and emits a structured rollback note; it does **not** silently skip a mutation or claim success.
 
 7. **Never skip the Decision Gate evidence block.** The command-level gate (above) is mandatory. The implementer and code-reviewer agents emit their own gates inside their dispatch payloads.
 

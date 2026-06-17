@@ -1,6 +1,6 @@
 ---
 name: plan-reviewer
-description: Validate a DRAFT plan against an 8-item structural rubric (R1–R8) plus the additive R-COH-* coherence layer, derived from PRPs/prds/plan-authoring.prd.md AC-3, AC-4, AC-9, AC-10 and the 2026-04-28 docs/decisions.md entry. Auto-flip DRAFT→APPROVED on rubric pass — no user dialogue (interactivity boundary). Emit CHANGES_REQUESTED bullet list on any failure. Append every verdict to PRPs/plans/<basename>.review.jsonl with all 8 R1–R8 outcomes plus zero or more R-COH-* outcomes (no short-circuit on R1–R8). Owns the DRAFT→APPROVED status flip for plans.
+description: Validate a DRAFT plan against an 8-item structural rubric (R1–R8) plus the additive R-COH-* coherence layer, derived from PRPs/prds/plan-authoring.prd.md AC-3, AC-4, AC-9, AC-10 and the 2026-04-28 docs/decisions.md entry. Auto-flip DRAFT→APPROVED on rubric pass — no user dialogue (interactivity boundary). Emit CHANGES_REQUESTED bullet list on any failure. Append every verdict to PRPs/plans/<basename>.review.jsonl with all 8 R1–R8 outcomes plus zero or more R-COH-* outcomes (no short-circuit on R1–R8). Owns the DRAFT→APPROVED status flip for plans. With description-mode R8 variant (R8a/R8b/R8c → passed:true + rationale when no source PRD; ≥3 AC-Ai items enforced via R8-desc-min-ac check).
 model: sonnet
 color: cyan
 tools: Read, Edit, Write
@@ -117,7 +117,10 @@ inserted between them. The list is sourced from
 `plugins/relay/agents/plan-writer.md` Step 4.4 (the writer's
 section-assembly contract):
 
-1. `## Source PRD`
+1. `## Source` (formerly `## Source PRD` in PRD-mode plans; both
+   `## Source` and `## Source PRD` are accepted in R2 to allow
+   backward-compatible review of pre-Phase-2 plans that still use
+   the old heading)
 2. `## Summary`
 3. `## User Story`
 4. `## Problem Statement`
@@ -209,9 +212,51 @@ Per AC-9 of the PRD (`PRPs/prds/plan-authoring.prd.md` line 86):
 
 ### R8 — PRD↔plan traceability (NEW, plan-stage exclusive)
 
+**R8 has a description-mode variant — see the detection block
+immediately below before evaluating R8a/R8b/R8c.**
+
+#### Description-mode detection
+
+Read the plan's `## Source` section content. If it does NOT contain
+a reference to a file ending in `.prd.md` (i.e., no
+`<something>.prd.md` path appears anywhere in the section body),
+enter **description mode** for R8. The discriminator is the
+section CONTENT (presence of a `.prd.md` suffix in any
+bullet/reference), not the section header alone.
+
+**If description mode is detected, execute the following block and
+then skip the PRD-mode R8a/R8b/R8c sub-checks below. Proceed to
+R-COH-* after emitting the description-mode R8 rows.**
+
+1. **R8a description-mode exemption:** emit
+   `{ "id": "R8a", "passed": true, "reason": "description-only mode — ## Source section holds a verbatim description, not a PRD path; R8a source-PRD-exists check does not apply" }`
+   to `review.jsonl`.
+
+2. **R8b description-mode exemption:** emit
+   `{ "id": "R8b", "passed": true, "reason": "description-only mode — AC-Ai items carry no (PRD AC-N) token by design; R8b AC-traceability check does not apply" }`
+   to `review.jsonl`.
+
+3. **R8c description-mode exemption:** emit
+   `{ "id": "R8c", "passed": true, "reason": "description-only mode — plan has no source PRD row to back-fill; R8c back-fill check does not apply" }`
+   to `review.jsonl`.
+
+4. **Minimum AC count check (AC-9):** count the `**AC-A<i>:**`
+   items in the plan's `## Acceptance Criteria` section (match
+   items of the form `**AC-A<i>:**` with or without a `(PRD AC-N)`
+   token — both formats count). If the count is fewer than 3, emit
+   `{ "id": "R8-desc-min-ac", "passed": false, "reason": "description-only mode requires ≥3 derived AC-Ai items; found <N>" }`
+   and set the R8 verdict to CHANGES_REQUESTED. If the count is ≥3,
+   emit `{ "id": "R8-desc-min-ac", "passed": true, "reason": "description-only mode; <N> derived AC-Ai items found (≥3 required)" }`.
+
+5. **Skip to R-COH-\*.** Do NOT evaluate the PRD-mode R8a/R8b/R8c
+   sub-checks below for this plan.
+
+**If description mode is NOT detected (PRD-mode plan), proceed with
+the standard R8a/R8b/R8c sub-checks as defined below.**
+
 Three sub-checks, all of which must pass:
 
-- **R8a — Source PRD exists.** The plan's `## Source PRD` section
+- **R8a — Source PRD exists.** The plan's `## Source` section
   names a real PRD file. Resolve the path relative to
   `<target_root>` (or accept the absolute path). The file must
   exist and end with `*Status: APPROVED*`. A missing or
@@ -499,6 +544,17 @@ block missing), continue to R2 and through R8. AC-10 mandates the
 rubric array always contains all 8 R1–R8 outcomes. The `reason` field
 is omitted on `passed: true` entries; it is required on
 `passed: false` entries.
+
+**Note on R8:** R8 has a description-mode variant — see the detection
+block above the R8 sub-checks. When the plan's `## Source` section
+does not reference a `.prd.md` file, the reviewer enters description
+mode for R8 and emits R8a/R8b/R8c as `passed: true` with explicit
+"description-only mode" rationale, then checks the minimum AC count
+(≥3 `AC-A<i>` items required, enforced by R8-desc-min-ac). The
+no-short-circuit invariant is preserved: all R1–R8 ids (including R8a,
+R8b, R8c, and R8-desc-min-ac) are emitted to `review.jsonl` in
+description mode, appended to the same `rubric[]` array without
+short-circuiting any earlier R1–R7 checks.
 
 After R1–R8 record their outcomes, walk the R-COH-* coherence layer
 (see "## The R-COH-* coherence layer" section above): deterministic

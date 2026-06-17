@@ -44,9 +44,10 @@ lives in `/relay-implement` — not in this agent.
 ## Inputs (from the calling command)
 
 - `plan_path`: absolute path to a plan file. The command has already
-  verified the file ends with `*Status: APPROVED*` and matches the
-  filename pattern `<feature>-phase-<N>-<slug>.plan.md` — you can
-  trust those preconditions.
+  verified the file ends with `*Status: APPROVED*` and either matches
+  the canonical filename pattern `<feature>-phase-<N>-<slug>.plan.md`
+  (PRD mode) or the flat pattern `<slug>.plan.md` (PRD-less /
+  description mode) — you can trust those preconditions.
 - `target_root`: absolute path to the target project's root (the
   repository the user invoked `/relay-implement` from). All Decision
   Gate consultation, `docs/context/methodology.md` reads, and source
@@ -117,8 +118,12 @@ Before Phase 1, do these reads (all relative to `<target_root>`):
 - `<plan_path>` — read end-to-end and hold the content in context.
   In particular, locate and remember:
   - The plan title (line 1, after `# `).
-  - The `## Source PRD` bullet — extract the source PRD relative
-    path (e.g. `PRPs/prds/<feature>.prd.md`) and the row N reference.
+  - The `## Source PRD` bullet (if present) — extract the source PRD
+    relative path (e.g. `PRPs/prds/<feature>.prd.md`) and the row N
+    reference. If the bullet is absent, the plan is in description
+    mode (PRD-less); see the two-branch read below.
+  - The `## Source` section body (relevant in description mode — see
+    below).
   - The `## Step-by-Step Tasks` section — every `### Task <i>:` block
     with its `**ACTION**:`, `**MIRROR**:`, and `**VALIDATE**:` lines.
   - The `## Files to Change` table.
@@ -131,10 +136,29 @@ Before Phase 1, do these reads (all relative to `<target_root>`):
     has already verified this, but a missing trailer here is a halt
     condition with a structured error).
   - The plan filename basename, parsed against the pattern
-    `<feature>-phase-<N>-<slug>.plan.md` to derive `<feature>` and
-    `<N>` for any path computations you surface in the handoff.
-- The source PRD at the relative path captured above — read end-to-
-  end for AC-N traceability and for the source PRD basename.
+    `<feature>-phase-<N>-<slug>.plan.md` OR the flat pattern
+    `<slug>.plan.md` (see Step 1.1 for the two-branch parse).
+
+**Two-branch source read (PRD mode vs. description mode):**
+
+- **PRD mode** (the `## Source PRD` bullet is present in the plan):
+  Read the source PRD at the relative path extracted from the bullet —
+  end-to-end, for AC-N traceability and for the source PRD basename.
+  Set `is_prd_less = false`. Behavior unchanged from prior
+  implementation.
+
+- **Description mode** (the `## Source PRD` bullet is absent in the
+  plan):
+  - Set `is_prd_less = true`.
+  - Read the `## Source` section body as the feature description (the
+    verbatim user description captured by the plan-writer). This is
+    the feature contract; treat it the way PRD AC text is treated in
+    PRD mode.
+  - Extract `AC-A<i>` items from the plan's `## Acceptance Criteria`
+    section. These items carry no `(PRD AC-N)` token — that is
+    expected and correct.
+  - Set source PRD path to `null`. Do NOT attempt to read any PRD
+    file. Do NOT HALT.
 - The three Decision Gate sources, in this order:
   - `docs/decisions.md`
   - `docs/anti-patterns.md`
@@ -173,9 +197,32 @@ the Phase 5 handoff message. Examples:
   `<feature>=implementation-authoring`, `<N>=1`,
   `<slug>=implementer-agent`.
 
-If the basename does not match the pattern, halt with a structured
-error naming the violating basename. The COMMAND has already
-verified the pattern — this is a defense-in-depth check.
+**Flat-filename branch (description mode / PRD-less plans):** If the
+basename does NOT match the canonical `<feature>-phase-<N>-<slug>.plan.md`
+pattern (i.e., it does not contain `-phase-<digits>-` as a literal
+segment) BUT does match the flat `<slug>.plan.md` pattern (a valid
+kebab-slug with the `.plan.md` extension and no `-phase-` segment):
+
+- Set `is_prd_less = true` (confirming description mode).
+- Set `feature = slug` (the full slug is both feature name and slug).
+- Set `N = null`.
+- Derive `artifact_root = PRPs/reports/<slug>/attempts/` (flat, no
+  `/phase-<N>/` tier).
+- Derive `completed_target = PRPs/plans/completed/<basename>.plan.md`.
+- Do NOT halt. This is a valid filename for a description-mode plan.
+
+Examples of flat filenames:
+
+- `add-rate-limiting.plan.md` → `slug=add-rate-limiting`,
+  `artifact_root=PRPs/reports/add-rate-limiting/attempts/`.
+- `relay-plan-prd-less-mode.plan.md` → `slug=relay-plan-prd-less-mode`,
+  `artifact_root=PRPs/reports/relay-plan-prd-less-mode/attempts/`.
+
+**Defense-in-depth halt:** If the basename does not match either the
+canonical `<feature>-phase-<N>-<slug>.plan.md` pattern OR the flat
+`<slug>.plan.md` pattern, halt with a structured error naming the
+violating basename. The COMMAND has already verified the pattern —
+this is a defense-in-depth check for unrecognised shapes only.
 
 ### Step 1.2 — Extract the contract sections
 
@@ -191,10 +238,13 @@ From the plan content held in context (Phase 0), extract:
 - `Validation Commands`: the Level 1 / Level 2 / Level 3 shell
   command bodies. Hold them as strings for Phase 3 dispatch via
   `Bash`.
-- `Acceptance Criteria`: every `**AC-A<i> (PRD AC-<N>):**` bullet —
-  used to scope the `IMPLEMENTATION_COMPLETE` verdict's coverage
-  claim and to fuel the `code-reviewer`'s R8 traceability check
-  downstream.
+- `Acceptance Criteria`: every `**AC-A<i> (PRD AC-<N>):**` bullet
+  (PRD mode) or plain `**AC-A<i>:**` bullet (description mode, no
+  `(PRD AC-N)` token) — used to scope the `IMPLEMENTATION_COMPLETE`
+  verdict's coverage claim and to fuel the `code-reviewer`'s R-S3
+  traceability check downstream. Both forms are valid; the absence
+  of the `(PRD AC-N)` token is expected and correct in description
+  mode.
 - `Patterns to Mirror`: the `# SOURCE: <path>:<line-range>` anchors.
   Every `**MIRROR**:` reference in Step-by-Step Tasks must resolve
   to one of these anchors; surface a structured warning if a task's
@@ -446,7 +496,7 @@ Emit a single human-readable confirmation message naming:
   diff, dispatch the code-reviewer, and decide on retry, dispute
   arbitration, or D8 mutations."
 
-Example for a happy-path completion:
+Example for a happy-path completion (PRD mode):
 
 > IMPLEMENTATION_COMPLETE for `<feature>` phase `<N>`. Files
 > changed: 3 (`<path1>`, `<path2>`, `<path3>`). Validation:
@@ -454,6 +504,16 @@ Example for a happy-path completion:
 > `tdd: false`. Next: `/relay-implement` will capture the diff,
 > dispatch the code-reviewer, and decide on retry, dispute
 > arbitration, or D8 mutations.
+
+Example for a happy-path completion (description mode / PRD-less):
+
+> IMPLEMENTATION_COMPLETE for `<slug>` (description mode, N=null).
+> Files changed: 3 (`<path1>`, `<path2>`, `<path3>`). Validation:
+> Level 1 PASS, Level 2 PASS, Level 3 PASS. Methodology:
+> `tdd: false`. Next: `/relay-implement` will capture the diff,
+> dispatch the code-reviewer, and decide on retry, dispute
+> arbitration, or D8 mutations (Mutation c is a no-op in
+> PRD-less mode).
 
 Example for a dispute:
 

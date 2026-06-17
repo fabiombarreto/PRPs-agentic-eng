@@ -153,25 +153,44 @@ Before Phase 1, do these reads (all relative to `<target_root>`):
   Locate and remember:
   - The plan title (line 1, after `# `).
   - The `## Source PRD` bullet — extract the source PRD relative
-    path and the row N reference.
+    path and the row N reference if the bullet is present. If the
+    bullet is absent, the plan is in description mode (PRD-less);
+    see the two-branch read below.
+  - The `## Acceptance Criteria` section — note whether AC items
+    carry `(PRD AC-N)` tokens (PRD mode) or are plain `AC-A<i>:`
+    bullets (description mode). Both forms are valid inputs.
   - The `## Step-by-Step Tasks` section — every `### Task <i>:`
     block (used by R-S1).
   - The `## Files to Change` table (used by R-S2).
   - The `## Validation Commands` section with Levels 1, 2, 3 shell
     command bodies (used by R-L1/R-L2/R-L3).
-  - The `## Acceptance Criteria` section (used by R-S3 and, in
-    arbitration mode, for cross-referencing `prd_refs`).
   - The plan filename basename, parsed against
-    `<feature>-phase-<N>-<slug>.plan.md` to derive `<feature>` and
+    `<feature>-phase-<N>-<slug>.plan.md` (PRD mode) or the flat
+    `<slug>.plan.md` (description mode) to derive `<feature>` and
     `<N>` for any path computations and for the
     `code-review.jsonl` filename (`<basename>.code-review.jsonl`
     where `<basename>` is the plan filename without the `.plan.md`
-    suffix... actually the jsonl basename mirrors `plan-reviewer`'s
+    suffix — the jsonl basename mirrors `plan-reviewer`'s
     convention: the plan filename minus `.plan.md`, with
     `.code-review.jsonl` appended).
-- The source PRD at the relative path captured above — read end-to-
-  end for AC-N traceability (R-S3) and, in arbitration mode, for
-  cross-referencing `prd_refs`.
+
+**Two-branch source read (PRD mode vs. description mode):**
+
+- **PRD mode** (the `## Source PRD` bullet is present in the plan):
+  Read the source PRD at the relative path extracted from the bullet —
+  end-to-end for AC-N traceability (R-S3) and, in arbitration mode,
+  for cross-referencing `prd_refs`. Set `is_prd_less = false`.
+  Behavior unchanged from prior implementation.
+
+- **Description mode** (the `## Source PRD` bullet is absent in the
+  plan):
+  - Set `is_prd_less = true`.
+  - Do NOT read any source PRD file. Do NOT HALT.
+  - Populate the R-S3 AC list from the plan's `## Acceptance
+    Criteria` section's `AC-A<i>` bullets. These items carry no
+    `(PRD AC-N)` token — that is expected and correct in description
+    mode.
+  - Raise no finding solely because no source PRD exists.
 - The three Decision Gate sources, in this order:
   - `docs/decisions.md`
   - `docs/anti-patterns.md`
@@ -285,8 +304,9 @@ indices and their file paths that are not in the diff.
 
 ### R-S3 — Every plan AC-A bullet has an observable counterpart in the diff
 
-For each `**AC-A<i> (PRD AC-<N>):**` bullet in the plan's
-Acceptance Criteria section:
+For each AC bullet in the plan's Acceptance Criteria section — either
+`**AC-A<i> (PRD AC-<N>):**` (PRD mode) or plain `**AC-A<i>:**`
+(description mode, no `(PRD AC-N)` token):
 
 - Identify the file paths or behaviors the AC-A names (heuristic:
   the AC text references files, function names, command outputs,
@@ -295,6 +315,12 @@ Acceptance Criteria section:
   addresses the AC's stated scope (e.g., the agent file the AC
   describes was created; the rubric item the AC enumerates is
   documented in the diff).
+
+In description mode (`is_prd_less == true`), AC items carry no
+`(PRD AC-N)` token; R-S3 checks observable counterparts against
+these plan-derived items. No finding is raised solely because a
+source PRD is absent — the plan's `AC-A<i>` bullets serve as the
+authoritative traceability list.
 
 PASS iff every AC-A is addressed. FAIL with the AC indices and a
 short rationale per failed AC.
@@ -510,7 +536,10 @@ the parent must inject all needed context):
 </plan_task>
 
 <prd_acs>
-...the source PRD's relevant AC-N items the diff is implementing...
+...the source PRD's relevant AC-N items the diff is implementing
+(PRD mode); OR the plan's derived AC-A<i> items (PRD-less mode —
+no source PRD; parent has already performed the AC-source
+substitution; apply the same K=5 judgment pass over these items)...
 </prd_acs>
 
 <instructions>
