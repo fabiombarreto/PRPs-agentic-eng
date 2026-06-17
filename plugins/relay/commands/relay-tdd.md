@@ -195,7 +195,7 @@ On success, the last user-facing message is `tdd-writer`'s Phase
 > DRAFT TDD suite written to PRPs/reports/<feature>/tdd-initial-suite.diff.
 > Aggregate verdict: <SUITE_DRAFT_WRITTEN | EXISTING_COVERAGE_SUFFICIENT>.
 > Test files written: <count> (paths in the .diff manifest).
-> Run /relay-tdd-review PRPs/reports/<feature>/tdd-initial-suite.diff to validate.
+> Run /relay:relay-tdd-review PRPs/reports/<feature>/tdd-initial-suite.diff to validate.
 
 Surface it verbatim. Do not append anything.
 

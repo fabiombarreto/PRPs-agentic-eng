@@ -242,7 +242,7 @@ terminal signal:
 
 > DRAFT plan written to `PRPs/plans/<slug>.plan.md`.
 > Decision Gate: **PROCEED**.
-> Run `/relay-plan-review PRPs/plans/<slug>.plan.md` to validate.
+> Run `/relay:relay-plan-review PRPs/plans/<slug>.plan.md` to validate.
 
 Surface it verbatim to the user and exit. (No "Source PRD row N
 marked in-progress" line — there is no PRD row in description
@@ -302,14 +302,14 @@ plan-writer's Phase 5.2 confirmation:
 > DRAFT plan written to `PRPs/plans/<feature>-phase-<N>-<slug>.plan.md`.
 > Decision Gate: **PROCEED**.
 > Source PRD row <N> marked `in-progress`.
-> Run `/relay-plan-review PRPs/plans/<feature>-phase-<N>-<slug>.plan.md` to validate.
+> Run `/relay:relay-plan-review PRPs/plans/<feature>-phase-<N>-<slug>.plan.md` to validate.
 
 **Description mode** — on success, the last user-facing message is
 plan-writer's Phase 5.2 description-mode confirmation:
 
 > DRAFT plan written to `PRPs/plans/<slug>.plan.md`.
 > Decision Gate: **PROCEED**.
-> Run `/relay-plan-review PRPs/plans/<slug>.plan.md` to validate.
+> Run `/relay:relay-plan-review PRPs/plans/<slug>.plan.md` to validate.
 
 Note the flat `<slug>.plan.md` filename — no `-phase-<N>-` segment
 because there is no PRD phase row in description mode.

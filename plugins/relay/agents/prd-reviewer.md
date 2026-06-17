@@ -355,7 +355,7 @@ No user dialogue; autonomous.
    (see JSONL format below).
 4. Emit the final summary:
    > ✅ PRD **APPROVED** at `PRPs/prds/<basename>.prd.md`.
-   > Ready for `/relay-plan`.
+   > Ready for `/relay:relay-plan`.
 
 Exit.
 

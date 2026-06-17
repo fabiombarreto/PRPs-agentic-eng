@@ -227,7 +227,7 @@ Emit verbatim:
 > ✅ TDD suite **APPROVED** at `<suite_path>`.
 > Rubric: all five pathology checks passed; R-RED-LEGITIMATE: <true|null+reason>.
 > JSONL: `PRPs/plans/<basename>.tdd-review.jsonl`.
-> Ready for `/relay-implement` (the Implementer must satisfy this
+> Ready for `/relay:relay-implement` (the Implementer must satisfy this
 > suite as contract).
 
 ### On CHANGES_REQUESTED

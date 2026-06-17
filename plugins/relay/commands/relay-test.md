@@ -220,7 +220,7 @@ After the loop exits (any outcome), produce:
    - Outcome line with color-coded status
    - Attempt count and total elapsed time
    - For failed outcomes: the abort reason
-   - For GREEN: pointer to `/relay-test-review` as the next step (when Phase 7 lands)
+   - For GREEN: pointer to `/relay:relay-test-review` as the next step (when Phase 7 lands)
 
 Do NOT write the final pretty report (`final-report.md`) here — that's
 the `/relay-pr` command's job (Phase 8, B6). `run.json` is

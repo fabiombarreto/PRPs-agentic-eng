@@ -698,8 +698,8 @@ When Phase A.1 finds no more actionable rows and `phases_completed` is non-empty
 > Orchestrator audit log at PRPs/reports/<feature>/orchestrator-run.json.
 > Working tree in .worktrees/<feature>/ carries uncommitted implementation changes.
 > Next step (Pillar 3): review the changes, run any manual tests, then:
->   1. /relay-commit <feature>  — commit locally (reversible; no push)
->   2. /relay-pr <feature>      — push branch + open PR
+>   1. /relay:relay-commit <feature>  — commit locally (reversible; no push)
+>   2. /relay:relay-pr <feature>      — push branch + open PR
 
 ### HALT paths
 

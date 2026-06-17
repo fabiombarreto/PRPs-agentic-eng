@@ -316,7 +316,7 @@ Emit exactly:
 DRAFT TDD suite written to PRPs/reports/<feature>/tdd-initial-suite.diff.
 Aggregate verdict: <SUITE_DRAFT_WRITTEN | EXISTING_COVERAGE_SUFFICIENT>.
 Test files written: <count> (paths in the .diff manifest).
-Run /relay-tdd-review PRPs/reports/<feature>/tdd-initial-suite.diff to validate.
+Run /relay:relay-tdd-review PRPs/reports/<feature>/tdd-initial-suite.diff to validate.
 ```
 
 Do not emit anything after this line. The `/relay-tdd` command

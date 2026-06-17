@@ -462,7 +462,7 @@ On the success path (Phase A.3 standard-mode APPROVED + all applicable D8 mutati
 > `<artifact_root><attempt>/diff.patch`.
 > Code-review verdict at
 > `PRPs/plans/<basename>.code-review.jsonl` (line <line_index>).
-> Worktree ready for `/relay-test PRPs/plans/completed/<basename>.plan.md`.
+> Worktree ready for `/relay:relay-test PRPs/plans/completed/<basename>.plan.md`.
 
 **PRD-less mode (`is_prd_less == true`):**
 
@@ -472,7 +472,7 @@ On the success path (Phase A.3 standard-mode APPROVED + all applicable D8 mutati
 > `<artifact_root><attempt>/diff.patch`.
 > Code-review verdict at
 > `PRPs/plans/<basename>.code-review.jsonl` (line <line_index>).
-> Worktree ready for `/relay-test PRPs/plans/completed/<basename>.plan.md`.
+> Worktree ready for `/relay:relay-test PRPs/plans/completed/<basename>.plan.md`.
 
 On HALT (one of `FAILED_AFTER_N_RETRIES`, `FAILED_TIME_BUDGET_EXCEEDED`, `FAILED_OSCILLATION_DETECTED`, `FAILED_DISPUTE_CAP_EXCEEDED`, `DISPUTE_UPHELD_TEST_WRONG`, `DISPUTE_UPHELD_PRD_AMBIGUOUS`, `PARTIAL_D8_FAILURE`, or any precondition HALT), the user-facing message is the verbatim halt message defined in the relevant Phase A.* sub-section above, and the command exits without performing further mutations.
 

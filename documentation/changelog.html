@@ -30,6 +30,21 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
+      <h2 id="v0-13-1">0.13.1 — 2026-06-17</h2>
+
+      <p>Patch release fixing the next-command suggestions that every relay pipeline command surfaces on success. They previously named the bare command (e.g. <code>/relay-plan</code>), which only resolves when no other installed plugin defines a colliding command name; they now use the fully-qualified plugin-namespaced form (<code>/relay:relay-plan</code>), which is always unambiguous. The fix touches only the success-path &ldquo;run this next&rdquo; strings in the agent and command bodies &mdash; the linear pipeline handoff chain <code>/relay:relay-prd</code> &rarr; <code>/relay:relay-plan</code> &rarr; <code>/relay:relay-plan-review</code> &rarr; <code>/relay:relay-tdd</code> &rarr; <code>/relay:relay-tdd-review</code> &rarr; <code>/relay:relay-implement</code> &rarr; <code>/relay:relay-test</code> &rarr; <code>/relay:relay-test-review</code>, plus the Pillar 3 pointer to <code>/relay:relay-commit</code> &rarr; <code>/relay:relay-pr</code>. Error-path re-run hints and in-prose cross-references are intentionally out of scope. Plugin manifest version bumped <code>0.13.0</code> &rarr; <code>0.13.1</code> per the 2026-04-30 &sect;7.5 binding contract (the change ships plugin assets).</p>
+
+      <h3 id="v0-13-1-changed">Changed</h3>
+      <ul>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong> &mdash; version bumped <code>0.13.0</code> &rarr; <code>0.13.1</code> per the 2026-04-30 &sect;7.5 binding contract. Users running <code>/plugin</code> after pulling this version will get a fresh <code>relay/0.13.1/</code> cache directory with the corrected next-command suggestions registered.</li>
+        <li><strong><code>documentation/changelog.html</code></strong> &mdash; this entry.</li>
+      </ul>
+
+      <h3 id="v0-13-1-fixed">Fixed</h3>
+      <ul>
+        <li><strong>Plugin-namespaced next-command suggestions</strong> &mdash; the success-path handoff strings now use <code>/relay:relay-&lt;name&gt;</code> instead of the bare <code>/relay-&lt;name&gt;</code>, in both the source agents and the command copies that surface them verbatim: <code>plugins/relay/agents/prd-reviewer.md</code> (&rarr; <code>/relay:relay-plan</code>), <code>plugins/relay/agents/plan-writer.md</code> and <code>plugins/relay/commands/relay-plan.md</code> (&rarr; <code>/relay:relay-plan-review</code>), <code>plugins/relay/agents/tdd-writer.md</code> and <code>plugins/relay/commands/relay-tdd.md</code> (&rarr; <code>/relay:relay-tdd-review</code>), <code>plugins/relay/commands/relay-tdd-review.md</code> (&rarr; <code>/relay:relay-implement</code>), <code>plugins/relay/commands/relay-implement.md</code> (&rarr; <code>/relay:relay-test</code>), <code>plugins/relay/commands/relay-test.md</code> (&rarr; <code>/relay:relay-test-review</code>), and <code>plugins/relay/commands/relay-execute.md</code> (&rarr; <code>/relay:relay-commit</code> then <code>/relay:relay-pr</code>).</li>
+      </ul>
+
       <h2 id="v0-13-0">0.13.0 — 2026-06-16</h2>
 
       <p><code>/relay-plan</code> gains a description-only (PRD-less) input mode, completing the four-phase <code>relay-plan-prd-less-mode</code> PRD. Phase 0 input-type detection routes a <code>.prd.md</code> path (or text containing an &ldquo;Implementation Phases&rdquo; table) to the existing PRD mode unchanged, and any other non-empty free-text argument to description mode &mdash; generating a flat <code>PRPs/plans/&lt;slug&gt;.plan.md</code> with derived <code>AC-A&lt;i&gt;</code> items, no PRD back-fill, and full Decision Gate preservation. The plan is consumable end-to-end by <code>/relay-implement</code> (P3 PRD-row check branched; D8 Mutation c no-op; <code>code-reviewer</code>/<code>code-reviewer-semantic</code> source plan-derived ACs). The 2026-05-15 decisions.md entry registering this as a future capability is superseded by a new [2026-06-16] entry recording the shipped contract. Plugin manifest version bumped <code>0.12.0</code> &rarr; <code>0.13.0</code> per the 2026-04-30 &sect;7.5 binding contract.</p>

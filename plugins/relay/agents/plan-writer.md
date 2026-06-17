@@ -645,14 +645,14 @@ deferred.
 > DRAFT plan written to `PRPs/plans/<feature>-phase-<N>-<slug>.plan.md`.
 > Decision Gate: **{PROCEED | HALT}**.
 > Source PRD row <N> marked `in-progress`.
-> Run `/relay-plan-review PRPs/plans/<feature>-phase-<N>-<slug>.plan.md` to validate.
+> Run `/relay:relay-plan-review PRPs/plans/<feature>-phase-<N>-<slug>.plan.md` to validate.
 
 **Description mode** — emit the flat-filename form (no "Source PRD
 row N marked in-progress" line):
 
 > DRAFT plan written to `PRPs/plans/<slug>.plan.md`.
 > Decision Gate: **{PROCEED | HALT}**.
-> Run `/relay-plan-review PRPs/plans/<slug>.plan.md` to validate.
+> Run `/relay:relay-plan-review PRPs/plans/<slug>.plan.md` to validate.
 
 If the Decision Gate result was `HALT` (either mode), emit instead:
 
