@@ -114,7 +114,7 @@ The canonical PRD shape is defined in `docs/context/prd-template.md`.
 
 ## Command surface
 
-Relay exposes **14 commands** plus 1 placeholder, organized by role. Full
+Relay exposes **13 commands** plus 1 placeholder, organized by role. Full
 table and contracts in `docs/api-reference.md`; rationale in
 `docs/decisions.md`. Summary of the philosophy:
 

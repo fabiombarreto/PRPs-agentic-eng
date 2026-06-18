@@ -14,7 +14,7 @@ Modes for `context-builder`: `*init`, `*update`, `*validate`, `*domain`,
 
 ## Commands
 
-14 commands organized by role (12 Pillar 1–2 plus `/relay-commit` and
+13 commands organized by role (11 Pillar 1–2 plus `/relay-commit` and
 `/relay-pr` as the first two Pillar 3 commands, shipped v0.14.0 and
 v0.15.0), plus 1 placeholder (`/relay-approve`) for the remaining Pillar 3.
 All core pipeline commands are now implemented; `/relay-execute` ✅
