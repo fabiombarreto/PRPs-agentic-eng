@@ -195,6 +195,20 @@ If the command fails (no `origin` remote), HALT:
 >   git -C .worktrees/<feature>/ remote add origin <repo-url>
 > Then re-run `/relay-pr <feature>`.
 
+On success, derive the GitHub `<owner>/<repo>` slug from the returned origin URL and record it as `<origin-repo>`. Support both URL forms (strip any trailing `.git`):
+
+- SSH — `git@github.com:<owner>/<repo>.git` → `<owner>/<repo>`
+- HTTPS — `https://github.com/<owner>/<repo>(.git)` → `<owner>/<repo>`
+
+`<origin-repo>` MUST be passed as `--repo <origin-repo>` to **every** `gh pr` call in Phases 3 and 4. This is mandatory, not optional: when the worktree has more than one remote (e.g. a fork `origin` plus an `upstream`), `gh` resolves the *default* repo ambiguously and routinely picks the **upstream** — which would query for, and open, the PR against the wrong repository. Pinning `--repo` to the branch's actual push target (`origin`) is the only correct behavior.
+
+If the origin URL is not a recognizable GitHub `<owner>/<repo>` form, HALT:
+
+> FAILED_ORIGIN_REPO_UNRESOLVED: Could not parse a GitHub `<owner>/<repo>` slug from the
+> origin URL `<url>`. /relay-pr pins `gh pr` calls to this repo to avoid targeting an
+> upstream remote. Ensure `origin` points at a GitHub repository (or set the slug
+> explicitly), then re-run `/relay-pr <feature>`.
+
 ---
 
 ## Phase 2: PUSH
@@ -256,7 +270,7 @@ If the push exits **zero**: the branch is now at `origin/feature/<feature>`.
 Run:
 
 ```bash
-gh pr list --head feature/<feature> --state open --json url --jq '.[].url'
+gh pr list --repo <origin-repo> --head feature/<feature> --state open --json url --jq '.[].url'
 ```
 
 If the output is **non-empty** (an open PR already exists for this head branch):
@@ -267,7 +281,7 @@ If the output is **empty**: no open PR exists. Continue to Step 2.
 
 ### Step 2 — PR title derivation
 
-Read `PRPs/reports/<feature>/orchestrator-run.json`. If the file exists and is valid JSON, extract the `prd_path` field. Read the file at `prd_path`. Find the first line starting with `# ` and extract everything after `# ` as `<prd-title>`.
+Read `PRPs/reports/<feature>/orchestrator-run.json`. If the file exists and is valid JSON, extract the `prd_path` field. Read the file at `prd_path`. Find the first line starting with `# ` and extract everything after `# ` as `<prd-title>`. Then **strip inline Markdown formatting** from `<prd-title>` — remove backticks (`` ` ``) and leading/trailing asterisks (`*`) and underscores (`_`) — because GitHub renders PR titles as plain text, so Markdown syntax appears literally (e.g. a heading ``# `/relay-pr` Command`` yields the title `/relay-pr Command`, not ``` `/relay-pr` Command ```).
 
 Compose the PR title:
 
@@ -325,6 +339,7 @@ Compose the `gh pr create` command:
 
 ```bash
 gh pr create \
+  --repo <origin-repo> \
   --base <resolved-base> \
   --head feature/<feature> \
   --title "<pr-title>" \
@@ -335,6 +350,7 @@ If `draft_flag = true`, append `--draft`:
 
 ```bash
 gh pr create \
+  --repo <origin-repo> \
   --base <resolved-base> \
   --head feature/<feature> \
   --title "<pr-title>" \
