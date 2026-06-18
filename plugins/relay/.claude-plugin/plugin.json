@@ -1,6 +1,6 @@
 {
   "name": "relay",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "Autonomous feature delivery for Claude Code: a single prompt takes a feature from PRD to merged PR via orchestrated writer/reviewer agent pairs and a Test Runner that closes the loop.",
   "author": {
     "name": "Fabio Martins Barreto",

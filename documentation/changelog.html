@@ -30,6 +30,23 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
+      <h2 id="v0-15-0">0.15.0 — 2026-06-17</h2>
+
+      <p>Ships <code>/relay-pr</code>, the second Pillar 3 command, completing the operator&rsquo;s push + pull-request step between <code>/relay-commit</code> (local commit) and <code>/relay-approve</code> (merge). It is a deterministic infra command &mdash; no LLM, no writer/reviewer split: it resolves <code>.worktrees/&lt;feature&gt;/</code>, verifies the branch and a clean working tree (<code>FAILED_UNCOMMITTED_CHANGES</code> &rarr; run <code>/relay-commit</code>), enforces the test-review gate only when <code>run.json</code> exists, pushes non-forced only when local is ahead of remote (<code>FAILED_BRANCH_DIVERGENCE</code> on a non-fast-forward; never <code>--force</code>), detects an existing open PR idempotently via <code>gh pr list</code>, and runs <code>gh pr create</code> with the redacted <code>final-report.md</code> as <code>--body-file</code> (minimal generated body when test artifacts are absent). Supports <code>--draft</code> and <code>--base &lt;ref&gt;</code>; writes <code>pr_url</code> back to <code>orchestrator-run.json</code> (best-effort). Plugin manifest version bumped <code>0.14.0</code> &rarr; <code>0.15.0</code> per the 2026-04-30 &sect;7.5 binding contract (the change ships a plugin asset).</p>
+
+      <h3 id="v0-15-0-added">Added</h3>
+      <ul>
+        <li><strong><code>plugins/relay/commands/relay-pr.md</code></strong> &mdash; the <code>/relay-pr &lt;feature-name&gt;</code> command. Phase 0 worktree preconditions + 4-phase protocol (assess/gate &rarr; push &rarr; PR body &rarr; create + output); idempotent existing-PR detection, framework-conditional test-review gate, conditional <code>final-report.md</code> generation with redaction, non-forced push. Analogous to <code>/relay-commit</code>, extended for push + PR creation.</li>
+      </ul>
+
+      <h3 id="v0-15-0-changed">Changed</h3>
+      <ul>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong> &mdash; version bumped <code>0.14.0</code> &rarr; <code>0.15.0</code> per the 2026-04-30 &sect;7.5 binding contract. Users running <code>/plugin</code> after pulling this version get a fresh <code>relay/0.15.0/</code> cache directory with <code>/relay-pr</code> registered.</li>
+        <li><strong><code>documentation/reference/commands.html</code></strong> &mdash; the <code>/relay-pr</code> entry flipped from &ldquo;planned&rdquo; to a <code>badge--done</code> implemented entry with Mode / Preconditions detail.</li>
+        <li><strong><code>documentation/roadmap/status.html</code></strong> &mdash; Phase 4 Scope cell moved <code>/relay-pr</code> from the pending list to the shipped list (badge stays <code>partial</code> &mdash; <code>/relay-approve</code> pending).</li>
+        <li><strong><code>docs/api-reference.md</code></strong> and <strong><code>docs/context/architecture.md</code></strong> &mdash; <code>/relay-pr</code> row flipped to implemented; command-count and Phase 4 / Commands rows updated to name <code>/relay-pr</code> as shipped v0.15.0.</li>
+      </ul>
+
       <h2 id="v0-14-0">0.14.0 — 2026-06-17</h2>
 
       <p>Ships <code>/relay-commit</code>, the first Pillar 3 command, completing the operator&rsquo;s commit step between <code>/relay-execute</code> (which terminates with uncommitted changes) and <code>/relay-pr</code>. It is a deterministic infra command &mdash; no LLM, no writer/reviewer split: it resolves <code>.worktrees/&lt;feature&gt;/</code>, verifies the worktree is on branch <code>feature/&lt;feature&gt;</code> (<code>FAILED_WRONG_BRANCH</code>) and exists (<code>FAILED_MISSING_WORKTREE</code>), checks idempotency via <code>git status --porcelain</code> (clean worktree exits 0 with &ldquo;Nothing to commit&rdquo;), generates a commit message from <code>PRPs/reports/&lt;feature&gt;/orchestrator-run.json</code> + the source PRD title (fallback <code>feat(&lt;feature&gt;): implement via relay</code>), stages with <code>git -C .worktrees/&lt;feature&gt;/ add -A</code>, and commits without ever passing <code>--no-verify</code>. Local only &mdash; no push, no network calls. The success-path next-command pointer uses the plugin-namespaced <code>/relay:relay-pr</code> form per the 0.13.1 convention. The <code>relay-commit-command</code> PRD and plans were already <code>APPROVED</code> and archived on this branch; this release ports the previously-unmerged command implementation onto <code>development</code> and flips every documentation surface from planned to shipped. Plugin manifest version bumped <code>0.13.1</code> &rarr; <code>0.14.0</code> per the 2026-04-30 &sect;7.5 binding contract (the change ships a plugin asset).</p>

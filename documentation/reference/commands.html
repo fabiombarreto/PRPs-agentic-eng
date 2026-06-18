@@ -21,7 +21,7 @@
       </div>
 
       <h1>Commands</h1>
-      <p class="page-subtitle">The full slash-command surface of the relay plugin. Thirteen commands plus one Pillar 3 placeholder, organized by role (writer / reviewer / infra / orchestrator / Pillar 3). Each command is invocable on its own for testing or manual intervention; the orchestrator (<code>/relay-execute</code>) composes the Pillar 2 stages into a full run.</p>
+      <p class="page-subtitle">The full slash-command surface of the relay plugin. Fourteen commands plus one Pillar 3 placeholder, organized by role (writer / reviewer / infra / orchestrator / Pillar 3). Each command is invocable on its own for testing or manual intervention; the orchestrator (<code>/relay-execute</code>) composes the Pillar 2 stages into a full run.</p>
 
       <h2 id="happy-path">The happy path</h2>
 
@@ -242,16 +242,16 @@
         <dd>P0: argument non-empty; P1: <code>.worktrees/&lt;feature&gt;/</code> exists (<code>FAILED_MISSING_WORKTREE</code> with instruction to run <code>/relay-worktree &lt;feature&gt;</code> first); P2: worktree branch is <code>feature/&lt;feature&gt;</code> (<code>FAILED_WRONG_BRANCH</code> showing actual branch vs expected).</dd>
       </div>
 
-      <h3 id="relay-pr"><code>/relay-pr &lt;feature-name&gt;</code></h3>
+      <h3 id="relay-pr"><code>/relay-pr &lt;feature-name&gt;</code> <span class="badge badge--done">implemented</span></h3>
       <div class="kv">
         <dt>Input</dt>
         <dd>Worktree branch with a committed implementation (produced by <code>/relay-commit</code>), green tests, and all reviews <code>APPROVED</code>.</dd>
         <dt>Output</dt>
         <dd>Branch pushed to origin (if not already ahead); pull request opened on GitHub via <code>gh pr create</code>; <code>PRPs/reports/&lt;feature&gt;/final-report.md</code> embedded as the PR description.</dd>
-        <dt>Notes</dt>
-        <dd>Verifies branch state before pushing &mdash; idempotent if branch was already pushed. Uses <code>gh</code> CLI under the hood.</dd>
-        <dt>Status</dt>
-        <dd>Planned &mdash; not yet implemented.</dd>
+        <dt>Mode</dt>
+        <dd>Deterministic infra command (no LLM, no agent, no writer/reviewer split). Pure <code>git</code> + <code>gh</code> operations scoped to the worktree via <code>git -C .worktrees/&lt;feature&gt;/</code>. Idempotent: existing-PR detection via <code>gh pr list --head feature/&lt;feature&gt; --state open --json url</code> exits 0 with the existing URL; non-forced push (never <code>--force</code>) is a no-op when local matches remote. See <code>plugins/relay/commands/relay-pr.md</code>.</dd>
+        <dt>Preconditions</dt>
+        <dd>P0: argument non-empty; <code>.worktrees/&lt;feature&gt;/</code> exists (<code>FAILED_MISSING_WORKTREE</code>) on branch <code>feature/&lt;feature&gt;</code> (<code>FAILED_WRONG_BRANCH</code>); clean working tree (<code>FAILED_UNCOMMITTED_CHANGES</code> &mdash; run <code>/relay-commit</code> first); test-review gate enforced only when <code>run.json</code> exists (<code>FAILED_TEST_REVIEW_NOT_APPROVED</code>); non-fast-forward push halts (<code>FAILED_BRANCH_DIVERGENCE</code>).</dd>
       </div>
 
       <h3 id="relay-approve"><code>/relay-approve &lt;pr&gt;</code></h3>
