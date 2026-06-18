@@ -60,14 +60,31 @@ integration with the pipeline's audit trail.
 
 ## Proposed Solution
 
-A new command file `plugins/relay/commands/relay-commit.md` that follows the `prp-commit`
-structure (4 phases: precondition check → assess worktree state → stage + commit → output),
-adapted for relay's worktree architecture. The command takes `<feature>` as its sole argument,
-resolves `.worktrees/<feature>/`, runs `git status --porcelain` to detect a clean worktree
-(exits 0 idempotently), generates a commit message from `orchestrator-run.json` + PRD title,
-executes `git -C .worktrees/<feature>/ add -A && git -C .worktrees/<feature>/ commit -m
-"<message>"`, and emits a structured output block with commit hash, file count, and a next-step
-pointer to `/relay-pr`.
+A command file `plugins/relay/commands/relay-commit.md` with **two modes resolved from the
+argument** in a Phase 0 routing step (added 2026-06-18):
+
+- **Worktree mode** (original behavior) — triggered when the argument names an existing
+  `.worktrees/<arg>/`. Follows the `prp-commit` 4-phase structure (assess worktree state → commit
+  message → stage + commit → output) scoped via `git -C .worktrees/<feature>/`. Resolves the
+  worktree, verifies the branch is `feature/<feature>`, runs `git status --porcelain` to detect a
+  clean worktree (exits 0 idempotently), generates a commit message from `orchestrator-run.json` +
+  PRD title (fallback `feat(<feature>): implement via relay`), executes
+  `git -C .worktrees/<feature>/ add -A && git -C .worktrees/<feature>/ commit -m "<message>"`, and
+  emits a structured output block with commit hash and a next-step pointer to `/relay-pr`.
+  Deterministic, non-interactive, no LLM judgment.
+
+- **Current-branch mode** (new) — triggered when there is no argument, or when the argument does
+  not match a worktree (treated as a natural-language *target description*, like `prp-commit`).
+  Operates on the current repository/branch in the working directory: reviews the working-tree
+  diff, interprets the description to scope which files to stage, flags files that probably should
+  not be committed (secrets, build artifacts, editor cruft, debug scaffolding) and asks the
+  operator what to do, generates a concise conventional-commit message from the diff, then stages +
+  commits. Brings relay-commit closer to `prp-commit` for everyday commits outside the worktree
+  pipeline. The only interaction is the single suspicious-file confirmation, and only when
+  something is actually flagged.
+
+An existing worktree always wins the routing decision; a non-empty argument with no matching
+worktree falls through to current-branch mode rather than halting.
 
 ## Key Hypothesis
 
@@ -125,6 +142,25 @@ without issuing any manual git commands.
   is NOT `feature/<feature>`, when `/relay-commit <feature>` is invoked, then the command halts
   with a message showing the actual branch and the expected branch, and exits non-zero.
 
+- **AC-6 no-argument current-branch commit:** Given a repository on any branch with uncommitted
+  changes and no flagged files, when `/relay-commit` is invoked with no argument, then the command
+  stages all changes, generates a conventional-commit message from the diff, creates a commit on
+  the current branch, and reports the hash, branch, and file count — without prompting.
+
+- **AC-7 argument-as-target-description:** Given a non-empty argument that does NOT match any
+  `.worktrees/<arg>/`, when `/relay-commit <arg>` is invoked, then the command does NOT halt;
+  instead it enters current-branch mode and interprets `<arg>` as a target description scoping
+  which files are staged (e.g. `only docs`, `except lockfile`).
+
+- **AC-8 suspicious-file confirmation:** Given uncommitted changes that include a likely-unwanted
+  file (e.g. `.env`, a build artifact, or a diff introducing an obvious secret), when
+  `/relay-commit` runs in current-branch mode, then it surfaces the flagged path(s) with a reason
+  and asks the operator whether to exclude, commit anyway, or abort — and honors the answer.
+
+- **AC-9 clean-tree current-branch exit:** Given a clean working tree, when `/relay-commit` is
+  invoked in current-branch mode, then it exits 0 with "Nothing to commit — the working tree is
+  already clean" and creates no commit.
+
 ## Open Questions
 
 - [ ] Should `/relay-commit` append the commit hash back to `orchestrator-run.json` for audit
@@ -174,6 +210,9 @@ advance to `/relay-pr` without any manual git ceremony.
 | Must | `git -C .worktrees/<feature>/ add -A` + `git commit -m "<generated>"` | Core commit operation |
 | Must | Generate commit message from `orchestrator-run.json` + PRD title | Structured, context-aware message without user input |
 | Must | Fallback to `feat(<feature>): implement via relay` if audit log unreadable | Graceful degradation — commit must not fail due to missing JSON |
+| Must | Phase 0 mode routing: existing worktree → worktree mode; else → current-branch mode | One command serves both the pipeline worktree flow and everyday current-branch commits |
+| Must | Current-branch mode: review the diff, interpret a target description, generate a conventional-commit message, stage + commit on the current branch | Brings relay-commit to parity with `prp-commit` for commits outside the worktree pipeline |
+| Must | Current-branch mode: flag likely-unwanted files (secrets, build artifacts, editor cruft, debug scaffolding) and ask the operator what to do | Prevents accidental commit of secrets/artifacts; the only interaction point |
 | Should | Emit output block with commit hash, file count, and "Next: /relay-pr <feature>" | Operator confirmation and next-step guidance |
 | Should | Note in output when fallback message was used | Transparency about message source |
 | Should | Append commit hash to `orchestrator-run.json` for audit trail | Keeps pipeline audit trail complete |
@@ -248,6 +287,7 @@ written alongside implementation. Acceptance Criteria seed those tests.
 |---|-------|-------------|--------|----------|---------|----------|
 | 1 | Command file | Author `plugins/relay/commands/relay-commit.md` — 4-phase protocol analogous to prp-commit, with relay worktree preconditions, orchestrator-run.json message generation, and idempotent clean-worktree exit | complete | - | - | PRPs/plans/relay-commit-command-phase-1-command-file.plan.md |
 | 2 | Plugin bump + docs | Bump `plugins/relay/.claude-plugin/plugin.json`; update `docs/api-reference.md`, `docs/context/architecture.md`, `documentation/reference/commands.html`, `documentation/changelog.html`, `documentation/roadmap/status.html` | complete | - | 1 | PRPs/plans/relay-commit-command-phase-2-plugin-bump-docs.plan.md |
+| 3 | Dual mode (current-branch) | Add Phase 0 mode routing; add Section B current-branch mode (review diff, interpret target description, flag suspicious files + confirm, conventional-commit message from diff); split constraints by mode; bump `plugin.json`; refresh all doc surfaces | complete | - | 1 | - |
 
 ### Phase Details
 
@@ -278,6 +318,9 @@ written alongside implementation. Acceptance Criteria seed those tests.
 | Hook execution | Allow hooks to run (no `--no-verify`) | Skip hooks with `--no-verify` | Hooks represent project-level quality gates; suppressing them undermines the commit's trustworthiness |
 | Writer/reviewer split | None — single deterministic command | Add reviewer for commit message quality | `/relay-commit` is pure infra (git operations only); LLM review of a generated commit message adds no value and contradicts the "no LLM" character of the command |
 | git -C pattern | `git -C .worktrees/<feature>/ <subcommand>` for all git ops | `cd .worktrees/<feature>/ && git ...` | `-C` pattern works on both Unix and Windows without a shell `cd`; established by relay-worktree.md:140 |
+| Dual mode (2026-06-18) | Argument routes the command: existing `.worktrees/<arg>/` → worktree mode; no/other argument → current-branch mode (argument is a target description) | Keep worktree-only; or split into two commands | One command covers both the pipeline worktree commit and everyday current-branch commits; existing-worktree-wins routing is unambiguous; avoids a second command and keeps muscle memory |
+| Current-branch interactivity (2026-06-18) | Prompt the operator only for the suspicious-file decision, and only when something is flagged | Never prompt (silent `git add -A`); or fully interactive | Silent `add -A` risks committing secrets/artifacts; a single targeted confirmation is the minimum safety gate without turning the command into an interview. Worktree mode stays fully non-interactive |
+| Message source by mode (2026-06-18) | Worktree mode: `orchestrator-run.json` + PRD title. Current-branch mode: conventional-commit message inferred from the staged diff | Single message strategy for both | Worktree commits have pipeline artifacts to draw from; ad-hoc current-branch commits do not, so the diff is the only reliable source |
 
 ---
 
@@ -313,4 +356,5 @@ subdirectory without `cd` — the correct technique for worktree-scoped commands
 
 *Generated: 2026-05-18*
 *Approved: 2026-05-18*
+*Updated: 2026-06-18 — dual mode (worktree + current-branch) added (Phase 3)*
 *Status: APPROVED*

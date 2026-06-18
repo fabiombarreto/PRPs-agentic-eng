@@ -14,11 +14,12 @@ Modes for `context-builder`: `*init`, `*update`, `*validate`, `*domain`,
 
 ## Commands
 
-13 commands organized by role (12 Pillar 1–2 plus `/relay-commit` as the
-first Pillar 3 command, shipped v0.14.0), plus 1 placeholder for the
-remaining Pillar 3. All core pipeline commands are now implemented;
-`/relay-execute` ✅ orchestrator shipped in v0.9.0 completing project
-Phase 3. See `docs/decisions.md` for the decision record and rationale.
+14 commands organized by role (12 Pillar 1–2 plus `/relay-commit` and
+`/relay-pr` as the first two Pillar 3 commands, shipped v0.14.0 and
+v0.15.0), plus 1 placeholder (`/relay-approve`) for the remaining Pillar 3.
+All core pipeline commands are now implemented; `/relay-execute` ✅
+orchestrator shipped in v0.9.0 completing project Phase 3. See
+`docs/decisions.md` for the decision record and rationale.
 
 ### Happy path
 
@@ -57,7 +58,7 @@ cycle.
 |---------|-------|--------|
 | `/relay-worktree <feature-name>` ✅ **implemented** | feature name (free argument); or PRD-derived slug when invoked internally by `/relay-execute`. Sanitized to `[a-z0-9-]` max 64 chars; empty result after sanitization → HALT. `--base <ref>` flag overrides the base ref (default: `origin/main` → `origin/master` → `HEAD` fallback chain). `--no-worktree` on `/relay-execute` skips invocation entirely. | worktree at `.worktrees/<feature>/` + branch `feature/<feature>`. Idempotent: silently reuses an existing worktree when the branch matches; halts loud (`FAILED_BRANCH_DIVERGENCE`) when the worktree exists on a different branch. Bootstrap log at `PRPs/reports/<feature>/worktree-bootstrap.log` when `scripts/worktree-bootstrap.sh` runs (non-fatal on failure). Precondition halts: `FAILED_NOT_A_GIT_REPO`, `FAILED_BASE_REF_MISSING`, `FAILED_BRANCH_CONFLICT`, `FAILED_PATH_OCCUPIED`. Creation failure inside `/relay-execute` triggers graceful fallback to cwd per D3/D4 — pipeline does NOT halt on worktree creation failure. See `PRPs/prds/relay-worktree.prd.md` AC-1 through AC-9. |
 | `/relay-test <worktree>` ✅ **implemented** | worktree with code | green state or `FAILED_AFTER_N_RETRIES` / `FAILED_TIME_BUDGET_EXCEEDED` / `FAILED_OSCILLATION` / `FAILED_INFRA_UNRECOVERABLE`, or `skipped_no_test_framework` (graceful self-skip when `test_frameworks: []` or `methodology.md` absent; no `run.json` written; symmetric with `/relay-tdd` P4.a). Encapsulates B1–B4: suite execution, failure classification, auto-correction loop (see `docs/decisions.md` on `max_test_retries`, `max_test_minutes`). Delegates per-attempt work to the `test-runner` agent (`plugins/relay/agents/test-runner.md`). Produces `PRPs/reports/<feature>/run.json` plus per-attempt `record.json` and `stdout.log`. |
-| `/relay-pr <feature-name>` | worktree (`.worktrees/<feature>/`) with uncommitted implementation changes, green tests, and all reviews `APPROVED` | git commit + branch push + PR opened + `PRPs/reports/<feature>/final-report.md` |
+| `/relay-pr <feature-name>` | worktree (`.worktrees/<feature>/`) with a committed branch (produced by `/relay-commit`), green tests, and all reviews `APPROVED` | branch push (non-forced) + PR opened via `gh pr create` + `PRPs/reports/<feature>/final-report.md` (when test artifacts exist) |
 
 #### Orchestrator
 
@@ -69,8 +70,8 @@ cycle.
 
 | Command | Input | Output |
 |---------|-------|--------|
-| `/relay-commit <feature-name>` ✅ **implemented** | worktree at `.worktrees/<feature>/` on branch `feature/<feature>` with uncommitted changes | local git commit (no push). Phase 0: P0 argument non-empty; P1 worktree exists (`FAILED_MISSING_WORKTREE` with instruction to run `/relay-worktree`); P2 branch is `feature/<feature>` (`FAILED_WRONG_BRANCH` showing actual vs expected). Phase 1 idempotency via `git status --porcelain` — clean worktree exits 0 with "Nothing to commit". Phase 2 commit message from `PRPs/reports/<feature>/orchestrator-run.json` + PRD title; fallback `feat(<feature>): implement via relay`. Phase 3 `git -C .worktrees/<feature>/ add -A` + `git commit` (pre-commit hooks run; `--no-verify` never passed). Deterministic infra — no LLM, no writer/reviewer split. See `plugins/relay/commands/relay-commit.md`. |
-| `/relay-pr <feature-name>` *(planned)* | worktree with a committed branch (produced by `/relay-commit`) + green tests + all reviews `APPROVED` | branch pushed to origin (if not already) + PR opened via `gh pr create` + `PRPs/reports/<feature>/final-report.md` |
+| `/relay-commit [feature-name \| target description]` ✅ **implemented** | **Worktree mode:** an argument naming an existing `.worktrees/<arg>/` on branch `feature/<arg>` with uncommitted changes. **Current-branch mode:** no argument, or an argument that does not match a worktree (treated as a target description), against the current repo/branch. | local git commit (no push). **Phase 0 routing:** existing `.worktrees/<arg>/` → worktree mode; otherwise current-branch mode (argument is a target description — no HALT). **Worktree mode:** branch check (`FAILED_WRONG_BRANCH` showing actual vs expected); idempotency via `git status --porcelain` (clean → exit 0); message from `PRPs/reports/<arg>/orchestrator-run.json` + PRD title (fallback `feat(<arg>): implement via relay`); `git -C .worktrees/<arg>/ add -A` + commit; points to `/relay-pr`. Deterministic, non-interactive. **Current-branch mode:** reviews the diff, interprets the target description to scope staging, flags likely-unwanted files (secrets, build artifacts, editor cruft, debug scaffolding) and asks the operator to exclude / commit anyway / abort, then writes a conventional-commit message inferred from the staged diff and commits on the current branch. Both modes: pre-commit hooks run; `--no-verify` never passed; no push, no network. See `plugins/relay/commands/relay-commit.md`. |
+| `/relay-pr <feature-name>` ✅ **implemented** | worktree with a committed branch (produced by `/relay-commit`) + green tests + all reviews `APPROVED` | branch pushed to origin (if not already) + PR opened via `gh pr create` + `PRPs/reports/<feature>/final-report.md`. Phase 0 validates worktree existence (`FAILED_MISSING_WORKTREE`), branch (`FAILED_WRONG_BRANCH`), and clean tree (`FAILED_UNCOMMITTED_CHANGES` → run `/relay-commit`). Framework-conditional test-review gate (`FAILED_TEST_REVIEW_NOT_APPROVED` when `run.json` exists without an APPROVED `test-review.json`; graceful skip otherwise). Non-forced push only when local is ahead of remote (`FAILED_BRANCH_DIVERGENCE` on non-fast-forward; never `--force`). Idempotent existing-PR detection via `gh pr list --head ... --json url`. `final-report.md` (redacted) as `--body-file` when test artifacts exist; minimal body otherwise. `--draft` and `--base <ref>` flags; `pr_url` write-back to `orchestrator-run.json` (best-effort). See `plugins/relay/commands/relay-pr.md`. |
 | `/relay-approve <pr>` *(placeholder)* | PR number or URL | merge PR, delete branch + worktree, run Docs Updater and Docs Reviewer |
 
 ### Preconditions
