@@ -293,9 +293,9 @@ target_root: absolute path to the target project root</code></pre>
       <h4 id="tdd-writer-outcomes">Per-AC outcome shapes</h4>
 
       <div class="kv">
-        <dt>NEW_TEST_REQUIRED</dt><dd>The AC describes behavior not currently covered by any test in the target's test root. B7 writes a framework-idiomatic test file (pytest, vitest, jest, ExUnit, RSpec, playwright — selected from <code>methodology.md test_frameworks[0]</code>) with the AC encoded as a discriminative observable assertion. The test body sets up minimal preconditions ("Given"), triggers the action ("When"), and asserts the observable ("Then"). Comment header carries the source PRD + AC-N path for traceability.</dd>
+        <dt>NEW_TEST_REQUIRED</dt><dd>The AC describes behavior not currently covered by any test in the target's test root. B7 writes a framework-idiomatic test file (pytest, vitest, jest, ExUnit, RSpec, playwright, JUnit5 (Java, Maven/Gradle), Go <code>go test</code>, .NET/xUnit — selected from <code>methodology.md test_frameworks[0]</code>) with the AC encoded as a discriminative observable assertion. For a framework outside that list, B7 first attempts corpus discovery (mirroring the idiom of the project's existing tests) before falling back to <code>AMBIGUOUS</code>. The test body sets up minimal preconditions ("Given"), triggers the action ("When"), and asserts the observable ("Then"). Comment header carries the source PRD + AC-N path for traceability.</dd>
         <dt>EXISTING_TEST_COVERS</dt><dd>The existing-coverage scan found a test that covers the AC. B7 records the mapping <code>AC-N → existing_test_path:line</code> in the suite manifest's <code>## AC outcomes</code> table. No new test file is written; no existing test file is modified. When the existing test only partially covers the AC, B7 emits <code>NEW_TEST_REQUIRED</code> for the missing-property delta (a new test asserting only the uncovered properties).</dd>
-        <dt>AMBIGUOUS</dt><dd>The AC's prose lacks Given/When/Then concreteness, an unambiguous input/output example, or a discriminative observable that B7 can encode without inventing implementation details. Examples that trigger AMBIGUOUS: "the feature works correctly" (abstract), "performance is acceptable" (no measurable threshold), "the validateToken function returns false" (leaks imagined implementation). B7 halts with a structured message naming each ambiguous AC; partial test files for earlier-resolved ACs remain in the worktree.</dd>
+        <dt>AMBIGUOUS</dt><dd>The AC's prose lacks Given/When/Then concreteness, an unambiguous input/output example, or a discriminative observable that B7 can encode without inventing implementation details. Examples that trigger AMBIGUOUS: "the feature works correctly" (abstract), "performance is acceptable" (no measurable threshold), "the validateToken function returns false" (leaks imagined implementation). B7 halts with a structured message naming each ambiguous AC; partial test files for earlier-resolved ACs remain in the worktree. <strong>Note:</strong> precise ACs can also surface as AMBIGUOUS when the phase <em>creates</em> the types they name — that is a foundation phase, not a vague AC. The fix is to mark the plan <code>phase_type: foundation</code> (the TDD track then skips test-first for that phase) rather than to rewrite the PRD; B7's Phase 0 guard and <code>/relay-tdd</code>'s P5 precondition self-skip this case before authoring begins.</dd>
       </div>
 
       <h3 id="tdd-reviewer">tdd-reviewer <span class="badge badge--done">shipped</span></h3>
@@ -318,7 +318,7 @@ target_root: absolute path to the target project root</code></pre>
         <dt>R-MOCK-ABUSE</dt><dd>Four syntactic-categorical detections (no quantitative threshold in MVP): (1) mock of the SUT itself; (2) mock of a concrete type when an interface/protocol exists; (3) mock chained ≥3 levels deep; (4) <code>was_called</code>-only assertions without an effect check.</dd>
         <dt>R-AC-COVERAGE</dt><dd>Every in-scope AC has ≥1 test reference (test name encoding the AC's observable, comment header naming the AC, or explicit <code>EXISTING_TEST_COVERS</code> mapping). Per yrkan.com Requirements Traceability Matrix convention; pass threshold for MVP: 100%.</dd>
         <dt>R-DUPLICATE</dt><dd>Two tests asserting the same property without discriminative input variance (same equivalence class). Fails the pair, not just one.</dd>
-        <dt>R-RED-LEGITIMATE</dt><dd>Hybrid static + dynamic check. <strong>Dynamic</strong>: invokes the project's test command via <code>Bash</code>; non-zero exit + assertion-failure output = <code>passed: true</code> (red for the right reason); non-zero exit + import/compile/setup-error output = <code>passed: false</code> (broken setup); zero exit = <code>passed: false</code> (suite green pre-implementation). <strong>Static fallback</strong>: when <code>Bash</code> is unavailable (framework not installed, sandbox restriction, Docker not running) → <code>passed: null</code> with <code>reason: "degraded — test framework execution unavailable: …"</code> per AC-13. The aggregate verdict treats <code>null</code> as non-blocking when all other rows pass.</dd>
+        <dt>R-RED-LEGITIMATE</dt><dd>Hybrid static + dynamic check. <strong>Dynamic</strong>: invokes the project's test command via <code>Bash</code>; non-zero exit + assertion-failure output = <code>passed: true</code> (red for the right reason); non-zero exit + import/compile/setup-error output is classified via the <strong>seam-set discriminator</strong> — if every unresolved symbol is in the plan's <code>## Files to Change</code> <code>CREATE</code>/<code>UPDATE</code> set the failure is legitimate red-by-design (<code>passed: true</code>, the test drives a not-yet-created production symbol; this makes compiled-language red first-class), otherwise it is broken setup (<code>passed: false</code>); zero exit = <code>passed: false</code> (suite green pre-implementation). <strong>Static fallback</strong>: when <code>Bash</code> is unavailable (framework not installed, sandbox restriction, Docker not running) → <code>passed: null</code> with <code>reason: "degraded — test framework execution unavailable: …"</code> per AC-13. The aggregate verdict treats <code>null</code> as non-blocking when all other rows pass.</dd>
       </div>
 
       <p>
@@ -427,6 +427,26 @@ target_root: absolute path to the target project root</code></pre>
         Empty <code>findings</code> with a non-null <code>degradation_reason</code> is a correct outcome (e.g., WebSearch unavailable, codebase empty) — never a fabricated fill.
       </p>
 
+      <h3 id="docs-updater">docs-updater <span class="badge badge--done">shipped</span></h3>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/agents/docs-updater.md</code></dd>
+        <dt>Model</dt><dd>sonnet</dd>
+        <dt>Invoked by</dt><dd><code>/relay-approve</code> command (post-merge, before <code>docs-reviewer</code>)</dd>
+        <dt>Responsibility</dt><dd>Pillar 3 WRITER. Given a merged PR, reads <code>gh pr diff &lt;pr&gt;</code> and the source PRD (via <code>orchestrator-run.json prd_path</code>), compares the change set against the <code>docs/</code> knowledge base, and makes surgical additive-only updates mirroring the context-builder <code>*update</code> PRESERVE-ENTIRELY rules. Writes a docs-update manifest at <code>PRPs/reports/&lt;feature&gt;/docs-update.md</code> ending <code>*Status: DRAFT*</code>. Scoped strictly to <code>docs/context/</code> and <code>docs/domain/</code> &mdash; the <code>documentation/</code> rendered site is out of scope.</dd>
+        <dt>Never does</dt><dd>Write under <code>.claude/</code>. Inject relay plugin defaults into a target <code>decisions.md</code>. Self-flip the manifest status to APPROVED (the Docs Reviewer owns that flip). Touch the <code>documentation/</code> HTML site. Regenerate PRESERVE-ENTIRELY files wholesale.</dd>
+      </div>
+
+      <h3 id="docs-reviewer">docs-reviewer <span class="badge badge--done">shipped</span></h3>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/agents/docs-reviewer.md</code></dd>
+        <dt>Model</dt><dd>sonnet</dd>
+        <dt>Invoked by</dt><dd><code>/relay-approve</code> command (post-merge, immediately after <code>docs-updater</code>)</dd>
+        <dt>Responsibility</dt><dd>Pillar 3 REVIEWER. Validates the Docs Updater&rsquo;s <code>docs-update.md</code> manifest and its surgical <code>docs/</code> edits against an 8-item rubric (<code>D-R1</code>&ndash;<code>D-R8</code>: diff-traceability, PRESERVE-ENTIRELY, no fabricated decisions, no plugin-default injection, no <code>.claude/</code> writes, <code>documentation/</code> untouched, KNOWLEDGE_BASE index consistency, manifest well-formedness). Appends every verdict to <code>PRPs/reports/&lt;feature&gt;/docs-review.jsonl</code> with all rubric outcomes recorded &mdash; no short-circuit. Owns the manifest <code>*Status: DRAFT*</code>&rarr;<code>*Status: APPROVED*</code> flip (two-line <code>Edit</code>) on rubric pass. Emits <code>APPROVED</code> (flip&thinsp;+&thinsp;log) or <code>CHANGES_REQUESTED</code> (failing D-R&lt;i&gt; IDs&thinsp;+&thinsp;reasons, no flip). Mirrors <code>plan-reviewer</code> (reviewer-with-flip); contrasts <code>post-green-reviewer</code> (no flip).</dd>
+        <dt>Never does</dt><dd>Short-circuit the rubric. Flip without all 8 D-R rows passing. Modify production code or tests. Touch the <code>documentation/</code> rendered HTML site. Prompt the user beyond surfacing ambiguities flagged by the rubric.</dd>
+      </div>
+
       <h2 id="planned">Planned</h2>
 
       <p>
@@ -439,8 +459,6 @@ target_root: absolute path to the target project root</code></pre>
         </thead>
         <tbody>
           <tr><td><code>report-pr-creator</code></td><td>Assembles report and opens the PR</td><td>8 — Report + PR</td></tr>
-          <tr><td><code>docs-updater</code></td><td>Post-merge: updates docs/context and docs/domain</td><td>Pillar 3</td></tr>
-          <tr><td><code>docs-reviewer</code></td><td>Post-merge: reviews Docs Updater output, asks user about ambiguous rules</td><td>Pillar 3</td></tr>
         </tbody>
       </table>
 

@@ -416,7 +416,31 @@ Re-read `<target_root>/docs/context/methodology.md` (already read in P5 — re-r
   ```
   Proceed directly to Phase A.4. No suite manifest is produced.
 
-- If `tdd: true`: proceed to Step A.3.5.1.
+- If `tdd: true`: proceed to the phase_type gate below.
+
+**phase_type gate (foundation self-skip):** `Read` `current_plan_path`'s
+`## Metadata` table and inspect the `phase_type` row (populated by the
+plan-writer, or by the plan-reviewer's Phase 0 pre-pass during
+A.3.2/A.3.2.x).
+
+- If `phase_type: foundation`: A.3.5 self-skips. A foundation phase
+  creates the seam (entities, repositories, resolvers,
+  schema/migrations) that later phases depend on — its ACs are precise
+  but not test-first-authorable until the seam exists, so the
+  implementer materializes it and the feature phases that follow run
+  fully test-first. Append to `orchestrator_run_log`:
+  ```json
+  {"phase": <N>, "stage": "tdd", "outcome": "skipped_foundation_phase"}
+  ```
+  Proceed directly to Phase A.4. No suite manifest is produced. (This
+  is symmetric with A.3.5.1's inline adoption of `/relay-tdd`, whose P5
+  gate self-skips the same case; the gate is duplicated here so the
+  orchestrator records the correct `skipped_foundation_phase` outcome
+  rather than surfacing the command's self-skip message as a phase
+  result.)
+
+- Otherwise (`phase_type` absent, or `feature`/`scaffold`/`docs`/
+  `refactor`): proceed to Step A.3.5.1.
 
 Set `tdd_review_attempts = 0`.
 
@@ -437,10 +461,22 @@ The Writer either:
     "phase_N": <N>,
     "halting_stage": "tdd_writer",
     "ambiguous_acs": <captured AC list from B7 halt>,
-    "orchestrator_run_log": <orchestrator_run_log>
+    "orchestrator_run_log": <orchestrator_run_log>,
+    "manual_recovery_paths": [
+      "If the ambiguous ACs are genuinely vague (no Given/When/Then, no explicit input/output, or they name an implementation method rather than an observable) — tighten those ACs in the source PRD and re-run /relay-execute.",
+      "If the ambiguous ACs are precise (clear Given/When/Then) but this phase CREATES the seam they describe — the types/methods do not exist yet, so a test-first suite cannot be authored without referencing non-existent symbols (which breaks a compiled language's test source set) or inventing production signatures (forbidden for B7). This is an ordering problem, not an AC-quality problem: mark the plan's ## Metadata `phase_type: foundation` and re-run /relay-execute. A.3.5's phase_type gate will self-skip test-first for this phase, the implementer will materialize the seam, and the feature phases that follow will run fully test-first."
+    ]
   }
   ```
-  HALT the orchestrator (the user must tighten the PRD ACs and re-run).
+  HALT the orchestrator with the recovery guidance from
+  `manual_recovery_paths`. **Do not assume the ACs are vague** — B7's
+  `AMBIGUOUS` verdict fires both for genuinely-vague ACs and for
+  precise-but-not-yet-seam-backed ACs on a foundation phase.
+  Distinguish the two in the surfaced message: recommend tightening the
+  PRD ACs **only** when the ACs actually lack Given/When/Then
+  concreteness; when the ACs are precise and the phase creates the
+  types under test, recommend the `phase_type: foundation` escape
+  hatch instead.
 
 Record the suite path as `current_suite_path`.
 

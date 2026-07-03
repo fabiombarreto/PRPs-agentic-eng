@@ -39,7 +39,7 @@
     "title": "TDD opt-in",
     "path": "concepts/tdd-track.html",
     "category": "Concepts",
-    "excerpt": "TDD is an explicit opt-in via docs/context/methodology.md with tdd: true. Heuristic activation is forbidden — explicit declaration only. When active, tests are written before implementation by the TDD Writer."
+    "excerpt": "TDD is an explicit opt-in via docs/context/methodology.md with tdd: true. Heuristic activation is forbidden — explicit declaration only. When active, tests are written before implementation by the TDD Writer. Foundation phases (phase_type: foundation) skip test-first in compiled languages (Java/JUnit, Go, .NET) so the seam can be created first."
   },
   {
     "title": "PRP artifact paths",
@@ -87,13 +87,13 @@
     "title": "Commands",
     "path": "reference/commands.html",
     "category": "Reference",
-    "excerpt": "Thirteen commands plus one Pillar 3 placeholder. /relay-plan now supports a description-only (PRD-less) mode in addition to the standard APPROVED-PRD mode. Full command surface by role: writers, reviewers, infra, orchestrator, and Pillar 3."
+    "excerpt": "Fourteen commands, no placeholder. All Pillar 3 commands shipped: /relay-commit (v0.14.0), /relay-pr (v0.15.0), /relay-approve (v0.17.0). /relay-plan supports a description-only (PRD-less) mode in addition to the standard APPROVED-PRD mode. Full command surface by role: writers, reviewers, infra, orchestrator, and Pillar 3."
   },
   {
     "title": "Agents",
     "path": "reference/agents.html",
     "category": "Reference",
-    "excerpt": "Specialized Claude Code agents invoked by commands. Currently implemented: test-runner (B1 + B3 failure classifier) and post-green-reviewer (B5). Each has focused prompt, narrow tool allowlist, structured output."
+    "excerpt": "Specialized Claude Code agents invoked by commands. Implemented: test-runner, post-green-reviewer, prd-writer, prd-reviewer, research-web, research-codebase, plan-writer, plan-reviewer, implementer, code-reviewer, code-reviewer-semantic, tdd-writer, tdd-reviewer, docs-updater (Pillar 3 writer, v0.17.0), docs-reviewer (Pillar 3 reviewer, v0.17.0). Each has focused prompt, narrow tool allowlist, structured output."
   },
   {
     "title": "Skills",

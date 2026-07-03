@@ -139,6 +139,36 @@ human edit or an explicit user declaration during `*init` can.
 
       <p>The Test Runner downstream respects the TDD contract: B4 (auto-correction loop) explicitly refuses to weaken tests that the TDD Reviewer approved, and B5 (post-green review) uses the TDD suite as the baseline for "tests were not removed."</p>
 
+      <h2 id="foundation-phases">Foundation phases (compiled languages)</h2>
+
+      <p>
+        Test-first has a structural blind spot: the very first phase of a feature often <strong>creates the seam</strong> — the entities, repositories, resolvers, interfaces, schema types, and migrations that every later phase builds on. A test for that phase has nowhere to stand. It either references types that do not exist yet, or it invents the production signatures the Writer is forbidden to guess.
+      </p>
+
+      <p>
+        In an interpreted language this is survivable: a reference to a not-yet-created symbol fails at run time, one test at a time. In a <strong>compiled</strong> language (Java/JUnit, Go, C#/.NET) it is fatal — a reference to a missing type breaks compilation of the entire test source set, so no test can run at all. The result was a dead end: the TDD Writer returned <code>AMBIGUOUS</code> for the seam phase's Acceptance Criteria even though those ACs were perfectly precise. The problem was never AC quality; it was <strong>ordering</strong>.
+      </p>
+
+      <p>
+        relay resolves this with a plan-metadata value: <code>phase_type: foundation</code>.
+      </p>
+
+      <div class="kv">
+        <dt>What it marks</dt><dd>A phase that creates the seam later phases depend on, where the phase itself introduces the types its ACs name. Distinct from <code>scaffold</code> (config-only, no application source) and from <code>feature</code> (exercises existing types).</dd>
+        <dt>What it does</dt><dd>The TDD track <strong>skips test-first</strong> for that phase. <code>/relay-tdd</code> self-skips at precondition P5; <code>/relay-execute</code> logs <code>skipped_foundation_phase</code> and proceeds straight to the Implementer, which materializes the seam. The feature phases that follow run fully test-first against the now-existing types.</dd>
+        <dt>How it's set</dt><dd>Inferred conservatively by the Plan Writer and the Plan Reviewer's Phase 0 pre-pass, and honored when a human annotates it explicitly. Its legitimate validation is a compile/build/migration check (<code>mvn test-compile</code>, <code>go build</code>, <code>dotnet build</code>), so it is also exempt from the framework-mismatch coherence check.</dd>
+      </div>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Red-by-design is first-class in compiled languages</div>
+        <p>For the feature phases that follow a foundation phase, the TDD Reviewer's red-legitimacy check applies a <strong>seam-set discriminator</strong>: a compile error whose unresolved symbols are all in the plan's <code>## Files to Change</code> <code>CREATE</code>/<code>UPDATE</code> set is a legitimate red-by-design failure — the test drives a production symbol that does not exist yet. Only unresolved symbols <em>outside</em> that set (typos, wrong imports, missing dependencies) or a pure test-source syntax error count as broken setup.</p>
+      </div>
+
+      <div class="callout callout--warn">
+        <div class="callout__title">If a foundation phase is misclassified</div>
+        <p>When the TDD Writer returns <code>AMBIGUOUS</code> for ACs that are clearly written (they have Given/When/Then), the phase is usually a foundation phase that was tagged <code>feature</code>. The fix is not to rewrite the PRD — it is to mark the plan <code>phase_type: foundation</code> and re-run. <code>/relay-execute</code>'s halt message now surfaces this recovery path explicitly.</p>
+      </div>
+
       <h2 id="what-doesnt-change">What doesn't change when TDD is active</h2>
 
       <ul>

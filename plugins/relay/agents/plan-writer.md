@@ -483,11 +483,31 @@ Assemble in this order:
      no application source files.
    - `refactor` — phases whose primary action is restructuring
      existing code without adding capability (move, rename, extract).
+   - `foundation` — phases that CREATE the seam later phases depend
+     on: new domain entities, repositories, resolvers, interfaces,
+     GraphQL/schema types, or database migrations, where the phase
+     itself introduces the types/methods its Acceptance Criteria name
+     (so those ACs cannot be exercised test-first until the seam
+     exists). Distinct from `scaffold`: a foundation phase writes real
+     application source (not config-only), and its VALIDATE commands
+     are compile/build/migration checks (`mvn test-compile`,
+     `go build`, `dotnet build`, migration dry-run) rather than
+     filesystem probes. Signals: the `## Files to Change` table is
+     dominated by `CREATE` rows for source modules that later phases
+     reference; the phase Goal names "foundation", "seam", "scaffold
+     the domain", or "create the entity/repository/schema". This value
+     is consumed by the TDD track (`/relay-tdd` P5, `/relay-execute`
+     A.3.5) to skip test-first for the phase. Assign it only when the
+     phase genuinely creates types under test — an incorrect
+     `phase_type: foundation` on a behavioral feature phase would
+     silently skip its TDD suite.
    - `feature` — default; any phase not matching the above signals.
-   The `phase_type` field is consumed by `plan-reviewer` Phase 0 and
-   the `R-COH-VALIDATE-FRAMEWORK-MISMATCH` exemption branch. Populate
-   it accurately: an incorrect `phase_type: scaffold` on a feature
-   phase would bypass the framework-mismatch check incorrectly.
+   The `phase_type` field is consumed by `plan-reviewer` Phase 0, the
+   `R-COH-VALIDATE-FRAMEWORK-MISMATCH` exemption branch, and the TDD
+   track's foundation self-skip. Populate it accurately: an incorrect
+   `phase_type: scaffold` or `phase_type: foundation` on a feature
+   phase would bypass the framework-mismatch check or skip the TDD
+   suite incorrectly.
 6. `## Mandatory Reading` — table of files (priority, path, lines,
    why) drawn from research-codebase findings + the PRD's Phase
    Details. Every row's path must come from a real research finding

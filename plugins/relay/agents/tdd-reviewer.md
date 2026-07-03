@@ -81,9 +81,22 @@ Read these files from `<target_root>`:
   - Aggregate verdict from B7 (`SUITE_DRAFT_WRITTEN` or
     `EXISTING_COVERAGE_SUFFICIENT`).
   - The source PRD path.
+  - The source plan path (the manifest's `# Source plan:` header).
   - The list of new test files written this session.
   - The list of `EXISTING_TEST_COVERS` mappings (`AC-N →
     path:line`).
+- `<source_plan_path>` (from the manifest header) — Read its
+  `## Files to Change` table and capture the set of symbols/paths
+  marked `CREATE` or `UPDATE`. This is the *seam set*: the
+  types/methods/modules this phase is about to introduce. The
+  `R-RED-LEGITIMATE` check (Step 1.6.b, 1.6.c) uses it to tell a
+  legitimate red-by-design failure (test references a symbol in the
+  seam set that does not exist yet) apart from genuinely broken setup
+  (test references a symbol that is NOT in the seam set — a typo,
+  wrong import path, or misconfigured framework). This distinction
+  matters most in compiled languages, where a reference to a
+  not-yet-created production symbol surfaces as a compile error over
+  the whole test source set rather than a runtime import error.
 - `<source_prd_path>` (from the manifest) — the source PRD.
   Locate `## Acceptance Criteria (test scenarios)` and extract
   every AC-N (id, name, body).
@@ -262,9 +275,30 @@ Capture stdout + stderr + exit code via `BashOutput`.
   red-for-legitimate-reason. → `passed: true`.
 - **Non-zero exit code with import/compile/setup-error output**
   (`ImportError`, `ModuleNotFoundError`, `SyntaxError`, compile
-  errors, `cannot find module`, fixture setup errors, framework
-  bootstrap errors): red but for the wrong reason. → `passed: false`,
-  `reason: "broken setup — import/compile error: <first error line>"`.
+  errors — `cannot find symbol`, `undefined: <name>`, `type or
+  namespace ... could not be found` — `cannot find module`, fixture
+  setup errors, framework bootstrap errors): apply the **seam-set
+  discriminator** before classifying (this is the compiled-language
+  refinement — a reference to a not-yet-created production symbol is a
+  *legitimate* red-by-design failure, not broken setup):
+  - Extract the unresolved symbol(s) named in the error output (the
+    class/type/function/module the compiler or importer could not
+    resolve).
+  - **If every unresolved symbol is in the seam set** (the plan's
+    `## Files to Change` `CREATE`/`UPDATE` set captured in Phase 0):
+    red-for-legitimate-reason. The test fails only because the
+    production symbol it drives does not exist yet — exactly the TDD
+    red state. → `passed: true`,
+    `reason: "legitimate red-by-design — test references seam symbol(s) not yet implemented: <symbols> (in plan ## Files to Change)"`.
+  - **If any unresolved symbol is NOT in the seam set** (a typo, a
+    wrong import path, a genuinely missing dependency, or a
+    misconfigured framework): red but for the wrong reason. →
+    `passed: false`,
+    `reason: "broken setup — unresolved symbol <symbol> is not in the plan's seam set: <first error line>"`.
+  - **If the error is a pure syntax error in the test file itself**
+    (malformed test source, not an unresolved reference): broken
+    setup regardless of the seam set. → `passed: false`,
+    `reason: "broken setup — test source syntax error: <first error line>"`.
 - **Bash invocation itself failed** (command not found, exit
   code 127, framework not installed, sandbox restriction blocking
   Bash, Docker not running): degraded environment. →

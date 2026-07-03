@@ -106,6 +106,17 @@ Before Phase 1, read these files from `<target_root>`:
     match between framework's test-file extension and the source
     module under test — see Step 2.2).
 - `<plan_path>` — read end-to-end. In particular:
+  - Locate `## Metadata` and read the `phase_type` row. **If
+    `phase_type: foundation`:** `/relay-tdd`'s P5 gate should have
+    self-skipped this phase (foundation phases create the seam — the
+    types/methods the tests would reference do not exist yet, so a
+    test-first suite either references non-existent symbols, which in
+    a compiled language breaks the whole test source set, or invents
+    production signatures, which is forbidden). You should not have
+    been invoked. Halt with
+    `unexpected invocation: phase_type: foundation should skip the TDD
+    track at the command layer (see /relay-tdd P5)` and exit. Do NOT
+    write any test file or manifest.
   - Locate `## Source PRD` and extract the PRD path.
   - Locate `## Files to Change` to see what the Implementer will
     do (informational only — you do not act on it).
@@ -181,9 +192,36 @@ discovered during the existing-coverage scan):
   `test "..." do ... end` body.
 - **RSpec** → `spec/<feature>/<ac_slug>_spec.rb` with `describe`
   + `it` + `expect`.
-- **Other** → emit `AMBIGUOUS` with reason
-  `framework <X> not in supported template list` if no convention
-  is discoverable from the existing test corpus.
+- **JUnit5 (Java)** → `src/test/java/<package-path>/<Feature><AcSlug>Test.java`
+  (Maven/Gradle standard layout) with a `class <Feature><AcSlug>Test`
+  carrying `@Test void <acSlug>() { ... }` methods, `org.junit.jupiter.api`
+  imports, and `org.junit.jupiter.api.Assertions.*` (or AssertJ
+  `assertThat` if the existing corpus uses it) for the observable
+  assertion. Derive `<package-path>` by mirroring the package of the
+  source module under test (discovered during the existing-coverage
+  scan); when the phase creates the module (no source yet), mirror the
+  package named in the plan's `## Files to Change` rows. If the phase
+  creates the type under test rather than exercising an existing one,
+  it is a foundation phase — see the foundation guard in Phase 0; you
+  should not be authoring tests for it.
+- **Go (`go test`)** → `<feature>_<ac_slug>_test.go` in the same
+  package directory as the source under test, with
+  `func Test<AcSlug>(t *testing.T) { ... }` and `t.Fatalf` /
+  `t.Errorf` on the observable. Use table-driven form only when the AC
+  names a discriminative range of inputs.
+- **.NET / xUnit (C#)** → `<Feature><AcSlug>Tests.cs` under the
+  project's test directory with a `public class <Feature><AcSlug>Tests`
+  carrying `[Fact]` (or `[Theory]` + `[InlineData]` when the AC names a
+  discriminative input range) methods and `Assert.*` on the observable.
+- **Other** → first attempt corpus discovery: `Glob` + `Read` the
+  target's existing test files and, if a consistent framework
+  convention is discoverable (file-naming pattern, assertion idiom,
+  test-annotation style), synthesize the test file in that idiom and
+  proceed as `NEW_TEST_REQUIRED`. Only when the framework is neither
+  in the list above **nor** discoverable from an existing test corpus,
+  emit `AMBIGUOUS` with reason `framework <X> not in supported
+  template list and no convention discoverable from the existing test
+  corpus`.
 
 Write the test file with framework-idiomatic syntax. The test
 body MUST:

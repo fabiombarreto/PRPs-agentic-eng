@@ -135,8 +135,38 @@ Do NOT dispatch the Writer. Do NOT write any artifact.
 
 #### P4.c — proceed
 
-If `tdd: true` AND `test_frameworks` is non-empty: proceed to
-Phase A.
+If `tdd: true` AND `test_frameworks` is non-empty: proceed to P5.
+
+### P5 — plan phase_type gate (foundation self-skip)
+
+`Read` the plan's `## Metadata` table and inspect the `phase_type`
+row (populated by the plan-writer, or by the plan-reviewer's Phase 0
+pre-pass).
+
+If `phase_type: foundation`:
+
+Emit verbatim and exit 0:
+
+> Foundation phase (phase_type: foundation) — test-first skipped. A
+> foundation phase creates the seam (the entities, repositories,
+> resolvers, schema/migrations that later phases depend on); the types
+> and methods a test would reference do not exist yet, so authoring a
+> test-first suite would either reference non-existent symbols (which
+> breaks the whole test source set in a compiled language) or invent
+> production signatures (forbidden for B7). The implementer materializes
+> the seam for this phase; the feature phases that follow run fully
+> test-first.
+
+Do NOT dispatch the Writer. Do NOT write any artifact.
+
+If the `phase_type` row is absent, or holds any value other than
+`foundation` (`feature`, `scaffold`, `docs`, `refactor`): proceed to
+Phase A. (`scaffold` and `docs` phases produce no test suite in
+practice — their in-scope AC set is typically empty — but they are not
+force-skipped here; the Writer's Phase 1 AC-enumeration naturally
+yields `EXISTING_COVERAGE_SUFFICIENT` or an empty in-scope set for
+them. Only `foundation` is a hard self-skip, because its ACs are
+precise yet not test-first-authorable until the seam exists.)
 
 ---
 
@@ -200,9 +230,9 @@ On success, the last user-facing message is `tdd-writer`'s Phase
 Surface it verbatim. Do not append anything.
 
 On halt or self-skip exit, the user-facing message is the
-P4 / Writer halt message verbatim and the command exits without
+P4 / P5 / Writer halt message verbatim and the command exits without
 writing the suite manifest. The `/relay-tdd-review` command is
-NOT invoked in any halt case.
+NOT invoked in any halt or self-skip case.
 
 ---
 
@@ -262,3 +292,7 @@ NOT invoked in any halt case.
 - **Activation by heuristic from a project's test folder
   structure** — explicit anti-pattern (`docs/anti-patterns.md`
   lines 43-48). Only `tdd: true` activates.
+- **Authoring a test-first suite for a foundation phase** — P5
+  self-skips `phase_type: foundation` phases. The seam (entities,
+  repositories, resolvers, schema/migrations) is the implementer's
+  to create; test-first resumes on the feature phases that follow.

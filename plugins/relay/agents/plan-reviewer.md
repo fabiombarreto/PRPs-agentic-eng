@@ -352,16 +352,22 @@ Two execution stages, in order:
   "test_frameworks empty in methodology.md; framework-mismatch check
   skipped"` and continue. Do NOT fail in this case.
 - **Phase-type exemption branch:** if `plan_phase_type` (recorded in
-  Phase 0) is `scaffold` or `docs`, emit a single `passed: true` row
-  with `reason: "phase_type: <value>; VALIDATE commands are expected
-  to use OS/filesystem tools rather than test-framework invocations
-  for <value> phases — framework-mismatch check skipped"` and
-  continue. Do NOT fail in this case. Rationale: scaffold and docs
-  phases have no application code to exercise; their legitimate
-  validation is filesystem-oriented (Test-Path, Select-String,
-  Get-ChildItem, git check-ignore, npm install, npx astro check).
-  Requiring a test-framework invocation here would produce only
-  performative tests that assert on filesystem state.
+  Phase 0) is `scaffold`, `docs`, or `foundation`, emit a single
+  `passed: true` row with `reason: "phase_type: <value>; VALIDATE
+  commands are expected to use OS/filesystem or compile/build tools
+  rather than test-framework invocations for <value> phases —
+  framework-mismatch check skipped"` and continue. Do NOT fail in this
+  case. Rationale: scaffold and docs phases have no application code to
+  exercise; their legitimate validation is filesystem-oriented
+  (Test-Path, Select-String, Get-ChildItem, git check-ignore, npm
+  install, npx astro check). A `foundation` phase creates the seam but
+  is exempted for a different reason: its legitimate validation is a
+  compile/build/migration check (`mvn test-compile`, `go build`,
+  `dotnet build`) confirming the newly-created types compile — the
+  behavioral test-framework assertions are deferred to the feature
+  phases that consume the seam (the TDD track skips test-first for
+  `foundation` per `/relay-tdd` P5). Requiring a test-framework
+  invocation here would produce only performative tests.
 - Otherwise, parse every `**VALIDATE**:` command in
   `## Step-by-Step Tasks`. The first token of each VALIDATE command
   (the executable / runner) must match (or be a recognized invocation
@@ -500,6 +506,17 @@ rubric evaluates the updated plan.
    - **`refactor`** — `## Summary` or `## Problem Statement` uses
      "refactor", "reorganise", "move", "rename", or "extract" as
      the primary action verb.
+   - **`foundation`** — `## Files to Change` is dominated by `CREATE`
+     rows for application source modules (entities, repositories,
+     resolvers, interfaces, schema/migration files) that the plan's
+     ACs reference as newly-introduced types, AND the `## Step-by-Step
+     Tasks` VALIDATE commands are compile/build/migration checks
+     (`mvn test-compile`, `mvn compile`, `gradle compileTestJava`,
+     `go build`, `dotnet build`, migration dry-runs) rather than
+     test-framework assertions. Distinguish from `scaffold`
+     (config-only, no application source) and from `feature` (exercises
+     existing types). Infer conservatively: only when the phase creates
+     the very types its ACs name.
    - **`feature`** — Default. Any plan that does not match the signals
      above.
 

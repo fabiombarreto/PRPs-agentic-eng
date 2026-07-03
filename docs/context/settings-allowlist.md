@@ -58,14 +58,18 @@ not emitted.
 - `Bash(git checkout feature/*)` — restricted to feature branches
 - `Bash(git checkout -b feature/*)`
 - `Bash(git worktree *)`
+- `Bash(git worktree remove *)` — post-merge worktree cleanup (relay-approve Phase 2)
 - `Bash(git fetch*)`
 - `Bash(git push origin feature/*)` — never `main`, never `--force`
+- `Bash(git push origin --delete feature/*)` — post-merge remote branch delete (relay-approve Phase 2)
 - `Bash(git stash*)` — stash/pop acceptable
 - `Bash(git rev-parse*)`, `Bash(git show*)`, `Bash(git ls-files*)`
+- `Bash(git branch -d *)` — safe delete of fully-merged branches (relay-approve Phase 2; force-delete `git branch -D*` remains denied)
 
 ### GitHub CLI (always, read + restricted write)
 
 - `Bash(gh pr create *)`
+- `Bash(gh pr merge *)` — post-review PR merge (relay-approve Phase 1)
 - `Bash(gh pr view *)`
 - `Bash(gh pr checks *)`
 - `Bash(gh pr list *)`

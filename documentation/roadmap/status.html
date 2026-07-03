@@ -61,8 +61,8 @@
           <tr>
             <td>4</td>
             <td><strong>Approval</strong></td>
-            <td><code>/relay-commit</code> (local commit, no push) <strong>shipped v0.14.0</strong>; <code>/relay-pr</code> (push + PR creation) <strong>shipped v0.15.0</strong>; <code>/relay-approve</code> (merge + branch/worktree cleanup + docs update) + Docs Updater + Docs Reviewer agents pending</td>
-            <td><span class="badge badge--partial">partial</span></td>
+            <td><code>/relay-commit</code> (local commit, no push) <strong>shipped v0.14.0</strong>; <code>/relay-pr</code> (push + PR creation) <strong>shipped v0.15.0</strong>; <code>/relay-approve</code> (merge + collision-safe cleanup + docs update) <strong>shipped v0.17.0</strong>; Docs Updater agent <strong>shipped v0.17.0</strong>; Docs Reviewer agent <strong>shipped v0.17.0</strong></td>
+            <td><span class="badge badge--done">done</span></td>
           </tr>
           <tr>
             <td>5</td>
@@ -147,11 +147,11 @@
 
       <ul>
         <li><strong>Skill:</strong> <code>skills/context-builder/SKILL.md</code> — initializes / updates the documentation tree for any target project</li>
-        <li><strong>Agents:</strong> <code>agents/test-runner.md</code>, <code>agents/post-green-reviewer.md</code>, <code>agents/prd-writer.md</code>, <code>agents/prd-reviewer.md</code>, <code>agents/research-web.md</code>, <code>agents/research-codebase.md</code>, <code>agents/plan-writer.md</code> (v0.7.0), <code>agents/plan-reviewer.md</code> (v0.7.0), <code>agents/implementer.md</code> (v0.8.0), <code>agents/code-reviewer.md</code> (v0.8.0; R-COH-* coherence layer added 2026-04-28), <code>agents/code-reviewer-semantic.md</code> (sub-agent shipped 2026-04-28), <code>agents/tdd-writer.md</code> (v0.10.0), <code>agents/tdd-reviewer.md</code> (v0.10.0)</li>
-        <li><strong>Commands:</strong> <code>commands/relay-test.md</code>, <code>commands/relay-test-review.md</code>, <code>commands/relay-prd.md</code>, <code>commands/relay-plan.md</code> (v0.7.0), <code>commands/relay-plan-review.md</code> (v0.7.0), <code>commands/relay-implement.md</code> (v0.8.0), <code>commands/relay-code-review.md</code> (v0.8.0), <code>commands/relay-execute.md</code> (v0.9.0), <code>commands/relay-tdd.md</code> (v0.10.0), <code>commands/relay-tdd-review.md</code> (v0.10.0), <code>commands/relay-worktree.md</code> (v0.11.0), <code>commands/relay-commit.md</code> (v0.14.0)</li>
+        <li><strong>Agents:</strong> <code>agents/test-runner.md</code>, <code>agents/post-green-reviewer.md</code>, <code>agents/prd-writer.md</code>, <code>agents/prd-reviewer.md</code>, <code>agents/research-web.md</code>, <code>agents/research-codebase.md</code>, <code>agents/plan-writer.md</code> (v0.7.0), <code>agents/plan-reviewer.md</code> (v0.7.0), <code>agents/implementer.md</code> (v0.8.0), <code>agents/code-reviewer.md</code> (v0.8.0; R-COH-* coherence layer added 2026-04-28), <code>agents/code-reviewer-semantic.md</code> (sub-agent shipped 2026-04-28), <code>agents/tdd-writer.md</code> (v0.10.0), <code>agents/tdd-reviewer.md</code> (v0.10.0), <code>agents/docs-updater.md</code> (v0.17.0), <code>agents/docs-reviewer.md</code> (v0.17.0)</li>
+        <li><strong>Commands:</strong> <code>commands/relay-test.md</code>, <code>commands/relay-test-review.md</code>, <code>commands/relay-prd.md</code>, <code>commands/relay-plan.md</code> (v0.7.0), <code>commands/relay-plan-review.md</code> (v0.7.0), <code>commands/relay-implement.md</code> (v0.8.0), <code>commands/relay-code-review.md</code> (v0.8.0), <code>commands/relay-execute.md</code> (v0.9.0), <code>commands/relay-tdd.md</code> (v0.10.0), <code>commands/relay-tdd-review.md</code> (v0.10.0), <code>commands/relay-worktree.md</code> (v0.11.0), <code>commands/relay-commit.md</code> (v0.14.0), <code>commands/relay-pr.md</code> (v0.15.0), <code>commands/relay-approve.md</code> (v0.17.0)</li>
       </ul>
 
-      <p>Of the 14-command surface (<a href="../reference/commands.html">Commands</a>), 13 are shipped; the one remaining Pillar 3 command — <code>/relay-approve</code> — plus the Docs Updater / Reviewer agents are the main deliverables of project phase 4. The first two Pillar 3 commands, <code>/relay-commit</code> and <code>/relay-pr</code>, shipped in v0.14.0 and v0.15.0.</p>
+      <p>Of the 14-command surface (<a href="../reference/commands.html">Commands</a>), all 14 shipped. The three Pillar 3 commands &mdash; <code>/relay-commit</code> (v0.14.0), <code>/relay-pr</code> (v0.15.0), and <code>/relay-approve</code> (v0.17.0) &mdash; complete the commit &rarr; push &rarr; PR &rarr; merge lifecycle. The Docs Updater and Docs Reviewer agents (v0.17.0) close out the automated knowledge-base sync.</p>
 
       <h3 id="shared-scripts">Shared scripts</h3>
 
@@ -194,23 +194,19 @@
         <li><code>/relay-execute</code> (v0.9.0) — multi-phase orchestrator with source-PRD-table state machine (D6) and two session-level budgets (D3)</li>
         <li><code>/relay-tdd</code> + <code>/relay-tdd-review</code> (v0.10.0) — B7/B8 TDD pair; the only authorized creator of new test files in the autonomous pipeline</li>
         <li><code>/relay-commit [&lt;feature&gt; | target description]</code> (v0.14.0; dual-mode v0.16.0) — first Pillar 3 command; worktree mode is a deterministic local commit in the worktree (idempotent, no push), and current-branch mode reviews the diff, flags suspicious files, and commits on the current branch.</li>
-      </ul>
-
-      <p><strong>Pending (Pillar 3 — next phase):</strong></p>
-      <ul>
-        <li><code>/relay-pr &lt;feature&gt;</code> — verifies the committed branch, pushes if needed, runs <code>gh pr create</code>, and writes <code>final-report.md</code>.</li>
-        <li><code>/relay-approve &lt;pr&gt;</code> — merges the PR, deletes the branch and worktree, then runs Docs Updater and Docs Reviewer to keep <code>/context</code> and <code>/domain</code> in sync.</li>
+        <li><code>/relay-pr &lt;feature&gt;</code> (v0.15.0) &mdash; verifies the committed branch, pushes if needed, runs <code>gh pr create</code>, and writes <code>final-report.md</code>.</li>
+        <li><code>/relay-approve &lt;pr&gt;</code> (v0.17.0) &mdash; merges the PR, deletes the branch and worktree in collision-safe order, then runs Docs Updater and Docs Reviewer agents to keep <code>docs/context/</code> and <code>docs/domain/</code> in sync. Phase 4 complete.</li>
       </ul>
 
       <p>With <code>/relay-execute</code> shipped, the Test Runner PRD's AC-2/3/4 (auto-correction succeeds / budget exhausted / oscillation) and Phase 5's "no prompts during autonomous run" signal are now validatable end-to-end — pending the operator-driven phoenix/sisalfa dogfood runs (Phase 5 of <code>tdd-writer-reviewer.prd.md</code>).</p>
 
       <h3 id="next-phase-4">Phase 4 (Approval cycle)</h3>
 
-      <p>Three commands complete the commit &rarr; push &rarr; PR &rarr; merge lifecycle after human validation of <code>/relay-execute</code> output. The first, <code>/relay-commit</code>, shipped in v0.14.0; the remaining two are pending:</p>
+      <p>All three Pillar 3 commands and both Docs agents shipped in v0.14.0&ndash;v0.17.0, completing the full commit &rarr; push &rarr; PR &rarr; merge &rarr; docs-sync lifecycle:</p>
       <ol>
-        <li><strong><code>/relay-commit [&lt;feature&gt; | target description]</code></strong> <span class="badge badge--done">shipped v0.14.0; dual-mode v0.16.0</span> — local commit only; reversible; no push. Worktree mode commits the pipeline worktree; current-branch mode reviews the diff and commits the current branch. Safe to run immediately after manual testing.</li>
-        <li><strong><code>/relay-pr &lt;feature&gt;</code></strong> — pushes the branch and opens the PR via <code>gh pr create</code>; writes <code>final-report.md</code> into the PR body.</li>
-        <li><strong><code>/relay-approve &lt;pr&gt;</code></strong> — merges the PR, deletes the feature branch and worktree, then runs Docs Updater and Docs Reviewer agents to keep <code>/context</code> and <code>/domain</code> in sync with what was merged.</li>
+        <li><strong><code>/relay-commit [&lt;feature&gt; | target description]</code></strong> <span class="badge badge--done">shipped v0.14.0; dual-mode v0.16.0</span> &mdash; local commit only; reversible; no push. Worktree mode commits the pipeline worktree; current-branch mode reviews the diff and commits the current branch. Safe to run immediately after manual testing.</li>
+        <li><strong><code>/relay-pr &lt;feature&gt;</code></strong> <span class="badge badge--done">shipped v0.15.0</span> &mdash; pushes the branch and opens the PR via <code>gh pr create</code>; writes <code>final-report.md</code> into the PR body.</li>
+        <li><strong><code>/relay-approve &lt;pr&gt;</code></strong> <span class="badge badge--done">shipped v0.17.0</span> &mdash; merges the PR, deletes the feature branch and worktree in collision-safe order, then runs Docs Updater and Docs Reviewer agents to keep <code>docs/context/</code> and <code>docs/domain/</code> in sync with what was merged.</li>
       </ol>
 
       <h3 id="next-phase-5">Phase 5 (CI/CD)</h3>

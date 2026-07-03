@@ -21,7 +21,7 @@
       </div>
 
       <h1>Commands</h1>
-      <p class="page-subtitle">The full slash-command surface of the relay plugin. Thirteen commands plus one Pillar 3 placeholder, organized by role (writer / reviewer / infra / orchestrator / Pillar 3). Each command is invocable on its own for testing or manual intervention; the orchestrator (<code>/relay-execute</code>) composes the Pillar 2 stages into a full run.</p>
+      <p class="page-subtitle">The full slash-command surface of the relay plugin. Fourteen commands, organized by role (writer / reviewer / infra / orchestrator / Pillar 3). Each command is invocable on its own for testing or manual intervention; the orchestrator (<code>/relay-execute</code>) composes the Pillar 2 stages into a full run.</p>
 
       <h2 id="happy-path">The happy path</h2>
 
@@ -254,14 +254,16 @@
         <dd>P0: argument non-empty; <code>.worktrees/&lt;feature&gt;/</code> exists (<code>FAILED_MISSING_WORKTREE</code>) on branch <code>feature/&lt;feature&gt;</code> (<code>FAILED_WRONG_BRANCH</code>); clean working tree (<code>FAILED_UNCOMMITTED_CHANGES</code> &mdash; run <code>/relay-commit</code> first); test-review gate enforced only when <code>run.json</code> exists (<code>FAILED_TEST_REVIEW_NOT_APPROVED</code>); non-fast-forward push halts (<code>FAILED_BRANCH_DIVERGENCE</code>).</dd>
       </div>
 
-      <h3 id="relay-approve"><code>/relay-approve &lt;pr&gt;</code></h3>
+      <h3 id="relay-approve"><code>/relay-approve &lt;pr&gt;</code> <span class="badge badge--done">implemented</span></h3>
       <div class="kv">
         <dt>Input</dt>
-        <dd>PR number or URL.</dd>
+        <dd>PR number or URL (the merged PR from <code>/relay-pr</code>).</dd>
         <dt>Output</dt>
-        <dd>PR merged, branch + worktree deleted, <code>docs/context/</code> and <code>docs/domain/</code> updated by the Docs Updater, ambiguities flagged by the Docs Reviewer.</dd>
-        <dt>Status</dt>
-        <dd>Placeholder &mdash; not yet implemented.</dd>
+        <dd>PR merged via <code>gh pr merge &lt;pr&gt; --merge</code>; branch + worktree deleted in collision-safe order (<code>git worktree remove</code> &rarr; <code>git branch -d</code> &rarr; <code>git push origin --delete</code> &rarr; <code>git worktree prune</code>, avoiding the cli/cli #13380 trap); <code>docs/</code> knowledge base updated and committed on the base branch (<code>docs(&lt;feature&gt;): sync knowledge base post-merge</code>) after the Docs Updater + Docs Reviewer agents approve the manifest.</dd>
+        <dt>Mode</dt>
+        <dd>Deterministic infra command (no LLM, no writer/reviewer split at the command level). All docs interpretation is delegated to the dispatched <code>docs-updater</code> (writer) and <code>docs-reviewer</code> (reviewer) agent pair. Supports <code>--strategy merge|squash|rebase</code>, <code>--admin</code>, <code>--force</code>, <code>--no-docs</code> flags. See <code>plugins/relay/commands/relay-approve.md</code>.</dd>
+        <dt>Preconditions</dt>
+        <dd>P0: argument non-empty; <code>FAILED_GH_AUTH</code> (gh not authenticated); <code>FAILED_PR_NOT_FOUND</code> (PR does not exist); <code>FAILED_NOT_A_RELAY_FEATURE</code> (PR not associated with a relay feature branch); <code>FAILED_PR_NOT_MERGEABLE</code> (PR not in a mergeable state); <code>FAILED_UNCOMMITTED_CHANGES</code> (worktree has uncommitted changes); <code>FAILED_MERGE</code> (gh pr merge failed); <code>FAILED_DOCS_REVIEW_BUDGET_EXCEEDED</code> (Docs Reviewer retries exhausted); <code>FAILED_DOCS_PUSH_BLOCKED</code> (protected base branch; docs commit kept local).</dd>
       </div>
 
       <h2 id="preconditions">Preconditions (every command)</h2>
