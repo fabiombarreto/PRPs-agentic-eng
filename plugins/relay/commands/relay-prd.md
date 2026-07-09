@@ -215,7 +215,7 @@ names the DRAFT path (if any).
 ## What you do NOT do
 
 - **Planning, TDD, implementation, tests** — those are downstream
-  commands (`/relay-plan`, `/relay-tdd`, `/relay-implement`,
+  commands (`/relay-plan`, `/relay-write-test`, `/relay-implement`,
   `/relay-test`). `/relay-prd` produces the APPROVED PRD that
   `/relay-execute` then drives through the pipeline.
 - **Reopening an APPROVED PRD** — out of scope for the MVP per the

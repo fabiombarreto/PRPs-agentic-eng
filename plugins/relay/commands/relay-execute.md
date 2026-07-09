@@ -147,8 +147,8 @@ Read `docs/context/methodology.md` in the target project. Extract the `tdd:` fro
 - If `tdd: true`: emit startup note (AC-11 live-routing visibility):
 
   > TDD routing note: docs/context/methodology.md has tdd: true. Proceeding
-  > with the TDD path: /relay-plan → /relay-plan-review → /relay-tdd →
-  > /relay-tdd-review → /relay-implement → /relay-test → /relay-test-review.
+  > with the TDD path: /relay-plan → /relay-plan-review → /relay-write-test →
+  > /relay-test-write-review → /relay-implement → /relay-test → /relay-test-review.
   > B7 TDD Writer + B8 TDD Reviewer engaged via Phase A.3.5 with budget
   > max_tdd_review_retries=2 (HALT code FAILED_TDD_REVIEW_BUDGET_EXCEEDED on
   > exhaustion). R-X strict invariant of code-reviewer is preserved — the
@@ -402,7 +402,7 @@ Append to `orchestrator_run_log`:
 
 Continue to Phase A.3.5. The pipeline does NOT halt on worktree-creation failure — only on downstream stage failure (per D8 of relay-worktree.prd.md).
 
-### Phase A.3.5 — Per-phase TDD sub-flow (tdd-review retry loop)
+### Phase A.3.5 — Per-phase TDD sub-flow (test-write-review retry loop)
 
 Conditional on `methodology.md` `tdd:` value read in P5.
 
@@ -433,7 +433,7 @@ A.3.2/A.3.2.x).
   {"phase": <N>, "stage": "tdd", "outcome": "skipped_foundation_phase"}
   ```
   Proceed directly to Phase A.4. No suite manifest is produced. (This
-  is symmetric with A.3.5.1's inline adoption of `/relay-tdd`, whose P5
+  is symmetric with A.3.5.1's inline adoption of `/relay-write-test`, whose P5
   gate self-skips the same case; the gate is duplicated here so the
   orchestrator records the correct `skipped_foundation_phase` outcome
   rather than surfacing the command's self-skip message as a phase
@@ -444,16 +444,16 @@ A.3.2/A.3.2.x).
 
 Set `tdd_review_attempts = 0`.
 
-#### Step A.3.5.1 — Adopt /relay-tdd role
+#### Step A.3.5.1 — Adopt /relay-write-test role
 
-Read `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-tdd.md` and execute its full protocol inline against `current_plan_path`. Pass context:
+Read `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-write-test.md` and execute its full protocol inline against `current_plan_path`. Pass context:
 
 - `plan_path`: `current_plan_path`
 - `target_root`: the cwd
 - `prior_feedback`: null on first attempt; the captured B8 JSONL line on retry attempts (orchestrator-side feedback channel)
 
 The Writer either:
-- Produces a DRAFT suite manifest at `PRPs/reports/<feature>/tdd-initial-suite.diff` with aggregate verdict `SUITE_DRAFT_WRITTEN` or `EXISTING_COVERAGE_SUFFICIENT` → continue to Step A.3.5.2.
+- Produces a DRAFT suite manifest at `PRPs/reports/<feature>/test-suite.diff` with aggregate verdict `SUITE_DRAFT_WRITTEN` or `EXISTING_COVERAGE_SUFFICIENT` → continue to Step A.3.5.2.
 - Halts on `AMBIGUOUS` ACs → surface the verbatim halt; write `orchestrator-halt.json`:
   ```json
   {
@@ -480,9 +480,9 @@ The Writer either:
 
 Record the suite path as `current_suite_path`.
 
-#### Step A.3.5.2 — Adopt /relay-tdd-review role
+#### Step A.3.5.2 — Adopt /relay-test-write-review role
 
-Read `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-tdd-review.md` and execute its full protocol inline against `current_suite_path`.
+Read `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-test-write-review.md` and execute its full protocol inline against `current_suite_path`.
 
 **On APPROVED:**
 
@@ -495,7 +495,7 @@ Proceed to Phase A.4. The implementer's contract for this phase is now the B8-AP
 
 **On CHANGES_REQUESTED:**
 
-Capture the rubric defect bullet-list (failing rubric ids + reasons) from the JSONL line just appended to `PRPs/plans/<basename>.tdd-review.jsonl`. This is the structured feedback for the next /relay-tdd attempt.
+Capture the rubric defect bullet-list (failing rubric ids + reasons) from the JSONL line just appended to `PRPs/plans/<basename>.test-write-review.jsonl`. This is the structured feedback for the next /relay-write-test attempt.
 
 Increment `tdd_review_attempts`.
 
@@ -527,7 +527,7 @@ HALT with verbatim message:
 > on TDD-budget exhaustion — running /relay-implement against an unapproved
 > TDD suite would violate R-X strict in the test-file write direction.
 
-Else: re-adopt `/relay-tdd` role passing `prior_feedback = <captured defect list>`. Loop back to Step A.3.5.2.
+Else: re-adopt `/relay-write-test` role passing `prior_feedback = <captured defect list>`. Loop back to Step A.3.5.2.
 
 ### Phase A.4 — Per-phase implement sub-flow
 
@@ -761,7 +761,7 @@ On any HALT path (one of `FAILED_PLAN_REVIEW_BUDGET_EXCEEDED`, `FAILED_ORCHESTRA
 
 8. **Never orchestrate multiple PRDs in one invocation.** One PRD per `/relay-execute` invocation. Cross-PRD orchestration is a separate future concern.
 
-9. **When `tdd: true`, the orchestrator invokes `/relay-tdd` and `/relay-tdd-review` in Phase A.3.5 with budget `max_tdd_review_retries=2`; on budget exhaustion, HALT with `FAILED_TDD_REVIEW_BUDGET_EXCEEDED`.** When `tdd: false` or `methodology.md` is missing, A.3.5 self-skips silently per AC-10 (live no-op path). The implementer is NEVER invoked when A.3.5 halted — running it against an unapproved TDD suite would violate R-X strict in the test-file write direction.
+9. **When `tdd: true`, the orchestrator invokes `/relay-write-test` and `/relay-test-write-review` in Phase A.3.5 with budget `max_tdd_review_retries=2`; on budget exhaustion, HALT with `FAILED_TDD_REVIEW_BUDGET_EXCEEDED`.** When `tdd: false` or `methodology.md` is missing, A.3.5 self-skips silently per AC-10 (live no-op path). The implementer is NEVER invoked when A.3.5 halted — running it against an unapproved TDD suite would violate R-X strict in the test-file write direction.
 
 10. **`/relay-worktree` is invoked in Phase A.3.3 by default before Phase A.3.5.** When `--no-worktree` is passed, Phase A.3.3 is entirely skipped. When `/relay-worktree` returns a non-zero exit code, the orchestrator logs a warning, records `worktree_succeeded: false` and `fallback_reason` in `orchestrator-run.json`, and continues against cwd — the pipeline does NOT halt on worktree-creation failure (D8 of relay-worktree.prd.md). The worktree at `.worktrees/<feature>/` and its branch `feature/<feature>` persist on disk even if /relay-execute halts mid-pipeline (AC-15).
 

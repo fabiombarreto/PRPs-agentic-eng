@@ -1,9 +1,9 @@
 ---
-description: Autonomous TDD initial-suite generation from an APPROVED plan + its source APPROVED PRD. Reads the target's `docs/context/methodology.md` and self-skips silently when `tdd: false` or the file is missing; hard-aborts when `tdd: true` AND `test_frameworks: []`. Otherwise dispatches the `tdd-writer` agent (B7) which walks every PRD AC-N and emits per-AC outcomes (`NEW_TEST_REQUIRED` writes a test, `EXISTING_TEST_COVERS` documents the mapping, `AMBIGUOUS` aborts). Reviewer adoption is OUT of scope — the separate `/relay-tdd-review` command owns the DRAFT→APPROVED flip on the suite manifest.
+description: Autonomous TDD initial-suite generation from an APPROVED plan + its source APPROVED PRD. Reads the target's `docs/context/methodology.md` and self-skips silently when `tdd: false` or the file is missing; hard-aborts when `tdd: true` AND `test_frameworks: []`. Otherwise dispatches the `test-writer` agent (B7) which walks every PRD AC-N and emits per-AC outcomes (`NEW_TEST_REQUIRED` writes a test, `EXISTING_TEST_COVERS` documents the mapping, `AMBIGUOUS` aborts). Reviewer adoption is OUT of scope — the separate `/relay-test-write-review` command owns the DRAFT→APPROVED flip on the suite manifest.
 argument-hint: <plan-path>
 ---
 
-# /relay-tdd
+# /relay-write-test
 
 **Arguments:** `$ARGUMENTS`
 
@@ -13,15 +13,15 @@ argument-hint: <plan-path>
 
 Validate the plan path argument, run the preconditions check
 (including the `methodology.md` self-skip / hard-abort gate),
-then adopt the `tdd-writer` role to generate a DRAFT initial test
+then adopt the `test-writer` role to generate a DRAFT initial test
 suite for the phase the plan describes. Reviewer dispatch is OUT
-of scope — that is the `/relay-tdd-review` command (Phase 1
+of scope — that is the `/relay-test-write-review` command (Phase 1
 sibling artifact, ships in the same release).
 
 See:
 - `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/tdd-writer-reviewer.prd.md` —
   this feature's PRD; AC-1 through AC-13, scope, rationale.
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/tdd-writer.md` — the
+- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/test-writer.md` — the
   Writer protocol you adopt in Phase A.
 - `docs/context/methodology.md` (in the target project) — the
   single source of truth for `tdd:` and `test_frameworks: [...]`.
@@ -47,10 +47,10 @@ the argument as the plan path; resolve it as absolute, or as
 relative to the current working directory. If the argument is
 blank/whitespace, HALT with:
 
-> /relay-tdd requires a plan path. Usage:
->   /relay-tdd PRPs/plans/<feature>-phase-<N>-<slug>.plan.md
+> /relay-write-test requires a plan path. Usage:
+>   /relay-write-test PRPs/plans/<feature>-phase-<N>-<slug>.plan.md
 > Example:
->   /relay-tdd PRPs/plans/feat-x-phase-1-foundation.plan.md
+>   /relay-write-test PRPs/plans/feat-x-phase-1-foundation.plan.md
 
 If the argument is non-empty but does not resolve to an existing
 readable file, fall through to P1 below.
@@ -72,7 +72,7 @@ If `plan_path` does not point at an existing readable file:
 
 > I cannot start TDD suite authoring without `<plan_path>`.
 > The path did not resolve to an existing readable file.
-> Usage: /relay-tdd PRPs/plans/<feature>-phase-<N>-<slug>.plan.md
+> Usage: /relay-write-test PRPs/plans/<feature>-phase-<N>-<slug>.plan.md
 
 ### P2 — Plan ends with `*Status: APPROVED*`
 
@@ -86,7 +86,7 @@ non-empty line of the file).
   HALT with:
 
   > The plan at `<plan_path>` is not APPROVED (current status:
-  > `<status>`). /relay-tdd only operates on APPROVED plans.
+  > `<status>`). /relay-write-test only operates on APPROVED plans.
   > Run /relay-plan-review to bring the plan to APPROVED first,
   > or manually flip its trailing `*Status:*` line if the rubric
   > was already validated by hand.
@@ -103,11 +103,11 @@ All three files must exist and be readable at `target_root`:
 
 If any is missing, HALT with:
 
-> I cannot dispatch the tdd-writer without `<missing-file>`.
+> I cannot dispatch the test-writer without `<missing-file>`.
 > The Decision Gate consultation requires all three mandatory
 > sources. Run the `context-builder` skill (`*init` or `*update`
 > mode) to generate the missing governance files, then re-run
-> /relay-tdd.
+> /relay-write-test.
 
 ### P4 — methodology.md gate (self-skip / hard-abort / proceed)
 
@@ -173,20 +173,20 @@ precise yet not test-first-authorable until the seam exists.)
 ## Phase A — Adopt the Writer role
 
 Follow the protocol in
-`${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/tdd-writer.md`.
+`${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/test-writer.md`.
 
 Execution context to pass into the Writer's Phase 0 setup:
 
 - `plan_path`: the resolved absolute path verified by P1–P4.
 - `target_root`: the cwd.
 
-Run Phases 0 through 3 as specified by `tdd-writer.md`. The
+Run Phases 0 through 3 as specified by `test-writer.md`. The
 Writer reads the plan + the source PRD, classifies each AC, and
 either:
 
-- Writes new test files + a `tdd-initial-suite.diff` manifest
+- Writes new test files + a `test-suite.diff` manifest
   with aggregate verdict `SUITE_DRAFT_WRITTEN`, OR
-- Writes only the `tdd-initial-suite.diff` manifest with
+- Writes only the `test-suite.diff` manifest with
   aggregate verdict `EXISTING_COVERAGE_SUFFICIENT`, OR
 - Halts with a structured `AMBIGUOUS` message naming the ACs
   that need tightening.
@@ -196,14 +196,14 @@ to ...`) is the terminal signal. Surface it verbatim to the user
 and exit.
 
 **There is no Phase B.** Reviewer adoption is the
-`/relay-tdd-review` command's job. This command is single-role by
+`/relay-test-write-review` command's job. This command is single-role by
 design — the writer/reviewer split is the canonical post-PRD
 command-surface decision (`docs/decisions.md` 2026-04-19 row).
 
 ### If the Writer halts
 
 Possible Writer halt conditions (all specified in
-`tdd-writer.md`):
+`test-writer.md`):
 
 - **Unexpected invocation** (P0 detected `tdd: false` or empty
   `test_frameworks` despite this command's P4 passing) — should
@@ -212,26 +212,26 @@ Possible Writer halt conditions (all specified in
   structured halt message verbatim and exit. The user must
   tighten the PRD ACs before re-running.
 
-In all halt cases, do NOT invoke `/relay-tdd-review`. The user
+In all halt cases, do NOT invoke `/relay-test-write-review`. The user
 (or orchestrator) decides next steps.
 
 ---
 
 ## Final output surface
 
-On success, the last user-facing message is `tdd-writer`'s Phase
+On success, the last user-facing message is `test-writer`'s Phase
 3.2 confirmation:
 
-> DRAFT TDD suite written to PRPs/reports/<feature>/tdd-initial-suite.diff.
+> DRAFT TDD suite written to PRPs/reports/<feature>/test-suite.diff.
 > Aggregate verdict: <SUITE_DRAFT_WRITTEN | EXISTING_COVERAGE_SUFFICIENT>.
 > Test files written: <count> (paths in the .diff manifest).
-> Run /relay:relay-tdd-review PRPs/reports/<feature>/tdd-initial-suite.diff to validate.
+> Run /relay:relay-test-write-review PRPs/reports/<feature>/test-suite.diff to validate.
 
 Surface it verbatim. Do not append anything.
 
 On halt or self-skip exit, the user-facing message is the
 P4 / P5 / Writer halt message verbatim and the command exits without
-writing the suite manifest. The `/relay-tdd-review` command is
+writing the suite manifest. The `/relay-test-write-review` command is
 NOT invoked in any halt or self-skip case.
 
 ---
@@ -240,12 +240,12 @@ NOT invoked in any halt or self-skip case.
 
 - **Never write anything under `.claude/`.** Test files go to the
   framework-natural test root in the target project. The suite
-  manifest goes to `PRPs/reports/<feature>/tdd-initial-suite.diff`.
+  manifest goes to `PRPs/reports/<feature>/test-suite.diff`.
   Nothing under `.claude/`.
 - **Never adopt the Reviewer role.** Reviewer is
-  `/relay-tdd-review` (separate command). This command file MUST
+  `/relay-test-write-review` (separate command). This command file MUST
   NOT contain a Phase B section, and MUST NOT invoke
-  `tdd-reviewer` via `Task` or otherwise.
+  `test-reviewer` via `Task` or otherwise.
 - **Never prompt the user.** Past the interactivity boundary
   (`docs/context/architecture.md` §Interactivity boundary). HALTs
   are surfaced verbatim and the command exits.
@@ -258,9 +258,9 @@ NOT invoked in any halt or self-skip case.
 - **Never skip the Decision Gate evidence block.** The
   command-level gate (above) is mandatory.
 - **Never re-run the Writer on `CHANGES_REQUESTED` from a later
-  `/relay-tdd-review`.** That is the orchestrator's call
+  `/relay-test-write-review`.** That is the orchestrator's call
   (`/relay-execute`'s `max_tdd_review_retries=2` budget). A
-  single `/relay-tdd` invocation produces zero or one DRAFT suite;
+  single `/relay-write-test` invocation produces zero or one DRAFT suite;
   it never loops.
 - **Never activate by heuristic.** The only signal is `tdd: true`
   in `methodology.md`. Existence of test folders, CI jobs, high
@@ -270,7 +270,7 @@ NOT invoked in any halt or self-skip case.
 
 ## What you do NOT do
 
-- **Reviewing the suite** — `/relay-tdd-review` owns the rubric
+- **Reviewing the suite** — `/relay-test-write-review` owns the rubric
   run + DRAFT→APPROVED flip + JSONL append.
 - **Writing production code** — that is `/relay-implement`. The
   R-X-strict invariant of `code-reviewer` (D17 of

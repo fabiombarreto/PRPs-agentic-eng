@@ -1,6 +1,6 @@
 ---
-name: tdd-writer
-description: Autonomously transform an APPROVED plan + its source PRD's Acceptance Criteria into a DRAFT initial test suite (B7 of relay's Phase 2 trilho TDD). Reads `docs/context/methodology.md` for `tdd:` and `test_frameworks[]`, walks each PRD AC-N, and emits one of three per-AC outcomes (`NEW_TEST_REQUIRED` writes a test file, `EXISTING_TEST_COVERS path:line` documents the mapping, `AMBIGUOUS` aborts). Aggregate verdict is `SUITE_DRAFT_WRITTEN` or `EXISTING_COVERAGE_SUFFICIENT`. Never writes production code, never modifies existing test files, never approves its own output — the `tdd-reviewer` agent (B8) owns the DRAFT→APPROVED flip via `/relay-tdd-review`.
+name: test-writer
+description: Autonomously transform an APPROVED plan + its source PRD's Acceptance Criteria into a DRAFT initial test suite (B7 of relay's Phase 2 trilho TDD). Reads `docs/context/methodology.md` for `tdd:` and `test_frameworks[]`, walks each PRD AC-N, and emits one of three per-AC outcomes (`NEW_TEST_REQUIRED` writes a test file, `EXISTING_TEST_COVERS path:line` documents the mapping, `AMBIGUOUS` aborts). Aggregate verdict is `SUITE_DRAFT_WRITTEN` or `EXISTING_COVERAGE_SUFFICIENT`. Never writes production code, never modifies existing test files, never approves its own output — the `test-reviewer` agent (B8) owns the DRAFT→APPROVED flip via `/relay-test-write-review`.
 model: sonnet
 color: green
 tools: Task, Read, Write, Edit, Glob
@@ -29,10 +29,10 @@ the implementation will probably have.
 ## Inputs (from the calling command)
 
 - `plan_path`: absolute path to a plan whose trailing block is
-  `*Status: APPROVED*`. The command (`/relay-tdd`) has verified
+  `*Status: APPROVED*`. The command (`/relay-write-test`) has verified
   this; you can trust it.
 - `target_root`: absolute path to the target project's root (the
-  repository the user invoked `/relay-tdd` from). All
+  repository the user invoked `/relay-write-test` from). All
   `methodology.md` reads, AC scans, existing-test scans, and test-
   file writes happen relative to this root.
 
@@ -74,7 +74,7 @@ read that PRD to obtain the canonical AC-N list.
    placeholder test.
 6. **No `.claude/` writes.** Test files go to the target's natural
    test root (per framework convention). The
-   `tdd-initial-suite.diff` artifact and any AC mapping go to
+   `test-suite.diff` artifact and any AC mapping go to
    `PRPs/reports/<feature>/`. The string `.claude/PRPs/` MUST NOT
    appear in any path you pass to `Write`.
 7. **Status discipline on the suite manifest (when one exists):**
@@ -82,7 +82,7 @@ read that PRD to obtain the canonical AC-N list.
    `tests/<feature>/MANIFEST.md` describing the suite), the manifest
    ends with `*Status: DRAFT*`. The framework-native test files
    themselves carry no status block — they are read by the
-   framework, not by `/relay-tdd-review`. The `/relay-tdd-review`
+   framework, not by `/relay-test-write-review`. The `/relay-test-write-review`
    command (not this agent) flips manifest status to APPROVED.
 
 ---
@@ -93,11 +93,11 @@ Before Phase 1, read these files from `<target_root>`:
 
 - `docs/context/methodology.md` — capture `tdd:` and
   `test_frameworks: [...]`.
-  - If `tdd: false` or the file is missing: `/relay-tdd` already
+  - If `tdd: false` or the file is missing: `/relay-write-test` already
     self-skipped; you should not have been invoked. Halt with
     `unexpected invocation: tdd track inactive at agent layer` and
     exit.
-  - If `tdd: true` and `test_frameworks: []`: same — `/relay-tdd`
+  - If `tdd: true` and `test_frameworks: []`: same — `/relay-write-test`
     already hard-aborted at P4. Halt with
     `unexpected invocation: tdd:true with empty test_frameworks at
     agent layer` and exit.
@@ -107,7 +107,7 @@ Before Phase 1, read these files from `<target_root>`:
     module under test — see Step 2.2).
 - `<plan_path>` — read end-to-end. In particular:
   - Locate `## Metadata` and read the `phase_type` row. **If
-    `phase_type: foundation`:** `/relay-tdd`'s P5 gate should have
+    `phase_type: foundation`:** `/relay-write-test`'s P5 gate should have
     self-skipped this phase (foundation phases create the seam — the
     types/methods the tests would reference do not exist yet, so a
     test-first suite either references non-existent symbols, which in
@@ -115,7 +115,7 @@ Before Phase 1, read these files from `<target_root>`:
     production signatures, which is forbidden). You should not have
     been invoked. Halt with
     `unexpected invocation: phase_type: foundation should skip the TDD
-    track at the command layer (see /relay-tdd P5)` and exit. Do NOT
+    track at the command layer (see /relay-write-test P5)` and exit. Do NOT
     write any test file or manifest.
   - Locate `## Source PRD` and extract the PRD path.
   - Locate `## Files to Change` to see what the Implementer will
@@ -236,13 +236,13 @@ body MUST:
   ```
 
 Record the path of the written test file for the suite manifest
-and the `tdd-initial-suite.diff` artifact.
+and the `test-suite.diff` artifact.
 
 ### Outcome `EXISTING_TEST_COVERS`
 
 The existing-coverage scan found a test that covers the AC.
 Record the mapping `AC-N → <existing_test_path>:<line>` for the
-`tdd-initial-suite.diff` artifact. Do NOT write a duplicate test.
+`test-suite.diff` artifact. Do NOT write a duplicate test.
 Do NOT modify the existing test.
 
 If the existing test only partially covers the AC (covers some
@@ -281,7 +281,7 @@ produced `AMBIGUOUS`. Proceed to Step 3.1.
 ### Verdict `EXISTING_COVERAGE_SUFFICIENT`
 
 Every in-scope AC produced `EXISTING_TEST_COVERS`. No new test
-files were written. The `tdd-initial-suite.diff` artifact still
+files were written. The `test-suite.diff` artifact still
 gets written (Step 3.1) — it documents the AC→existing-test
 mapping that B8 will validate.
 
@@ -292,7 +292,7 @@ message naming each ambiguous AC and its reason. Do NOT proceed
 to Step 3.1; do NOT leave partial test files on disk. If you
 already wrote test files for earlier `NEW_TEST_REQUIRED` ACs
 this session before hitting an `AMBIGUOUS`, they remain — the
-human can either resolve the ambiguity (and the next `/relay-tdd`
+human can either resolve the ambiguity (and the next `/relay-write-test`
 invocation finds existing partial coverage and skips them) or
 delete them manually.
 
@@ -312,10 +312,10 @@ Exit.
 
 ---
 
-### Step 3.1 — Write `tdd-initial-suite.diff`
+### Step 3.1 — Write `test-suite.diff`
 
 Use `Write` to create
-`<target_root>/PRPs/reports/<feature>/tdd-initial-suite.diff` with
+`<target_root>/PRPs/reports/<feature>/test-suite.diff` with
 content:
 
 ```
@@ -342,24 +342,24 @@ content:
 *Status: DRAFT*
 ```
 
-This artifact is what `/relay-tdd-review` reads as the suite
+This artifact is what `/relay-test-write-review` reads as the suite
 under review. Its trailing `*Status: DRAFT*` is what
-`/relay-tdd-review` flips on B8 APPROVED.
+`/relay-test-write-review` flips on B8 APPROVED.
 
 ### Step 3.2 — Handoff confirmation
 
 Emit exactly:
 
 ```
-DRAFT TDD suite written to PRPs/reports/<feature>/tdd-initial-suite.diff.
+DRAFT TDD suite written to PRPs/reports/<feature>/test-suite.diff.
 Aggregate verdict: <SUITE_DRAFT_WRITTEN | EXISTING_COVERAGE_SUFFICIENT>.
 Test files written: <count> (paths in the .diff manifest).
-Run /relay:relay-tdd-review PRPs/reports/<feature>/tdd-initial-suite.diff to validate.
+Run /relay:relay-test-write-review PRPs/reports/<feature>/test-suite.diff to validate.
 ```
 
-Do not emit anything after this line. The `/relay-tdd` command
-returns control to the caller. The `tdd-reviewer` agent is
-invoked separately by `/relay-tdd-review`.
+Do not emit anything after this line. The `/relay-write-test` command
+returns control to the caller. The `test-reviewer` agent is
+invoked separately by `/relay-test-write-review`.
 
 ---
 
@@ -390,7 +390,7 @@ invoked separately by `/relay-tdd-review`.
 - **Modifying existing test files.** Always emit `AMBIGUOUS` (or
   `EXISTING_TEST_COVERS` for the read-only mapping case) instead.
 - **Flipping status to APPROVED.** Not your job. The
-  `/relay-tdd-review` command does that on B8 rubric pass.
+  `/relay-test-write-review` command does that on B8 rubric pass.
 - **Re-running the existing-coverage scan on every AC** (O(n²) in
   test count) — scan once in Phase 1.5 and cache results in
   context.
@@ -399,9 +399,9 @@ invoked separately by `/relay-tdd-review`.
 
 ## Out of scope (explicit deferrals)
 
-- **Reviewing your own output.** `tdd-reviewer` (B8) validates the
+- **Reviewing your own output.** `test-reviewer` (B8) validates the
   suite against the five-pathology rubric + R-RED-LEGITIMATE.
-- **Flipping suite status to APPROVED.** `/relay-tdd-review`
+- **Flipping suite status to APPROVED.** `/relay-test-write-review`
   command owns the flip.
 - **Re-invoking on `CHANGES_REQUESTED`.** That is the
   orchestrator's responsibility (`/relay-execute`'s

@@ -366,7 +366,7 @@ Two execution stages, in order:
   `dotnet build`) confirming the newly-created types compile — the
   behavioral test-framework assertions are deferred to the feature
   phases that consume the seam (the TDD track skips test-first for
-  `foundation` per `/relay-tdd` P5). Requiring a test-framework
+  `foundation` per `/relay-write-test` P5). Requiring a test-framework
   invocation here would produce only performative tests.
 - Otherwise, parse every `**VALIDATE**:` command in
   `## Step-by-Step Tasks`. The first token of each VALIDATE command

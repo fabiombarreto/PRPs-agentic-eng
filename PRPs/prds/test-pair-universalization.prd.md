@@ -202,7 +202,7 @@ Current value of `tdd` in `docs/context/methodology.md`: **false**.
 
 | # | Phase | Description | Status | Parallel | Depends | PRP Plan |
 |---|-------|-------------|--------|----------|---------|----------|
-| 1 | Rename (behavior-preserving) | Rename the 2 agents + 2 commands + artifact strings across `plugins/relay/`; update every cross-reference; keep tdd:false self-skip intact for now | pending | - | - | - |
+| 1 | Rename (behavior-preserving) | Rename the 2 agents + 2 commands + artifact strings across `plugins/relay/`; update every cross-reference; keep tdd:false self-skip intact for now | complete | - | - | PRPs/plans/test-pair-universalization-phase-1-rename-behavior-preserving.plan.md |
 | 2 | test-writer: mode + lifecycle | test-after mode; full CREATE/UPDATE/DELETE; suite-manifest lifecycle ledger with classifications + justifications; reframe "Implementer must satisfy" | pending | - | 1 | - |
 | 3 | test-reviewer: mode + legitimacy | RED↔GREEN legitimacy by mode; new `R-LIFECYCLE-LEGITIMATE` (no unrecorded update/delete; obsolete/redundant validated); keep the five quality checks | pending | - | 2 | - |
 | 4 | Post-green (B5) ledger-awareness | `post-green-reviewer` + `/relay-test-review` consult the APPROVED suite manifest: ledger-matched removals/skips = accepted notes, unmatched = blocking; extend detection to whole-file test deletions | pending | 5 | 3 | - |

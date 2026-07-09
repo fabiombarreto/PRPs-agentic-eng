@@ -336,7 +336,7 @@ The code-reviewer arbitrates the dispute. It appends one verdict line to `code-r
 
 - **`DISPUTE_REJECTED`** → next attempt mandates code (the implementer cannot dispute the same tests again). Carry `last_reviewer_feedback = [{rubric_id: "arbitration", reason: "dispute rejected: <reason>; produce code addressing the disputed tests"}]`. Increment `attempt`. Restart pre-flight checks.
 
-- **`DISPUTE_UPHELD_TEST_WRONG`** → the disputed tests are wrong. B7/B8 bounce-back is deferred per source PRD D14 (placeholder protocol reserved). Write `<artifact_root>../halt.json` with `{outcome: "DISPUTE_UPHELD_TEST_WRONG", dispute_payload, arbitration_verdict, attempt_history, dispute_history, actionable_recommendation: "Surface dispute to user; user decides whether to update tests or re-author the PRD. When B7/B8 ship, re-invoke via Task(subagent_type='tdd-writer', prompt={attempt_history, dispute_evidence})."}`. HALT with verbatim message:
+- **`DISPUTE_UPHELD_TEST_WRONG`** → the disputed tests are wrong. B7/B8 bounce-back is deferred per source PRD D14 (placeholder protocol reserved). Write `<artifact_root>../halt.json` with `{outcome: "DISPUTE_UPHELD_TEST_WRONG", dispute_payload, arbitration_verdict, attempt_history, dispute_history, actionable_recommendation: "Surface dispute to user; user decides whether to update tests or re-author the PRD. When B7/B8 ship, re-invoke via Task(subagent_type='test-writer', prompt={attempt_history, dispute_evidence})."}`. HALT with verbatim message:
   > DISPUTE_UPHELD_TEST_WRONG. The code-reviewer agreed the
   > disputed tests contradict the PRD. B7/B8 bounce-back is
   > deferred in MVP per source PRD D14 (placeholder protocol
@@ -344,7 +344,7 @@ The code-reviewer arbitrates the dispute. It appends one verdict line to `code-r
   > PRPs/reports/<feature>/phase-<N>/halt.json; either update the
   > tests by hand or surface the dispute to the user for decision.
   > When TDD Writer (B7) ships, the Task dispatch contract will
-  > be: Task(subagent_type='tdd-writer',
+  > be: Task(subagent_type='test-writer',
   > prompt={attempt_history, dispute_evidence}).
 
 - **`DISPUTE_UPHELD_PRD_AMBIGUOUS`** → the PRD itself is ambiguous; tests and proposed code both have legitimate readings. Write `<artifact_root>../halt.json` with the same shape, `actionable_recommendation: "Hand-edit the PRD to disambiguate; flip its status back to DRAFT; re-run /relay-prd."`. HALT with verbatim message:

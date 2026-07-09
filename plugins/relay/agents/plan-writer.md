@@ -496,7 +496,7 @@ Assemble in this order:
      dominated by `CREATE` rows for source modules that later phases
      reference; the phase Goal names "foundation", "seam", "scaffold
      the domain", or "create the entity/repository/schema". This value
-     is consumed by the TDD track (`/relay-tdd` P5, `/relay-execute`
+     is consumed by the TDD track (`/relay-write-test` P5, `/relay-execute`
      A.3.5) to skip test-first for the phase. Assign it only when the
      phase genuinely creates types under test — an incorrect
      `phase_type: foundation` on a behavioral feature phase would
