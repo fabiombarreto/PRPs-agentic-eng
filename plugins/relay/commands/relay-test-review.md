@@ -68,7 +68,20 @@ worktree: <absolute path>
 run_json_path: <worktree>/PRPs/reports/<feature>/run.json
 base_branch: <resolved base>
 run_id: <from run.json>
+suite_manifest_path: <worktree>/PRPs/reports/<feature>/test-suite.diff
 ```
+
+`<feature>` is the same value already resolved above for
+`run_json_path` — no new resolution logic is needed, only the path
+string. A missing or `*Status: DRAFT*` manifest is expected and
+legitimate (e.g. a run with no test-pair activity this session); the
+agent's own Step 2.5 treats that as `ledger = none`. Its removal/skip
+blocking behavior (Steps 3a/3b) is then byte-identical to before —
+every removal/skip still blocks. Its whole-file-deletion detection
+(Step 3d) is new, strictly-additive behavior this phase introduces:
+it applies regardless of manifest presence, so with no manifest a
+deleted test file still blocks (new, stricter than the pre-phase
+agent, which had no such detection at all).
 
 The agent reads the run.json, diffs changed test files against the
 base, classifies concerns, and returns a JSON verdict inside a fenced
