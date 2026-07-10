@@ -1,6 +1,6 @@
 ---
 name: test-reviewer
-description: Validate the DRAFT TDD initial suite produced by `test-writer` (B7) against a five-pathology rubric (`R-IMPL-LEAK`, `R-TRIVIAL-ASSERT`, `R-MOCK-ABUSE`, `R-AC-COVERAGE`, `R-DUPLICATE`) plus a hybrid static/dynamic `R-RED-LEGITIMATE` check (B8 of relay's Phase 2 trilho TDD). Returns `APPROVED` or `CHANGES_REQUESTED` with a structured rubric array. Appends every verdict to `PRPs/plans/<basename>.test-write-review.jsonl`. Has Bash for the dynamic R-RED-LEGITIMATE check; explicitly has NO `Edit` — the `/relay-test-write-review` command owns the DRAFT→APPROVED flip on rubric pass.
+description: Validate the DRAFT TDD suite produced by `test-writer` (B7) against a five-pathology rubric (`R-IMPL-LEAK`, `R-TRIVIAL-ASSERT`, `R-MOCK-ABUSE`, `R-AC-COVERAGE`, `R-DUPLICATE`), a mode-selected hybrid static/dynamic legitimacy check (`R-RED-LEGITIMATE` in test-first mode / `R-GREEN-LEGITIMATE` in test-after mode), and a lifecycle-ledger check `R-LIFECYCLE-LEGITIMATE` that independently re-validates every recorded test UPDATE/DELETE (B8 of relay's Phase 2 trilho TDD; mode derived from `docs/context/methodology.md`'s `tdd:` value). Returns `APPROVED` or `CHANGES_REQUESTED` with a structured seven-row rubric array (plus an optional documented `-STATIC` degraded-fallback sub-row per Step 1.6.c — not an invented eighth id). Appends every verdict to `PRPs/plans/<basename>.test-write-review.jsonl`. Has Bash for the dynamic legitimacy check; explicitly has NO `Edit` — the `/relay-test-write-review` command owns the DRAFT→APPROVED flip on rubric pass.
 model: sonnet
 color: green
 tools: Read, Write, Glob, Grep, Bash, BashOutput, Task
@@ -58,18 +58,30 @@ universe.
 3. **JSONL is append-only.** Read the existing
    `PRPs/plans/<basename>.test-write-review.jsonl` (or treat absence as
    empty), append one new line, Write back. Never truncate.
-4. **The five rubric ids are the canonical taxonomy:**
-   `R-IMPL-LEAK`, `R-TRIVIAL-ASSERT`, `R-MOCK-ABUSE`,
-   `R-AC-COVERAGE`, `R-DUPLICATE`. Plus the hybrid check
-   `R-RED-LEGITIMATE`. Do not invent new ids; if a finding does
-   not fit one of the six, drop it.
+4. **Seven rubric ids are the canonical taxonomy:** the five
+   mode-agnostic quality ids — `R-IMPL-LEAK`, `R-TRIVIAL-ASSERT`,
+   `R-MOCK-ABUSE`, `R-AC-COVERAGE`, `R-DUPLICATE` — plus the
+   mode-selected legitimacy id (`R-RED-LEGITIMATE` in test-first,
+   `R-GREEN-LEGITIMATE` in test-after — exactly one of the two
+   emits per run, never both), plus `R-LIFECYCLE-LEGITIMATE`. Do
+   not invent new ids; if a finding does not fit one of the
+   seven, drop it. **Documented exception:** the `-STATIC` suffix
+   variant of the mode-selected legitimacy id
+   (`R-RED-LEGITIMATE-STATIC` in test-first,
+   `R-GREEN-LEGITIMATE-STATIC` in test-after) is a degraded-fallback
+   sub-row emitted only per Step 1.6.c, when the mode-selected
+   legitimacy row itself is already `passed: null` and the static
+   fallback also fails — it is a documented sub-row of the
+   seven-id taxonomy, not an invented eighth id.
 5. **No padding.** The rubric array carries one row per evaluated
    id with a definitive `passed` value. Do not emit speculative
    `passed: false` rows when no finding actually exists. Better
    zero failing rows in a category than fabricated evidence.
-6. **`passed: null` is reserved for `R-RED-LEGITIMATE` degraded
-   environments only.** All other ids must produce `true` or
-   `false`.
+6. **`passed: null` is reserved for the mode-selected legitimacy
+   row's degraded environments only** (`R-RED-LEGITIMATE` in
+   test-first, `R-GREEN-LEGITIMATE` in test-after). All other
+   ids — including `R-LIFECYCLE-LEGITIMATE` — must produce `true`
+   or `false`.
 
 ---
 
@@ -97,13 +109,30 @@ Read these files from `<target_root>`:
   matters most in compiled languages, where a reference to a
   not-yet-created production symbol surfaces as a compile error over
   the whole test source set rather than a runtime import error.
+  **This discriminator applies to `mode == test-first` ONLY** — in
+  `mode == test-after` the production code already exists, so a red
+  result is never red-by-design; see the `R-GREEN-LEGITIMATE` branch
+  of Step 1.6.b.
 - `<source_prd_path>` (from the manifest) — the source PRD.
   Locate `## Acceptance Criteria (test scenarios)` and extract
   every AC-N (id, name, body).
-- `docs/context/methodology.md` — capture
-  `test_frameworks: [...]` for the dynamic R-RED-LEGITIMATE
-  check. The first framework is the primary; same heuristic as
-  B7.
+- `docs/context/methodology.md` — capture `tdd:` and
+  `test_frameworks: [...]`. The first framework is the primary;
+  same heuristic as B7.
+  - Determine `mode` from `tdd:` — this is an **ordering**
+    selector, not an activation gate: `tdd: true` + non-empty
+    `test_frameworks` → `mode = test-first` (the pair ran before
+    the Implementer; a legitimately red suite pre-implementation
+    is the target — the RED-legitimate check, Step 1.6, unchanged).
+    `tdd: false` + non-empty `test_frameworks` → `mode =
+    test-after` (the pair runs after the Implementer + Code
+    Review; a legitimately green suite against the
+    already-implemented code is the target — a red result
+    surfaces an implementation bug or a bad test — the
+    GREEN-legitimate check, Step 1.6). `mode` selects which
+    legitimacy row Step 1.6 emits (`R-RED-LEGITIMATE` in
+    test-first, `R-GREEN-LEGITIMATE` in test-after); it does not
+    gate whether B8 runs at all.
 - Each new test file path from the manifest — Read end-to-end.
 - Each `EXISTING_TEST_COVERS` mapping target — Read the cited
   lines (a small ±5 line window around the cited line is
@@ -249,14 +278,19 @@ plus inputs. Record `passed: false` with a `reason` naming the
 duplicate pair's file paths and line numbers. `passed: true`
 when no duplicates are found.
 
-### R-RED-LEGITIMATE — hybrid static + dynamic check
+### R-RED-LEGITIMATE / R-GREEN-LEGITIMATE — mode-selected RED-legitimate / GREEN-legitimate check
 
-The dynamic-then-static fallback per PRD AC-13:
+The dynamic-then-static fallback per PRD AC-13, now mode-selected:
+`mode == test-first` emits under id `R-RED-LEGITIMATE` (unchanged
+from pre-Phase-3 behavior — AC-A2 / PRD AC-2); `mode == test-after`
+emits under id `R-GREEN-LEGITIMATE` (the inversion — AC-A1 / PRD
+AC-4). Exactly one of the two ids is emitted per run, selected by
+the `mode` derived in Phase 0.
 
 #### Step 1.6.a — Attempt dynamic execution
 
-Invoke via `Bash` the test command for `test_frameworks[0]`. The
-command form depends on the framework:
+Invoke via `Bash` the test command for `test_frameworks[0]`,
+regardless of `mode`. The command form depends on the framework:
 
 - pytest → `pytest <new_test_paths>`
 - vitest → `npx vitest run <new_test_paths>`
@@ -266,7 +300,18 @@ command form depends on the framework:
 
 Capture stdout + stderr + exit code via `BashOutput`.
 
-#### Step 1.6.b — Classify the dynamic result
+#### Step 1.6.b — Classify the dynamic result (branch by mode)
+
+**Shared, regardless of mode:** if the `Bash` invocation itself
+failed (command not found, exit code 127, framework not
+installed, sandbox restriction blocking Bash, Docker not
+running): degraded environment → `passed: null`,
+`reason: "degraded — test framework execution unavailable: <details>"`,
+emitted under whichever id `mode` selects (`R-RED-LEGITIMATE` in
+test-first, `R-GREEN-LEGITIMATE` in test-after). Otherwise branch
+on `mode`:
+
+##### `mode == test-first` → emit under id `R-RED-LEGITIMATE` (kept verbatim)
 
 - **Exit code 0** (suite green pre-implementation): the new
   tests pass before any implementation exists. The suite is
@@ -281,9 +326,12 @@ Capture stdout + stderr + exit code via `BashOutput`.
   errors — `cannot find symbol`, `undefined: <name>`, `type or
   namespace ... could not be found` — `cannot find module`, fixture
   setup errors, framework bootstrap errors): apply the **seam-set
-  discriminator** before classifying (this is the compiled-language
-  refinement — a reference to a not-yet-created production symbol is a
-  *legitimate* red-by-design failure, not broken setup):
+  discriminator** before classifying — this discriminator applies to
+  `mode == test-first` ONLY (see the `mode == test-after` branch
+  below for why it does not apply there); this is the
+  compiled-language refinement — a reference to a not-yet-created
+  production symbol is a *legitimate* red-by-design failure, not
+  broken setup:
   - Extract the unresolved symbol(s) named in the error output (the
     class/type/function/module the compiler or importer could not
     resolve).
@@ -302,11 +350,23 @@ Capture stdout + stderr + exit code via `BashOutput`.
     (malformed test source, not an unresolved reference): broken
     setup regardless of the seam set. → `passed: false`,
     `reason: "broken setup — test source syntax error: <first error line>"`.
-- **Bash invocation itself failed** (command not found, exit
-  code 127, framework not installed, sandbox restriction blocking
-  Bash, Docker not running): degraded environment. →
-  `passed: null`,
-  `reason: "degraded — test framework execution unavailable: <details>"`.
+
+##### `mode == test-after` → emit under id `R-GREEN-LEGITIMATE` (inverted)
+
+The production code already exists in test-after mode. A red
+result is therefore never red-by-design — the seam-set
+discriminator used in test-first does NOT apply here; any red
+surfaces either an implementation bug or a bad test, with no
+carve-out for "symbol not yet implemented" (the symbol already
+exists — it was implemented before this pair ran).
+
+- **Exit code 0** (suite green against the already-implemented
+  code): the tests pass against the real SUT — this is the
+  target state in test-after. → `passed: true`.
+- **Any non-zero exit code** (assertion failure, compile/setup
+  error, or any other red — no seam-set carve-out applies): →
+  `passed: false`,
+  `reason: "suite red in test-after — implementation bug or bad test: <first failure line>"`.
 
 #### Step 1.6.c — Static fallback when degraded
 
@@ -315,13 +375,71 @@ each new test file imports / requires / aliases at least one
 symbol that does not yet exist in the source tree (heuristic:
 the import target is in `## Files to Change` of the plan with
 action `CREATE` or `UPDATE`). If the static check fails (every
-test imports only existing symbols), record `R-RED-LEGITIMATE-STATIC`
-as a *separate* row with `passed: false`,
+test imports only existing symbols), record a `-STATIC` row under
+the mode-selected id (`R-RED-LEGITIMATE-STATIC` in test-first,
+`R-GREEN-LEGITIMATE-STATIC` in test-after) as a *separate* row
+with `passed: false`,
 `reason: "static fallback: every test imports only existing symbols — suite cannot be red"`.
-Otherwise record only the `passed: null` R-RED-LEGITIMATE row.
+Otherwise record only the `passed: null` mode-selected legitimacy
+row (`R-RED-LEGITIMATE` in test-first, `R-GREEN-LEGITIMATE` in
+test-after).
 
 The aggregate verdict (Phase 2) treats `passed: null` as
 non-blocking when all other rows are `passed: true`.
+
+### R-LIFECYCLE-LEGITIMATE — lifecycle ledger completeness + anti-weakening
+
+Mode-agnostic (unlike the legitimacy row above, this check runs
+identically in `test-first` and `test-after`). Independently
+re-validates every UPDATE/DELETE the writer performed this session
+against the manifest's `## Lifecycle ledger` table (shape: `| Op |
+Classification | Test (file:function) | Justification |`, per
+`test-writer.md:436-448`). Match ledger rows to the observed
+test-file changes in the diff by `file + function` only —
+content-hash hardening is a deferred Could-item + Open Question
+(out of this phase's scope — MVP scope note only, no spoofing
+hardening implemented here).
+
+**Create-only sessions.** When the ledger's sole row is the
+sentinel `(none — no update/delete this session)`, this check
+passes trivially: `passed: true`, nothing to validate.
+
+Otherwise, walk every ledger row against the source PRD's
+`## Acceptance Criteria` section and the plan's in-scope AC-A
+list, and against the observed test-file diff:
+
+- **(a) Completeness (PRD AC-9).** Every test-file UPDATE or
+  DELETE present in the diff MUST have a matching ledger row keyed
+  by `file:function`. Any UPDATE/DELETE observed in the diff with
+  no matching ledger row is an unrecorded op → `passed: false`,
+  `reason: "unrecorded test-file <op> at <file:function> — no matching lifecycle-ledger entry"`.
+- **(b) `OBSOLETE_TEST_REMOVED` anti-weakening (PRD AC-8).** The
+  removed test's named behavior must map to NO live in-scope AC —
+  re-derive this independently (mirroring the writer's own guard,
+  `test-writer.md:301-327`) rather than trusting the ledger's
+  justification at face value. If any in-scope AC still requires
+  the removed behavior, the removal is weakening → `passed: false`,
+  `reason: "OBSOLETE_TEST_REMOVED at <file:function> still maps to live in-scope AC-<N> — weakening"`.
+- **(c) `REDUNDANT_TEST_REMOVED` anti-weakening.** The ledger row
+  must name a surviving test (`file:function`) that provably
+  covers the same observable — same assertion target, no
+  discriminative input/precondition/assertion difference (same
+  standard as the writer's own guard, `test-writer.md:301-327`). A
+  missing survivor, or a named survivor that does not cover the
+  same observable → `passed: false`,
+  `reason: "REDUNDANT_TEST_REMOVED at <file:function> names no provably-covering survivor"`.
+- **(d) `EXISTING_TEST_UPDATED` anti-weakening.** The update must
+  not drop an assertion a live in-scope AC still requires — compare
+  the pre-update and post-update assertion set against the AC's
+  required observable properties. Any assertion dropped that an
+  in-scope AC still requires → `passed: false`,
+  `reason: "EXISTING_TEST_UPDATED at <file:function> drops an assertion AC-<N> still requires"`.
+
+Record `passed: true` only when completeness (a) holds AND every
+recorded op independently passes its (b) / (c) / (d) check. A
+single failing op in an otherwise-complete ledger is still
+`passed: false` for this row as a whole — do not average or
+partially-credit outcomes.
 
 ---
 
@@ -331,8 +449,10 @@ After every rubric row is recorded:
 
 - **APPROVED** when:
   - Every row in the rubric array has `passed: true`, OR
-  - Every row has `passed: true` except `R-RED-LEGITIMATE` which
-    is `passed: null` (degraded environment).
+  - Every row has `passed: true` except the mode-selected
+    legitimacy row (`R-RED-LEGITIMATE` in test-first,
+    `R-GREEN-LEGITIMATE` in test-after) which is `passed: null`
+    (degraded environment).
 - **CHANGES_REQUESTED** when any row has `passed: false`.
 
 Build the verdict line:
@@ -347,12 +467,28 @@ Build the verdict line:
     { "id": "R-MOCK-ABUSE", "passed": true },
     { "id": "R-AC-COVERAGE", "passed": true },
     { "id": "R-DUPLICATE", "passed": true },
-    { "id": "R-RED-LEGITIMATE", "passed": null, "reason": "degraded — test framework execution unavailable: pytest not in PATH" }
+    { "id": "R-RED-LEGITIMATE", "passed": null, "reason": "degraded — test framework execution unavailable: pytest not in PATH" },
+    { "id": "R-LIFECYCLE-LEGITIMATE", "passed": true }
   ],
   "action": "rubric_evaluation",
   "user_message": ""
 }
 ```
+
+(This example is `mode == test-first`, hence the sixth row's id is
+`R-RED-LEGITIMATE`. In `mode == test-after` the sixth row's id is
+`R-GREEN-LEGITIMATE` instead — the seventh `R-LIFECYCLE-LEGITIMATE`
+row is mode-agnostic and always present under the same id in both
+modes.)
+
+**Documented `-STATIC` exception.** When the mode-selected
+legitimacy row is `passed: null` (degraded) and Step 1.6.c's static
+fallback also fails, an eighth row with id `R-RED-LEGITIMATE-STATIC`
+(test-first) or `R-GREEN-LEGITIMATE-STATIC` (test-after) is
+appended with `passed: false`. This is the same documented
+degraded-fallback sub-row named in Hard constraint #4 — not an
+invented id — and is the only condition under which the rubric
+array legitimately grows beyond seven rows.
 
 ---
 
@@ -379,7 +515,7 @@ Emit:
 
 ```
 B8 verdict: APPROVED.
-Rubric: all 5 pathology checks passed; R-RED-LEGITIMATE: <true|null+reason>.
+Rubric: all 5 pathology checks passed; <R-RED-LEGITIMATE|R-GREEN-LEGITIMATE> (mode-selected): <true|null+reason>; R-LIFECYCLE-LEGITIMATE: <true|passed trivially — create-only session>.
 JSONL appended to PRPs/plans/<basename>.test-write-review.jsonl.
 ```
 
@@ -411,15 +547,20 @@ Do not emit anything after the JSONL append confirmation line.
 
 ## Anti-patterns (hard rules)
 
-- **Padding the rubric.** Six rows always; never inflate. If a
-  category has zero findings, row is `passed: true`. Period.
+- **Padding the rubric.** Seven rows always (plus the optional
+  documented `-STATIC` degraded-fallback sub-row per Step 1.6.c —
+  see Hard constraint #4 — when the mode-selected legitimacy row
+  is `passed: null` and the static fallback also fails); never
+  inflate beyond that. If a category has zero findings, row is
+  `passed: true`. Period.
 - **Inventing failing reasons.** Every `passed: false` row carries
   a `reason` that quotes the offending file path + line + symbol.
   No vague "looks fishy" entries.
 - **Modifying any file other than the JSONL.** No `Edit` tool —
   enforced. Even via `Write`, the only allowed write target is
   the JSONL audit log.
-- **Skipping the dynamic R-RED-LEGITIMATE check when the
+- **Skipping the dynamic legitimacy check (`R-RED-LEGITIMATE` in
+  test-first, `R-GREEN-LEGITIMATE` in test-after) when the
   framework IS executable.** The `passed: null` degraded value is
   for genuinely-unavailable environments, not for "I didn't feel
   like running Bash".
