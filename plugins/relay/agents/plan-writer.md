@@ -119,6 +119,22 @@ task, and exit cleanly when there is nothing to plan.
     conscious divergence from the 2026-04-25 per-phase naming
     convention, recorded in the Decisions Log of
     `PRPs/prds/relay-plan-prd-less-mode.prd.md`.
+11. **Validation commands must be able to fail (real exit-code
+    semantics).** Every command you emit under `## Validation
+    Commands` (Levels 1–3) and every per-task `**VALIDATE**:`
+    command MUST exit non-zero when the invariant it checks is
+    violated. The idiom `<check> && echo "PASS" || echo "FAIL"`
+    (and its anti-pattern mirror `grep <forbidden> … && echo
+    "FOUND" || echo "PASS"`) ALWAYS exits 0 — both branches are a
+    successful `echo` — so the downstream `code-reviewer`
+    R-L1/R-L2/R-L3 gate ("PASS iff exit code 0") can never fail on
+    it and the gate is cosmetic. Use a real exit instead:
+    `if grep -q <pattern> <paths>; then echo "FAIL: …"; exit 1;
+    else echo "PASS: …"; fi`, or let the tool's own non-zero status
+    propagate (a bare `grep -q <pattern> <paths>` with no
+    `|| echo`). `plan-reviewer`'s R-COH-VALIDATE-ALWAYS-PASS check
+    rejects plans that violate this. See Step 4.4 item 11 for the
+    full wrong→right table.
 
 ---
 
@@ -531,7 +547,10 @@ Assemble in this order:
     - `**MIRROR**:` referencing a Patterns-to-Mirror anchor
     - `**VALIDATE**:` followed by a non-empty shell command (the
       keyword `VALIDATE` must appear; the command must be present
-      on the same line or the immediately following line).
+      on the same line or the immediately following line). The
+      command must carry real exit-code semantics — see item 11's
+      *Exit-code semantics* rule; a `**VALIDATE**` that prints
+      "FAIL" but still exits 0 is a cosmetic gate.
 11. `## Validation Commands` — Levels 1–3 only:
     - **Level 1 STATIC_ANALYSIS** (lint / type-check / markdown-lint
       / YAML parse, depending on the phase's deliverable).
@@ -542,6 +561,50 @@ Assemble in this order:
     Levels 4–6 (browser / database / manual) are NOT part of the
     fixed agent contract; include them only if the phase's
     deliverable genuinely needs them.
+
+    **Exit-code semantics (mandatory — each level must be able to
+    fail).** The `code-reviewer` runs each Level-1/2/3 command block
+    and scores it PASS iff the block's exit code is 0
+    (R-L1/R-L2/R-L3). Two traps make a block exit 0 while its
+    invariant is violated — avoid both:
+
+    1. **Masked failure.** `<check> && echo "PASS" || echo "FAIL"`
+       always exits 0 (both branches are a successful `echo`). So
+       does the anti-pattern mirror `grep <forbidden> file && echo
+       "FOUND" || echo "PASS"`. Never report PASS/FAIL through
+       `echo` alone.
+    2. **Non-propagating block.** A multi-line block returns the
+       exit code of its LAST line only; an earlier `grep -q` that
+       fails mid-block is silently discarded. Start every Level
+       block with `set -euo pipefail` (or `&&`-chain the checks, or
+       append `|| exit 1` to each) so any single failure fails the
+       block.
+
+    Wrong vs right:
+
+    ```
+    # WRONG — exits 0 whether or not the pattern is found:
+    grep -q "needle" file && echo "PASS" || echo "FAIL"
+    grep -n "\.claude/PRPs" file && echo "FOUND" || echo "PASS"
+
+    # RIGHT — anti-pattern must be ABSENT: exit 1 on any match.
+    if grep -nE "tdd-writer|/relay-tdd" plugins/relay/; then
+      echo "FAIL: residual identifiers"; exit 1
+    else
+      echo "PASS: none found"
+    fi
+
+    # RIGHT — positive presence: let the tool's status propagate,
+    # with set -e so a mid-block miss fails the whole block.
+    set -euo pipefail
+    grep -q "test-writer"   plugins/relay/agents/test-writer.md
+    grep -q "test-reviewer" plugins/relay/agents/test-reviewer.md
+    ```
+
+    Rule of thumb: if you cannot construct an input that makes the
+    command exit non-zero, it is a cosmetic gate — rewrite it.
+    `plan-reviewer`'s R-COH-VALIDATE-ALWAYS-PASS rejects plans whose
+    Level or `VALIDATE` commands can never fail.
 12. `## Acceptance Criteria` — bulleted list.
     - **PRD mode (`description_mode = false`):** every bullet must
       reference at least one PRD `AC-N` it derives from (rubric R8).
@@ -716,6 +779,11 @@ invoked separately by `/relay-plan-review`.
 - **Inventing `file:line` references.** Every code snippet in
   Patterns to Mirror carries a `source` field from a real research
   finding, or is replaced by `TBD - needs validation`.
+- **Cosmetic validation gates.** A Level-1/2/3 or `**VALIDATE**`
+  command of the form `<check> && echo "PASS" || echo "FAIL"`
+  always exits 0 and can never fail the `code-reviewer` R-L gate.
+  Emit `if …; then echo "FAIL: …"; exit 1; fi` — or let the tool's
+  own non-zero status propagate — instead. See Step 4.4 item 11.
 
 ---
 

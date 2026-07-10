@@ -659,6 +659,36 @@ The 2026-04-19 command surface decision's description of `/relay-execute` output
 
 ---
 
+## [2026-07-09] PRD `DRAFT → APPROVED` flip ownership is invocation-context-scoped
+
+**Context:** `prd-reviewer` requires the user's OWN explicit in-dialogue approval (distinct from the rubric passing) before flipping a PRD `DRAFT → APPROVED`, and correctly refuses to treat any agent- or orchestrator-relayed approval as the user's consent (the [2026-04-19] interactivity-boundary decision; `docs/anti-patterns.md`). But when `prd-reviewer` is dispatched as a `Task` subagent, the harness delivers the user's messages only to the main conversation — never to a subagent. The approval condition is therefore structurally unsatisfiable in subagent context: the reviewer runs the full rubric, returns a pass, and MUST refuse the flip, forcing the caller to bypass the gate and flip manually. Observed 2026-07-09 approving `PRPs/prds/test-pair-universalization.prd.md` — the reviewer subagent returned `RUBRIC_PASSED` and withheld the flip; the main-loop coordinator applied the two-line Edit after the user approved directly via the approval UI (see `PRPs/prds/test-pair-universalization.review.jsonl`).
+
+**Decision:** The flip is an interactivity-boundary action and its ownership is scoped by an explicit `invocation_context` input to `prd-reviewer`. This is **Option (a)** — main-conversation-only flip; the caller owns the mutation in subagent context. **Option (b)** — a caller-supplied approval token that the reviewer accepts as consent — was rejected because it re-introduces the exact relayed-consent risk the design forbids (a subagent cannot distinguish real user consent from a coordinator asserting it).
+
+- **`main` mode** — the reviewer protocol is adopted directly in the main conversation (as `/relay-prd` Phase B does). The user's messages reach the reviewer; it runs the rubric, dialogues, obtains the user's explicit approval, and OWNS the two-line `Edit` + the `final_flip` jsonl append. This is the unchanged `/relay-prd` behavior, now an explicit contract.
+- **`subagent` mode** — the reviewer was dispatched via `Task`. It runs the full rubric (R1–R7 + R-COH-*), appends a `verdict: "RUBRIC_PASSED"` / `action: "rubric_pass_delegated"` row, and RETURNS the rubric array plus exact `flip_instructions` to its invoker. It NEVER edits the DRAFT and NEVER appends `final_flip`. The invoker — which holds real user contact — obtains the user's own approval in the main conversation and then performs the flip. On rubric failure the subagent returns the defect list and does NOT enter the dialogue loop (Step 5).
+- **Default is `subagent`** (fail-safe): absent an explicit `main` declaration the reviewer never auto-flips.
+
+The APPROVED `PRPs/prds/prd-authoring.prd.md` is NOT mutated (reopening APPROVED PRDs is out of scope per `docs/anti-patterns.md` and the reviewer's `already_approved` precondition). AC-11's "the Reviewer commits the approval" is refined by this entry: the reviewer commits the approval when — and only when — it runs in `main` mode; in `subagent` mode the invoker commits it. This mirrors the established relay pattern where the COMMAND owns state mutations and the reviewer subagent owns only the verdict (`code-reviewer` + `/relay-implement`'s D8 mutations). The sibling `plan-reviewer` auto-flips with no user dialogue precisely because plans require no user approval — only the PRD sits on the interactivity boundary.
+
+**Reason:** Consent must live only where the user actually is. A subagent cannot receive the user's approval, so it must not own an approval-gated mutation. Encoding the locus as an explicit input (rather than a token the reviewer trusts) keeps the gate satisfiable by design in both contexts while preserving the no-relayed-consent invariant. The fail-safe default guarantees that a caller who forgets to declare the context can never cause an un-approved auto-flip.
+
+**Areas affected:** `plugins/relay/agents/prd-reviewer.md` (new `invocation_context` input; `## Invocation context and flip ownership` section; dual-mode Step 3/4/5 branching; `RUBRIC_PASSED` verdict + `rubric_pass_delegated` action in the review.jsonl contract; anti-patterns); `plugins/relay/commands/relay-prd.md` (Phase B declares `invocation_context: main`; subagent-dispatch note; approval constraint); any future orchestrator that dispatches `prd-reviewer` as a subagent (inherits the caller-owns-flip obligation); `PRPs/prds/prd-authoring.prd.md` AC-11 (refined here, not mutated).
+
+---
+
+## [2026-07-09] Validation commands must carry real exit-code semantics; plan-reviewer enforces via R-COH-VALIDATE-ALWAYS-PASS
+
+**Context:** `plan-writer`-generated plans routinely expressed Level-1/2/3 Validation Commands and per-task `VALIDATE` commands with the shell idiom `<check> && echo "PASS" || echo "FAIL"` (and the anti-pattern mirror `grep <forbidden> … && echo "FOUND" || echo "PASS"`). Both branches are a successful `echo`, so the command ALWAYS exits 0. `code-reviewer`'s R-L1/R-L2/R-L3 score a Level command PASS iff its exit code is 0, so a violated invariant that prints "FAIL" still passes review — the gate is cosmetic. Observed concretely in the generated Phase 1 plan of `PRPs/prds/test-pair-universalization.prd.md` (the AC-1 zero-grep gate printed "FAIL: residual …" yet exited 0). A second, related trap: a multi-line Level block returns only its LAST command's exit code, so an earlier `grep -q` miss is masked by a later passing line.
+
+**Decision:** Every command under `## Validation Commands` (Levels 1–3) and every per-task `VALIDATE:` command MUST exit non-zero when its invariant is violated. The canonical forms are `if grep -q <pattern> <paths>; then echo "FAIL: …"; exit 1; else echo "PASS: …"; fi`, the compact `grep -q … || { echo "FAIL: …"; exit 1; }`, or letting the tool's own non-zero status propagate under `set -euo pipefail`. The always-exit-0 `… && echo PASS || echo FAIL` idiom is forbidden. Enforced in three places: `plan-writer.md` (Hard constraint #11 + Step 4.4 item 11 wrong→right examples + anti-pattern bullet), `docs/context/plan-template.md` (mandatory extension #5 + item 12 note), and a new deterministic coherence check `R-COH-VALIDATE-ALWAYS-PASS` in `plan-reviewer.md` that fails any plan whose Level or `VALIDATE` commands can never exit non-zero.
+
+**Reason:** The weak idiom silently defeats the entire automated validation layer — the reviewer's exit-code gate is the only thing standing between a broken invariant and an APPROVED plan. Guidance alone is insufficient because the generating LLM emits the idiom freely; the deterministic `R-COH-VALIDATE-ALWAYS-PASS` check makes the contract enforceable at plan-review time (before implementation), where `code-reviewer`'s R-L gate structurally cannot catch it.
+
+**Areas affected:** `plugins/relay/agents/plan-writer.md`, `docs/context/plan-template.md`, `plugins/relay/agents/plan-reviewer.md` (new R-COH-VALIDATE-ALWAYS-PASS deterministic check; rubric[] length 14–19), every future generated plan's Validation Commands and per-task VALIDATE lines.
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision

@@ -77,7 +77,12 @@ Three canonical divergences from that sibling:
    structural regeneration is the orchestrator's job (or the
    developer's via `/relay-plan`), not this agent's.
 5. **Every verdict logs to `PRPs/plans/<basename>.review.jsonl`.**
-   One JSON object per line, appended. Never truncate.
+   One JSON object per line, appended. Never truncate. `<basename>`
+   is the plan filename with the trailing `.plan.md` stripped (then
+   `.review.jsonl` appended) — one canonical derivation, defined
+   with the exact string operation and a worked example in the
+   "## review.jsonl format" section below. Use that derivation
+   everywhere `<basename>` appears; never strip only `.md`.
 6. **Status flip is a two-line `Edit`** with exact-match strings:
    - `old_string`: `*Status: DRAFT*`
    - `new_string`: `*Approved: <YYYY-MM-DD>*\n*Status: APPROVED*`
@@ -396,6 +401,35 @@ Two execution stages, in order:
 - A row whose path is missing fails. Reason names the path and the
   table row's Why column verbatim.
 
+#### R-COH-VALIDATE-ALWAYS-PASS — validation commands can actually fail
+
+Guards against cosmetic validation gates: commands that print
+"FAIL" (or report an anti-pattern hit) but still exit 0, so the
+downstream `code-reviewer` R-L1/R-L2/R-L3 gate ("PASS iff exit code
+0") can never fail on them. This is the one defect `code-reviewer`
+structurally cannot catch — it runs the command and trusts the
+exit code the plan author chose.
+
+- Scan every command body in the plan's `## Validation Commands`
+  section (Levels 1–3) and every `**VALIDATE**:` command in
+  `## Step-by-Step Tasks`.
+- A command FAILS this check when its outcome is reported ONLY
+  through `echo` and no branch exits non-zero — i.e. it matches the
+  shape `<check> && echo … || echo …` (or the anti-pattern mirror
+  `grep <forbidden> … && echo "FOUND" || echo "PASS"`) with no
+  `exit 1` (or `exit $?`, `return 1`, `false`) on the failure
+  branch, so the command exits 0 regardless of `<check>`'s result.
+- A multi-line Level block that neither opens with `set -e`
+  (`set -euo pipefail`), nor `&&`-chains its checks, nor appends
+  `|| exit 1` to each, ALSO fails: an earlier `grep -q` miss is
+  masked by a later passing line, so the block exits 0 while an
+  invariant is violated.
+- PASS iff every scanned command either lets an underlying non-zero
+  status propagate as the block's exit code or explicitly `exit 1`s
+  on failure. FAIL naming the Level (or task heading), quoting the
+  offending command verbatim, and stating the fix form:
+  `if <check>; then echo "FAIL: …"; exit 1; else echo "PASS: …"; fi`.
+
 ### Bounded K=5 LLM judgment pass
 
 After the deterministic checks emit their rows, run a single LLM pass
@@ -453,8 +487,8 @@ contradictions / the deterministic check held / the K=5 pass returned
 zero findings under that classification, and `false` when a
 contradiction was found (with a non-empty `reason`).
 
-The total `rubric[]` length per run is `8 (R1–R8) + 5 (deterministic
-R-COH-*) + ≤5 (K=5 pass) = 13 to 18 rows`. The "exactly 8" wording
+The total `rubric[]` length per run is `8 (R1–R8) + 6 (deterministic
+R-COH-*) + ≤5 (K=5 pass) = 14 to 19 rows`. The "exactly 8" wording
 at the five sites is replaced by "R1–R8 always present, no duplicates
 among R1–R8; R-COH-* rows additional" — see the JSONL format section
 below.
@@ -718,6 +752,36 @@ section is intentionally empty.
 
 Path: `<target_root>/PRPs/plans/<basename>.review.jsonl`
 
+**Deriving `<basename>` (canonical — one derivation, no exceptions).**
+`<basename>` is the plan filename with the trailing `.plan.md`
+suffix stripped. Apply this exact string operation to `draft_path`
+every run, so every run against the same plan resolves to the
+identical path:
+
+1. Take the filename component of `draft_path` (everything after
+   the last `/` or `\`). It always ends in `.plan.md` (the command
+   guaranteed this precondition).
+2. Strip the trailing literal `.plan.md` (all 8 characters,
+   `.plan.md`). Do **not** strip only `.md` — the `.plan` segment
+   is part of the suffix and must be removed with it.
+3. Append the literal `.review.jsonl`.
+
+This mirrors `code-reviewer`'s convention exactly: `code-reviewer`
+strips `.plan.md` and appends `.code-review.jsonl`; you strip
+`.plan.md` and append `.review.jsonl`.
+
+Worked example:
+
+- Plan `test-pair-universalization-phase-1-rename-behavior-preserving.plan.md`
+  → jsonl `test-pair-universalization-phase-1-rename-behavior-preserving.review.jsonl`
+  (strip `.plan.md`, append `.review.jsonl`).
+- **WRONG — never produce this:**
+  `test-pair-universalization-phase-1-rename-behavior-preserving.plan.review.jsonl`.
+  That is the result of stripping only `.md` and keeping `.plan`.
+  It splits the append-only audit trail across two files depending
+  on which strip the model picks — the exact defect this convention
+  eliminates.
+
 One JSON object per line, appended (never truncated). Shape:
 
 ```json
@@ -737,7 +801,8 @@ One JSON object per line, appended (never truncated). Shape:
     { "id": "R-COH-FILES-UNTOUCHED", "passed": true },
     { "id": "R-COH-VALIDATE-FRAMEWORK-MISMATCH", "passed": true, "reason": "test_frameworks empty in methodology.md; framework-mismatch check skipped" },
     { "id": "R-COH-PATTERN-SOURCE-MISSING", "passed": true },
-    { "id": "R-COH-MANDATORY-READING-MISSING", "passed": true }
+    { "id": "R-COH-MANDATORY-READING-MISSING", "passed": true },
+    { "id": "R-COH-VALIDATE-ALWAYS-PASS", "passed": true }
   ],
   "action": "final_flip",
   "user_message": ""

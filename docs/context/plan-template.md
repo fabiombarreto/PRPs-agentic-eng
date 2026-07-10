@@ -59,6 +59,15 @@ command-surface decision).
    7.4 (lines 382–386) — that is the single source of truth.
    plan-reviewer R5 enforces byte-equality.
 
+5. **Validation exit-code semantics.** Every command under
+   `## Validation Commands` (Levels 1–3) and every per-task
+   `VALIDATE:` command MUST exit non-zero when its invariant is
+   violated. The idiom `<check> && echo "PASS" || echo "FAIL"`
+   always exits 0 and is forbidden — the `code-reviewer`
+   R-L1/R-L2/R-L3 gate scores PASS iff exit code is 0, so a masked
+   failure passes review silently. plan-reviewer's
+   R-COH-VALIDATE-ALWAYS-PASS check enforces this.
+
 ---
 
 ## Output path
@@ -234,6 +243,18 @@ mandatory fields.
     Levels 4–6 (browser / database / manual) are NOT part of the
     fixed agent contract; include them only if the phase's
     deliverable genuinely needs them.
+
+    **Exit-code semantics (mandatory).** Each Level command must
+    exit non-zero when its invariant fails — the `code-reviewer`
+    scores PASS iff exit code is 0 (R-L1/R-L2/R-L3). Do NOT use
+    `<check> && echo "PASS" || echo "FAIL"` (always exits 0), and
+    do NOT rely on a multi-line block whose earlier failure is
+    masked by a later passing line (a block returns its LAST
+    command's exit code). Use `if grep -q … ; then echo "FAIL: …";
+    exit 1; else echo "PASS: …"; fi`, or let the tool's own status
+    propagate under `set -euo pipefail`. See `plan-writer.md`
+    Step 4.4 item 11 for the full wrong→right examples.
+    plan-reviewer R-COH-VALIDATE-ALWAYS-PASS enforces this.
 
 13. `## Acceptance Criteria`
 
