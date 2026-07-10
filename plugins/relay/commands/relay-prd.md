@@ -21,11 +21,11 @@ the `Task` tool during Phase 3 (and conditionally Phase 5).
 See:
 - `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/prd-authoring.prd.md` — this
   feature's PRD; scope, AC-1 through AC-16, rationale.
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/prd-writer.md` — the
+- `${CLAUDE_PLUGIN_ROOT}/agents/prd-writer.md` — the
   Writer protocol you adopt in Phases 1–7.
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/prd-reviewer.md` — the
+- `${CLAUDE_PLUGIN_ROOT}/agents/prd-reviewer.md` — the
   Reviewer protocol you adopt after the DRAFT is written.
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/research-web.md` and
+- `${CLAUDE_PLUGIN_ROOT}/agents/research-web.md` and
   `research-codebase.md` — subagents invoked via `Task` during
   grounding.
 - `${CLAUDE_PLUGIN_ROOT}/docs/context/prd-template.md` — canonical
@@ -111,7 +111,7 @@ These checks apply only when `mode == draft-path`:
 ## Phase A — Adopt the Writer role
 
 Follow the protocol in
-`${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/prd-writer.md`.
+`${CLAUDE_PLUGIN_ROOT}/agents/prd-writer.md`.
 
 Execution context to pass into the Writer's Phase 0 setup:
 
@@ -154,12 +154,28 @@ protocol):
 ## Phase B — Adopt the Reviewer role
 
 Follow the protocol in
-`${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/prd-reviewer.md`.
+`${CLAUDE_PLUGIN_ROOT}/agents/prd-reviewer.md`.
 
 Execution context:
 
 - `draft_path`: the path returned by the Writer.
 - `target_root`: the cwd.
+- `invocation_context: main`. You adopt the Reviewer protocol *inside
+  this command's main conversation*, so the user's messages reach the
+  Reviewer directly. The two-condition approval gate (rubric pass AND
+  explicit user approval) is satisfiable here, and the Reviewer owns
+  the `DRAFT → APPROVED` flip inline (Step 4 of its protocol). This is
+  the ONLY place the flip happens in a `/relay-prd` session — do not
+  delegate it elsewhere.
+
+> **Note — subagent dispatch is a different contract.** `/relay-prd`
+> never dispatches `prd-reviewer` via `Task`; it adopts the role in
+> `main` mode as above. An orchestrator that DOES dispatch the Reviewer
+> as a subagent runs it in `subagent` mode, where the Reviewer returns
+> `RUBRIC_PASSED` and the *dispatcher* — after obtaining the user's own
+> approval in the main conversation — owns the flip. See the Reviewer's
+> "## Invocation context and flip ownership" and the `docs/decisions.md`
+> [2026-07-09] entry.
 
 Run the Reviewer protocol: load, rubric, branch on result. The
 Reviewer either:
@@ -196,8 +212,13 @@ names the DRAFT path (if any).
 - **Never write anything under `.claude/`.** PRDs live at
   `PRPs/prds/<feature>.prd.md`; review logs at
   `PRPs/prds/<basename>.review.jsonl`. Nothing else goes on disk.
-- **Never approve without user confirmation.** The Reviewer's final
-  flip requires both rubric pass AND explicit user approval.
+- **Never approve without the user's own confirmation.** The Reviewer's
+  final flip requires both rubric pass AND the user's explicit approval
+  in dialogue. In `main` mode (this command) the Reviewer waits for the
+  user before flipping. A relayed or secondhand approval is never
+  sufficient — if a coordinator ever runs the Reviewer as a subagent,
+  the flip stays with the coordinator and still requires the user's own
+  approval, never a relayed one.
 - **Never overwrite an APPROVED PRD.** P3 refuses draft-path
   invocations against APPROVED files; the Writer's Phase 7.3
   collision-suffix rule handles the write-time case.

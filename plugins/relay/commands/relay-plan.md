@@ -19,9 +19,9 @@ actionable phase. Reviewer dispatch is OUT of scope — that is the
 See:
 - `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/plan-authoring.prd.md` — this
   feature's PRD; scope, AC-1 through AC-10, rationale.
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/plan-writer.md` — the
+- `${CLAUDE_PLUGIN_ROOT}/agents/plan-writer.md` — the
   Writer protocol you adopt in Phases 0–5.
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/research-codebase.md`
+- `${CLAUDE_PLUGIN_ROOT}/agents/research-codebase.md`
   and `research-web.md` — subagents the Writer invokes via `Task`
   during its Phase 2 GROUNDING.
 - `${CLAUDE_PLUGIN_ROOT}/docs/context/prd-template.md` —
@@ -190,7 +190,7 @@ P2 (APPROVED status) and P4 (Implementation Phases table) are
 ## Phase A — Adopt the Writer role (PRD mode)
 
 Follow the protocol in
-`${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/plan-writer.md`.
+`${CLAUDE_PLUGIN_ROOT}/agents/plan-writer.md`.
 
 Execution context to pass into the Writer's Phase 0 setup:
 
@@ -223,7 +223,7 @@ is the canonical post-PRD command-surface decision
 ## Phase B — Adopt the Writer role (description mode)
 
 Follow the protocol in
-`${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/plan-writer.md`,
+`${CLAUDE_PLUGIN_ROOT}/agents/plan-writer.md`,
 entering at the description-mode entrypoint **Phase 0.B**.
 
 Execution context to pass into the Writer's Phase 0.B setup:

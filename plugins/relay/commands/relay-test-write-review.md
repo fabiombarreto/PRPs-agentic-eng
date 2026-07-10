@@ -22,9 +22,9 @@ artifact).
 See:
 - `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/tdd-writer-reviewer.prd.md` —
   this feature's PRD; AC-1 through AC-13, scope, rationale.
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/test-reviewer.md` —
+- `${CLAUDE_PLUGIN_ROOT}/agents/test-reviewer.md` —
   the Reviewer protocol dispatched in Phase A via `Task`.
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-code-review.md`
+- `${CLAUDE_PLUGIN_ROOT}/commands/relay-code-review.md`
   — structural template for the heavier reviewer-command shape
   with explicit no-D8-mutation no-op step.
 
@@ -165,9 +165,15 @@ The agent:
 
 ### A.2 — Read the just-appended JSONL line
 
-`Read` `<target_root>/PRPs/plans/<basename>.test-write-review.jsonl`. The
-last non-empty line is the verdict from A.1. Parse it and
-inspect:
+`Read` `<target_root>/PRPs/plans/<basename>.test-write-review.jsonl`,
+where `<basename>` is the name of the directory that contains the
+suite diff — `<feature>` in `PRPs/reports/<feature>/test-suite.diff`
+(e.g. `suite_path` `PRPs/reports/feat-x/test-suite.diff` →
+`PRPs/plans/feat-x.test-write-review.jsonl`). This is the identical
+derivation the test-reviewer agent uses to WRITE the line, so the
+two always resolve to the same file — never strip the literal
+`test-suite.diff` filename to form the basename. The last non-empty
+line is the verdict from A.1. Parse it and inspect:
 
 - `verdict: "APPROVED"` → proceed to A.3.
 - `verdict: "CHANGES_REQUESTED"` → proceed to A.4.

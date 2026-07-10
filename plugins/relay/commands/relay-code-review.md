@@ -21,10 +21,10 @@ The closest external precedent is **Cloudflare's AI code review architecture** (
 
 See:
 - `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/implementation-authoring.prd.md` — source PRD with D1+D5+D8+D11 decisions and AC-10+AC-12+AC-14, especially the User Flow §"Standalone /relay-code-review flow" (lines 197–203).
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/code-reviewer.md` — the code-reviewer agent's input/output contract for `mode: 'standard'`; hard constraint that the agent never performs D8 mutations (lines 131–137).
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-plan-review.md` — canonical single-shot reviewer command shape; key divergence: relay-plan-review DOES auto-flip plan status, this command does NOT.
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-implement.md` — sibling writer command with the canonical base-commit derivation chain (Precondition P5); the mutation-triggering counterpart to this command.
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-test-review.md` — only existing relay command with both "diff-input reviewer" and "verdict-without-status-mutation" properties.
+- `${CLAUDE_PLUGIN_ROOT}/agents/code-reviewer.md` — the code-reviewer agent's input/output contract for `mode: 'standard'`; hard constraint that the agent never performs D8 mutations (lines 131–137).
+- `${CLAUDE_PLUGIN_ROOT}/commands/relay-plan-review.md` — canonical single-shot reviewer command shape; key divergence: relay-plan-review DOES auto-flip plan status, this command does NOT.
+- `${CLAUDE_PLUGIN_ROOT}/commands/relay-implement.md` — sibling writer command with the canonical base-commit derivation chain (Precondition P5); the mutation-triggering counterpart to this command.
+- `${CLAUDE_PLUGIN_ROOT}/commands/relay-test-review.md` — only existing relay command with both "diff-input reviewer" and "verdict-without-status-mutation" properties.
 
 ---
 

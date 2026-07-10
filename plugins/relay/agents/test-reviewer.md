@@ -109,12 +109,15 @@ Read these files from `<target_root>`:
   lines (a small ±5 line window around the cited line is
   sufficient).
 
-Compute the JSONL path:
+Compute the JSONL path (one canonical derivation, every run):
 `<target_root>/PRPs/plans/<basename>.test-write-review.jsonl` where
-`<basename>` is the suite_path basename without
-`test-suite.diff` — e.g., for
-`PRPs/reports/feat-x/test-suite.diff` the basename
-component is `feat-x` so the JSONL is
+`<basename>` is the name of the directory that CONTAINS the suite
+diff — i.e. `<feature>` in
+`PRPs/reports/<feature>/test-suite.diff` — NOT the literal filename
+`test-suite.diff`. Take the parent-directory name of `suite_path`
+and append `.test-write-review.jsonl`. Worked example: for
+`PRPs/reports/feat-x/test-suite.diff` the basename component is
+`feat-x`, so the JSONL is
 `PRPs/plans/feat-x.test-write-review.jsonl`.
 
 (Note: relay's plan-review and code-review JSONLs live next to

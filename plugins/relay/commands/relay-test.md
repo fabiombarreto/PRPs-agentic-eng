@@ -22,7 +22,7 @@ verdict.
 See:
 - `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/test-runner.prd.md` — Test Runner PRD
 - `${CLAUDE_PLUGIN_ROOT}/docs/decisions.md` — `max_test_retries=3`, `max_test_minutes=30`, layered execution, redaction policy
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/test-runner.md` — the B1 + B3 agent
+- `${CLAUDE_PLUGIN_ROOT}/agents/test-runner.md` — the B1 + B3 agent
 
 ---
 

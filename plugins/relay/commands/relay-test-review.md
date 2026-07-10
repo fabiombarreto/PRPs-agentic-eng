@@ -18,7 +18,7 @@ and surface its verdict.
 
 See:
 - `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/test-runner.prd.md` — B5 scope + AC-6
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/post-green-reviewer.md` — the agent
+- `${CLAUDE_PLUGIN_ROOT}/agents/post-green-reviewer.md` — the agent
 
 ---
 

@@ -20,10 +20,10 @@ command (Phase 3 of `plan-authoring`, complete).
 See:
 - `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/plan-authoring.prd.md` — this
   feature's PRD; scope, AC-3 / AC-4 / AC-10, rationale.
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/plan-reviewer.md` —
+- `${CLAUDE_PLUGIN_ROOT}/agents/plan-reviewer.md` —
   the Reviewer protocol you adopt: 8-item rubric, auto-flip on
   pass, jsonl logging, CHANGES_REQUESTED on fail.
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/plan-writer.md` —
+- `${CLAUDE_PLUGIN_ROOT}/agents/plan-writer.md` —
   the sibling Writer; informational only, not dispatched here.
 - `${CLAUDE_PLUGIN_ROOT}/docs/context/prd-template.md` —
   canonical PRD shape; R8 traceability cross-reads from the
@@ -137,7 +137,7 @@ contract for surface uniformity.
 ## Phase A — Adopt the Reviewer role
 
 Follow the protocol in
-`${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/plan-reviewer.md`.
+`${CLAUDE_PLUGIN_ROOT}/agents/plan-reviewer.md`.
 
 Execution context to pass into the Reviewer's Step 1:
 

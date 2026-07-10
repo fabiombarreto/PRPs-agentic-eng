@@ -17,10 +17,10 @@ You are autonomous. You do not prompt the user. You do not loop the writer↔rev
 
 See:
 - `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/implementation-authoring.prd.md` — source PRD with D1–D18 decisions and AC-1 through AC-14, especially D7 (budgets), D8 (post-approval mutations), D9 (TDD opt-in / dispute escape valve), D14–D18 (resolved Open Questions).
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/implementer.md` — the implementer agent's input/output contract (verdict shapes: `IMPLEMENTATION_COMPLETE` and `TEST_CONTRACT_DISPUTE`); D8 boundary (mutations are COMMAND-owned, not agent-owned).
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/code-reviewer.md` — the code-reviewer agent's input/output contract (modes `standard` and `arbitration`; rubric IDs R-S1/R-S2/R-S3/R-L1/R-L2/R-L3/R-SEM/R-X plus R-COH-* additive; jsonl audit log shape).
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-test.md` — closest precedent for the internal-loop pattern with budget checks + oscillation detection + per-attempt artifacts + outcome code distinction.
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-plan.md` — sibling writer-only command shape (Decision Gate emission, Preconditions structure, Final output / Constraints / What you do NOT do sections).
+- `${CLAUDE_PLUGIN_ROOT}/agents/implementer.md` — the implementer agent's input/output contract (verdict shapes: `IMPLEMENTATION_COMPLETE` and `TEST_CONTRACT_DISPUTE`); D8 boundary (mutations are COMMAND-owned, not agent-owned).
+- `${CLAUDE_PLUGIN_ROOT}/agents/code-reviewer.md` — the code-reviewer agent's input/output contract (modes `standard` and `arbitration`; rubric IDs R-S1/R-S2/R-S3/R-L1/R-L2/R-L3/R-SEM/R-X plus R-COH-* additive; jsonl audit log shape).
+- `${CLAUDE_PLUGIN_ROOT}/commands/relay-test.md` — closest precedent for the internal-loop pattern with budget checks + oscillation detection + per-attempt artifacts + outcome code distinction.
+- `${CLAUDE_PLUGIN_ROOT}/commands/relay-plan.md` — sibling writer-only command shape (Decision Gate emission, Preconditions structure, Final output / Constraints / What you do NOT do sections).
 - `docs/context/plan-template.md` (in the target project) — canonical plan shape; the command reads the Step-by-Step Tasks, Validation Commands, Files to Change, and Acceptance Criteria sections from a plan that conforms to this template.
 
 ---

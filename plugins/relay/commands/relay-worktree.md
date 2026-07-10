@@ -17,9 +17,9 @@ You are autonomous. You do not prompt the user. You do not invoke any agent. You
 
 See:
 - `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/relay-worktree.prd.md` — source PRD with D1–D11 decisions and AC-1 through AC-9 (Phase 1 scope), Architecture Notes (lines 163–170).
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-implement.md` — canonical structural sibling (frontmatter, Decision Gate, Parse arguments, Preconditions, Phase A/B loop, Final output, Constraints, What you do NOT do).
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-plan.md` — precondition HALT message shape (P1 file-not-readable pattern, P2 status check pattern).
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/plan-writer.md` — slug derivation contract (lines 167–173): `<feature>` = basename minus `.prd.md`; kebab-cased, ASCII only, `[a-z0-9-]`.
+- `${CLAUDE_PLUGIN_ROOT}/commands/relay-implement.md` — canonical structural sibling (frontmatter, Decision Gate, Parse arguments, Preconditions, Phase A/B loop, Final output, Constraints, What you do NOT do).
+- `${CLAUDE_PLUGIN_ROOT}/commands/relay-plan.md` — precondition HALT message shape (P1 file-not-readable pattern, P2 status check pattern).
+- `${CLAUDE_PLUGIN_ROOT}/agents/plan-writer.md` — slug derivation contract (lines 167–173): `<feature>` = basename minus `.prd.md`; kebab-cased, ASCII only, `[a-z0-9-]`.
 - `${CLAUDE_PLUGIN_ROOT}/docs/context/redaction-policy.md` — three-layer redaction policy applied to the bootstrap log (Layer 1 invariant defaults + Layer 2 per-project extensions from `PRPs/redaction-extensions.txt`).
 
 ---

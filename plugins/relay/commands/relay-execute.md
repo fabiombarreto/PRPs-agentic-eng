@@ -16,12 +16,12 @@ Validate the PRD path argument, run preconditions, then enter a multi-phase orch
 You are autonomous. You do not prompt the user. You do not re-implement any logic from the dispatched commands. You do not loop `/relay-implement` — that command's own internal loop already exhausted its budget before its HALT propagates here.
 
 See:
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-plan.md` — adopted inline in Phase A.3; owns plan-writer protocol.
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-plan-review.md` — adopted inline in Phase A.3; CHANGES_REQUESTED triggers plan-review retry loop bounded by `max_plan_review_retries`.
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-implement.md` — adopted inline in Phase A.4; owns D8 post-approval mutations (plan trailing-block flip, plan move to `PRPs/plans/completed/`, source PRD row flip `in-progress → complete`).
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-test.md` — adopted inline in Phase A.5 when available; command-exists guard required (AC-13 risk mitigation).
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-test-review.md` — adopted inline in Phase A.5 when available; CHANGES_REQUESTED HALTs with `FAILED_TEST_REVIEW_REJECTED`.
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/plan-reviewer.md` — CHANGES_REQUESTED bullet-list output format (lines 459-483) captured as `prior_feedback` for plan-review retry loop.
+- `${CLAUDE_PLUGIN_ROOT}/commands/relay-plan.md` — adopted inline in Phase A.3; owns plan-writer protocol.
+- `${CLAUDE_PLUGIN_ROOT}/commands/relay-plan-review.md` — adopted inline in Phase A.3; CHANGES_REQUESTED triggers plan-review retry loop bounded by `max_plan_review_retries`.
+- `${CLAUDE_PLUGIN_ROOT}/commands/relay-implement.md` — adopted inline in Phase A.4; owns D8 post-approval mutations (plan trailing-block flip, plan move to `PRPs/plans/completed/`, source PRD row flip `in-progress → complete`).
+- `${CLAUDE_PLUGIN_ROOT}/commands/relay-test.md` — adopted inline in Phase A.5 when available; command-exists guard required (AC-13 risk mitigation).
+- `${CLAUDE_PLUGIN_ROOT}/commands/relay-test-review.md` — adopted inline in Phase A.5 when available; CHANGES_REQUESTED HALTs with `FAILED_TEST_REVIEW_REJECTED`.
+- `${CLAUDE_PLUGIN_ROOT}/agents/plan-reviewer.md` — CHANGES_REQUESTED bullet-list output format (lines 459-483) captured as `prior_feedback` for plan-review retry loop.
 
 ---
 
@@ -253,7 +253,7 @@ HALT with verbatim message:
 
 #### Step A.3.1 — Adopt /relay-plan role
 
-Read `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-plan.md` and execute its full protocol inline for the current phase. Pass context:
+Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-plan.md` and execute its full protocol inline for the current phase. Pass context:
 
 - `prd_path`: the resolved absolute path verified by P1–P3
 - `target_root`: the cwd
@@ -265,7 +265,7 @@ Set `plan_review_attempts = 0`.
 
 #### Step A.3.2 — Adopt /relay-plan-review role
 
-Read `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-plan-review.md` and execute its full protocol inline against `current_plan_path`.
+Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-plan-review.md` and execute its full protocol inline against `current_plan_path`.
 
 **On APPROVED:**
 
@@ -373,7 +373,7 @@ Proceed directly to Phase A.3.5.
 
 #### Step A.3.3.1 — Adopt /relay-worktree role
 
-Read `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-worktree.md` and execute its full protocol inline for feature `<feature>`. Pass context:
+Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-worktree.md` and execute its full protocol inline for feature `<feature>`. Pass context:
 
 - `feature`: `<feature>` (derived from the PRD basename in the Parse arguments section)
 - `target_root`: the cwd
@@ -446,7 +446,7 @@ Set `tdd_review_attempts = 0`.
 
 #### Step A.3.5.1 — Adopt /relay-write-test role
 
-Read `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-write-test.md` and execute its full protocol inline against `current_plan_path`. Pass context:
+Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-write-test.md` and execute its full protocol inline against `current_plan_path`. Pass context:
 
 - `plan_path`: `current_plan_path`
 - `target_root`: the cwd
@@ -482,7 +482,7 @@ Record the suite path as `current_suite_path`.
 
 #### Step A.3.5.2 — Adopt /relay-test-write-review role
 
-Read `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-test-write-review.md` and execute its full protocol inline against `current_suite_path`.
+Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-test-write-review.md` and execute its full protocol inline against `current_suite_path`.
 
 **On APPROVED:**
 
@@ -533,7 +533,7 @@ Else: re-adopt `/relay-write-test` role passing `prior_feedback = <captured defe
 
 #### Step A.4.1 — Adopt /relay-implement role
 
-Read `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-implement.md` and execute its full protocol inline against `current_plan_path`. The command's own D8 post-approval mutations run as part of its internal Phase A.4:
+Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-implement.md` and execute its full protocol inline against `current_plan_path`. The command's own D8 post-approval mutations run as part of its internal Phase A.4:
 - Mutation a: plan trailing-block flip `*Status: APPROVED*` → `*Status: IMPLEMENTED*`
 - Mutation b: plan move to `PRPs/plans/completed/<basename>.plan.md`
 - Mutation c: source PRD row flip `in-progress → complete`
@@ -589,14 +589,14 @@ Re-read `<target_root>/docs/context/methodology.md` (already read in P5 — re-r
 
 #### Step A.5.1 — Command-exists check
 
-Check that both `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-test.md` and `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-test-review.md` are readable.
+Check that both `${CLAUDE_PLUGIN_ROOT}/commands/relay-test.md` and `${CLAUDE_PLUGIN_ROOT}/commands/relay-test-review.md` are readable.
 
 If either is absent: emit structured warning:
 
 > Warning: relay-test / relay-test-review not available; skipping test
 > stage for phase <N>. The command file(s) could not be read at:
->   ${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-test.md
->   ${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-test-review.md
+>   ${CLAUDE_PLUGIN_ROOT}/commands/relay-test.md
+>   ${CLAUDE_PLUGIN_ROOT}/commands/relay-test-review.md
 > Proceeding to Phase A.6 (state-transition record + loop).
 
 Record in `orchestrator_run_log`:
@@ -608,7 +608,7 @@ Proceed to Phase A.6.
 
 #### Step A.5.2 — Adopt /relay-test role
 
-Read `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-test.md` and execute its full protocol inline.
+Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-test.md` and execute its full protocol inline.
 
 **On GREEN:**
 
@@ -642,7 +642,7 @@ Surface `/relay-test`'s halt details verbatim. HALT the orchestrator (AC-4).
 
 #### Step A.5.3 — Adopt /relay-test-review role
 
-Read `${CLAUDE_PLUGIN_ROOT}/plugins/relay/commands/relay-test-review.md` and execute its full protocol inline.
+Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-test-review.md` and execute its full protocol inline.
 
 **On APPROVED:**
 

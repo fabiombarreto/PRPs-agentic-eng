@@ -21,7 +21,7 @@ sibling artifact, ships in the same release).
 See:
 - `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/tdd-writer-reviewer.prd.md` —
   this feature's PRD; AC-1 through AC-13, scope, rationale.
-- `${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/test-writer.md` — the
+- `${CLAUDE_PLUGIN_ROOT}/agents/test-writer.md` — the
   Writer protocol you adopt in Phase A.
 - `docs/context/methodology.md` (in the target project) — the
   single source of truth for `tdd:` and `test_frameworks: [...]`.
@@ -173,7 +173,7 @@ precise yet not test-first-authorable until the seam exists.)
 ## Phase A — Adopt the Writer role
 
 Follow the protocol in
-`${CLAUDE_PLUGIN_ROOT}/plugins/relay/agents/test-writer.md`.
+`${CLAUDE_PLUGIN_ROOT}/agents/test-writer.md`.
 
 Execution context to pass into the Writer's Phase 0 setup:
 
