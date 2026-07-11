@@ -14,19 +14,20 @@ because the enforcement code does not yet exist.
 
 ## Weakening or deleting tests to make the auto-correction loop turn green
 
-**What it is:** An agent edits, skips, or removes failing tests in order to satisfy the "all tests pass" exit condition of the Test Runner loop. [INFERRED - VALIDATE]
+**What it is:** An agent edits, skips, or removes a test that still encodes a live requirement in order to satisfy the "all tests pass" exit condition of the Test Runner loop. [INFERRED - VALIDATE]
 **Why it's forbidden:** Optimizes for "verde" instead of "correto". The loop is supposed to fix the implementation, not the contract. The post-green reviewer (B5) exists precisely to catch this.
 **What to do instead:** Fix the implementation, or — if the failure exposes a real requirement gap — abort and surface the conflict to the human.
-**Areas affected:** Test Runner (B1–B5), auto-correction loop (B4)
+**Carve-out (NOT weakening):** legitimate retirement of an **obsolete** test (its behavior-under-test is gone from the in-scope ACs) or a **redundant** test (a proven duplicate), performed by the approved test pair, recorded in the suite manifest's lifecycle ledger, and validated by `test-reviewer`'s `R-LIFECYCLE-LEGITIMATE`. B5 accepts a removal/skip only when it matches an APPROVED ledger entry; every unmatched removal — and every removal when no manifest exists — still blocks. The Implementer and the auto-correction loop still author ZERO test-file changes (R-X strict); only the approved test pair's ledger authorizes a removal. See the 2026-07-10 decision.
+**Areas affected:** Test Runner (B1–B5), auto-correction loop (B4), test pair (test-writer/test-reviewer)
 
 ---
 
-## Writing TDD tests that mirror the imagined implementation
+## Writing tests that mirror the implementation instead of the requirements
 
-**What it is:** In TDD mode, the TDD Writer (B7) produces tests that encode specific implementation choices (internal method names, private data shapes, mocked collaborators that presuppose a design) instead of requirements from the PRD. [INFERRED - VALIDATE]
-**Why it's forbidden:** Tests and implementation then "nascem acoplados" and exert no design pressure on the code — the core failure mode of AI-driven TDD called out by the planning document.
-**What to do instead:** TDD Writer derives tests from PRD requirements and observable behavior. TDD Reviewer (B8) rejects suites that leak implementation details, rely on excessive mocks, or contain trivial asserts.
-**Areas affected:** TDD track (B7, B8)
+**What it is:** The `test-writer` produces tests that encode specific implementation choices (internal method names, private data shapes, mocked collaborators that presuppose a design) instead of requirements from the PRD. In test-first this mirrors an *imagined* implementation; in test-after the risk sharpens — the tests can mirror the *actual* code just written, exerting no independent pressure. [INFERRED - VALIDATE]
+**Why it's forbidden:** Tests and implementation then "nascem acoplados" and exert no design pressure on the code — the core failure mode of AI-driven testing.
+**What to do instead:** `test-writer` derives tests from PRD requirements and observable behavior. `test-reviewer` rejects suites that leak implementation details (`R-IMPL-LEAK`), rely on excessive mocks, or contain trivial asserts — in both modes.
+**Areas affected:** test pair (test-writer, test-reviewer)
 
 ---
 
@@ -39,12 +40,12 @@ because the enforcement code does not yet exist.
 
 ---
 
-## Activating the TDD track by heuristic
+## Activating the test pair by heuristic
 
-**What it is:** Inferring that a project "does TDD" from the existence of a test folder, a high test count, or a CI job, and enabling B7/B8 automatically. [INFERRED - VALIDATE]
-**Why it's forbidden:** TDD is a methodology, not a side effect of having tests. Activating it silently surprises teams that test a lot without practicing TDD. See `docs/decisions.md` entry on opt-in activation.
-**What to do instead:** Read `docs/context/methodology.md` and check exactly one key: `tdd: true | false`. No declaration file, `tdd: false`, or missing frontmatter → skip B7/B8 silently. The context-builder skill MUST create this file in every `*init` run with `tdd: false` as the default.
-**Areas affected:** orchestrator activation, context-builder skill, TDD agents (B7, B8)
+**What it is:** Inferring that a project wants relay-authored tests from the existence of a test folder, a high test count, or a CI job, and enabling the test pair automatically — or inferring the `tdd:` value the same way. [INFERRED - VALIDATE]
+**Why it's forbidden:** Activation is a methodology declaration, not a side effect of having tests; silent activation surprises teams. And `tdd:` selects *ordering* (test-first vs test-after), which must not be guessed.
+**What to do instead:** Read `docs/context/methodology.md`. The single activation gate is a declared framework: non-empty `test_frameworks` → the pair runs (in BOTH modes); `test_frameworks: []` or missing frontmatter → skip the pair silently. The `tdd:` value only selects ordering, never whether the pair runs — do NOT infer it from test folders/CI. The context-builder skill MUST create this file in every `*init` run with `tdd: false` and `test_frameworks: []` as the default (the pair is opt-in by declaring a framework).
+**Areas affected:** orchestrator activation, context-builder skill, test pair (test-writer/test-reviewer)
 
 ---
 

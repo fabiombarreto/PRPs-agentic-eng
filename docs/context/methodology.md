@@ -10,10 +10,13 @@ test_frameworks: []
 
 Current state: **not declared** (default).
 
-The TDD track (agents B7 TDD Writer and B8 TDD Reviewer) activates only
-when `tdd: true` in the frontmatter above. Heuristics MUST NOT flip this
-value — only a human edit or an explicit user declaration during
-`*init` can.
+The test writer/reviewer pair (`test-writer` + `test-reviewer`) activates when
+`test_frameworks` above is non-empty — in BOTH modes. The `tdd:` value only
+selects ORDERING: `tdd: true` = test-first (the pair authors before the
+Implementer), `tdd: false` = test-after (the pair authors after the Implementer
++ Code Review). With `test_frameworks: []` (as here) the pair self-skips.
+Heuristics MUST NOT flip these values — only a human edit or an explicit
+declaration during `*init` can.
 
 ### Observed signals
 
@@ -27,8 +30,9 @@ target project that the plugin drives. The TDD contract is exercised
 against **target** projects run through the context-builder skill, not
 against this repository.
 
-Kept at `tdd: false` to document the contract and provide the reference
-format other projects will inherit when the skill processes them.
+Kept at `tdd: false` with `test_frameworks: []` — the test pair self-skips for
+this repo (no declared framework). This documents the contract and provides the
+reference format other projects inherit when the skill processes them.
 
 ## Other methodologies
 

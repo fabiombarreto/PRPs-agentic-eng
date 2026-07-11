@@ -689,6 +689,24 @@ The APPROVED `PRPs/prds/prd-authoring.prd.md` is NOT mutated (reopening APPROVED
 
 ---
 
+## [2026-07-10] Test pair universalized: activation on declared framework, `tdd:` selects ordering, full test lifecycle (supersedes the 2026-05-06 self-skip half)
+
+**Context:** The 2026-05-06 decision made the pair the *only* authorized test-file author and self-skipped it on `tdd: false`, so a `tdd: false` project could get NO relay-authored tests — a plan with test-authoring ACs was APPROVED by the plan-reviewer but had to be rejected by the implementer (R-X). The pair was also create-only, and the post-green reviewer (B5) flagged *every* removed test as weakening, so no agent could update or retire a test. See `PRPs/prds/test-pair-universalization.prd.md`.
+
+**Decision:** Universalize the pair (renamed `tdd-writer`→`test-writer`, `tdd-reviewer`→`test-reviewer`; commands `/relay-tdd`→`/relay-write-test`, `/relay-tdd-review`→`/relay-test-write-review`; artifacts `tdd-initial-suite.diff`→`test-suite.diff`, `.tdd-review.jsonl`→`.test-write-review.jsonl`):
+
+- **Activation gate = non-empty `test_frameworks`**, in BOTH methodology modes. This PROMOTES the 2026-05-12 empty-frameworks self-skip to the single activation gate and SUPERSEDES the 2026-05-06 "tdd:false → self-skip" half. `test_frameworks: []` or missing methodology → skip (observably identical to before).
+- **`tdd:` now selects ORDERING, not existence:** `tdd: true` = test-first (the pair runs before the Implementer, RED-legitimate; `/relay-execute` Phase A.3.5); `tdd: false` = test-after (the pair runs after the Implementer + Code Review, GREEN-legitimate; new Phase A.4.5). The mode-selected legitimacy row in `test-reviewer` is `R-RED-LEGITIMATE` / `R-GREEN-LEGITIMATE`.
+- **Full test lifecycle (CREATE / UPDATE / DELETE)** with a suite-manifest **lifecycle ledger.** Every non-create op is recorded (`EXISTING_TEST_UPDATED`, `OBSOLETE_TEST_REMOVED` = behavior gone from the in-scope ACs, `REDUNDANT_TEST_REMOVED` = proven duplicate naming the survivor) and validated by `test-reviewer`'s new `R-LIFECYCLE-LEGITIMATE` check. B5 consults the APPROVED manifest ledger: a removal/skip matching an approved entry is an accepted note, an unmatched one (or any removal when no manifest exists) still blocks; B5 also now detects whole-file test deletions.
+
+**R-X strict is preserved verbatim.** The 2026-05-06 sole-author invariant is KEPT and EXTENDED to the whole lifecycle: the Implementer and the auto-correction loop still author ZERO test-file changes. In test-after the pair's diff is reviewed by `test-reviewer`, never the code-reviewer — so R-X (which fires on the Implementer's diff) never sees it. The ledger is a POSITIVE authorization signal from the APPROVED test pair, not a blanket exemption.
+
+**Reason:** Test-after is the dominant real-world mode outside strict-TDD shops; forcing `tdd: true` to get any relay-authored tests, and having no path to update/retire a stale test, mismatched how most teams work. Keying activation on the framework (which is *required* to author a test at all) makes the model coherent and gives projects a clean opt-out (`test_frameworks: []`).
+
+**Areas affected:** `plugins/relay/agents/test-writer.md`, `test-reviewer.md`, `post-green-reviewer.md`; `plugins/relay/commands/relay-write-test.md`, `relay-test-write-review.md`, `relay-test-review.md`, `relay-execute.md` (Phase A.3.5 gate + new Phase A.4.5); `plugins/relay/agents/prd-writer.md`, `plan-writer.md`, `plan-reviewer.md` (R5 routing note); `docs/context/methodology.md`, `prd-template.md`, `anti-patterns.md`, `api-reference.md`, `architecture.md`, `constraints.md`, `docs/domain/glossary.md`. Supersedes the 2026-05-06 entry's tdd:false self-skip half; preserves its sole-author + R-X-strict invariants.
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision

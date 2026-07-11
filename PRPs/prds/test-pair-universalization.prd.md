@@ -209,7 +209,7 @@ Current value of `tdd` in `docs/context/methodology.md`: **false**.
 | 5 | Command gates | `/relay-write-test` + `/relay-test-write-review`: tdd:false + frameworks → run test-after (stop self-skipping); skip only on empty frameworks/missing file; foundation-skip only in test-first | complete | 4 | 2,3 | - |
 | 6 | Orchestrator ordering | `/relay-execute`: test-first stage before Implementer, test-after stage after; routing notes, run-log outcomes, budgets; B5 receives the manifest path | complete | - | 4,5 | - |
 | 7 | Plan-stage + template coherence | `plan-writer` note emission, `plan-reviewer` R5 note text, `prd-template.md` tdd:false routing/AC text → describe test-after | complete | 8 | 1 | - |
-| 8 | Canonical docs | decisions.md (supersede + ledger entry), anti-patterns.md narrowing, methodology.md semantics, architecture.md, api-reference.md, constraints.md, glossary.md | pending | 7 | 6 | - |
+| 8 | Canonical docs | decisions.md (supersede + ledger entry), anti-patterns.md narrowing, methodology.md semantics, architecture.md, api-reference.md, constraints.md, glossary.md | complete | 7 | 6 | - |
 | 9 | Docs site + version bump | documentation/ pages (three-file registration rule + tdd-track/agents/commands/pipeline), changelog.html, plugin.json → 0.19.0 | pending | - | 8 | - |
 
 ### Phase Details

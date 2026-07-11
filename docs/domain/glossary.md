@@ -99,11 +99,15 @@ in a red-green-refactor cycle. In `relay`, TDD is an opt-in mode: active
 only when the target project explicitly declares it in its context-builder
 output.
 
-## TDD track (Trilho de TDD)
+## Test writer/reviewer pair (formerly the TDD track / Trilho de TDD)
 
-Pair of agents — B7 (TDD Writer) and B8 (TDD Reviewer) — inserted between
-the Plan Reviewer and the Implementer when the project is declared as TDD.
-Produces the test suite the Implementer must satisfy.
+Pair of agents — `test-writer` and `test-reviewer` (formerly `tdd-writer` /
+`tdd-reviewer`) — that authors and maintains a project's test suite whenever a
+test framework is declared. The `tdd:` value selects ordering: test-first
+(before the Implementer, `tdd: true`) or test-after (after the Implementer +
+Code Review, `tdd: false`). Owns the full test lifecycle (create / update /
+delete) via a manifest lifecycle ledger; the Implementer never touches test
+files (R-X strict).
 
 ## Test Runner
 

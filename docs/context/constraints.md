@@ -32,8 +32,10 @@ gracefully when its preconditions are absent. Concretely:
   risk.
 - Missing test frameworks → Test Runner is skipped entirely with a clear
   skip-reason in the final report.
-- No explicit `metodologia: TDD` declaration → TDD agents (B7/B8) are
-  silently skipped (heuristic activation is forbidden).
+- No declared test framework (`test_frameworks: []` or missing) → the test
+  writer/reviewer pair is silently skipped (heuristic activation is forbidden;
+  `tdd:` only selects test-first vs test-after ordering, never whether the pair
+  runs).
 
 See `docs/planning/planejamento_fase_2.docx` §8.
 
