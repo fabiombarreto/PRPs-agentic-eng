@@ -54,8 +54,8 @@ acknowledgement of uncertainty.
 4. **TDD routing note matches `docs/context/methodology.md`.** Read
    `tdd:` at write time from the target project (not relay itself)
    and emit the corresponding line verbatim:
-   - `tdd: true` → "TDD track active"
-   - `tdd: false` → "TDD track inactive — tests written alongside implementation."
+   - `tdd: true` → "Test-first ordering"
+   - `tdd: false` → "Test-after ordering"
 5. **Never overwrite a file whose status is `APPROVED`.** Collision
    handling uses a numeric suffix (`-2`, `-3`, …) until the path is
    free.
@@ -380,9 +380,9 @@ Fill sections in this order (from the template):
 
 The TDD routing subsection inside "Technical Approach" reads:
 
-- `tdd: true` → "Current value of `tdd` in `docs/context/methodology.md`: **true**. TDD track active — TDD Writer (B7) produces the initial test suite from the Acceptance Criteria above, before the Implementer runs."
-- `tdd: false` → "Current value of `tdd` in `docs/context/methodology.md`: **false**. TDD track inactive — tests written alongside implementation. Acceptance Criteria seed those tests."
-- `methodology.md` missing → "Current value of `tdd` in `docs/context/methodology.md`: **unavailable** (file missing). Defaulting to tdd: false semantics: tests written alongside implementation."
+- `tdd: true` → "Current value of `tdd` in `docs/context/methodology.md`: **true**. Test-first ordering — the test pair (test-writer/test-reviewer) produces the initial test suite from the Acceptance Criteria above, before the Implementer runs."
+- `tdd: false` → "Current value of `tdd` in `docs/context/methodology.md`: **false**. Test-after ordering — when a test framework is declared, the test pair (test-writer/test-reviewer) authors and maintains the suite from the Acceptance Criteria above, after the Implementer + Code Review; with no framework declared, no tests are authored."
+- `methodology.md` missing → "Current value of `tdd` in `docs/context/methodology.md`: **unavailable** (file missing). Defaulting to test-after ordering — the test pair authors tests from the Acceptance Criteria after implementation when a framework is declared; none otherwise."
 
 When `mode == draft-path` and phases were carried over, add a row to
 **Decisions Log** recording which fields came from the draft:

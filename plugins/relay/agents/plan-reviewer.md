@@ -188,11 +188,11 @@ Per AC-9 of the PRD (`PRPs/prds/plan-authoring.prd.md` line 86):
   canonical strings in `plugins/relay/agents/prd-writer.md` Step
   7.4 (lines 382–386) — that is the single source of truth:
   - `tdd: true` →
-    `Current value of \`tdd\` in \`docs/context/methodology.md\`: **true**. TDD track active — TDD Writer (B7) produces the initial test suite from the Acceptance Criteria above, before the Implementer runs.`
+    `Current value of \`tdd\` in \`docs/context/methodology.md\`: **true**. Test-first ordering — the test pair (test-writer/test-reviewer) produces the initial test suite from the Acceptance Criteria above, before the Implementer runs.`
   - `tdd: false` →
-    `Current value of \`tdd\` in \`docs/context/methodology.md\`: **false**. TDD track inactive — tests written alongside implementation. Acceptance Criteria seed those tests.`
+    `Current value of \`tdd\` in \`docs/context/methodology.md\`: **false**. Test-after ordering — when a test framework is declared, the test pair (test-writer/test-reviewer) authors and maintains the suite from the Acceptance Criteria above, after the Implementer + Code Review; with no framework declared, no tests are authored.`
   - methodology.md missing →
-    `Current value of \`tdd\` in \`docs/context/methodology.md\`: **unavailable** (file missing). Defaulting to tdd: false semantics: tests written alongside implementation.`
+    `Current value of \`tdd\` in \`docs/context/methodology.md\`: **unavailable** (file missing). Defaulting to test-after ordering — the test pair authors tests from the Acceptance Criteria after implementation when a framework is declared; none otherwise.`
 - Any deviation (paraphrase, truncation, wrong value) fails R5.
 - If R5's verbatim strings ever drift, update them at
   `prd-writer.md` Step 7.4 — never in this file.

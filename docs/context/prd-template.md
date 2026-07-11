@@ -25,16 +25,20 @@ let upstream changes propagate silently.
    Metrics", above "Users & Context". Each acceptance criterion is written
    as an observable scenario: *given … when … then …*, or as a concrete
    input/output example. When `docs/context/methodology.md` declares
-   `tdd: true`, this section becomes the direct input to the TDD Writer (B7)
-   and the contract the Implementer must satisfy. When `tdd: false`, the
-   same section seeds the tests the Implementer writes alongside the code
-   (and that the Test Runner executes).
+   `tdd: true`, this section is the direct input to the test pair
+   (test-writer/test-reviewer) authoring test-first, before the Implementer.
+   When `tdd: false` with a declared framework, the same section is the
+   contract the test pair authors test-after (after the Implementer + Code
+   Review); with no framework declared, no tests are authored. Either way the
+   Test Runner executes the resulting suite.
 
 3. **TDD routing note.** Every PRD includes a short subsection under
    "Technical Approach" that reads the current value of `tdd` from
-   `docs/context/methodology.md` and states explicitly: "TDD track active"
-   or "TDD track inactive — tests written alongside implementation." This
-   leaves no ambiguity for the orchestrator at hand-off.
+   `docs/context/methodology.md` and states the ordering explicitly:
+   "Test-first ordering" (`tdd: true` — the test pair authors before the
+   Implementer) or "Test-after ordering" (`tdd: false` — the test pair authors
+   after the Implementer + Code Review). This leaves no ambiguity for the
+   orchestrator at hand-off.
 
 ---
 
@@ -96,8 +100,10 @@ We'll know we're right when {measurable outcome}.
 
 Mandatory. Each criterion is an observable scenario the resulting code must
 satisfy. If `tdd: true` in `docs/context/methodology.md`, these are the
-contract for the TDD Writer (B7). Otherwise, they seed the tests the
-Implementer produces.
+contract the test pair authors test-first (before the Implementer). If
+`tdd: false` with a declared framework, they are the contract the test pair
+authors test-after (after the Implementer + Code Review). With no framework
+declared, no tests are authored.
 
 - **AC-1 {short name}:** Given {precondition}, when {action}, then {observable outcome}.
 - **AC-2 {short name}:** {scenario}
@@ -153,10 +159,13 @@ When {situation}, I want to {motivation}, so I can {outcome}.
 
 Current value of `tdd` in `docs/context/methodology.md`: **{true | false}**.
 
-- If **true:** TDD Writer (B7) produces the initial test suite from the
-  Acceptance Criteria section above, before the Implementer runs.
-- If **false:** Implementer writes tests alongside the production code;
-  Acceptance Criteria seed those tests.
+- If **true:** Test-first ordering — the test pair (test-writer/test-reviewer)
+  produces the initial test suite from the Acceptance Criteria section above,
+  before the Implementer runs.
+- If **false:** Test-after ordering — when a test framework is declared, the
+  test pair authors and maintains the suite from the Acceptance Criteria after
+  the Implementer + Code Review; with no framework declared, no tests are
+  authored.
 
 ### Architecture Notes
 - {Key technical decision and why}
