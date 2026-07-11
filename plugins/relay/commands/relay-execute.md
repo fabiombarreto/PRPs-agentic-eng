@@ -140,22 +140,30 @@ If any is missing, HALT with the byte-exact AC-9 message:
 > `<target_root>/<relative-path>` and re-run /relay-execute.
 > No code has been changed and no review has been run.
 
-### P5 — TDD routing emitted + concurrency soft-fail diagnostic
+### P5 — test-authoring routing emitted + concurrency soft-fail diagnostic
 
-Read `docs/context/methodology.md` in the target project. Extract the `tdd:` frontmatter value.
+Read `docs/context/methodology.md` in the target project. Extract the `tdd:` value and whether `test_frameworks` is non-empty. The test writer/reviewer pair ACTIVATES on a declared framework (non-empty `test_frameworks`), in BOTH methodology modes; the `tdd:` value selects ordering (test-first vs test-after).
 
-- If `tdd: true`: emit startup note (AC-11 live-routing visibility):
+- If `test_frameworks` non-empty AND `tdd: true` → **test-first** (AC-11 live-routing visibility):
 
-  > TDD routing note: docs/context/methodology.md has tdd: true. Proceeding
-  > with the TDD path: /relay-plan → /relay-plan-review → /relay-write-test →
-  > /relay-test-write-review → /relay-implement → /relay-test → /relay-test-review.
-  > B7 TDD Writer + B8 TDD Reviewer engaged via Phase A.3.5 with budget
-  > max_tdd_review_retries=2 (HALT code FAILED_TDD_REVIEW_BUDGET_EXCEEDED on
-  > exhaustion). R-X strict invariant of code-reviewer is preserved — the
-  > implementer never edits test files; B7 is the authorized author.
+  > Test-authoring routing: tdd: true with a declared framework. TEST-FIRST path:
+  > /relay-plan → /relay-plan-review → /relay-write-test → /relay-test-write-review
+  > → /relay-implement → /relay-test → /relay-test-review. The pair runs BEFORE
+  > the Implementer (Phase A.3.5), budget max_tdd_review_retries=2 (HALT
+  > FAILED_TDD_REVIEW_BUDGET_EXCEEDED on exhaustion). R-X strict preserved — the
+  > implementer never edits test files; the test pair is the authorized author.
 
-- If `tdd: false` or file absent: no note required; proceed silently. Phase
-  A.3.5 self-skips per AC-10 (live no-op path).
+- If `test_frameworks` non-empty AND `tdd: false` → **test-after**:
+
+  > Test-authoring routing: tdd: false with a declared framework. TEST-AFTER path:
+  > /relay-plan → /relay-plan-review → /relay-implement → (code-review) →
+  > /relay-write-test → /relay-test-write-review → /relay-test → /relay-test-review.
+  > The pair runs AFTER the Implementer + Code Review (Phase A.4.5),
+  > authoring/updating/retiring tests, budget max_tdd_review_retries=2. R-X strict
+  > preserved — the implementer's diff is test-free (code-reviewed), and the
+  > pair's test diff is reviewed by test-reviewer, never the code-reviewer.
+
+- If `test_frameworks: []` (empty) or file absent: no note required; proceed silently. Phases A.3.5 and A.4.5 both self-skip (no declared framework — no idiom to author in).
 
 Concurrency soft-fail diagnostic (D18): `Glob` `PRPs/reports/<feature>/orchestrator-run.json` for an existing file without a terminal `outcome` entry (heuristic: file exists but does not contain `"outcome":` or contains `"outcome": null`). If found:
 
@@ -406,17 +414,23 @@ Continue to Phase A.3.5. The pipeline does NOT halt on worktree-creation failure
 
 Conditional on `methodology.md` `tdd:` value read in P5.
 
-#### Step A.3.5.0 — methodology.md gate (live no-op when `tdd: false`)
+#### Step A.3.5.0 — methodology.md gate (activation = declared framework; ordering by `tdd:`)
 
-Re-read `<target_root>/docs/context/methodology.md` (already read in P5 — re-read here protects against mid-flow mutations).
+Re-read `<target_root>/docs/context/methodology.md` (already read in P5 — re-read here protects against mid-flow mutations). The single activation gate is a declared test framework; the `tdd:` value selects WHERE the pair runs relative to the Implementer — **test-first** (here, before A.4) when `tdd: true`, **test-after** (Phase A.4.5, after A.4 + code-review) when `tdd: false`.
 
-- If file absent or `tdd: false`: A.3.5 self-skips. Append to `orchestrator_run_log`:
+- If file absent OR `test_frameworks: []` (empty): the pair self-skips entirely (no idiom to author in, either mode). Append to `orchestrator_run_log`:
   ```json
-  {"phase": <N>, "stage": "tdd", "outcome": "skipped_tdd_false"}
+  {"phase": <N>, "stage": "tdd", "outcome": "skipped_no_framework"}
   ```
   Proceed directly to Phase A.4. No suite manifest is produced.
 
-- If `tdd: true`: proceed to the phase_type gate below.
+- If `test_frameworks` non-empty AND `tdd: false` → **test-after ordering**: the pair does NOT run here. Append to `orchestrator_run_log`:
+  ```json
+  {"phase": <N>, "stage": "tdd", "outcome": "deferred_to_test_after"}
+  ```
+  Proceed to Phase A.4; the pair runs at Phase A.4.5 (post-implement, post-code-review) so its test-file diff is never seen by the code-reviewer's R-X — which by then has already approved the Implementer's test-free diff.
+
+- If `test_frameworks` non-empty AND `tdd: true` → **test-first ordering**: proceed to the phase_type gate below and run the pair here, before the Implementer. (The foundation self-skip below applies to test-first only; in test-after the seam already exists by A.4.5.)
 
 **phase_type gate (foundation self-skip):** `Read` `current_plan_path`'s
 `## Metadata` table and inspect the `phase_type` row (populated by the
@@ -545,7 +559,7 @@ Append to `orchestrator_run_log`:
 {"phase": <N>, "stage": "implement", "outcome": "APPROVED"}
 ```
 
-Proceed to Phase A.5.
+Proceed to Phase A.4.5 (test-after sub-flow; a no-op unless this phase deferred to test-after at Step A.3.5.0).
 
 **On any HALT from /relay-implement** (`FAILED_AFTER_N_RETRIES`, `FAILED_TIME_BUDGET_EXCEEDED`, `FAILED_OSCILLATION_DETECTED`, `FAILED_DISPUTE_CAP_EXCEEDED`, `DISPUTE_UPHELD_TEST_WRONG`, `DISPUTE_UPHELD_PRD_AMBIGUOUS`, `PARTIAL_D8_FAILURE`):
 
@@ -572,6 +586,53 @@ Surface `/relay-implement`'s halt message verbatim. HALT the orchestrator (AC-3)
 > PRPs/reports/<feature>/phase-<N>/halt.json for per-attempt details.
 > Do NOT re-run /relay-execute until the underlying cause is resolved —
 > /relay-implement's internal loop already exhausted its budget.
+
+### Phase A.4.5 — Per-phase test-after sub-flow (test-after ordering only)
+
+Runs the test writer/reviewer pair AFTER the Implementer + Code Review, but ONLY
+when Step A.3.5.0 recorded `deferred_to_test_after` for this phase
+(`test_frameworks` non-empty AND `tdd: false`). In every other case — test-first
+(the pair already ran at A.3.5) or `skipped_no_framework` — this phase is a
+no-op: proceed directly to Phase A.5.
+
+Because the Implementer (A.4) and Code Reviewer have already run and approved a
+test-free diff, R-X held on the Implementer's diff. The pair now authors,
+updates, and retires tests in **test-after** mode; its test-file diff is reviewed
+by `test-reviewer` (via `/relay-test-write-review`), never by the code-reviewer —
+so R-X never sees it.
+
+#### Step A.4.5.0 — gate
+
+Re-read `<target_root>/docs/context/methodology.md`. If NOT (`test_frameworks`
+non-empty AND `tdd: false`) — i.e. this phase was test-first or framework-less —
+append `{"phase": <N>, "stage": "test_after", "outcome": "not_applicable"}` to
+`orchestrator_run_log` and proceed directly to Phase A.5. There is NO foundation
+self-skip here: in test-after the Implementer has already materialized the seam.
+
+Set `tdd_review_attempts = 0`.
+
+#### Step A.4.5.1 — Adopt /relay-write-test role (test-after)
+
+Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-write-test.md` and execute its full
+protocol inline against `current_plan_path` (same adoption as Step A.3.5.1; the
+command and Writer derive `mode = test-after` from `tdd: false` themselves). The
+Writer produces a DRAFT `PRPs/reports/<feature>/test-suite.diff` — including any
+lifecycle-ledger entries for updated/retired tests — → continue to Step A.4.5.2;
+or halts on `AMBIGUOUS` ACs → surface verbatim and write `orchestrator-halt.json`
+with `outcome: "FAILED_TDD_AMBIGUOUS_ACS"` exactly as Step A.3.5.1. Note: the
+`phase_type: foundation` recovery path does NOT apply in test-after (the seam
+already exists), so recommend tightening the ACs. Record the suite path as
+`current_suite_path`.
+
+#### Step A.4.5.2 — Adopt /relay-test-write-review role (test-after)
+
+Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-test-write-review.md` and execute its
+full protocol inline against `current_suite_path` (same retry loop as Step
+A.3.5.2, bounded by `max_tdd_review_retries`; the reviewer applies its
+GREEN-legitimate check + `R-LIFECYCLE-LEGITIMATE` because `tdd: false`).
+
+- **On APPROVED:** append `{"phase": <N>, "stage": "test_after", "outcome": "APPROVED", "suite_path": "<current_suite_path>"}`; proceed to Phase A.5. The APPROVED suite manifest (with its lifecycle ledger) is the positive authorization the post-green reviewer (B5, Step A.5.3) consults for legitimate removals/skips.
+- **On CHANGES_REQUESTED:** capture the defect list; increment `tdd_review_attempts`; if `> max_tdd_review_retries`, write `orchestrator-halt.json` with `outcome: "FAILED_TDD_REVIEW_BUDGET_EXCEEDED"` (same shape as Step A.3.5.2) and HALT; else re-adopt `/relay-write-test` with `prior_feedback = <defect list>` and loop back to Step A.4.5.2.
 
 ### Phase A.5 — Per-phase test sub-flow (guarded by command-exists check)
 
@@ -761,7 +822,7 @@ On any HALT path (one of `FAILED_PLAN_REVIEW_BUDGET_EXCEEDED`, `FAILED_ORCHESTRA
 
 8. **Never orchestrate multiple PRDs in one invocation.** One PRD per `/relay-execute` invocation. Cross-PRD orchestration is a separate future concern.
 
-9. **When `tdd: true`, the orchestrator invokes `/relay-write-test` and `/relay-test-write-review` in Phase A.3.5 with budget `max_tdd_review_retries=2`; on budget exhaustion, HALT with `FAILED_TDD_REVIEW_BUDGET_EXCEEDED`.** When `tdd: false` or `methodology.md` is missing, A.3.5 self-skips silently per AC-10 (live no-op path). The implementer is NEVER invoked when A.3.5 halted — running it against an unapproved TDD suite would violate R-X strict in the test-file write direction.
+9. **When a test framework is declared (`test_frameworks` non-empty), the orchestrator invokes `/relay-write-test` and `/relay-test-write-review` in BOTH methodology modes with budget `max_tdd_review_retries=2` (HALT `FAILED_TDD_REVIEW_BUDGET_EXCEEDED` on exhaustion): in Phase A.3.5 BEFORE the Implementer when `tdd: true` (test-first), or in Phase A.4.5 AFTER the Implementer + Code Review when `tdd: false` (test-after).** When `test_frameworks: []` or `methodology.md` is missing, both A.3.5 and A.4.5 self-skip silently (no declared framework — no idiom to author in). The implementer is NEVER invoked when A.3.5 (test-first) halted — running it against an unapproved test suite would violate R-X strict in the test-file write direction. In test-after, R-X holds structurally: the pair runs only after the Implementer's test-free diff has already been code-reviewed, and the pair's own test diff is reviewed by `test-reviewer`, never the code-reviewer.
 
 10. **`/relay-worktree` is invoked in Phase A.3.3 by default before Phase A.3.5.** When `--no-worktree` is passed, Phase A.3.3 is entirely skipped. When `/relay-worktree` returns a non-zero exit code, the orchestrator logs a warning, records `worktree_succeeded: false` and `fallback_reason` in `orchestrator-run.json`, and continues against cwd — the pipeline does NOT halt on worktree-creation failure (D8 of relay-worktree.prd.md). The worktree at `.worktrees/<feature>/` and its branch `feature/<feature>` persist on disk even if /relay-execute halts mid-pipeline (AC-15).
 
