@@ -1,5 +1,5 @@
 ---
-description: Autonomous TDD initial-suite validation against the five-pathology rubric (`R-IMPL-LEAK`, `R-TRIVIAL-ASSERT`, `R-MOCK-ABUSE`, `R-AC-COVERAGE`, `R-DUPLICATE`) plus the hybrid `R-RED-LEGITIMATE` check. Validates the suite path, runs the preconditions check (including the `methodology.md` self-skip gate symmetric to `/relay-write-test`), then dispatches the `test-reviewer` agent (B8) via `Task`. On APPROVED rubric, performs the suite manifest's DRAFT→APPROVED flip via `Edit`. Every verdict appended to `PRPs/plans/<basename>.test-write-review.jsonl` (no short-circuit). Writer dispatch is OUT of scope — the separate `/relay-write-test` command generates the initial suite.
+description: Autonomous test-suite validation against the test-reviewer's rubric — five quality checks (`R-IMPL-LEAK`, `R-TRIVIAL-ASSERT`, `R-MOCK-ABUSE`, `R-AC-COVERAGE`, `R-DUPLICATE`) plus the mode-selected legitimacy check `R-RED-LEGITIMATE` (test-first) / `R-GREEN-LEGITIMATE` (test-after) and the `R-LIFECYCLE-LEGITIMATE` ledger check. Validates the suite path, runs the preconditions check (including the `methodology.md` activation gate symmetric to `/relay-write-test` — self-skips only when no test framework is declared, regardless of `tdd:`), then dispatches the `test-reviewer` agent via `Task`. On APPROVED rubric, performs the suite manifest's DRAFT→APPROVED flip via `Edit`. Every verdict appended to `PRPs/plans/<basename>.test-write-review.jsonl` (no short-circuit). Writer dispatch is OUT of scope — the separate `/relay-write-test` command generates the suite.
 argument-hint: <suite-path>
 ---
 
@@ -12,8 +12,8 @@ argument-hint: <suite-path>
 ## Your mission
 
 Validate the suite path argument, run the preconditions check
-(including the `methodology.md` self-skip gate symmetric to
-`/relay-write-test`), then dispatch the `test-reviewer` agent (B8) via
+(including the `methodology.md` activation gate symmetric to
+`/relay-write-test`), then dispatch the `test-reviewer` agent via
 `Task` for the rubric pass. On APPROVED, perform the suite
 manifest's DRAFT→APPROVED flip via `Edit`. Writer dispatch is OUT
 of scope — that is the `/relay-write-test` command (Phase 1 sibling
@@ -113,26 +113,28 @@ If any is missing, HALT with:
 > sources. Run the `context-builder` skill (`*init` or `*update`
 > mode), then re-run /relay-test-write-review.
 
-### P4 — methodology.md self-skip (symmetric to /relay-write-test)
+### P4 — methodology.md activation gate (symmetric to /relay-write-test)
 
 Read `<target_root>/docs/context/methodology.md`. If the file is
-missing OR `tdd: false`:
+missing OR `test_frameworks` is missing/empty (`[]`):
 
 Emit verbatim and exit 0:
 
-> TDD track inactive (tdd: false). Skipping.
+> Test authoring inactive (no test_frameworks declared). Skipping.
 
-This protects against accidentally running the reviewer in a
-project that has flipped `tdd: true → false` between the
-`/relay-write-test` invocation and this one. The suite manifest is
-preserved on disk; the user can flip `tdd: true` again and
-re-run, or delete the manifest manually.
+This is symmetric with `/relay-write-test`'s P4.a activation gate: the reviewer
+runs whenever a framework is declared, in BOTH methodology modes. The `tdd:`
+value only selects the reviewer's ordering mode — test-first (`R-RED-LEGITIMATE`)
+vs test-after (`R-GREEN-LEGITIMATE`), which `test-reviewer` reads for itself —
+never *whether* the reviewer runs. With no declared framework there is no suite
+to review, so the reviewer self-skips regardless of `tdd:` — observably
+identical to the pre-universalization empty-frameworks / `tdd: false` skip. If a
+project removed its framework declaration between the `/relay-write-test`
+invocation and this one, the suite manifest is preserved on disk; re-declare a
+framework and re-run, or delete the manifest manually.
 
-If `tdd: true`: proceed to Phase A.
-
-(Note: P4 here does NOT hard-abort on empty `test_frameworks` —
-B8's `R-RED-LEGITIMATE` handles missing-framework gracefully via
-the `passed: null` degraded outcome per PRD AC-13.)
+If `test_frameworks` is non-empty: proceed to Phase A (the `tdd:` value selects
+the reviewer's ordering mode, not whether it runs).
 
 ---
 
@@ -291,8 +293,10 @@ Exit.
   status.
 - **Looping with the orchestrator** — no auto-retry; the
   orchestrator manages the loop.
-- **Activating in `tdd: false` projects** — symmetric self-skip
-  with `/relay-write-test` ensures consistent behavior.
+- **Skipping in `tdd: false` projects that declare a framework** —
+  forbidden: the reviewer runs in both modes; it self-skips ONLY when no
+  test framework is declared (symmetric with `/relay-write-test`). The
+  `tdd:` value selects the reviewer's ordering mode, not whether it runs.
 - **Modifying test files** — agent has no `Edit`; command's
   `Edit` is restricted to the suite manifest's status line only.
 - **Bypassing the no-D8 invariant** — even if a `CHANGES_REQUESTED`

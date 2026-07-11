@@ -1,5 +1,5 @@
 ---
-description: Autonomous TDD initial-suite generation from an APPROVED plan + its source APPROVED PRD. Reads the target's `docs/context/methodology.md` and self-skips silently when `tdd: false` or the file is missing; hard-aborts when `tdd: true` AND `test_frameworks: []`. Otherwise dispatches the `test-writer` agent (B7) which walks every PRD AC-N and emits per-AC outcomes (`NEW_TEST_REQUIRED` writes a test, `EXISTING_TEST_COVERS` documents the mapping, `AMBIGUOUS` aborts). Reviewer adoption is OUT of scope — the separate `/relay-test-write-review` command owns the DRAFT→APPROVED flip on the suite manifest.
+description: Autonomous test-suite authoring from an APPROVED plan + its source APPROVED PRD. Reads the target's `docs/context/methodology.md`; the single activation gate is a declared test framework — self-skips silently when `test_frameworks: []` or the file is missing (no idiom to author in), regardless of `tdd:`. When a framework is declared it runs in BOTH methodology modes: `tdd: true` = test-first (before the Implementer), `tdd: false` = test-after (after the Implementer + Code Review); the `tdd:` value only selects ordering. Dispatches the `test-writer` agent which walks every in-scope PRD AC-N and emits per-AC outcomes (`NEW_TEST_REQUIRED` writes a test, `EXISTING_TEST_COVERS` documents the mapping, `EXISTING_TEST_UPDATED`/`OBSOLETE_TEST_REMOVED`/`REDUNDANT_TEST_REMOVED` record lifecycle ops, `AMBIGUOUS` aborts). Reviewer adoption is OUT of scope — the separate `/relay-test-write-review` command owns the DRAFT→APPROVED flip on the suite manifest.
 argument-hint: <plan-path>
 ---
 
@@ -12,8 +12,9 @@ argument-hint: <plan-path>
 ## Your mission
 
 Validate the plan path argument, run the preconditions check
-(including the `methodology.md` self-skip / hard-abort gate),
-then adopt the `test-writer` role to generate a DRAFT initial test
+(including the `methodology.md` activation gate — a declared test
+framework — plus the `tdd:`-derived ordering mode),
+then adopt the `test-writer` role to generate a DRAFT test
 suite for the phase the plan describes. Reviewer dispatch is OUT
 of scope — that is the `/relay-test-write-review` command (Phase 1
 sibling artifact, ships in the same release).
@@ -109,41 +110,54 @@ If any is missing, HALT with:
 > mode) to generate the missing governance files, then re-run
 > /relay-write-test.
 
-### P4 — methodology.md gate (self-skip / hard-abort / proceed)
+### P4 — methodology.md gate (activation = declared framework; `tdd:` selects ordering)
 
-Read `<target_root>/docs/context/methodology.md`. Three branches:
+Read `<target_root>/docs/context/methodology.md`. The single activation gate is
+whether a test framework is declared; the `tdd:` value only selects *when* the
+pair runs (test-first vs test-after), never *whether* it runs. Two branches:
 
-#### P4.a — self-skip (PRD AC-1, AC-2)
+#### P4.a — self-skip (no framework to author in)
 
-If the file is missing OR its frontmatter has `tdd: false`:
+If the file is missing OR its frontmatter `test_frameworks` is missing or empty
+(`[]`):
 
 Emit verbatim and exit 0:
 
-> TDD track inactive (tdd: false). Skipping.
+> Test authoring inactive (no test_frameworks declared). Skipping.
 
-Do NOT dispatch the Writer. Do NOT write any artifact.
+Do NOT dispatch the Writer. Do NOT write any artifact. This is the SOLE
+self-skip of this gate: with no declared framework there is no idiom to author
+tests in, so the pair skips regardless of the `tdd:` value — observably
+identical to the pre-universalization empty-frameworks / `tdd: false` skip.
 
-#### P4.b — hard-abort (PRD AC-3)
+#### P4.b — proceed + derive ordering mode
 
-If `tdd: true` AND `test_frameworks` is missing OR empty (`[]`):
+If `test_frameworks` is non-empty, record the ordering `mode` from `tdd:` and
+proceed to P5:
 
-HALT with verbatim message and non-zero exit:
+- `tdd: true` → `mode = test-first` (the pair runs BEFORE the Implementer; the
+  suite must be RED pre-implementation).
+- `tdd: false`, or `tdd:` absent/unset → `mode = test-after` (the pair runs
+  AFTER the Implementer + Code Review; the suite must be GREEN against the
+  implemented code).
 
-> TDD track active but no test framework declared. Run context-builder *update or remove tdd:true.
+The Writer (`test-writer.md` mode-awareness) and Reviewer (`test-reviewer.md`
+RED↔GREEN + `R-LIFECYCLE-LEGITIMATE`) consume `mode`; this command only routes
+it. WHERE the stage sits relative to the Implementer is the orchestrator's
+concern (`/relay-execute`), not this command's.
 
-Do NOT dispatch the Writer. Do NOT write any artifact.
-
-#### P4.c — proceed
-
-If `tdd: true` AND `test_frameworks` is non-empty: proceed to P5.
-
-### P5 — plan phase_type gate (foundation self-skip)
+### P5 — plan phase_type gate (foundation self-skip — test-first only)
 
 `Read` the plan's `## Metadata` table and inspect the `phase_type`
 row (populated by the plan-writer, or by the plan-reviewer's Phase 0
 pre-pass).
 
-If `phase_type: foundation`:
+**Test-after (`mode = test-after`) — no foundation skip.** In test-after the
+Implementer has already materialized the seam (entities, repositories,
+resolvers, schema/migrations) before the pair runs, so the types and methods a
+test references already exist. Proceed to Phase A regardless of `phase_type`.
+
+**Test-first (`mode = test-first`) AND `phase_type: foundation`:**
 
 Emit verbatim and exit 0:
 
@@ -153,19 +167,19 @@ Emit verbatim and exit 0:
 > and methods a test would reference do not exist yet, so authoring a
 > test-first suite would either reference non-existent symbols (which
 > breaks the whole test source set in a compiled language) or invent
-> production signatures (forbidden for B7). The implementer materializes
-> the seam for this phase; the feature phases that follow run fully
-> test-first.
+> production signatures (forbidden for the test-first Writer). The implementer
+> materializes the seam for this phase; the feature phases that follow run
+> fully test-first.
 
 Do NOT dispatch the Writer. Do NOT write any artifact.
 
-If the `phase_type` row is absent, or holds any value other than
-`foundation` (`feature`, `scaffold`, `docs`, `refactor`): proceed to
+If `mode = test-first` and the `phase_type` row is absent, or holds any value
+other than `foundation` (`feature`, `scaffold`, `docs`, `refactor`): proceed to
 Phase A. (`scaffold` and `docs` phases produce no test suite in
 practice — their in-scope AC set is typically empty — but they are not
 force-skipped here; the Writer's Phase 1 AC-enumeration naturally
 yields `EXISTING_COVERAGE_SUFFICIENT` or an empty in-scope set for
-them. Only `foundation` is a hard self-skip, because its ACs are
+them. Only `foundation` is a hard self-skip in test-first, because its ACs are
 precise yet not test-first-authorable until the seam exists.)
 
 ---
@@ -205,8 +219,8 @@ command-surface decision (`docs/decisions.md` 2026-04-19 row).
 Possible Writer halt conditions (all specified in
 `test-writer.md`):
 
-- **Unexpected invocation** (P0 detected `tdd: false` or empty
-  `test_frameworks` despite this command's P4 passing) — should
+- **Unexpected invocation** (P0 detected empty `test_frameworks`
+  despite this command's P4 passing) — should
   not happen; surface the halt verbatim and treat as a bug.
 - **AMBIGUOUS ACs** (Writer's Phase 3 verdict halt) — surface the
   structured halt message verbatim and exit. The user must
