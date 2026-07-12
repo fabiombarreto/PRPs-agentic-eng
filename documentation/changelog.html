@@ -30,6 +30,21 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
+      <h2 id="v0-20-0">0.20.0 &#8212; 2026-07-12</h2>
+
+      <p>Ships the rendered documentation-site reference page for the already-implemented <code>/relay-qa-report</code> command (Phase 1) and its canonical-docs coverage (Phase 2), completing the <code>relay-qa-report-command</code> feature's documentation surface. Registers the new page in all three coupled files (NAV, search index, changelog) per <a href="AGENTS.md">AGENTS.md</a> &sect;6, and bumps the plugin manifest per the &sect;7.5 lock-step contract &mdash; a new page + NAV entry is a Minor bump. Plugin manifest version bumped <code>0.19.0</code> &rarr; <code>0.20.0</code>.</p>
+
+      <h3 id="v0-20-0-added">Added</h3>
+      <ul>
+        <li><strong><code>documentation/reference/relay-qa-report.html</code></strong> &mdash; new reference page for the <code>/relay-qa-report</code> QA / Support command: the four-way argument router (PRD / plan / description / diff mode), the seven-field per-case report schema, the honesty guarantee for uncovered cases, <code>record.json</code> coverage grounding, and the <code>FAILED_NOTHING_TO_REPORT</code> / anti-overwrite HALTs. Registered in NAV (<code>documentation/assets/js/app.js</code>, Reference section) and the search index (<code>documentation/assets/data/search-index.json</code>, category "Reference") &mdash; no orphan page.</li>
+      </ul>
+
+      <h3 id="v0-20-0-changed">Changed</h3>
+      <ul>
+        <li><strong><code>documentation/reference/commands.html</code></strong> &mdash; command surface count corrected <code>Fourteen</code> &rarr; <code>Fifteen</code> and a new <code>QA / Support</code> role section added between Orchestrator and Pillar 3, documenting <code>/relay-qa-report</code> (input router, seven-field report output, honesty-by-contract mode, and the <code>FAILED_NOTHING_TO_REPORT</code> / anti-overwrite preconditions) with a link to its full reference page. The Commands search-index excerpt (<code>documentation/assets/data/search-index.json</code>) was bumped in step (<code>Fourteen</code> &rarr; <code>Fifteen</code>, QA / Support role added). Keeps the overview page and its search entry consistent with <code>docs/api-reference.md</code>&rsquo;s 15-command surface.</li>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong> &mdash; version bumped <code>0.19.0</code> &rarr; <code>0.20.0</code> per the 2026-04-30 &sect;7.5 binding contract. Users running <code>/plugin</code> after pulling this version get a fresh <code>relay/0.20.0/</code> cache directory with the newly-registered <code>/relay-qa-report</code> reference page.</li>
+      </ul>
+
       <h2 id="v0-19-0">0.19.0 &#8212; 2026-07-10</h2>
 
       <p>Universalizes the test writer/reviewer pair so it authors tests in <strong>both</strong> methodology modes, and renames it to reflect that it is no longer TDD-exclusive. Previously a <code>tdd: false</code> project could get <strong>no</strong> relay-authored tests: the pair self-skipped on <code>tdd: false</code>, and the universal R-X guard barred the Implementer from touching any test file &mdash; so a PRD with test-authoring Acceptance Criteria produced a plan the plan-reviewer APPROVED but the implementer had to reject. The pair was also create-only, and the post-green reviewer flagged every removed test as weakening, so no agent could update or retire a test. Now activation is keyed on a declared framework (non-empty <code>test_frameworks</code>), the <code>tdd:</code> value selects <strong>ordering</strong> (test-first vs test-after), and the pair owns the full create/update/delete lifecycle with a manifest ledger. R-X strict is preserved verbatim: the Implementer and auto-correction loop still author zero test-file changes. Plugin manifest bumped <code>0.18.0</code> &rarr; <code>0.19.0</code> per the 2026-04-30 &sect;7.5 binding contract. See <a href="governance/decisions.html">Decisions</a> (2026-07-10 entry) and the <code>test-pair-universalization</code> PRD.</p>

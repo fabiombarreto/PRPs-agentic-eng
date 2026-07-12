@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QA report — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Reference</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>QA report</span>
+      </div>
+
+      <h1>QA report</h1>
+      <p class="page-subtitle"><code>/relay-qa-report</code> is the human-facing QA / Support command that sits in the validation gate between Pillar 2 (<code>/relay-execute</code>) and Pillar 3. It enumerates test cases — automated, manual, or missing coverage — so a human can drive manual testing before committing and opening a PR. It is a single LLM-judgment tool with no writer/reviewer pair and is never called by the autonomous orchestrator.</p>
+
+      <h3 id="relay-qa-report"><code>/relay-qa-report [&lt;prd-path&gt; | &lt;plan-path&gt; | &lt;description&gt;]</code> (blank = uncommitted diff) <span class="badge badge--done">implemented</span></h3>
+
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>Four-way argument router (Phase 0): a <code>.prd.md</code> path enters <strong>PRD mode</strong> (cases derived from the PRD's Acceptance Criteria section); a <code>.plan.md</code> path enters <strong>plan mode</strong> (cases derived from the plan's Step-by-Step Tasks + Validation Commands); non-empty free text enters <strong>description mode</strong> (cases derived from the uncommitted diff read through the description as scope, or from the description itself on a clean tree); blank enters <strong>diff mode</strong> (cases derived from <code>git status --porcelain</code> plus <code>git diff</code> on the current branch). <code>&lt;feature&gt;</code> is derived per mode — the PRD basename, the plan filename's <code>&lt;feature&gt;</code> segment (everything before <code>-phase-&lt;N&gt;-</code>, or the full slug for a flat description-mode plan), or the current branch slug with any <code>feature/</code> prefix stripped, falling back to a kebab-cased slug of the description.</dd>
+        <dt>Output</dt>
+        <dd><code>PRPs/reports/&lt;feature&gt;/qa-report.md</code> — the only file this command ever writes. One entry per case, each carrying all seven fields of the report schema below; uncovered cases are listed explicitly, never omitted.</dd>
+        <dt>Mode</dt>
+        <dd>Single LLM-judgment command with <strong>no writer/reviewer pair</strong> — the human performing manual QA is the validator, not a reviewer agent. Read-only over the repository except for the one report it writes. Never invoked by <code>/relay-execute</code>; it lives in the human validation gate between Pillar 2 and Pillar 3, not inside the autonomous loop.</dd>
+        <dt>Report schema</dt>
+        <dd>Seven fields per case: title; risk level (<code>Critical</code> / <code>High</code> / <code>Medium</code> / <code>Low</code>, probability × severity); required state (the DB entities and values needed to exercise the case, or "none"); coverage (<code>automated</code> / <code>manual</code> / <code>none</code>); automated test path (every cited path verified with <code>test -f</code> before citing — never invented; unconfirmed coverage marked <code>unverified</code>); manual status (<code>pending</code> on first generation, updated only conversationally afterward); and a manual step-by-step (setup, action, expected result). A single automated or manual test MAY cover several cases — there is no forced 1:1 mapping.</dd>
+        <dt>Refuses</dt>
+        <dd>Silently overwriting an existing <code>qa-report.md</code> — an anti-overwrite HALT requires explicit operator confirmation before regenerating, so manual statuses already recorded are never silently discarded. In diff mode, a clean working tree HALTs with <code>FAILED_NOTHING_TO_REPORT</code> and writes no file.</dd>
+        <dt>Notes</dt>
+        <dd>Grounds the automated-coverage column in <code>PRPs/reports/&lt;feature&gt;/record.json</code> (or the latest per-attempt <code>attempts/&lt;N&gt;/record.json</code>) — the Test Runner's schema v1 — when present, citing its <code>file</code>/<code>line</code> fields directly. When absent, infers coverage by searching the repo's test files and marks entries that cannot be confirmed <code>unverified</code>. Never runs, authors, or modifies a test; never writes under <code>.claude/</code>. See <code>PRPs/prds/relay-qa-report-command.prd.md</code>.</dd>
+      </div>
+
+      <h2 id="argument-router">Argument router in detail</h2>
+
+      <p>Phase 0 of the command trims <code>$ARGUMENTS</code> and routes on its shape — mirroring, and extending to four branches, the suffix-based mode detection <code>/relay-plan</code> uses for its two-way PRD/description split.</p>
+
+      <div class="kv">
+        <dt>PRD mode</dt>
+        <dd>Argument ends with <code>.prd.md</code>. Cases come from the PRD's <code>## Acceptance Criteria</code> section — each Acceptance Criterion becomes at least one report entry. <code>&lt;feature&gt;</code> is the PRD basename with the extension stripped.</dd>
+        <dt>Plan mode</dt>
+        <dd>Argument ends with <code>.plan.md</code>. Cases come from the plan's <code>## Step-by-Step Tasks</code> (each task's <code>ACTION</code> + <code>VALIDATE</code>) and <code>## Validation Commands</code> sections. <code>&lt;feature&gt;</code> is the filename segment before <code>-phase-&lt;N&gt;-</code>, or the full slug for a flat description-mode plan filename.</dd>
+        <dt>Description mode</dt>
+        <dd>Any other non-empty argument. Treated as scope: on a dirty working tree, cases come from <code>git diff</code> (and <code>git diff --staged</code>) interpreted through the description; on a clean tree, cases come directly from the description as a freeform list. There is no clean-tree HALT here — <code>FAILED_NOTHING_TO_REPORT</code> is diff-mode-only.</dd>
+        <dt>Diff mode</dt>
+        <dd>Blank argument. Cases come from <code>git status --porcelain</code> plus <code>git diff</code> (unstaged) and <code>git diff --staged</code> (staged) on the current branch — everything uncommitted. A clean tree HALTs with <code>FAILED_NOTHING_TO_REPORT</code> and creates no file.</dd>
+      </div>
+
+      <h2 id="honesty-and-grounding">Honesty guarantee and coverage grounding</h2>
+
+      <p>Any case covered by <strong>neither</strong> an automated <strong>nor</strong> a manual test still appears in the report, explicitly marked <code>coverage: none</code>. The entry is never silently dropped to make the report look complete — hiding a coverage gap is the exact anti-pattern this command exists to counter.</p>
+
+      <p>Before inferring coverage from repo test files, the command checks whether <code>PRPs/reports/&lt;feature&gt;/record.json</code> exists. When it does, coverage and automated-test-path fields are grounded in its <code>failures[]</code> entries and <code>counts</code> rather than re-derived. When it is absent — for example a project with <code>test_frameworks: []</code>, or a manual-only implementation — the command infers coverage from the repo's test files and marks anything it cannot confirm <code>unverified</code> rather than asserting confident coverage it does not have.</p>
+
+      <h2 id="halts">HALT conditions</h2>
+
+      <div class="kv">
+        <dt><code>FAILED_NOTHING_TO_REPORT</code></dt>
+        <dd>Diff mode only. The working tree is clean — there is nothing uncommitted to report on. Creates no file. Re-run after making changes, or pass an explicit <code>.prd.md</code> path, <code>.plan.md</code> path, or free-text description.</dd>
+        <dt>Anti-overwrite HALT</dt>
+        <dd>All modes. Fires when <code>PRPs/reports/&lt;feature&gt;/qa-report.md</code> already exists. Regenerating without confirmation would silently discard any manual statuses already recorded there; the command waits for explicit operator confirmation before overwriting within the same invocation.</dd>
+        <dt>Feature-slug derivation HALT</dt>
+        <dd>Description and diff modes. Fires when neither the current branch nor the description text yields a usable slug (detached HEAD, a generic branch name, and no alphanumeric description text).</dd>
+      </div>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Not part of the autonomous loop</div>
+        <p><code>/relay-qa-report</code> is invoked by the human, standalone, after <code>/relay-execute</code> completes and before Pillar 3 (<code>/relay-commit</code> → <code>/relay-pr</code> → <code>/relay-approve</code>). See the <a href="commands.html#orchestrator">Commands</a> reference for the full pipeline surface.</p>
+      </div>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

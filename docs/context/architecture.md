@@ -22,7 +22,7 @@ The plugin is composed of four Claude Code asset types:
 | Type | Folder | Purpose | Status |
 |------|--------|---------|--------|
 | Skills | `plugins/relay/skills/` | Reusable, prompt-based capabilities loaded on demand. Currently: `context-builder`. | 1 present |
-| Commands | `plugins/relay/commands/` | `/relay-*` slash commands users invoke. | 14 implemented (including `/relay-commit` v0.14.0, dual-mode since v0.16.0, `/relay-pr` v0.15.0, and `/relay-approve` v0.17.0); see `docs/api-reference.md` |
+| Commands | `plugins/relay/commands/` | `/relay-*` slash commands users invoke. | 15 implemented (including `/relay-commit` v0.14.0, dual-mode since v0.16.0, `/relay-pr` v0.15.0, `/relay-approve` v0.17.0, and `/relay-qa-report` as the QA / Support command); see `docs/api-reference.md` |
 | Agents | `plugins/relay/agents/` | Specialized sub-agents (PRD Writer, Plan Writer, Test Runner, etc.). | planned, not yet implemented |
 | Hooks | `plugins/relay/hooks/` | Event-triggered scripts (Stop, PostToolUse, etc.) wired in `hooks/hooks.json`. | planned, not yet implemented |
 
@@ -112,7 +112,7 @@ The canonical PRD shape is defined in `docs/context/prd-template.md`.
 
 ## Command surface
 
-Relay exposes **14 commands**, organized by role. Full
+Relay exposes **15 commands**, organized by role. Full
 table and contracts in `docs/api-reference.md`; rationale in
 `docs/decisions.md`. Summary of the philosophy:
 
@@ -128,11 +128,16 @@ table and contracts in `docs/api-reference.md`; rationale in
 - **Naming reuses prp-core where it exists.** `/relay-implement` matches
   the familiar `/prp-implement` convention. The orchestrator is
   `/relay-execute` to avoid collision.
+- **A QA / Support command sits in the human validation gate.**
+  `/relay-qa-report` is invoked by the human between `/relay-execute`
+  (Pillar 2) and Pillar 3 to enumerate per-case test coverage before
+  manual testing; it is not part of the autonomous loop and is never
+  called by `/relay-execute`.
 
 Happy path for day-to-day use: `/relay-prd` → `/relay-execute` →
-(human validates + manual testing) → `/relay-commit` → `/relay-pr` →
-(after merge) `/relay-approve`. Every intermediate command is there for
-flexibility, not for routine use.
+(human validates + manual testing, aided by `/relay-qa-report`) →
+`/relay-commit` → `/relay-pr` → (after merge) `/relay-approve`. Every
+intermediate command is there for flexibility, not for routine use.
 
 ## Orchestrator state machine
 

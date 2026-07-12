@@ -14,9 +14,10 @@ Modes for `context-builder`: `*init`, `*update`, `*validate`, `*domain`,
 
 ## Commands
 
-14 commands organized by role (11 Pillar 1–2 plus `/relay-commit`,
+15 commands organized by role (11 Pillar 1–2 plus `/relay-commit`,
 `/relay-pr`, and `/relay-approve` as the three Pillar 3 commands, shipped
-v0.14.0, v0.15.0, and v0.17.0). All 14 commands are now implemented;
+v0.14.0, v0.15.0, and v0.17.0, plus `/relay-qa-report` as the QA / Support
+command in the human validation gate). All 15 commands are now implemented;
 `/relay-execute` ✅ orchestrator shipped in v0.9.0 completing project Phase 3;
 `/relay-approve` ✅ shipped in v0.17.0 completing Phase 4. See
 `docs/decisions.md` for the decision record and rationale.
@@ -65,6 +66,12 @@ cycle.
 | Command | Input | Output |
 |---------|-------|--------|
 | `/relay-execute <prd-path>` ✅ **implemented** | approved PRD | all phases complete — working tree in `.worktrees/<feature>/` carries uncommitted implementation changes, ready for `/relay-pr`; or a HALT code on unrecoverable failure. Does NOT commit or create a PR (see `docs/decisions.md` 2026-05-18). Serial orchestration via source PRD's Implementation Phases table as state machine (D6 — idempotent on re-invocation; re-reads table on every run; no separate state file). Inline command-protocol adoption via `Read` (D7 — LLM reads each downstream command file and executes its protocol in the same conversation context; zero logic duplication; no sub-agents). Two new orchestration-layer budgets: `max_plan_review_retries` and `max_orchestrator_minutes` (D3 — each downstream command owns its internal loop budget; orchestrator adds session-level wall-clock; first-to-expire wins). Nine distinct HALT outcome codes: `FAILED_PLAN_REVIEW_BUDGET_EXCEEDED`, `FAILED_PLAN_REVIEW_STUCK`, `FAILED_ORCHESTRATOR_TIME_BUDGET_EXCEEDED`, `FAILED_TEST_REVIEW_REJECTED`, plus four propagated from `/relay-implement` and one from `/relay-test`. Phase A.5.0 (v0.11.1): when `test_frameworks: []` or `methodology.md` absent, the orchestrator logs `{"phase": <N>, "stage": "test", "outcome": "skipped_no_test_framework"}` to `orchestrator_run_log` and proceeds to Phase A.6 without halting — not a HALT code but a structured outcome entry (symmetric with A.3.5's `skipped_tdd_false`). Audit artifact at `PRPs/reports/<feature>/orchestrator-run.json`. TDD routing (B7/B8) shipped v0.10.0. Composes: `/relay-plan → /relay-plan-review → /relay-worktree → /relay-tdd → /relay-tdd-review → /relay-implement → /relay-code-review → /relay-test → /relay-test-review`. |
+
+#### QA / Support (human validation gate)
+
+| Command | Input | Output |
+|---------|-------|--------|
+| `/relay-qa-report [<prd-path> \| <plan-path> \| <description>]` (blank = uncommitted diff) ✅ **implemented** | Four-way argument router: a `.prd.md` path enters PRD mode (cases derived from the PRD Acceptance Criteria); a `.plan.md` path enters plan mode (cases derived from the plan's Step-by-Step Tasks + Validation Commands); non-empty free text enters description mode (cases derived from the uncommitted diff read through the description, or from the description itself on a clean tree); blank enters diff mode (cases derived from `git status --porcelain` + `git diff` on the current branch; a clean tree HALTs with `FAILED_NOTHING_TO_REPORT` and writes no file). | `PRPs/reports/<feature>/qa-report.md` — one entry per case carrying all seven fields (title, risk level, required state, coverage, automated test path, manual status defaulting to `pending`, manual step-by-step); uncovered cases are listed explicitly, never omitted. Single LLM-judgment command with NO writer/reviewer pair; never invoked by `/relay-execute`; an anti-overwrite HALT guards an existing report. See `PRPs/prds/relay-qa-report-command.prd.md`. |
 
 #### Pillar 3 (commit + PR + approval cycle)
 

@@ -59,6 +59,7 @@
         { title: "Test output schema",      path: "reference/test-output-schema.html" },
         { title: "Settings allowlist",      path: "reference/settings-allowlist.html" },
         { title: "Redaction policy",        path: "reference/redaction-policy.html" },
+        { title: "QA report",               path: "reference/relay-qa-report.html" },
       ],
     },
     {

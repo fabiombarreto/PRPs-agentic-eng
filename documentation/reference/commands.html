@@ -21,7 +21,7 @@
       </div>
 
       <h1>Commands</h1>
-      <p class="page-subtitle">The full slash-command surface of the relay plugin. Fourteen commands, organized by role (writer / reviewer / infra / orchestrator / Pillar 3). Each command is invocable on its own for testing or manual intervention; the orchestrator (<code>/relay-execute</code>) composes the Pillar 2 stages into a full run.</p>
+      <p class="page-subtitle">The full slash-command surface of the relay plugin. Fifteen commands, organized by role (writer / reviewer / infra / orchestrator / QA / Pillar 3). Each command is invocable on its own for testing or manual intervention; the orchestrator (<code>/relay-execute</code>) composes the Pillar 2 stages into a full run.</p>
 
       <h2 id="happy-path">The happy path</h2>
 
@@ -224,6 +224,22 @@
           <strong>TDD routing:</strong> shipped v0.10.0. The TDD pair (B7 + B8) is engaged in Phase A.3.5 of <code>/relay-execute</code> when <code>docs/context/methodology.md</code> declares <code>tdd: true</code>; the orchestrator-level loop is bounded by <code>max_tdd_review_retries=2</code> with HALT outcome <code>FAILED_TDD_REVIEW_BUDGET_EXCEEDED</code>. R-X strict (D17 of <code>implementation-authoring.prd.md</code>) is preserved — the implementer never edits test files; B7 is the authorized author of new test files. When <code>tdd: false</code> or <code>methodology.md</code> is missing, A.3.5 self-skips silently as a live no-op.<br><br>
           Name deliberately distinct from <code>/relay-implement</code> (which is the code-writing stage) to avoid collision.
         </dd>
+      </div>
+
+      <h2 id="qa-support">QA / Support</h2>
+
+      <p>A human-facing command invoked in the validation gate between <code>/relay-execute</code> (Pillar 2) and Pillar 3. It reports test coverage to support manual testing; it is not part of the autonomous loop and is never called by <code>/relay-execute</code>.</p>
+
+      <h3 id="relay-qa-report"><code>/relay-qa-report [prd-path | plan-path | description]</code> <span class="badge badge--done">implemented</span></h3>
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>Phase 0 four-way routing by argument shape: a <code>.prd.md</code> path (cases from the PRD Acceptance Criteria), a <code>.plan.md</code> path (cases from the plan&rsquo;s tasks / validation), non-empty free text (description mode; <code>&lt;feature&gt;</code> from the current branch slug), or blank (diff mode over <code>git status --porcelain</code> + <code>git diff</code>).</dd>
+        <dt>Output</dt>
+        <dd>A human-facing QA support report at <code>PRPs/reports/&lt;feature&gt;/qa-report.md</code> enumerating test cases, each with seven fields: title, risk level (Critical / High / Medium / Low), required state (DB entities + values), coverage (automated / manual / none), automated test path, manual status (defaults to <code>pending</code>), and a manual step-by-step. A single test may cover multiple cases (n:1); less-critical cases may be left uncovered.</dd>
+        <dt>Mode</dt>
+        <dd>Single LLM-judgment command &mdash; no writer/reviewer pair (the human doing manual QA is the validator). <strong>Honest by contract:</strong> any case covered by neither an automated nor a manual test is listed explicitly as uncovered, never omitted; cited automated-test paths must resolve to real files, and unconfirmed coverage is marked unverified rather than invented. When <code>PRPs/reports/&lt;feature&gt;/record.json</code> from a prior Test Runner run exists it grounds the automated-coverage column; otherwise coverage is inferred from repo test files. Full reference: <a href="relay-qa-report.html">/relay-qa-report</a>. See <code>plugins/relay/commands/relay-qa-report.md</code>.</dd>
+        <dt>Preconditions</dt>
+        <dd>Diff mode on a clean working tree HALTs with <code>FAILED_NOTHING_TO_REPORT</code> and writes no file; an existing <code>PRPs/reports/&lt;feature&gt;/qa-report.md</code> triggers the anti-overwrite guard (confirm-then-continue, or leave it in place) so recorded manual statuses are never silently clobbered.</dd>
       </div>
 
       <h2 id="pillar3">Pillar 3 — Commit, PR &amp; Approval</h2>

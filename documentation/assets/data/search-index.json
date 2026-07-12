@@ -87,7 +87,7 @@
     "title": "Commands",
     "path": "reference/commands.html",
     "category": "Reference",
-    "excerpt": "Fourteen commands, no placeholder. All Pillar 3 commands shipped: /relay-commit (v0.14.0), /relay-pr (v0.15.0), /relay-approve (v0.17.0). /relay-plan supports a description-only (PRD-less) mode in addition to the standard APPROVED-PRD mode. Full command surface by role: writers, reviewers, infra, orchestrator, and Pillar 3."
+    "excerpt": "Fifteen commands, no placeholder. All Pillar 3 commands shipped: /relay-commit (v0.14.0), /relay-pr (v0.15.0), /relay-approve (v0.17.0). /relay-qa-report (v0.20.0) is the QA / Support command in the human validation gate. /relay-plan supports a description-only (PRD-less) mode in addition to the standard APPROVED-PRD mode. Full command surface by role: writers, reviewers, infra, orchestrator, QA / Support, and Pillar 3."
   },
   {
     "title": "Agents",
@@ -124,6 +124,12 @@
     "path": "reference/redaction-policy.html",
     "category": "Reference",
     "excerpt": "Three-layer secret redaction: invariant defaults (env name wildcards + exact URL vars + value regex for AWS/Stripe/GitHub/JWT/PEM/OpenAI/Anthropic/Google), per-project extensions, documented non-redacted values."
+  },
+  {
+    "title": "QA report",
+    "path": "reference/relay-qa-report.html",
+    "category": "Reference",
+    "excerpt": "The /relay-qa-report human validation gate command: four-way argument router (PRD, plan, description, diff mode), seven-field per-case schema, honesty guarantee for uncovered cases, record.json coverage grounding, anti-overwrite and FAILED_NOTHING_TO_REPORT HALTs."
   },
   {
     "title": "Decisions",
