@@ -78,17 +78,17 @@
         <p><code>/relay-plan</code> now supports a description-only (PRD-less) input mode in addition to the standard APPROVED-PRD mode. <strong>Input-type detection (Phase 0):</strong> if the argument resolves to a <code>.prd.md</code> file or its content contains an &ldquo;Implementation Phases&rdquo; table, the command runs the existing PRD mode unchanged. Any other non-empty free-text argument enters description mode. <strong>Output:</strong> a flat <code>PRPs/plans/&lt;slug&gt;.plan.md</code> (no phase number, no PRD back-fill). <strong>Decision Gate preserved:</strong> the three Decision Gate sources are consulted in both modes. <strong>Full chain supported:</strong> the generated plan is consumable by <code>/relay-implement</code> end-to-end (P3 PRD-row check branched; D8 Mutation c no-op for absent PRD row; <code>code-reviewer</code>/<code>code-reviewer-semantic</code> use plan-derived ACs). <strong>Note:</strong> <code>tdd: true</code> targets are deferred to a future branch; description mode supports <code>tdd: false</code> projects only. Supersedes the 2026-05-15 decision entry. See <code>docs/decisions.md</code> [2026-06-16].</p>
       </div>
 
-      <h3 id="relay-tdd"><code>/relay-tdd &lt;plan-path&gt;</code> <span class="badge badge--done">implemented</span></h3>
+      <h3 id="relay-write-test"><code>/relay-write-test &lt;plan-path&gt;</code> <span class="badge badge--done">implemented</span></h3>
 
       <div class="kv">
         <dt>Input</dt>
         <dd>A plan ending with <code>*Status: APPROVED*</code> whose source PRD's Implementation Phases row N has <code>Status: in-progress</code>.</dd>
         <dt>Output</dt>
-        <dd><code>PRPs/reports/&lt;feature&gt;/tdd-initial-suite.diff</code> manifest with aggregate verdict <code>SUITE_DRAFT_WRITTEN</code> or <code>EXISTING_COVERAGE_SUFFICIENT</code> (the latter when every in-scope AC is already covered by existing tests). Test files (when verdict is <code>SUITE_DRAFT_WRITTEN</code>) committed to the framework-native test root in the target project. Suite manifest carries <code>*Status: DRAFT*</code> for <code>/relay-tdd-review</code> to flip.</dd>
+        <dd><code>PRPs/reports/&lt;feature&gt;/test-suite.diff</code> manifest with aggregate verdict <code>SUITE_DRAFT_WRITTEN</code> or <code>EXISTING_COVERAGE_SUFFICIENT</code> (the latter when every in-scope AC is already covered by existing tests). Test files (when verdict is <code>SUITE_DRAFT_WRITTEN</code>) committed to the framework-native test root in the target project. Suite manifest carries <code>*Status: DRAFT*</code> for <code>/relay-test-write-review</code> to flip.</dd>
         <dt>Mode</dt>
-        <dd>Autonomous, opt-in. Three P4 branches based on <code>docs/context/methodology.md</code>: (a) <code>tdd: false</code> or file absent → silent self-skip exiting 0 with the verbatim line <code>TDD track inactive (tdd: false). Skipping.</code>; (b) <code>tdd: true</code> + empty <code>test_frameworks</code> → hard-abort with <code>TDD track active but no test framework declared. Run context-builder *update or remove tdd:true.</code>; (c) <code>tdd: true</code> + non-empty → adopts <code>tdd-writer</code> protocol inline.</dd>
+        <dd>Autonomous. Activation gate is a declared test framework (non-empty <code>test_frameworks</code> in <code>docs/context/methodology.md</code>) — active in BOTH methodology modes; <code>test_frameworks: []</code> or a missing file &rarr; silent self-skip exiting 0. The <code>tdd:</code> value selects ordering only: <code>tdd: true</code> = test-first (runs before the Implementer); <code>tdd: false</code> = test-after (runs after the Implementer + Code Review). Adopts <code>test-writer</code> protocol inline.</dd>
         <dt>Notes</dt>
-        <dd>Reads the source PRD's Acceptance Criteria section to derive tests. Walks each AC and emits one of three per-AC outcomes (<code>NEW_TEST_REQUIRED</code> writes a framework-idiomatic test, <code>EXISTING_TEST_COVERS path:line</code> records the mapping without writing a duplicate, <code>AMBIGUOUS</code> aborts the suite asking the user to tighten the PRD). Prompt parametrized by <code>methodology.md test_frameworks[]</code> — supports pytest, vitest, jest, ExUnit, RSpec, playwright. Never writes production code (R-X strict's symmetric inverse). Never modifies existing test files. See <code>PRPs/prds/tdd-writer-reviewer.prd.md</code>.</dd>
+        <dd>Reads the source PRD's Acceptance Criteria section to derive tests. Walks each AC and emits one of five per-AC outcomes (<code>NEW_TEST_REQUIRED</code> writes a framework-idiomatic test, <code>EXISTING_TEST_COVERS path:line</code> records the mapping without writing a duplicate, <code>EXISTING_TEST_UPDATED</code>/<code>OBSOLETE_TEST_REMOVED</code>/<code>REDUNDANT_TEST_REMOVED</code> record lifecycle ops in the manifest ledger, <code>AMBIGUOUS</code> aborts the suite asking the user to tighten the PRD). Prompt parametrized by <code>methodology.md test_frameworks[]</code> — supports pytest, vitest, jest, ExUnit, RSpec, playwright. Never writes production code (R-X strict's symmetric inverse). See <code>PRPs/prds/test-pair-universalization.prd.md</code> (formerly <code>PRPs/prds/tdd-writer-reviewer.prd.md</code>).</dd>
       </div>
 
       <h3 id="relay-implement"><code>/relay-implement &lt;plan-path&gt;</code> <span class="badge badge--done">implemented</span></h3>
@@ -122,16 +122,16 @@
         <dd>Three preconditions (plan readable, plan ends with <code>*Status: DRAFT*</code>, Decision Gate sources readable). Diverges from <code>/relay-prd</code>'s reviewer in three ways: auto-flips without user dialogue (interactivity boundary), evaluates all 8 items every run (no short-circuit), no Step 5 dialogue loop (CHANGES_REQUESTED is terminal). <strong>Phase 0 pre-pass (v0.12.0):</strong> before rubric evaluation, the reviewer infers and writes the <code>phase_type</code> field (<code>scaffold</code> / <code>docs</code> / <code>refactor</code> / <code>feature</code>) in the plan's <code>## Metadata</code> table when absent — the only bounded exception to the reviewer's no-inline-edit rule. This drives the <code>R-COH-VALIDATE-FRAMEWORK-MISMATCH</code> phase-type exemption. See <code>PRPs/prds/plan-authoring.prd.md</code>.</dd>
       </div>
 
-      <h3 id="relay-tdd-review"><code>/relay-tdd-review &lt;suite-path&gt;</code> <span class="badge badge--done">implemented</span></h3>
+      <h3 id="relay-test-write-review"><code>/relay-test-write-review &lt;suite-path&gt;</code> <span class="badge badge--done">implemented</span></h3>
       <div class="kv">
         <dt>Input</dt>
-        <dd>A TDD suite manifest at <code>PRPs/reports/&lt;feature&gt;/tdd-initial-suite.diff</code> ending with <code>*Status: DRAFT*</code>.</dd>
+        <dd>A test suite manifest at <code>PRPs/reports/&lt;feature&gt;/test-suite.diff</code> ending with <code>*Status: DRAFT*</code>.</dd>
         <dt>Output</dt>
-        <dd><code>APPROVED</code> or <code>CHANGES_REQUESTED</code> appended to <code>PRPs/plans/&lt;basename&gt;.tdd-review.jsonl</code> (append-only Read+concat+Write). On APPROVED, the suite manifest is flipped <code>*Status: DRAFT*</code> → <code>*Status: APPROVED*</code> via the command's own <code>Edit</code>. Symmetric self-skip with <code>/relay-tdd</code> on <code>tdd: false</code> / missing <code>methodology.md</code>.</dd>
+        <dd><code>APPROVED</code> or <code>CHANGES_REQUESTED</code> appended to <code>PRPs/plans/&lt;basename&gt;.test-write-review.jsonl</code> (append-only Read+concat+Write). On APPROVED, the suite manifest is flipped <code>*Status: DRAFT*</code> → <code>*Status: APPROVED*</code> via the command's own <code>Edit</code>. Symmetric self-skip with <code>/relay-write-test</code> on <code>test_frameworks: []</code> / missing <code>methodology.md</code>.</dd>
         <dt>Mode</dt>
-        <dd>Autonomous, single-shot. Mirrors the <code>/relay-code-review</code> shape: <code>Task</code>-dispatches <code>tdd-reviewer</code>; reads the just-appended JSONL line; flips suite status on APPROVED. Explicit no-D8-mutation no-op step preserved (the reviewer command does not modify the source PRD's Implementation Phases table or move plans to <code>completed/</code>).</dd>
+        <dd>Autonomous, single-shot. Mirrors the <code>/relay-code-review</code> shape: <code>Task</code>-dispatches <code>test-reviewer</code>; reads the just-appended JSONL line; flips suite status on APPROVED. Explicit no-D8-mutation no-op step preserved (the reviewer command does not modify the source PRD's Implementation Phases table or move plans to <code>completed/</code>).</dd>
         <dt>Notes</dt>
-        <dd>Six rubric ids evaluated per run with no short-circuit: <code>R-IMPL-LEAK</code> (asserts on private symbols, call-count assertions, test names matching internal method names), <code>R-TRIVIAL-ASSERT</code> (tautologies, existence-only, strict-subset of AC properties), <code>R-MOCK-ABUSE</code> (mock-of-SUT, mock of concrete type when interface exists, chained mocks ≥3 deep, <code>was_called</code>-only assertions), <code>R-AC-COVERAGE</code> (every in-scope AC has ≥1 test reference), <code>R-DUPLICATE</code> (two tests asserting the same property without discriminative input variance), and the hybrid <code>R-RED-LEGITIMATE</code> (dynamic <code>Bash</code> execution distinguishing assertion-failure red from broken-setup red from green-pre-impl; <code>passed: null</code> graceful degradation when framework unavailable per AC-13). The orchestrator (<code>/relay-execute</code>) decides retry vs HALT per <code>max_tdd_review_retries=2</code>. See <code>PRPs/prds/tdd-writer-reviewer.prd.md</code>.</dd>
+        <dd>Rubric ids evaluated per run with no short-circuit, including <code>R-IMPL-LEAK</code> (asserts on private symbols, call-count assertions, test names matching internal method names), <code>R-TRIVIAL-ASSERT</code> (tautologies, existence-only, strict-subset of AC properties), <code>R-MOCK-ABUSE</code> (mock-of-SUT, mock of concrete type when interface exists, chained mocks ≥3 deep, <code>was_called</code>-only assertions), <code>R-AC-COVERAGE</code> (every in-scope AC has ≥1 test reference), <code>R-DUPLICATE</code> (two tests asserting the same property without discriminative input variance), <code>R-LIFECYCLE-LEGITIMATE</code> (update/delete ops match an APPROVED ledger entry), and the mode-selected hybrid <code>R-RED-LEGITIMATE</code> (test-first) / <code>R-GREEN-LEGITIMATE</code> (test-after) — dynamic <code>Bash</code> execution distinguishing legitimate from illegitimate suite state; <code>passed: null</code> graceful degradation when framework unavailable per AC-13. The orchestrator (<code>/relay-execute</code>) decides retry vs HALT per <code>max_tdd_review_retries=2</code>. See <code>PRPs/prds/test-pair-universalization.prd.md</code> (formerly <code>PRPs/prds/tdd-writer-reviewer.prd.md</code>).</dd>
       </div>
 
       <h3 id="relay-code-review"><code>/relay-code-review &lt;plan-path&gt;</code> <span class="badge badge--done">implemented</span></h3>
@@ -175,7 +175,7 @@
         <dt>Flags</dt>
         <dd><code>--base &lt;ref&gt;</code> &mdash; base ref for the new branch (default: <code>origin/main</code> &rarr; <code>origin/master</code> &rarr; <code>HEAD</code> fallback chain).</dd>
         <dt>Notes</dt>
-        <dd>Invoked automatically by <code>/relay-execute</code> between <code>/relay-plan-review</code> and <code>/relay-tdd</code>. <code>--no-worktree</code> flag on <code>/relay-execute</code> skips invocation and preserves the current cwd-based behavior. Creation failure inside <code>/relay-execute</code> falls through to graceful degradation per D3/D4 &mdash; pipeline does NOT halt on worktree creation failure; fallback recorded in <code>orchestrator-run.json</code> with <code>worktree_attempted: true</code>, <code>worktree_succeeded: false</code>, <code>fallback_reason: &lt;code&gt;</code>. See <code>PRPs/prds/relay-worktree.prd.md</code>.</dd>
+        <dd>Invoked automatically by <code>/relay-execute</code> between <code>/relay-plan-review</code> and <code>/relay-write-test</code>. <code>--no-worktree</code> flag on <code>/relay-execute</code> skips invocation and preserves the current cwd-based behavior. Creation failure inside <code>/relay-execute</code> falls through to graceful degradation per D3/D4 &mdash; pipeline does NOT halt on worktree creation failure; fallback recorded in <code>orchestrator-run.json</code> with <code>worktree_attempted: true</code>, <code>worktree_succeeded: false</code>, <code>fallback_reason: &lt;code&gt;</code>. See <code>PRPs/prds/relay-worktree.prd.md</code>.</dd>
       </div>
 
       <h3 id="relay-test"><code>/relay-test &lt;worktree&gt;</code> <span class="badge badge--done">implemented</span></h3>
@@ -184,7 +184,7 @@
         <dd>A worktree with pending code changes.</dd>
         <dt>Output</dt>
         <dd>
-          Green state, or one of: <code>FAILED_AFTER_N_RETRIES</code>, <code>FAILED_TIME_BUDGET_EXCEEDED</code>, <code>FAILED_OSCILLATION</code>, <code>FAILED_INFRA_UNRECOVERABLE</code>, or <code>skipped_no_test_framework</code> (graceful self-skip when <code>test_frameworks: []</code> or <code>methodology.md</code> absent &mdash; no <code>run.json</code> written; symmetric with <code>/relay-tdd</code> P4.a silent self-skip exiting 0).
+          Green state, or one of: <code>FAILED_AFTER_N_RETRIES</code>, <code>FAILED_TIME_BUDGET_EXCEEDED</code>, <code>FAILED_OSCILLATION</code>, <code>FAILED_INFRA_UNRECOVERABLE</code>, or <code>skipped_no_test_framework</code> (graceful self-skip when <code>test_frameworks: []</code> or <code>methodology.md</code> absent &mdash; no <code>run.json</code> written; symmetric with <code>/relay-write-test</code> P4.a silent self-skip exiting 0).
           <br />Produces <code>PRPs/reports/&lt;feature&gt;/run.json</code> plus per-attempt <code>record.json</code> and <code>stdout.log</code> (not written on self-skip).
         </dd>
         <dt>Encapsulates</dt>
@@ -210,7 +210,7 @@
         <dd>All phases complete &mdash; working tree in <code>.worktrees/&lt;feature&gt;/</code> carries uncommitted implementation changes, ready for <code>/relay-pr</code>. Does <strong>not</strong> commit or create a PR (Pillar 3 owns that boundary; see <code>docs/decisions.md</code> 2026-05-18). Or a HALT code with diagnostic. Audit artifact at <code>PRPs/reports/&lt;feature&gt;/orchestrator-run.json</code>.</dd>
         <dt>Composes</dt>
         <dd>
-          <code>/relay-plan</code> → <code>/relay-plan-review</code> → <code>/relay-worktree</code> → <code>/relay-tdd</code> → <code>/relay-tdd-review</code> → <code>/relay-implement</code> → <code>/relay-code-review</code> → <code>/relay-test</code> → <code>/relay-test-review</code>.
+          <code>/relay-plan</code> → <code>/relay-plan-review</code> → <code>/relay-worktree</code> → <code>/relay-write-test</code> → <code>/relay-test-write-review</code> → <code>/relay-implement</code> → <code>/relay-code-review</code> → <code>/relay-test</code> → <code>/relay-test-review</code>.
         </dd>
         <dt>Loop behavior</dt>
         <dd>Each writer/reviewer pair loops on <code>CHANGES_REQUESTED</code> until approved or the stage's retry budget is exhausted. Any unrecoverable abort is surfaced with the underlying command's exit reason.</dd>
@@ -304,7 +304,7 @@
 │   ├── &lt;feature&gt;-phase-&lt;N&gt;-&lt;slug&gt;.plan.md       # DRAFT or APPROVED
 │   ├── &lt;basename&gt;.review.jsonl                  # plan-reviewer audit log
 │   ├── &lt;basename&gt;.code-review.jsonl             # code-reviewer audit log
-│   ├── &lt;basename&gt;.tdd-review.jsonl              # tdd-reviewer audit log
+│   ├── &lt;basename&gt;.test-write-review.jsonl        # test-reviewer audit log
 │   └── completed/
 │       └── &lt;feature&gt;-phase-&lt;N&gt;-&lt;slug&gt;.plan.md   # IMPLEMENTED (archived by /relay-implement)
 └── reports/&lt;feature&gt;/
@@ -312,7 +312,7 @@
     ├── test-review.json                         # /relay-test-review verdict
     ├── final-report.md                          # /relay-pr report (planned)
     ├── orchestrator-run.json                    # /relay-execute audit (v0.9.0)
-    ├── tdd-initial-suite.diff                   # /relay-tdd suite manifest (v0.10.0)
+    ├── test-suite.diff                          # /relay-write-test suite manifest (v0.10.0; universalized v0.19.0)
     ├── attempts/&lt;N&gt;/                          # /relay-test per-attempt
     │   ├── record.json
     │   ├── stdout.log

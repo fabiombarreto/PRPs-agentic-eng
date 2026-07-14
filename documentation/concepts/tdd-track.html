@@ -155,7 +155,7 @@ human edit or an explicit user declaration during `*init` can.
 
       <div class="kv">
         <dt>What it marks</dt><dd>A phase that creates the seam later phases depend on, where the phase itself introduces the types its ACs name. Distinct from <code>scaffold</code> (config-only, no application source) and from <code>feature</code> (exercises existing types).</dd>
-        <dt>What it does</dt><dd>The TDD track <strong>skips test-first</strong> for that phase. <code>/relay-tdd</code> self-skips at precondition P5; <code>/relay-execute</code> logs <code>skipped_foundation_phase</code> and proceeds straight to the Implementer, which materializes the seam. The feature phases that follow run fully test-first against the now-existing types.</dd>
+        <dt>What it does</dt><dd>The TDD track <strong>skips test-first</strong> for that phase. <code>/relay-write-test</code> self-skips at precondition P5; <code>/relay-execute</code> logs <code>skipped_foundation_phase</code> and proceeds straight to the Implementer, which materializes the seam. The feature phases that follow run fully test-first against the now-existing types.</dd>
         <dt>How it's set</dt><dd>Inferred conservatively by the Plan Writer and the Plan Reviewer's Phase 0 pre-pass, and honored when a human annotates it explicitly. Its legitimate validation is a compile/build/migration check (<code>mvn test-compile</code>, <code>go build</code>, <code>dotnet build</code>), so it is also exempt from the framework-mismatch coherence check.</dd>
       </div>
 
@@ -190,7 +190,7 @@ human edit or an explicit user declaration during `*init` can.
       <h2 id="related">Related</h2>
 
       <ul>
-        <li><a href="../reference/commands.html#relay-tdd"><code>/relay-tdd</code></a> and <a href="../reference/commands.html#relay-tdd-review"><code>/relay-tdd-review</code></a> — command references</li>
+        <li><a href="../reference/commands.html#relay-write-test"><code>/relay-write-test</code></a> and <a href="../reference/commands.html#relay-test-write-review"><code>/relay-test-write-review</code></a> — command references</li>
         <li><a href="../governance/decisions.html#tdd-opt-in">Decision: TDD activation is opt-in by explicit declaration only</a></li>
         <li><a href="../governance/decisions.html#methodology-file">Decision: methodology declaration lives in <code>docs/context/methodology.md</code></a></li>
         <li><a href="../governance/anti-patterns.html">Anti-patterns — see "activating the TDD track by heuristic"</a></li>

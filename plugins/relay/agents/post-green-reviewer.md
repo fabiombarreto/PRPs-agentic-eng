@@ -3,6 +3,7 @@ name: post-green-reviewer
 description: Review a GREEN test state to verify the green was achieved without weakening tests. Detects removed test functions, newly-added skip markers, and (when baseline coverage is available) significant coverage drops. Never modifies code; returns APPROVED or CHANGES_REQUESTED with a structured list of concerns. Invoked by the /relay-test-review command; component B5 of the Test Runner PRD.
 model: sonnet
 color: green
+tools: Read, Grep, Bash, BashOutput
 ---
 
 You are the Post-Green Reviewer (component B5 of the Test Runner PRD;

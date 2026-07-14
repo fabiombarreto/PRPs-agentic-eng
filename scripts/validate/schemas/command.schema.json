@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://relay.internal/schemas/command.schema.json",
+  "title": "Command frontmatter",
+  "description": "Frontmatter shape for plugins/relay/commands/*.md — description + argument-hint, and NO name field.",
+  "type": "object",
+  "properties": {
+    "description": { "type": "string", "minLength": 1 },
+    "argument-hint": { "type": "string" }
+  },
+  "required": ["description", "argument-hint"],
+  "not": {
+    "required": ["name"]
+  },
+  "additionalProperties": true
+}

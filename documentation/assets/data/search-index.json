@@ -66,6 +66,12 @@
     "excerpt": "How to use /relay-test directly — standalone Test Runner with auto-correction. Invocation flags, interpreting verdict codes (GREEN, FAILED_*), reading the report, the current /relay-implement gap."
   },
   {
+    "title": "Validation suite",
+    "path": "guide/validation-suite.html",
+    "category": "Guide",
+    "excerpt": "The plugin's own self-test: npm run validate runs eight static consistency checks and npm run eval checks the reviewer agents against golden fixtures. Why it exists, why it is built this way, how to run it, cost, and how to maintain it."
+  },
+  {
     "title": "Handling failures",
     "path": "guide/handling-failures.html",
     "category": "Guide",
@@ -87,13 +93,13 @@
     "title": "Commands",
     "path": "reference/commands.html",
     "category": "Reference",
-    "excerpt": "Fifteen commands, no placeholder. All Pillar 3 commands shipped: /relay-commit (v0.14.0), /relay-pr (v0.15.0), /relay-approve (v0.17.0). /relay-qa-report (v0.20.0) is the QA / Support command in the human validation gate. /relay-plan supports a description-only (PRD-less) mode in addition to the standard APPROVED-PRD mode. Full command surface by role: writers, reviewers, infra, orchestrator, QA / Support, and Pillar 3."
+    "excerpt": "Fifteen commands, no placeholder. Orchestrator /relay-execute composes /relay-plan, /relay-plan-review, /relay-worktree, /relay-write-test, /relay-test-write-review, /relay-implement, /relay-code-review, /relay-test, and /relay-test-review end to end. All Pillar 3 commands shipped: /relay-commit (v0.14.0), /relay-pr (v0.15.0), /relay-approve (v0.17.0). /relay-qa-report (v0.20.0) is the QA / Support command in the human validation gate. /relay-plan supports a description-only (PRD-less) mode in addition to the standard APPROVED-PRD mode. Full command surface by role: writers, reviewers, infra, orchestrator, QA / Support, and Pillar 3."
   },
   {
     "title": "Agents",
     "path": "reference/agents.html",
     "category": "Reference",
-    "excerpt": "Specialized Claude Code agents invoked by commands. Implemented: test-runner, post-green-reviewer, prd-writer, prd-reviewer, research-web, research-codebase, plan-writer, plan-reviewer, implementer, code-reviewer, code-reviewer-semantic, tdd-writer, tdd-reviewer, docs-updater (Pillar 3 writer, v0.17.0), docs-reviewer (Pillar 3 reviewer, v0.17.0). Each has focused prompt, narrow tool allowlist, structured output."
+    "excerpt": "Specialized Claude Code agents invoked by commands. Implemented: test-runner, post-green-reviewer, prd-writer, prd-reviewer, research-web, research-codebase, plan-writer, plan-reviewer, implementer, code-reviewer, code-reviewer-semantic, test-writer, test-reviewer, docs-updater (Pillar 3 writer, v0.17.0), docs-reviewer (Pillar 3 reviewer, v0.17.0). Each has focused prompt, narrow tool allowlist, structured output."
   },
   {
     "title": "Skills",
@@ -106,6 +112,12 @@
     "path": "reference/scripts.html",
     "category": "Reference",
     "excerpt": "Helper scripts written in Node.js with zero npm dependencies. normalize-test-output.mjs (JUnit XML to canonical schema) and generate-final-report.mjs (assembles the PR-embeddable markdown report)."
+  },
+  {
+    "title": "Validation checks",
+    "path": "reference/validation-checks.html",
+    "category": "Reference",
+    "excerpt": "Complete per-check catalog of the validation suite: for each of the eight static checks and the eval layer, the functionality guarded, a passing example, a failing example with the verbatim finding text, and the covering unit tests (76 total)."
   },
   {
     "title": "Test output schema",

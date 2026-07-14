@@ -1,0 +1,18 @@
+#!/bin/sh
+# Pre-commit gate for the relay repo. Activated per-clone via
+# `npm run setup-hooks` (sets git config core.hooksPath .githooks).
+# Runs under Git for Windows' bundled sh as well as native Unix sh.
+#
+# Runs the validation harness (`npm run validate`), prints its output so the
+# developer sees which check + file:line failed, and propagates the runner's
+# exit status: any finding -> non-zero exit -> commit blocked.
+
+echo "pre-commit: running npm run validate..."
+npm run validate
+status=$?
+
+if [ "$status" -ne 0 ]; then
+  echo "pre-commit: validation FAILED — commit blocked" >&2
+fi
+
+exit "$status"

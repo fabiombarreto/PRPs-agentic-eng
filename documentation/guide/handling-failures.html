@@ -197,7 +197,7 @@ cat PRPs/reports/&lt;feature&gt;/attempts/3/diff.patch</code></pre>
 
       <p>This <code>FAILED_INFRA_UNRECOVERABLE</code> sub-reason is retained in the agent's verdict enum for defensive symmetry, but it is no longer reachable when <code>methodology.md</code> declares the framework state correctly. If you genuinely want test coverage, add a test framework, then re-run <code>context-builder *update</code> to declare it in <code>test_frameworks</code>.</p>
 
-      <p>Symmetric precedent: <code>/relay-tdd</code>'s <code>tdd: false</code> self-skip (P4.a) — see <code>docs/decisions.md</code> entries 2026-05-06 and 2026-05-12.</p>
+      <p>Symmetric precedent: <code>/relay-write-test</code>'s <code>test_frameworks: []</code> self-skip (P4.a) — see <code>docs/decisions.md</code> entries 2026-05-06, 2026-05-12, and 2026-07-10.</p>
 
       <h2 id="halted-retry-needed">HALTED on <code>RETRY_NEEDED</code> (known gap)</h2>
 

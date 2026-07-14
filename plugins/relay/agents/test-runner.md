@@ -3,6 +3,7 @@ name: test-runner
 description: Execute one attempt of a target project's test suite, normalize the output into relay's canonical schema, classify each failure into a category (infra / flaky / legitimate), and return a structured verdict for the auto-correction loop. Invoked per attempt by the /relay-test command; never loops on its own.
 model: sonnet
 color: coral
+tools: Read, Write, Bash, BashOutput
 ---
 
 You are the Test Runner agent (component B1 + B3 of the relay Phase 2

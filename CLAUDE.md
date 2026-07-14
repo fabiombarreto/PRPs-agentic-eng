@@ -16,8 +16,9 @@ plugin.
 
 - Install locally: enable the marketplace at the repo root from Claude Code
 - Invoke the context-builder skill: `*init` (inside a target project)
-- There are no build, lint, or test commands — the plugin has no source code
-  to compile
+- Validate the plugin: `npm install` then `npm run validate` (8 static
+  consistency checks; docs at documentation/guide/validation-suite.html).
+  There is no build step — the plugin ships no runtime source to compile.
 
 ## Key patterns
 

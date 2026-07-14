@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://relay.internal/schemas/agent.schema.json",
+  "title": "Agent frontmatter",
+  "description": "Frontmatter shape for plugins/relay/agents/*.md — name, description, model, color, tools. name must equal the filename stem (validated at the code level, not by this schema).",
+  "type": "object",
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string", "minLength": 1 },
+    "model": { "type": "string", "minLength": 1 },
+    "color": { "type": "string", "minLength": 1 },
+    "tools": { "type": "string", "minLength": 1 }
+  },
+  "required": ["name", "description", "model", "color", "tools"],
+  "additionalProperties": true
+}

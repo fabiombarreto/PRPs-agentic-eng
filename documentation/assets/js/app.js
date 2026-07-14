@@ -44,6 +44,7 @@
       items: [
         { title: "Writing a PRD",           path: "guide/writing-a-prd.html" },
         { title: "Running tests",           path: "guide/running-tests.html" },
+        { title: "Validation suite",        path: "guide/validation-suite.html" },
         { title: "Handling failures",       path: "guide/handling-failures.html" },
         { title: "Post-green review",       path: "guide/post-green-review.html" },
         { title: "Troubleshooting",         path: "guide/troubleshooting.html" },
@@ -56,6 +57,7 @@
         { title: "Agents",                  path: "reference/agents.html" },
         { title: "Skills",                  path: "reference/skills.html" },
         { title: "Scripts",                 path: "reference/scripts.html" },
+        { title: "Validation checks",       path: "reference/validation-checks.html" },
         { title: "Test output schema",      path: "reference/test-output-schema.html" },
         { title: "Settings allowlist",      path: "reference/settings-allowlist.html" },
         { title: "Redaction policy",        path: "reference/redaction-policy.html" },

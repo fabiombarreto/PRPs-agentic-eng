@@ -129,7 +129,7 @@
         <dt>FAILED_INFRA_UNRECOVERABLE</dt>
         <dd>Docker down, declared framework not present in tree, <code>settings.json</code> absent when a framework <em>is</em> declared. Fix the environment and re-run. (Framework-not-declared-at-all is a graceful self-skip, not this halt — see below.)</dd>
         <dt>skipped_no_test_framework <span class="muted">(graceful, exit 0)</span></dt>
-        <dd>As of <a href="../changelog.html#v0-11-1">v0.11.1</a>: when <code>docs/context/methodology.md</code> has <code>test_frameworks: []</code> or the file is absent, <code>/relay-test</code>'s Phase 0 gate emits <code>Test framework inactive (test_frameworks: []). Skipping.</code> and exits 0; <code>orchestrator_run_log</code> records the outcome. Symmetric with <code>/relay-tdd</code>'s <code>tdd: false</code> self-skip; no human handoff required.</dd>
+        <dd>As of <a href="../changelog.html#v0-11-1">v0.11.1</a>: when <code>docs/context/methodology.md</code> has <code>test_frameworks: []</code> or the file is absent, <code>/relay-test</code>'s Phase 0 gate emits <code>Test framework inactive (test_frameworks: []). Skipping.</code> and exits 0; <code>orchestrator_run_log</code> records the outcome. Symmetric with <code>/relay-write-test</code>'s <code>test_frameworks: []</code> self-skip; no human handoff required.</dd>
       </div>
 
       <p>

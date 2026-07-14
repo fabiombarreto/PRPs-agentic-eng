@@ -138,7 +138,7 @@
 
       <div class="kv">
         <dt>max_plan_review_retries</dt><dd>2 (orchestrator-level, v0.9.0; 0 forbidden). Caps the <code>/relay-plan</code> ↔ <code>/relay-plan-review</code> re-plan loop when the rubric returns <code>CHANGES_REQUESTED</code>. Exhaustion halts the orchestrator with <code>FAILED_PLAN_REVIEW_BUDGET_EXCEEDED</code>.</dd>
-        <dt>max_tdd_review_retries</dt><dd>2 (orchestrator-level, v0.10.0; 0 forbidden). Caps the <code>/relay-tdd</code> ↔ <code>/relay-tdd-review</code> loop in Phase A.3.5 of <code>/relay-execute</code>. Exhaustion halts with <code>FAILED_TDD_REVIEW_BUDGET_EXCEEDED</code>.</dd>
+        <dt>max_tdd_review_retries</dt><dd>2 (orchestrator-level, v0.10.0; 0 forbidden). Caps the <code>/relay-write-test</code> ↔ <code>/relay-test-write-review</code> loop in Phase A.3.5 of <code>/relay-execute</code>. Exhaustion halts with <code>FAILED_TDD_REVIEW_BUDGET_EXCEEDED</code>.</dd>
         <dt>max_implement_retries</dt><dd>3 (implemented v0.8.0). Caps the internal writer↔reviewer loop inside <code>/relay-implement</code> (4 attempts total: 1 initial + 3 retries). Wall-clock companion: <code>max_implement_minutes = 45</code>; first-to-expire wins.</dd>
         <dt>max_disputes_per_session</dt><dd>2 (implemented v0.8.0). Caps the <code>TEST_CONTRACT_DISPUTE</code> escape valve per <code>/relay-implement</code> session; exhaustion halts with <code>FAILED_DISPUTE_CAP_EXCEEDED</code>.</dd>
         <dt>max_test_retries</dt><dd>3 (implemented).</dd>

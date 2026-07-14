@@ -1,38 +1,45 @@
 ---
 tdd: false
 tdd_evidence: null
-test_frameworks: []
+test_frameworks: ["node:test"]
 ---
 
 # Methodology
 
 ## TDD (Test-Driven Development)
 
-Current state: **not declared** (default).
+Current state: **test-after** — `test_frameworks: ["node:test"]` declares the
+Node built-in test runner; `tdd: false` selects test-after ordering.
 
 The test writer/reviewer pair (`test-writer` + `test-reviewer`) activates when
 `test_frameworks` above is non-empty — in BOTH modes. The `tdd:` value only
 selects ORDERING: `tdd: true` = test-first (the pair authors before the
 Implementer), `tdd: false` = test-after (the pair authors after the Implementer
-+ Code Review). With `test_frameworks: []` (as here) the pair self-skips.
-Heuristics MUST NOT flip these values — only a human edit or an explicit
-declaration during `*init` can.
++ Code Review). With `test_frameworks: ["node:test"]` (as here) the pair is
+ACTIVE in test-after mode. Heuristics MUST NOT flip these values — only a human
+edit or an explicit declaration can.
 
 ### Observed signals
 
-None. This repository has no test suite yet — the plugin is markdown +
-JSON and the Test Runner (Phase 2) is not yet implemented.
+The `validation-suite` feature (2026-07-12) introduces the repo's first Node/ESM
+test surface — `scripts/validate/**/*.test.mjs` run via `node --test`. This
+declares `node:test` as the framework; the relay test-writer/test-reviewer pair
+authors and maintains those tests test-after (after the Implementer + Code
+Review). R-X strict is preserved: the Implementer authors ZERO test files.
 
 ### How to activate
 
-Not applicable for the `relay` repo itself: `relay` is the plugin, not a
-target project that the plugin drives. The TDD contract is exercised
-against **target** projects run through the context-builder skill, not
-against this repository.
+Already active for the `validation-suite` work: the repo now self-hosts a test
+surface (`scripts/validate/`). Because a framework is declared, the relay test
+pair authors and maintains the checker unit tests — the Implementer never authors
+them (R-X strict). Ordering is test-after (`tdd: false`): Implementer + Code
+Review land production code first, then the pair authors the tests, then
+`/relay-test` runs them.
 
-Kept at `tdd: false` with `test_frameworks: []` — the test pair self-skips for
-this repo (no declared framework). This documents the contract and provides the
-reference format other projects inherit when the skill processes them.
+Resolved from the `validation-suite` PRD Open Question #5 on 2026-07-12: having
+the Implementer author the checkers' own tests directly conflicts with R-X strict
+(`docs/decisions.md` [2026-05-06], [2026-07-10]); declaring the framework routes
+test authorship through the compliant mechanism.
 
 ## Other methodologies
 

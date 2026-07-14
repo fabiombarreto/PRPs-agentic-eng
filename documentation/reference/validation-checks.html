@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Validation checks — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Reference</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Validation checks</span>
+      </div>
+
+      <h1>Validation checks</h1>
+      <p class="page-subtitle">The complete catalog of what the validation suite tests. Each of the eight static checks and the behavioral eval layer is documented with the functionality it guards, a concrete example that passes, a concrete example that fails (with the exact finding text the check emits), and the unit tests that cover it. For the why-and-how overview, see the <a href="../guide/validation-suite.html">Validation suite</a> guide.</p>
+
+      <div class="callout callout--note">
+        <div class="callout__title">How to read this page</div>
+        <p>Every check returns the shared contract <code>{ name, ok, findings: [{ message, file, line }] }</code>. Most are a pure function (operates on already-read inputs) plus a wrapper (does the file I/O); <code>native-validate</code> is wrapper-only. The runner (<code>scripts/validate/index.mjs</code>) runs all eight with no short-circuit, prints one line per check plus each finding as <code>file:line — message</code>, and exits non-zero if any check failed. Finding messages below are quoted verbatim from the check source.</p>
+      </div>
+
+      <h2 id="summary">Summary</h2>
+
+      <table>
+        <thead>
+          <tr><th>Check</th><th>What it verifies</th><th>Unit tests</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><a href="#version-parity">version-parity</a></td><td>plugin.json version equals the latest released changelog heading</td><td>14</td></tr>
+          <tr><td><a href="#native-validate">native-validate</a></td><td>wraps <code>claude plugin validate --strict</code></td><td>5</td></tr>
+          <tr><td><a href="#registration-parity">registration-parity</a></td><td>commands/agents in sync with NAV, search index, changelog</td><td>11</td></tr>
+          <tr><td><a href="#path-existence">path-existence</a></td><td>referenced repo paths resolve on disk</td><td>8</td></tr>
+          <tr><td><a href="#dispatch-graph">dispatch-graph</a></td><td>every <code>subagent_type</code> / <code>Next:</code> pointer resolves</td><td>11</td></tr>
+          <tr><td><a href="#frontmatter-schema">frontmatter-schema</a></td><td>command/agent/skill frontmatter matches its JSON Schema</td><td>13</td></tr>
+          <tr><td><a href="#artifact-naming">artifact-naming</a></td><td>review-log artifact filenames follow the convention</td><td>6</td></tr>
+          <tr><td><a href="#bootstrap-parity">bootstrap-parity</a></td><td>context-builder emits both <code>.sh</code> and <code>.ps1</code> bootstrap</td><td>6</td></tr>
+          <tr><td><a href="#eval-layer">eval layer</a></td><td>reviewer-agent verdict on golden fixtures</td><td>2</td></tr>
+        </tbody>
+      </table>
+
+      <p><strong>Totals:</strong> 76 <code>node:test</code> unit tests, all passing; <code>npm run validate</code> reports 8 checks, all PASS on the current tree.</p>
+
+      <h2 id="version-parity">version-parity</h2>
+
+      <p><strong>Functionality.</strong> Enforces the <a href="../AGENTS.md">AGENTS.md</a> §7.5 lock-step rule: the <code>version</code> in <code>plugins/relay/.claude-plugin/plugin.json</code> must equal the latest <em>released</em> version in <code>documentation/changelog.html</code>. "Latest released" is the first versioned <code>&lt;h2&gt;</code> heading, skipping the always-first <code>id="unreleased"</code> heading; the separator after the version is irrelevant and non-version headings do not stop the scan. Reads exactly those two files.</p>
+      <p><strong>Passes when</strong> the manifest and the latest release agree — e.g. <code>plugin.json</code> version <code>0.20.0</code> and changelog <code>&lt;h2 id="unreleased"&gt;Unreleased&lt;/h2&gt;</code> then <code>&lt;h2 id="v0-20-0"&gt;0.20.0 — 2026-07-12&lt;/h2&gt;</code>. This is the current tree state.</p>
+      <p><strong>Fails when</strong> they drift — e.g. manifest <code>0.20.0</code>, latest release <code>0.19.0</code>:</p>
+      <pre><code class="language-default">version mismatch: plugins/relay/.claude-plugin/plugin.json declares "0.20.0" but the latest documentation/changelog.html release is "0.19.0"</code></pre>
+      <p>It also fails loud (a finding, never a crash) on a missing/unparseable manifest, a manifest with no <code>version</code>, or a changelog with no versioned heading (only "Unreleased").</p>
+      <p><strong>Unit tests (14).</strong> Match passes with no findings; mismatch fails naming both versions; the Unreleased heading is skipped even when it looks like a version; the first versioned heading is taken; both the <code>&amp;#8212;</code> entity and a literal em-dash separator parse; and six robustness cases (missing / non-JSON / no-version manifest; missing / unparseable / only-Unreleased changelog); plus a scope test that an unrelated third input is never read.</p>
+
+      <h2 id="native-validate">native-validate</h2>
+
+      <p><strong>Functionality.</strong> Shells out to <code>claude plugin validate ./plugins/relay --strict</code> (via <code>spawnSync</code>, no shell), delegating to Claude Code's own frontmatter / kebab-case / wrong-type-field validator, scoped to the relay plugin tree only. A non-zero exit becomes a finding; when the <code>claude</code> CLI is unavailable it degrades to a clean skip.</p>
+      <p><strong>Passes when</strong> the native validator exits <code>0</code> — or when <code>claude</code> is not on PATH (degrades to <code>ok: true</code> with a note). Both surface as <code>[PASS]</code>.</p>
+      <p><strong>Fails when</strong> the validator exits non-zero (e.g. malformed frontmatter). The finding, where the tail is the last 2000 chars of combined stdout+stderr:</p>
+      <pre><code class="language-default">claude plugin validate ./plugins/relay --strict exited 1: &lt;tail&gt;</code></pre>
+      <p>The graceful-skip note (not a finding) reads <code>native validator skipped: "claude" CLI unavailable (…)</code>.</p>
+      <p><strong>Unit tests (5).</strong> Exit-0 passes; a non-zero exit surfaces the code + tail; a missing CLI degrades cleanly (ok, note set); a very long tail is truncated; and the invocation is scoped to <code>./plugins/relay</code>, never <code>prp-core</code>. All use a hermetic fake <code>claude</code> executable, never the real CLI.</p>
+
+      <h2 id="registration-parity">registration-parity</h2>
+
+      <p><strong>Functionality.</strong> Cross-references the on-disk command set (<code>plugins/relay/commands/*.md</code>) and agent set (<code>plugins/relay/agents/*.md</code>) against three documentation surfaces: the NAV array in <code>assets/js/app.js</code>, <code>assets/data/search-index.json</code>, and <code>changelog.html</code>. NAV is page-level, so it is only checked structurally (must reference the commands and agents reference pages). Commands get a full missing-and-stale diff on the other two surfaces (anchored on <code>/relay-</code> with a negative lookbehind so path segments do not false-positive); agents are checked missing-direction only.</p>
+      <p><strong>Passes when</strong> every shipped command and agent is referenced where expected and no doc references a command that has no file — e.g. command <code>relay-plan</code> and agent <code>plan-writer</code> both mentioned across the surfaces, and NAV pointing at both reference pages.</p>
+      <p><strong>Fails when</strong> a surface drifts. Representative findings:</p>
+      <pre><code class="language-default">command "relay-execute" is registered under plugins/relay/commands/ but is not referenced (as "/relay-execute") in documentation/assets/data/search-index.json
+documentation/assets/data/search-index.json references "/relay-old-thing" but plugins/relay/commands/relay-old-thing.md does not exist
+agent "ghost-writer" is registered under plugins/relay/agents/ but is not referenced in documentation/changelog.html
+documentation/assets/js/app.js NAV does not reference reference/commands.html</code></pre>
+      <p>This is the check that caught the stale <code>relay-tdd</code> names and the six commands missing from the search index.</p>
+      <p><strong>Unit tests (11).</strong> Consistent surfaces pass; a command missing from the search index fails; a stale command mentioned but absent fails; an agent missing from the changelog fails while a stray mention never produces a stale finding; both missing NAV reference pages fail; a mid-path <code>/relay-</code> never false-positives; four missing-input cases; and a real-wrapper test that no finding ever resolves under <code>prp-core</code>.</p>
+
+      <h2 id="path-existence">path-existence</h2>
+
+      <p><strong>Functionality.</strong> Scans every <code>.md</code> under <code>plugins/relay/</code> and <code>docs/</code> (never <code>prp-core</code>) and flags dangling references, using a precision-first allowlist of three reference classes: backtick-quoted repo <code>scripts/…</code> paths; <code>${CLAUDE_PLUGIN_ROOT}/{agents,commands,skills,.claude-plugin}/…</code> plugin assets; and intra-repo markdown links to <code>docs/…md</code> or <code>documentation/…html</code>. Placeholder and example tokens (<code>&lt;…&gt;</code>, <code>*</code>, <code>feat-x</code>, <code>foo-bar</code>, anything after "example"/"e.g.") are skipped, so it never fires on illustrative prose.</p>
+      <p><strong>Passes when</strong> every in-scope reference resolves on disk — e.g. a doc citing <code>scripts/validate/index.mjs</code>, which exists.</p>
+      <p><strong>Fails when</strong> a reference is dangling — the canonical example is a doc citing <code>scripts/normalize-test-output.py</code> when only the <code>.mjs</code> sibling exists:</p>
+      <pre><code class="language-default">dangling reference "scripts/normalize-test-output.py" — resolved path "scripts/normalize-test-output.py" does not exist on disk</code></pre>
+      <p><strong>Unit tests (8).</strong> All-resolve passes; a dangling reference is named with raw token + resolved path + <code>file:line</code>; the wrapper-level worked example flags the <code>.py</code> but not the real <code>.mjs</code>; every dangling reference aggregates with no short-circuit; missing input fails loud; an empty array passes (distinct from null); a malformed entry is treated as failing (fail-safe); and no finding resolves under <code>prp-core</code>.</p>
+
+      <h2 id="dispatch-graph">dispatch-graph</h2>
+
+      <p><strong>Functionality.</strong> Reads the bodies of <code>plugins/relay/commands/*.md</code> and enforces the dispatch graph: every <code>subagent_type: X</code> must resolve to <code>plugins/relay/agents/&lt;X&gt;.md</code>, and every <code>Next:</code> pointer to a <code>/relay-x</code> command must resolve to a command file. An optional <code>relay:</code> namespace prefix on the agent name is normalized away first; the <code>Next:</code> scan only fires on lines that literally contain <code>Next:</code>.</p>
+      <p><strong>Passes when</strong> every dispatch resolves — e.g. a command with <code>subagent_type: plan-writer</code> (agent exists) and <code>Next: /relay-plan-review</code> (command exists). The namespaced forms <code>subagent_type: relay:code-reviewer</code> and <code>Next: /relay:relay-plan-review</code> resolve the same way.</p>
+      <p><strong>Fails when</strong> a target is missing:</p>
+      <pre><code class="language-default">references subagent_type "ghost-agent" but plugins/relay/agents/ghost-agent.md does not exist
+Next: pointer references "/relay-ghost-command" but plugins/relay/commands/relay-ghost-command.md does not exist</code></pre>
+      <p>A namespaced miss is reported using the normalized name, never the raw <code>relay:x</code> form.</p>
+      <p><strong>Unit tests (11).</strong> All-resolve passes; a bare unresolved <code>subagent_type</code> fails; a namespaced reference normalizes and resolves; a namespaced miss reports the normalized name; an unresolved <code>Next:</code> fails; a namespaced <code>Next:</code> resolves; a <code>/relay-x</code> mention without <code>Next:</code> is ignored; and four robustness cases (missing listing, unreadable file, null agent set treated as empty, no <code>prp-core</code> findings).</p>
+
+      <h2 id="frontmatter-schema">frontmatter-schema</h2>
+
+      <p><strong>Functionality.</strong> Validates the YAML frontmatter of every command, agent, and <code>SKILL.md</code> under <code>plugins/relay/</code> against a per-type JSON Schema (via <strong>ajv</strong>). Agents get an extra code-level check that the frontmatter <code>name</code> equals the filename stem. Required fields per type:</p>
+      <div class="kv">
+        <dt>command</dt><dd>requires <code>description</code> and <code>argument-hint</code>; <strong>forbids</strong> <code>name</code>.</dd>
+        <dt>agent</dt><dd>requires <code>name</code>, <code>description</code>, <code>model</code>, <code>color</code>, <code>tools</code> — plus <code>name</code> must equal the filename stem.</dd>
+        <dt>skill</dt><dd>requires <code>name</code> and <code>description</code>.</dd>
+      </div>
+      <p><strong>Passes when</strong> frontmatter is complete — e.g. an agent <code>plan-writer.md</code> with <code>name: plan-writer</code>, <code>description</code>, <code>model</code>, <code>color</code>, and <code>tools</code> all present.</p>
+      <p><strong>Fails when</strong> a required field is missing (this is the check that caught two agents missing <code>tools</code>) or a rule is broken:</p>
+      <pre><code class="language-default">frontmatter schema violation at "&lt;instancePath&gt;": &lt;ajv message&gt;
+agent frontmatter "name" ("foo") does not match filename stem ("bar")</code></pre>
+      <p><strong>Unit tests (13).</strong> Valid command / agent / skill each pass; a command carrying a forbidden <code>name</code> fails; a command missing <code>description</code> fails; an agent missing <code>tools</code> fails; an agent whose <code>name</code> mismatches its stem fails; a skill missing <code>description</code> fails; missing input fails loud; an unparseable frontmatter surfaces the parse error verbatim; an unknown component kind fails without a throw; two invalid files back-to-back attribute the right errors to the right file; and no <code>prp-core</code> findings.</p>
+
+      <h2 id="artifact-naming">artifact-naming</h2>
+
+      <p><strong>Functionality.</strong> Scans <code>PRPs/plans/*.jsonl</code> (top level only) for a doubled <code>.plan</code> segment in review-log filenames. The correct forms are <code>&lt;basename&gt;.review.jsonl</code>, <code>&lt;basename&gt;.code-review.jsonl</code>, and <code>&lt;basename&gt;.test-write-review.jsonl</code>.</p>
+      <p><strong>Passes when</strong> names follow the convention — e.g. <code>foo-phase-1-bar.review.jsonl</code>. A name that merely contains "plan" does not false-positive.</p>
+      <p><strong>Fails when</strong> the <code>.plan</code> segment is doubled — e.g. <code>…rename-behavior-preserving.plan.review.jsonl</code>:</p>
+      <pre><code class="language-default">doubled ".plan" segment in artifact filename — expected "&lt;basename&gt;.review.jsonl", "&lt;basename&gt;.code-review.jsonl", or "&lt;basename&gt;.test-write-review.jsonl"</code></pre>
+      <p><strong>Unit tests (6).</strong> Correct names pass; the worked example (<code>.plan.review.jsonl</code>) is caught; the doubled form is caught for the <code>code-review</code> and <code>test-write-review</code> suffixes too; a name merely containing "plan" does not false-positive; missing input fails loud; an empty array passes.</p>
+
+      <h2 id="bootstrap-parity">bootstrap-parity</h2>
+
+      <p><strong>Functionality.</strong> Reads exactly <code>plugins/relay/skills/context-builder/SKILL.md</code> and enforces Windows parity: if it emits a <code>worktree-bootstrap.sh</code> template it must also emit a <code>worktree-bootstrap.ps1</code> template. Asymmetric — only <code>.sh</code>-implies-<code>.ps1</code> is required; emitting neither is fine.</p>
+      <p><strong>Passes when</strong> both templates are emitted, or neither is, or only <code>.ps1</code> is.</p>
+      <p><strong>Fails when</strong> the skill emits <code>.sh</code> with no <code>.ps1</code> sibling:</p>
+      <pre><code class="language-default">plugins/relay/skills/context-builder/SKILL.md emits a worktree-bootstrap.sh template but no matching worktree-bootstrap.ps1 template — Windows hosts have no bootstrap script parity</code></pre>
+      <p><strong>Unit tests (6).</strong> Both-present passes; neither-present passes; the worked example (<code>.sh</code> without <code>.ps1</code>) is caught; only-<code>.ps1</code> passes (the documented asymmetry); a word-boundary anchor rejects similar-but-different tokens; and missing input fails loud.</p>
+
+      <h2 id="eval-layer">The eval layer (npm run eval)</h2>
+
+      <p><strong>Functionality.</strong> Behavioral evals for the <code>test-reviewer</code> agent, defined in <code>promptfooconfig.yaml</code>. Each case feeds the agent's own verbatim instructions plus a mini-PRD and a suite manifest to the Anthropic API (default model <code>claude-sonnet-4-5</code>; any current Claude model works since only the verdict token is asserted) and checks the verdict. This is manual and non-blocking — it costs tokens and never gates a commit.</p>
+      <p><strong>Passes when</strong> the reviewer returns the expected verdict for each fixture:</p>
+      <div class="kv">
+        <dt>clean fixture</dt><dd>the <code>synthetic-b8-fixture-1/clean</code> suite must earn <code>APPROVED</code> and must not contain <code>CHANGES_REQUESTED</code>.</dd>
+        <dt>dirty fixture</dt><dd>the <code>synthetic-b8-fixture-1/dirty</code> suite must earn <code>CHANGES_REQUESTED</code>.</dd>
+      </div>
+      <p><strong>Fails when</strong> the model returns the wrong verdict — a clean fixture flagged <code>CHANGES_REQUESTED</code>, or a dirty fixture waved through as <code>APPROVED</code> — which would signal a regression in the reviewer agent's prompt.</p>
+      <p><strong>Wrapper behavior.</strong> <code>scripts/eval.mjs</code> pre-flights <code>ANTHROPIC_API_KEY</code>: absent (or empty) prints a guidance message and exits <code>0</code> (clean skip); present, it runs promptfoo and propagates the exit code. <strong>Unit tests (2)</strong> cover exactly this degradation: key unset and key set to an empty string both take the no-key path (exit 0 + guidance, never a crash). The with-key path needs a live API call, so it is deliberately not unit-tested.</p>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

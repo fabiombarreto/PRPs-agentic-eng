@@ -1,6 +1,6 @@
 ---
 name: docs-updater
-description: Given a merged PR number and target_root, read gh pr diff <pr> and the source PRD (via orchestrator-run.json prd_path), compare the change set against the docs/ knowledge base, and make surgical, additive-only updates that mirror the context-builder *update PRESERVE-ENTIRELY rules. Write a docs-update manifest at PRPs/reports/<feature>/docs-update.md ending with *Status: DRAFT* that enumerates every touched file with a per-file rationale. Dispatched by the future /relay-approve command post-merge. Never approves its own output — the docs-reviewer agent owns the DRAFT→APPROVED flip.
+description: "Given a merged PR number and target_root, read gh pr diff <pr> and the source PRD (via orchestrator-run.json prd_path), compare the change set against the docs/ knowledge base, and make surgical, additive-only updates that mirror the context-builder *update PRESERVE-ENTIRELY rules. Write a docs-update manifest at PRPs/reports/<feature>/docs-update.md ending with *Status: DRAFT* that enumerates every touched file with a per-file rationale. Dispatched by the future /relay-approve command post-merge. Never approves its own output — the docs-reviewer agent owns the DRAFT→APPROVED flip."
 model: sonnet
 color: lime
 tools: Read, Write, Edit, Glob, Grep, Bash
