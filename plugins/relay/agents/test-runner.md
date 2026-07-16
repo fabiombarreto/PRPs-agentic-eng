@@ -71,11 +71,22 @@ Read from `<worktree>`:
 
 ### Step 2 — Detect test framework and tier
 
-If `framework` was passed, use it. Otherwise, detect from the worktree:
+If `framework` was passed, use it. Otherwise, detect from the worktree.
+The `test_frameworks` array read from `docs/context/methodology.md` in
+Step 1 is the authoritative declaration of what the project ships;
+config files only disambiguate the config-driven frameworks:
 
+- `test_frameworks` contains `node:test`, OR a root `package.json` whose
+  `scripts.test` invokes `node --test` → `node:test`. node:test has no
+  config file, so the methodology declaration (or the npm script) IS the
+  detection signal — there is nothing on disk to sniff.
 - `backend/pyproject.toml` or `setup.cfg` with `[tool:pytest]` → `pytest`
 - `frontend/playwright.config.ts` → `playwright`
 - `frontend/vitest.config.ts` → `vitest`
+
+When `test_frameworks` names exactly one framework, prefer it over an
+ambiguous config-file guess. If nothing matches, treat it as
+`no_runner_detected` in Step 3.
 
 If `tier` was passed, use it (layered execution is active). Otherwise:
 
@@ -90,6 +101,34 @@ Use the project's preferred entry point, in order of preference:
 1. If a `Makefile` target exists for the detected framework (e.g., `make test-pytest`, `make test-playwright`, `make test:run` convention), use that.
 2. Otherwise fall back to the framework-native command from `.claude/settings.json` allow patterns.
 3. If neither available: `ABORT_INFRA` with reason `no_runner_detected`.
+
+**node:test native invocation.** node:test has no Makefile convention
+and its JUnit reporter is opt-in — it is NOT the default, so neither of
+the preference rules above yields the JUnit XML the normalizer needs.
+Invoke it explicitly from the worktree root (this is the runner for the
+`node:test` framework, superseding steps 1–2):
+
+```
+node --test \
+    --test-reporter=spec --test-reporter-destination=stdout \
+    --test-reporter=junit --test-reporter-destination=<attempt-dir>/junit.xml \
+    [test-globs]
+```
+
+- `<attempt-dir>` is `<worktree>/PRPs/reports/<feature>/attempts/<attempt>/`.
+- The `junit` reporter writes the JUnit XML that the normalizer consumes
+  in Step 4 (pass `--junit <attempt-dir>/junit.xml`); the `spec` reporter
+  to `stdout` is what gets captured (and redacted) into `stdout.log`.
+  Both reporters observe the same run — node:test accepts repeated
+  `--test-reporter` / `--test-reporter-destination` pairs.
+- `[test-globs]`: if the root `package.json`'s `scripts.test` runs
+  `node --test <globs>`, reuse those globs. Otherwise omit them and let
+  Node's built-in discovery find `**/*.test.{mjs,cjs,js}` recursively
+  (skipping `node_modules`).
+- Coverage and trace are not wired for node:test — omit `--coverage` /
+  `--trace` in Step 4. See the `### node:test` section of
+  `docs/context/test-output-schema.md` for how the normalizer parses the
+  resulting XML.
 
 Capture stdout and stderr to a combined log. Apply redaction before
 persisting — env var values matching patterns from

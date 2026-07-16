@@ -14,10 +14,10 @@ before the Test Runner consumes it. Consumed by:
 
 Produced by `${CLAUDE_PLUGIN_ROOT}/scripts/normalize-test-output.mjs`,
 which reads framework-native output (JUnit XML for pytest, Playwright,
-Vitest) plus optional coverage / trace paths, and emits the schema
-below on stdout. Written in Node.js without npm dependencies — Claude
-Code ships Node, so the script runs in every relay target regardless
-of the target's own language stack.
+Vitest, and node:test) plus optional coverage / trace paths, and emits
+the schema below on stdout. Written in Node.js without npm dependencies
+— Claude Code ships Node, so the script runs in every relay target
+regardless of the target's own language stack.
 
 ---
 
@@ -28,7 +28,7 @@ of the target's own language stack.
   "run_id": "string (UUID generated per session; same id for all attempts in a run)",
   "attempt": 1,
   "tier": "unit | integration | e2e",
-  "framework": "pytest | playwright | vitest",
+  "framework": "pytest | playwright | vitest | node:test",
   "outcome": "PASSED | FAILED | FAILED_AFTER_N_RETRIES | FAILED_TIME_BUDGET_EXCEEDED | SKIPPED_UPSTREAM_FAILURE",
   "duration_ms": 12345,
   "counts": {
@@ -143,6 +143,39 @@ When evolving the schema:
 - Coverage emitted separately to `reports/vitest-coverage/coverage-final.json`
   when v8 provider is active; pass via `--coverage`.
 - `tier` defaults to `unit`.
+
+### node:test (JUnit XML via the built-in `--test-reporter=junit`)
+
+Node's built-in reporter (`node --test --test-reporter=junit
+--test-reporter-destination=<path>`) is handled framework-specifically
+because it defeats the suite-attribute summing the other frameworks
+rely on. It emits two shapes, both of which the normalizer counts by
+walking `<testcase>` elements directly:
+
+- **bare** (flat `test()` calls): a `<testsuites>` root with
+  `<testcase>` elements nested directly beneath it — no `<testsuite>`
+  wrapper and no `tests`/`failures`/`skipped` summary attributes (Node
+  reports those totals only in trailing XML comments like
+  `<!-- pass 2 -->`).
+- **wrapped** (`describe()` / `suite()` blocks): one `<testsuite>` per
+  block, arbitrarily NESTED, whose `tests` counts do not sum cleanly
+  across the nesting (an outer suite's `tests` already includes its
+  inner suites).
+
+Per-testcase mapping:
+
+- `<testcase name="<test-name>" classname="<file-basename-stem>"
+  file="<abs-path>" time="...">` — a self-closing `<testcase>` is a
+  pass.
+- `<failure type="..." message="...">` nested inside `<testcase>` marks
+  a failure (Node also mirrors it onto a `failure="..."` attribute on
+  the `<testcase>` open tag; the nested element is the signal the
+  normalizer keys on). Newlines in the message are `&#10;`-encoded and
+  are decoded back to real newlines in the record.
+- `<skipped>` nested inside `<testcase>` marks a skip.
+- `time` is per-testcase only; `duration_ms` is the sum of per-testcase
+  times. `line` is absent, so `failures[].line` is `null`.
+- `tier` defaults to `unit`. Coverage/trace are not wired for node:test.
 
 ---
 

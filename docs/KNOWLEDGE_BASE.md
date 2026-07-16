@@ -21,7 +21,7 @@ User-facing intro: see `README.md` at the repository root.
 
 ## Project Context
 
-→ docs/context/architecture.md — plugin layout, phases, relationship to upstream prp-core
+→ docs/context/architecture.md — plugin layout, phases, relationship to upstream prp-core, Pillar 2/3 docs-sync split (implement-time primary, approve-time safety net)
 → docs/context/conventions.md — frontmatter, file naming, hook script conventions
 → docs/context/integrations.md — Claude Code runtime, Context7 MCP (planned), Docker (planned)
 → docs/context/constraints.md — early-stage status, graceful-degradation mandate

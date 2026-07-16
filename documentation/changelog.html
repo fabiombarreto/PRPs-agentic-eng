@@ -30,6 +30,33 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
+      <h2 id="v0-22-0">0.22.0 &#8212; 2026-07-16</h2>
+      <p>Docs-sync is now described as occurring primarily during implementation (Pillar 2, <code>/relay-implement</code>'s <code>Phase A.3.5 &mdash; Docs-sync dispatch</code>), with <code>/relay-approve</code>'s post-merge cycle (Pillar 3) recast as a low-delta safety net &mdash; matching the behavior shipped by Phases 1&ndash;3 of the <code>implement-phase-docs-sync</code> feature. This release also fixes several pre-existing stale spots surfaced by that phase's grounding pass: a "Pillar 3 is planned" status callout (<code>pillars.html</code>), a Pillar-3-only framing of the docs pair (<code>interactivity-boundary.html</code>, <code>roadmap/status.html</code>), and a nonexistent <code>/approve-implementation</code> command name (<code>docs/domain/flows.md</code>, <code>docs/context/integrations.md</code>). Plugin manifest bumped <code>0.21.0</code> &rarr; <code>0.22.0</code> per <a href="AGENTS.md">AGENTS.md</a> &sect;7.5.</p>
+
+      <h3 id="v0-22-0-changed">Changed</h3>
+      <ul>
+        <li><strong><code>docs/context/architecture.md</code></strong> &mdash; "Three-pillar target architecture" section now describes the implement-time docs-sync dispatch and recasts the Pillar 3 cycle as a safety-net reconciliation pass.</li>
+        <li><strong><code>docs/api-reference.md</code></strong> &mdash; Happy-path prose, the <code>/relay-implement</code> row, the <code>/relay-approve</code> row, and the <code>docs-updater</code>/<code>docs-reviewer</code> rows now document the dual dispatch (implement-time primary, approve-time safety net).</li>
+        <li><strong><code>docs/domain/flows.md</code></strong> &mdash; Implementation flow gains a new docs-sync step 7.5; Approval flow heading and step 1 no longer name the nonexistent <code>/approve-implementation</code> command.</li>
+        <li><strong><code>docs/context/integrations.md</code></strong> &mdash; <code>gh</code> CLI entry drops the stale <code>(planned &mdash; Phase 3/4)</code> tag and the nonexistent <code>/approve-implementation</code> command name.</li>
+        <li><strong><code>docs/KNOWLEDGE_BASE.md</code></strong> &mdash; <code>docs/context/architecture.md</code> index entry now flags the Pillar 2/3 docs-sync split.</li>
+        <li><strong><code>docs/decisions.md</code></strong> &mdash; new <code>[2026-07-16]</code> entry (append-only) recording the two conscious refinements: the post-merge interactivity extension applies only to the approve-time invocation, and primary docs-sync relocates to Pillar 2 with Pillar 3 retained as a safety net.</li>
+        <li><strong><code>documentation/concepts/pillars.html</code></strong> &mdash; replaces the stale "Pillar 3 is planned" status callout with an accurate all-shipped statement, and adds the docs pair to Pillar 2's agent list.</li>
+        <li><strong><code>documentation/concepts/interactivity-boundary.html</code></strong> &mdash; Pillar 3 section now distinguishes the approve-time invocation (may dialogue) from the new implement-time invocation (always non-interactive).</li>
+        <li><strong><code>documentation/roadmap/status.html</code></strong> &mdash; Docs Updater/Reviewer entries now mention the implement-time dispatch alongside the existing Approval-roadmap mention.</li>
+        <li><strong><code>documentation/reference/commands.html</code></strong> &mdash; <code>/relay-implement</code> and <code>/relay-approve</code> Output sections gain the same dual-dispatch mentions as their <code>docs/api-reference.md</code> counterparts.</li>
+        <li><strong><code>documentation/reference/agents.html</code></strong> &mdash; <code>docs-updater</code>/<code>docs-reviewer</code> "Invoked by" and "Responsibility" fields relabeled for the dual dispatch.</li>
+        <li><strong><code>documentation/assets/data/search-index.json</code></strong> &mdash; <code>pillars.html</code> and <code>agents.html</code> excerpts updated to match the pages' new dual-dispatch framing.</li>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.21.0</code> &rarr; <code>0.22.0</code> per
+          <a href="AGENTS.md">AGENTS.md</a> &sect;7.5 for this docs + site
+          release cut (the <code>implement-phase-docs-sync</code> feature's
+          Phase 4 &mdash; documentation content only, no new commands or
+          agents shipped); users running <code>/plugin</code> after pulling
+          this version get a fresh <code>relay/0.22.0/</code> cache
+          directory.</li>
+      </ul>
+
       <h2 id="v0-21-0">0.21.0 &#8212; 2026-07-14</h2>
       <p>Ships the repo's first automated-test surface &mdash; the <strong>validation suite</strong>. <code>npm run validate</code> runs eight static consistency checks over the plugin (frontmatter schemas, command/agent registration against the doc site, cross-reference and path integrity, <code>plugin.json</code>/<code>changelog.html</code> version parity, <code>.sh</code>/<code>.ps1</code> bootstrap parity, and the native <code>claude plugin validate --strict</code> wrapper), backed by 76 <code>node:test</code> unit tests and wired to a local pre-commit hook; <code>npm run eval</code> adds on-demand promptfoo evals of the reviewer agents. Building the suite (by dogfooding relay on itself) surfaced and fixed real plugin defects &mdash; six agent/command files whose YAML frontmatter failed to parse and loaded with empty metadata at runtime, and two agents missing their <code>tools</code> field &mdash; and closed the known cross-reference gaps, so <code>npm run validate</code> is green. <code>docs/context/methodology.md</code> now declares <code>test_frameworks: ["node:test"]</code> (test-after), activating the relay test pair for this repo. Plugin manifest version bumped <code>0.20.0</code> &rarr; <code>0.21.0</code> per the <a href="AGENTS.md">AGENTS.md</a> &sect;7.5 lock-step contract.</p>
 

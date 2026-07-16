@@ -125,6 +125,7 @@ PRPs/
         <li><strong>Worktree creation</strong> — isolated branch and working copy for the run</li>
         <li><strong>TDD Writer &amp; TDD Reviewer</strong> — opt-in; active only when <code>methodology.md</code> declares <code>tdd: true</code></li>
         <li><strong>Implementer &amp; Code Reviewer</strong> — writes the production code; looped with the Test Runner until tests pass or budget exhausts</li>
+        <li><strong>Docs pair (docs-updater &amp; docs-reviewer)</strong> — dispatched non-interactively immediately after Code Reviewer approves and before the plan/PRD state advances; syncs <code>docs/</code> in the worktree with the change so the knowledge base does not depend on reaching approve</li>
         <li><strong>Test Runner</strong> — runs the suite, classifies failures, coordinates auto-correction, produces the execution report (see <a href="../reference/agents.html">Agents</a>)</li>
         <li><strong>Post-green Reviewer</strong> — after green, validates tests weren't weakened to reach there</li>
         <li><strong>Report + PR Creator</strong> — assembles the final Markdown report and opens the pull request</li>
@@ -163,7 +164,7 @@ PRPs/
 
       <div class="callout callout--note">
         <div class="callout__title">Status</div>
-        <p>Pillar 3 is planned. As of now, Pillar 1 is delivered (<code>context-builder</code> skill) and most of Pillar 2 is delivered at the plugin surface (Test Runner, Post-green reviewer, settings.json generation). The orchestrator that composes Pillar 2 end-to-end is the next deliverable. See <a href="../roadmap/status.html">Phase status</a> for the current state.</p>
+        <p>All three pillars have shipped. Pillar 3's three commands (<code>/relay-commit</code>, <code>/relay-pr</code>, <code>/relay-approve</code>) shipped v0.14.0&ndash;v0.17.0. Since then, primary docs-sync moved to Pillar 2 &mdash; the docs pair now runs non-interactively inside <code>/relay-implement</code> right after Code Reviewer approves &mdash; so Pillar 3's docs cycle is now a low-delta safety-net reconciliation pass that catches only decisions made after implementation. See <a href="../roadmap/status.html">Phase status</a> for the current state.</p>
       </div>
 
       <h2 id="why-three">Why three pillars, not two or four?</h2>

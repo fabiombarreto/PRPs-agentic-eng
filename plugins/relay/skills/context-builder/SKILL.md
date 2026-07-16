@@ -594,6 +594,7 @@ whether the TDD track is active. It must exist after every `*init` run.
 tdd: false                # true | false — the only key consulted by the TDD track
 tdd_evidence: null        # null | "<path-or-short-reason>" | "user-declared"
 test_frameworks: []       # array of frameworks detected in the scan (informative only)
+docs_sync: true           # true | false — per-project master switch for automated docs/ sync (docs-updater/docs-reviewer)
 ---
 
 # Methodology
@@ -633,6 +634,11 @@ in CONTRIBUTING.md / README.md. None of these activate TDD on their own.]
   decide with full evidence.
 - If the human provided explicit TDD declaration in the `*init` prompt or
   existing docs, set `tdd: true` and `tdd_evidence` to the source.
+- Always emit `docs_sync: true` — the per-project master switch for
+  automated `docs/` knowledge-base sync defaults to `true`, mirroring the
+  `tdd` default-emission precedent. Never heuristically inferred; always
+  emitted deterministically on every `*init` run (`docs/decisions.md`
+  [2026-04-19]).
 
 **Update behavior:**
 
@@ -646,6 +652,12 @@ in CONTRIBUTING.md / README.md. None of these activate TDD on their own.]
   - **Append new `Observed signals`** to the body section when the scan
     surfaces new TDD-suggestive evidence. Never remove existing signal
     bullets.
+  - **`docs_sync` preservation**: if `docs_sync` is already present in
+    the frontmatter, preserve its value untouched — validated human
+    input, same treatment as `tdd`. If the key is entirely absent (a
+    project initialized before this key existed), backfill
+    `docs_sync: true` — this is the ONLY case where `*update` adds this
+    key; never remove or flip an existing value.
 - If the file is missing: run Init behavior.
 
 **Reporting (both modes):**

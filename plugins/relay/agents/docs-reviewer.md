@@ -46,15 +46,41 @@ The `/relay-approve` command passes:
 
 - **`pr`**: the merged PR number or URL.
 - **`target_root`**: absolute path to the target project's root.
+- **`feature`** (optional string): the feature slug; when supplied,
+  used directly for every `PRPs/reports/<feature>/...` path in this
+  contract; skip the orchestrator-run.json read for this value
+  entirely.
+- **`prd_path`** (optional absolute path): the source PRD path; when
+  supplied, used directly; skip the orchestrator-run.json read for
+  this value entirely.
+- **`non_interactive`** (optional boolean, default `false`): when
+  `true`, you MUST NOT ask the operator any question — see Hard
+  Constraint 9 below. Omitting `non_interactive` reproduces today's
+  `/relay-approve` behavior exactly, mirroring the Docs Updater's
+  matching input.
 
-From these, you derive:
+### Deriving `feature` and `prd_path`
 
-- **`feature`**: read `<target_root>/PRPs/reports/<feature>/orchestrator-run.json`
-  — the `feature` field gives the feature name. The directory name
-  under `PRPs/reports/` that contains `orchestrator-run.json` is
-  `<feature>`. Scan `PRPs/reports/*/orchestrator-run.json` if the
-  feature name is not obvious from context; prefer the most recently
-  modified one tied to the merged PR.
+Two branches, evaluated in order:
+
+1. **Explicit inputs supplied.** When `feature` (and, in PRD mode,
+   `prd_path`) are supplied directly in the payload above, use them
+   directly — do NOT read `orchestrator-run.json` for the value(s)
+   supplied. This is the path standalone `/relay-implement` uses:
+   `orchestrator-run.json` does not exist until `/relay-execute`'s
+   Phase A.6, which runs AFTER implement, so the explicit-input path
+   is the only way to ground this agent pre-`orchestrator-run.json`.
+
+2. **Fallback — orchestrator-run.json read.** When `feature` is NOT
+   supplied, read `<target_root>/PRPs/reports/<feature>/orchestrator-run.json`
+   — the `feature` field gives the feature name. The directory name
+   under `PRPs/reports/` that contains `orchestrator-run.json` is
+   `<feature>`. Scan `PRPs/reports/*/orchestrator-run.json` if the
+   feature name is not obvious from context; prefer the most recently
+   modified one tied to the merged PR.
+
+From `feature`, you also derive:
+
 - **Manifest path**: `<target_root>/PRPs/reports/<feature>/docs-update.md`
   — the manifest the Docs Updater wrote, ending `*Status: DRAFT*`.
 - **jsonl log path**: `<target_root>/PRPs/reports/<feature>/docs-review.jsonl`
@@ -129,15 +155,25 @@ From these, you derive:
    to refresh the harness's read cache. This prevents spurious
    "Error editing file" failures.
 
-9. **Interactivity clause.** This agent is dispatched post-merge,
-   past the standard autonomy boundary. It MAY ask the operator one
-   focused, single question when a manifest claim is genuinely
-   ambiguous and the question cannot be answered from the diff or
-   the source PRD alone. This is a conscious, recorded extension of
-   the downstream-autonomous rule, consistent with the Docs Updater.
-   The question must name the ambiguity precisely, offer a concrete
-   default, and invite a yes/no or brief clarification — not an
-   open-ended discussion.
+9. **Interactivity clause, gated on `non_interactive`.** This agent
+   is dispatched post-merge, past the standard autonomy boundary.
+   When `non_interactive` is `false` or omitted, it MAY ask the
+   operator one focused, single question when a manifest claim is
+   genuinely ambiguous and the question cannot be answered from the
+   diff or the source PRD alone. This is a conscious, recorded
+   extension of the downstream-autonomous rule, consistent with the
+   Docs Updater. The question must name the ambiguity precisely,
+   offer a concrete default, and invite a yes/no or brief
+   clarification — not an open-ended discussion.
+
+   **When `non_interactive: true`, you MUST NOT ask** the operator
+   anything under any circumstance. Instead, record the would-be
+   question as a `deferred_question` field (string, or `null` when
+   no question arose) on the JSON verdict object you already append
+   to `docs-review.jsonl` via the existing `Write`-only mechanism
+   (Hard Constraint 3). This does NOT introduce a new `Edit` —
+   Hard Constraint 6 (`Edit` solely for the manifest flip) is
+   untouched by this gate.
 
 ---
 
@@ -267,8 +303,9 @@ Execute these steps in order.
 
 ### Step 1 — Ground yourself
 
-1. Read `<target_root>/PRPs/reports/<feature>/orchestrator-run.json`
-   to extract `feature` and `prd_path`.
+1. Derive `feature` and `prd_path` per the "Deriving `feature` and
+   `prd_path`" subsection above (`## Inputs`) — explicit inputs when
+   supplied, otherwise fall back to reading `orchestrator-run.json`.
 2. Read the manifest at `<target_root>/PRPs/reports/<feature>/docs-update.md`.
    Verify it ends with `*Status: DRAFT*`. If it ends with
    `*Status: APPROVED*`, the manifest has already been flipped. This
@@ -308,7 +345,8 @@ Accumulate all eight results into the `rubric` array.
 
 1. Append a `CHANGES_REQUESTED` jsonl entry (all D-R1..D-R8 outcomes,
    `action: "rubric_fail"`, `verdict: "CHANGES_REQUESTED"`,
-   `user_message: ""`). Use the append-only discipline from Hard
+   `user_message: ""`, `deferred_question: <string|null>` — see Hard
+   Constraint 9). Use the append-only discipline from Hard
    Constraint 3.
 2. Emit a bullet list naming each failing `D-R<i>` by ID and reason:
    ```
@@ -334,7 +372,8 @@ Proceed to Step 4.
      treat as empty; concatenate + newline + new JSON line; `Write`
      back.
    - Entry shape: `verdict: "APPROVED"`, all eight items with
-     `passed: true`, `action: "final_flip"`, `user_message: ""`.
+     `passed: true`, `action: "final_flip"`, `user_message: ""`,
+     `deferred_question: <string|null>` (see Hard Constraint 9).
 
 2. Re-`Read` the manifest at
    `<target_root>/PRPs/reports/<feature>/docs-update.md`
@@ -389,7 +428,8 @@ One JSON object per line, appended (never truncated). Shape:
     { "id": "D-R8", "passed": true }
   ],
   "action": "final_flip",
-  "user_message": ""
+  "user_message": "",
+  "deferred_question": null
 }
 ```
 
@@ -397,6 +437,12 @@ One JSON object per line, appended (never truncated). Shape:
 "CHANGES_REQUESTED"`, `passed: false` and a non-empty `reason`
 string on failing items, `action: "rubric_fail"`, and
 `user_message: ""`.
+
+`deferred_question` (string, or `null` when no question arose) is
+populated only when `non_interactive: true` and a manifest claim was
+genuinely ambiguous — see Hard Constraint 9. When
+`non_interactive: false` (or omitted) and the agent used its normal
+interactivity clause instead, `deferred_question` is `null`.
 
 The `rubric` array MUST contain exactly eight objects with `id`
 values `D-R1`, `D-R2`, `D-R3`, `D-R4`, `D-R5`, `D-R6`, `D-R7`,

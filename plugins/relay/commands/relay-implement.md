@@ -1,5 +1,5 @@
 ---
-description: 'Autonomous code generation from an APPROVED plan. Validates the plan path, runs preconditions, then adopts the implementer/code-reviewer pair via an internal writer↔reviewer loop with bounded retries (max_implement_retries=3), wall-clock budget (max_implement_minutes=45), oscillation detection always-on, dispute cap (max_disputes_per_session=2), per-attempt diff capture at PRPs/reports/<feature>/phase-<N>/attempts/<i>/diff.patch, and on APPROVED rubric performs all three D8 post-approval mutations atomically (plan trailing-block flip to *Status: IMPLEMENTED*, plan move to PRPs/plans/completed/, source PRD row N flip from in-progress to complete). Reviewer adoption is single-shot via Task per attempt — there is no Phase B; the loop lives entirely inside Phase A.'
+description: 'Autonomous code generation from an APPROVED plan. Validates the plan path, runs preconditions, then adopts the implementer/code-reviewer pair via an internal writer↔reviewer loop with bounded retries (max_implement_retries=3), wall-clock budget (max_implement_minutes=45), oscillation detection always-on, dispute cap (max_disputes_per_session=2), per-attempt diff capture at PRPs/reports/<feature>/phase-<N>/attempts/<i>/diff.patch, and on APPROVED rubric dispatches a docs-sync sub-phase (Phase A.3.5 — docs-updater/docs-reviewer pair, non-interactive, own max_docs_review_retries=2 budget, gated by docs_sync/--no-docs, graceful degradation on budget exhaustion, docs pair grounded via explicit feature/prd_path inputs rather than orchestrator-run.json which does not exist yet at implement time) before performing all three D8 post-approval mutations atomically (plan trailing-block flip to *Status: IMPLEMENTED*, plan move to PRPs/plans/completed/, source PRD row N flip from in-progress to complete). Reviewer adoption is single-shot via Task per attempt — there is no Phase B; the loop lives entirely inside Phase A.'
 argument-hint: <plan-path>
 ---
 
@@ -11,7 +11,7 @@ argument-hint: <plan-path>
 
 ## Your mission
 
-Validate the plan path argument, run the preconditions check, then run an internal writer↔reviewer loop that dispatches the `implementer` agent (Phase 1 of `implementation-authoring`, color: green) and the `code-reviewer` agent (Phase 2, color: magenta) once per attempt. Capture `git diff <base-commit>` to a per-attempt artifact after every attempt regardless of verdict. Enforce four orthogonal stop conditions (retry budget, wall-clock budget, oscillation detection, dispute cap) with distinct outcome codes. On APPROVED rubric, perform all three D8 post-approval mutations atomically (best-effort) with rollback note on partial failure.
+Validate the plan path argument, run the preconditions check, then run an internal writer↔reviewer loop that dispatches the `implementer` agent (Phase 1 of `implementation-authoring`, color: green) and the `code-reviewer` agent (Phase 2, color: magenta) once per attempt. Capture `git diff <base-commit>` to a per-attempt artifact after every attempt regardless of verdict. Enforce four orthogonal stop conditions (retry budget, wall-clock budget, oscillation detection, dispute cap) with distinct outcome codes. On APPROVED rubric, run a docs-sync dispatch (Phase A.3.5) that invokes the `docs-updater`/`docs-reviewer` pair non-interactively to sync `docs/` in the worktree — gated by `docs_sync` (`docs/context/methodology.md`) and a per-invocation `--no-docs` flag, with its own bounded retry budget that degrades gracefully (never blocks D8) on exhaustion, grounding the pair via explicit `feature`/`prd_path` inputs rather than `orchestrator-run.json` (which does not exist yet at implement time) — then perform all three D8 post-approval mutations atomically (best-effort) with rollback note on partial failure.
 
 You are autonomous. You do not prompt the user. You do not loop the writer↔reviewer pair across `/relay-implement` invocations — that is `/relay-execute`'s job. A single `/relay-implement` invocation produces zero or one APPROVED implementation; the loop is internal.
 
@@ -53,7 +53,9 @@ If the Decision Gate cannot be emitted because one of the three sources is unrea
 
 ## Parse arguments
 
-`$ARGUMENTS` MUST be a single non-empty path-like string. Treat the argument as the plan path; resolve it as absolute, or as relative to the current working directory. If the argument is blank/whitespace, HALT with:
+Extract flags first, before the positional plan-path parse. Scan `$ARGUMENTS` for the literal token `--no-docs`; when present, strip it from `$ARGUMENTS` and record `no_docs_flag = true` (default `false`) — mirrors `relay-approve.md`'s own `--no-docs` → `no_docs_flag` extraction (`plugins/relay/commands/relay-approve.md:28-32`).
+
+`$ARGUMENTS` (after flag extraction) MUST be a single non-empty path-like string. Treat the argument as the plan path; resolve it as absolute, or as relative to the current working directory. If the argument is blank/whitespace, HALT with:
 
 > /relay-implement requires a plan path. Usage:
 >   /relay-implement PRPs/plans/<feature>-phase-<N>-<slug>.plan.md
@@ -209,6 +211,8 @@ Set the budget caps and counters:
 - `files_changed_by_attempt: dict<int, set<str>> = {}` — populated from each attempt's diff.patch
 - `last_reviewer_feedback: list<{rubric_id, reason}> = []` — carried into the next attempt's implementer prompt
 
+Read `<target_root>/docs/context/methodology.md` frontmatter and extract the `docs_sync` key, recording `docs_sync_enabled` (boolean). Default `true` when the key is absent, mirroring the `tdd` absence-handling precedent and `docs-updater.md`'s own default-true-when-absent handling of the same key (`docs/context/methodology.md:45-65`). Precedence rule, evaluated by Phase A.3.5's gate: `no_docs_flag` (set in `## Parse arguments`) always wins over `docs_sync_enabled` — either one alone is sufficient to skip the docs-sync sub-phase.
+
 Soft-fail concurrency diagnostic per source PRD D18: `Glob` `<artifact_root>*/diff.patch` for any in-flight attempt (heuristic: a `diff.patch` whose corresponding `<basename>.code-review.jsonl` line shows neither APPROVED nor a final HALT). If found, emit warning `"concurrent /relay-implement detected for <feature> (is_prd_less=<is_prd_less>); orchestrator must serialize"` and **continue** (do not block). Robust file-lock semantics deferred until `/relay-execute` is designed.
 
 ### Phase A.1 — Per-attempt pre-flight checks (in order)
@@ -313,7 +317,7 @@ The code-reviewer runs the 8-item rubric (R-S1, R-S2, R-S3, R-L1, R-L2, R-L3, R-
 
 Read the just-appended jsonl line. Parse `verdict`:
 
-- **APPROVED** → exit Phase A loop into Phase A.4 (D8 mutations).
+- **APPROVED** → exit Phase A loop into Phase A.3.5 (docs-sync dispatch), then Phase A.4 (D8 mutations).
 - **CHANGES_REQUESTED** → carry the rubric defects (`reason` fields from each `passed: false` item) into `last_reviewer_feedback`. Increment `attempt`. Restart pre-flight checks (Phase A.1).
 
 #### Arbitration mode (after TEST_CONTRACT_DISPUTE)
@@ -356,6 +360,62 @@ The code-reviewer arbitrates the dispute. It appends one verdict line to `code-r
   > to re-author against the disambiguation.
 
 In all `DISPUTE_UPHELD_*` cases, the loop terminates structurally; the orchestrator (or developer) decides the recovery path.
+
+### Phase A.3.5 — Docs-sync dispatch
+
+Triggered exactly once when Phase A.3 standard-mode returns APPROVED — never on an arbitration-mode verdict (mirrors Phase A.4's own trigger phrasing below).
+
+1. **Gate.** If `no_docs_flag == true` OR `docs_sync_enabled == false`, skip the entire docs-sync sub-phase (log a one-line skip note naming which of the two gated it) and proceed directly to Phase A.4. Record `docs_sync_outcome = "SKIPPED (--no-docs)"` when `no_docs_flag == true` (checked first — `--no-docs` takes precedence over `docs_sync_enabled` when both are true), otherwise `docs_sync_outcome = "SKIPPED (docs_sync: false)"`.
+2. **Initialise the docs-sync budget.** Otherwise, initialise `docs_review_attempts = 0`, `max_docs_review_retries = 2`, `docs_prior_feedback = null` — its own budget, independent of `max_implement_retries`/`disputes_used`, mirroring `/relay-approve`'s Phase 3 DOCS CYCLE loop shape (`plugins/relay/commands/relay-approve.md:275-343`).
+3. **Step A — dispatch `docs-updater` (writer) via `Task`:**
+
+   ```
+   Task(subagent_type="docs-updater",
+        prompt={
+          target_root: <target_root>,
+          feature: <feature>,
+          prd_path: "PRPs/prds/<feature>.prd.md",   # PRD mode only (is_prd_less == false); key omitted entirely in PRD-less mode
+          diff_source: "patch",
+          patch_path: "<artifact_root><attempt>/diff.patch",
+          non_interactive: true,
+        })
+   ```
+
+4. **Step B — dispatch `docs-reviewer` (reviewer) via `Task`:**
+
+   ```
+   Task(subagent_type="docs-reviewer",
+        prompt={
+          target_root: <target_root>,
+          feature: <feature>,
+          prd_path: "PRPs/prds/<feature>.prd.md",   # PRD mode only (is_prd_less == false); key omitted entirely in PRD-less mode
+          non_interactive: true,
+        })
+   ```
+
+   `pr` is intentionally omitted — there is no PR yet at implement time.
+   `feature` (and, in PRD mode, `prd_path`) are passed EXPLICITLY instead
+   of relying on `docs-reviewer`'s `orchestrator-run.json` fallback
+   (Task 4's revision of `docs-reviewer.md`), because that file does not
+   exist at implement time for standalone `/relay-implement`. `<feature>`
+   is the same value this command already derives in `## Parse arguments`
+   (lines 69-97: `feature = slug` in PRD-less mode; the parsed `<feature>`
+   prefix in PRD mode).
+
+5. **Step C — evaluate the docs-reviewer verdict.** Read the just-appended `PRPs/reports/<feature>/docs-review.jsonl` line:
+   - **`APPROVED`** → record `docs_sync_outcome = "APPROVED"`; proceed to Phase A.4.
+   - **`CHANGES_REQUESTED`** → increment `docs_review_attempts`; set `docs_prior_feedback` from the failing `D-R<i>` reasons. If `docs_review_attempts > max_docs_review_retries`, record `docs_sync_outcome = "BUDGET_EXCEEDED"` (log a warning naming the last failing `D-R<i>` items) and proceed to Phase A.4 WITHOUT halting the command — this is the docs-sync graceful-degradation path (Decision Gate result): the docs-sync sub-phase never blocks code delivery, and `/relay-approve`'s docs cycle remains the safety net for exactly this case. Otherwise, loop back to Step A (`docs_prior_feedback` is retained only for the `BUDGET_EXCEEDED` warning-log line — Step A's dispatch payload no longer accepts it per edit (i) above).
+6. **Deferred questions.** Record deferred questions from BOTH docs-pair
+   artifacts into a running list `docs_deferred_questions` (each entry
+   tagged with its source): (i) after Step A completes, read
+   `PRPs/reports/<feature>/docs-update.md`'s `## Deferred Questions`
+   section — append each entry found, tagged `writer`; (ii) after Step B
+   completes, read the just-appended `docs-review.jsonl` line's
+   `deferred_question` field (string or `null`) — if non-null, append it,
+   tagged `reviewer`. The Final output surface's `Docs:` line (Task 6)
+   points at both source artifacts explicitly, so source and pointer
+   always agree.
+7. **No commit issued.** This sub-phase performs no commit action of any kind — edits from `docs-updater` land uncommitted in the worktree, per the Pillar 2 "never commit" invariant (`docs/decisions.md` 2026-05-18). `/relay-commit` bundles docs with code later.
 
 ### Phase A.4 — D8 post-approval mutations (best-effort atomic with rollback note)
 
@@ -462,6 +522,7 @@ On the success path (Phase A.3 standard-mode APPROVED + all applicable D8 mutati
 > `<artifact_root><attempt>/diff.patch`.
 > Code-review verdict at
 > `PRPs/plans/<basename>.code-review.jsonl` (line <line_index>).
+> Docs: `<docs_sync_outcome>` (`APPROVED` / `BUDGET_EXCEEDED` / `SKIPPED (--no-docs)` / `SKIPPED (docs_sync: false)`). When `docs_deferred_questions` is non-empty, see `PRPs/reports/<feature>/docs-update.md`'s `## Deferred Questions` section (writer-side questions) and/or `PRPs/reports/<feature>/docs-review.jsonl`'s `deferred_question` field (reviewer-side questions) — the two artifacts Task 5 Step 6 sources the list from.
 > Worktree ready for `/relay:relay-test PRPs/plans/completed/<basename>.plan.md`.
 
 **PRD-less mode (`is_prd_less == true`):**
@@ -472,6 +533,7 @@ On the success path (Phase A.3 standard-mode APPROVED + all applicable D8 mutati
 > `<artifact_root><attempt>/diff.patch`.
 > Code-review verdict at
 > `PRPs/plans/<basename>.code-review.jsonl` (line <line_index>).
+> Docs: `<docs_sync_outcome>` (`APPROVED` / `BUDGET_EXCEEDED` / `SKIPPED (--no-docs)` / `SKIPPED (docs_sync: false)`). When `docs_deferred_questions` is non-empty, see `PRPs/reports/<feature>/docs-update.md`'s `## Deferred Questions` section (writer-side questions) and/or `PRPs/reports/<feature>/docs-review.jsonl`'s `deferred_question` field (reviewer-side questions) — the two artifacts Task 5 Step 6 sources the list from.
 > Worktree ready for `/relay:relay-test PRPs/plans/completed/<basename>.plan.md`.
 
 On HALT (one of `FAILED_AFTER_N_RETRIES`, `FAILED_TIME_BUDGET_EXCEEDED`, `FAILED_OSCILLATION_DETECTED`, `FAILED_DISPUTE_CAP_EXCEEDED`, `DISPUTE_UPHELD_TEST_WRONG`, `DISPUTE_UPHELD_PRD_AMBIGUOUS`, `PARTIAL_D8_FAILURE`, or any precondition HALT), the user-facing message is the verbatim halt message defined in the relevant Phase A.* sub-section above, and the command exits without performing further mutations.
@@ -502,6 +564,8 @@ In all cases, the per-attempt artifacts at `PRPs/reports/<feature>/phase-<N>/att
 
 10. **Never invoke `/relay-code-review` from this command.** The standalone reviewer surface is for hand-invoked review of an existing implementation, not for the internal loop. The internal dispatch goes directly to the `code-reviewer` agent via `Task`.
 
+11. **Never block D8 mutations on docs-sync budget exhaustion.** The docs-sync sub-phase (Phase A.3.5) carries its own retry budget (`max_docs_review_retries=2`), independent of `max_implement_retries`. When that budget is exhausted (`docs_review_attempts > max_docs_review_retries` after a `CHANGES_REQUESTED` docs-reviewer verdict), the command degrades gracefully: it logs `docs_sync_outcome = "BUDGET_EXCEEDED"` and proceeds to Phase A.4 rather than halting the whole invocation. `/relay-approve`'s docs cycle remains the safety net for exactly this case.
+
 ---
 
 ## What you do NOT do
@@ -516,3 +580,4 @@ In all cases, the per-attempt artifacts at `PRPs/reports/<feature>/phase-<N>/att
 - **`--from-attempt <N>` resume flag** — Could-item per source PRD MoSCoW; deferred. To resume after a HALT, the developer must re-run `/relay-implement`; the command does not currently support partial-state recovery beyond the per-attempt diffs preserved on disk.
 - **Re-grounding via research subagents** — the implementer has no `Task` tool per source PRD D11; the plan is the source of truth. The plan-writer's grounding (recorded in the plan's "Patterns to Mirror" and "Mandatory Reading" sections) is the only research input the implementer consumes.
 - **Persisting research blobs** — Could-item; not MVP per source PRD's "What We're NOT Building".
+- **Blocking code approval on a docs-sync failure** — the docs-sync sub-phase (Phase A.3.5) degrades gracefully on budget exhaustion; D8 mutations proceed regardless.

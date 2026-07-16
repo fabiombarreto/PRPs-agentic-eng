@@ -21,7 +21,7 @@
     "title": "The three pillars",
     "path": "concepts/pillars.html",
     "category": "Concepts",
-    "excerpt": "Relay's pipeline is organized in three pillars: Initialization (context-builder), Implementation (PRD to PR), and Approval (merge and docs update). Each pillar has a clear boundary."
+    "excerpt": "Relay's pipeline is organized in three pillars: Initialization (context-builder), Implementation (PRD to PR, including implement-time docs-sync), and Approval (merge plus a low-delta docs-sync safety net). Each pillar has a clear boundary."
   },
   {
     "title": "Interactivity boundary",
@@ -99,7 +99,7 @@
     "title": "Agents",
     "path": "reference/agents.html",
     "category": "Reference",
-    "excerpt": "Specialized Claude Code agents invoked by commands. Implemented: test-runner, post-green-reviewer, prd-writer, prd-reviewer, research-web, research-codebase, plan-writer, plan-reviewer, implementer, code-reviewer, code-reviewer-semantic, test-writer, test-reviewer, docs-updater (Pillar 3 writer, v0.17.0), docs-reviewer (Pillar 3 reviewer, v0.17.0). Each has focused prompt, narrow tool allowlist, structured output."
+    "excerpt": "Specialized Claude Code agents invoked by commands. Implemented: test-runner, post-green-reviewer, prd-writer, prd-reviewer, research-web, research-codebase, plan-writer, plan-reviewer, implementer, code-reviewer, code-reviewer-semantic, test-writer, test-reviewer, docs-updater (dispatched twice, implement-time primary and approve-time safety net, v0.17.0), docs-reviewer (dispatched twice, implement-time primary and approve-time safety net, v0.17.0). Each has focused prompt, narrow tool allowlist, structured output."
   },
   {
     "title": "Skills",

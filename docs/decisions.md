@@ -707,6 +707,20 @@ The APPROVED `PRPs/prds/prd-authoring.prd.md` is NOT mutated (reopening APPROVED
 
 ---
 
+## [2026-07-16] Docs-sync relocates to Pillar 2 (implementation); Pillar 3 retained as a safety net; implement-time invocation stays non-interactive
+
+**Context:** `PRPs/prds/implement-phase-docs-sync.prd.md` (APPROVED 2026-07-15) relocates the primary docs-sync trigger point into `/relay-implement`, retaining `/relay-approve`'s cycle as a safety net. Phases 1-3 of that PRD (all `complete`) already shipped the underlying code: `docs-updater`/`docs-reviewer` gained `diff_source`/`non_interactive` inputs and read `docs_sync` (Phase 1); `/relay-implement` gained a `Phase A.3.5 — Docs-sync dispatch` sub-phase that runs the pair non-interactively immediately after code-review `APPROVED` and before the D8 mutations, with its own `max_docs_review_retries=2` budget and a `--no-docs` flag (Phase 2); `/relay-approve`'s existing docs cycle self-skips on `docs_sync: false` and was confirmed idempotent against an already implement-time-synced worktree (Phase 3). This entry records the two conscious refinements from that PRD's Decisions Log so future agents consult the decision instead of re-deriving it.
+
+**Decision:**
+- (1) The [2026-06-19] post-merge interactivity extension (allowing the docs pair to dialogue with the operator) applies ONLY to the approve-time invocation. The new implement-time invocation is non-interactive unconditionally — any question the pair would otherwise ask a human is deferred to the implementation report instead of interrupting the autonomous run.
+- (2) Primary docs-sync relocates to Pillar 2: `/relay-implement`'s `Phase A.3.5` dispatch, consuming the working-tree diff / captured attempt `diff.patch` as its `diff_source`. Pillar 3's approve-time cycle (`/relay-approve`'s existing docs phase) is RETAINED, unchanged in mechanics, now serving as a low-delta safety-net reconciliation pass that catches only decisions made after implementation.
+
+**Reason:** Approve is frequently unreached — co-locating docs with code in the same changeset is the industry norm for closing documentation drift (see the PRD's Research Summary). The interactivity boundary is defined at PRD approval: implement runs autonomously past that boundary, while approve is an explicitly-triggered, post-merge human act where a dialogue extension is safe. Splitting the two invocations' interactivity semantics keeps both behaviors consistent with the existing [2026-04-19] interactivity-boundary decision without weakening it.
+
+**Areas affected:** `plugins/relay/agents/docs-updater.md`, `plugins/relay/agents/docs-reviewer.md` (Phase 1 capability surface), `plugins/relay/commands/relay-implement.md` (Phase 2 dispatch), `plugins/relay/commands/relay-approve.md` (Phase 3 safety-net confirmation), and every `docs/`/`documentation/` file this Phase 4 plan touches (`docs/context/architecture.md`, `docs/api-reference.md`, `docs/domain/flows.md`, `docs/context/integrations.md`, `docs/KNOWLEDGE_BASE.md`, `documentation/concepts/pillars.html`, `documentation/concepts/interactivity-boundary.html`, `documentation/roadmap/status.html`, `documentation/reference/commands.html`, `documentation/reference/agents.html`, `documentation/assets/data/search-index.json`, `documentation/changelog.html`).
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision

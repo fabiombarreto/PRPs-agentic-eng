@@ -139,7 +139,7 @@
       <h3 id="pillar-3-is-also-on-the-manual-side">Pillar 3 is explicitly triggered</h3>
 
       <p>
-        The boundary applies within Pillar 2 (Implementation). Pillar 3 (Approval) is a separate concern with its own boundary: <code>/relay-approve &lt;pr&gt;</code> is triggered manually — you decided the PR is good. Once triggered, its internal steps (merge, Docs Updater, Docs Reviewer) run autonomously, but Pillar 3 as a whole is a conscious human act.
+        The boundary applies within Pillar 2 (Implementation). Pillar 3 (Approval) is a separate concern with its own boundary: <code>/relay-approve &lt;pr&gt;</code> is triggered manually — you decided the PR is good. Once triggered, its internal steps (merge, Docs Updater, Docs Reviewer) run autonomously, but Pillar 3 as a whole is a conscious human act. The Docs Updater/Docs Reviewer pair no longer lives only inside Pillar 3: it also runs a second, earlier invocation inside <code>/relay-implement</code> (Pillar 2), immediately after Code Reviewer approves. The two invocations have different interactivity rules — the approve-time invocation MAY dialogue with the operator on ambiguous rules (the 2026-06-19 extension), while the implement-time invocation is always non-interactive, deferring any question to the implementation report instead of interrupting the autonomous run (see <a href="../governance/decisions.html">Decisions</a>, 2026-07-16).
       </p>
 
       <h2 id="consequences-for-tooling">Consequences for the tooling</h2>

@@ -2,6 +2,7 @@
 tdd: false
 tdd_evidence: null
 test_frameworks: ["node:test"]
+docs_sync: true
 ---
 
 # Methodology
@@ -40,6 +41,39 @@ Resolved from the `validation-suite` PRD Open Question #5 on 2026-07-12: having
 the Implementer author the checkers' own tests directly conflicts with R-X strict
 (`docs/decisions.md` [2026-05-06], [2026-07-10]); declaring the framework routes
 test authorship through the compliant mechanism.
+
+## Docs Sync
+
+Current state: **true** (default) — `docs_sync: true` in the
+frontmatter above is the per-project master switch that gates
+automated `docs/` knowledge-base synchronization by the
+`docs-updater` / `docs-reviewer` pair. Both `/relay-implement`
+(Phase 2) and `/relay-approve` (Phase 3) now read `docs_sync`:
+`docs-updater` records it in the manifest's effective-configuration
+header, and each command wires its own skip logic — self-skipping
+its respective docs cycle when `docs_sync_enabled == false`.
+
+`docs_sync` governs BOTH the implement-time and approve-time docs
+cycles. Setting `docs_sync: false` disables automated docs sync for
+this project entirely — the docs-updater/docs-reviewer pair will
+self-skip in both commands. `--no-docs` is a separate, per-invocation
+override, shipped on both `/relay-implement` and `/relay-approve` —
+it overrides `docs_sync` for a single run without changing the
+persisted project-level default.
+
+### How to override
+
+1. Change `docs_sync: true` to `docs_sync: false` above to disable
+   automated docs sync for this project. This is a manual human edit
+   to this file — `context-builder` never produces a `false` value
+   itself.
+2. Heuristics MUST NOT flip this value — only a human edit can.
+   `context-builder` `*init` always emits the deterministic default
+   `docs_sync: true` (never heuristically inferred); `*update`
+   preserves an existing value untouched and backfills
+   `docs_sync: true` only when the key is entirely absent — never
+   flipping a set value to `false`, mirroring the `tdd` preservation
+   precedent above.
 
 ## Other methodologies
 

@@ -72,8 +72,8 @@ The repo self-tests with a Node/ESM validation suite. After `npm install`:
   version-parity, dispatch graph, artifact naming, `.sh`/`.ps1` parity, and the
   native `claude plugin validate --strict` wrapper). Exits non-zero with a named
   check + `file:line` on any violation; fast enough to run on every commit.
-- `node --test scripts/validate/checks/*.test.mjs scripts/eval.test.mjs` — the
-  unit tests for the checks (`node:test`).
+- `node --test scripts/validate/checks/*.test.mjs scripts/eval.test.mjs scripts/normalize-test-output.test.mjs` —
+  the `node:test` unit tests for the checks and the Test Runner scripts.
 - `npm run eval` — on-demand promptfoo evals of the reviewer agents against
   golden fixtures. Needs `ANTHROPIC_API_KEY`; costs tokens, so it is manual.
 - `npm run setup-hooks` — one-time; wires the pre-commit hook that runs
