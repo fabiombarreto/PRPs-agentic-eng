@@ -49,13 +49,23 @@ plugin covers three pillars:
    Test Runner (with auto-correction loop). Terminates with all phases
    complete and uncommitted changes in `.worktrees/<feature>/`. Does NOT
    commit or create a PR — that boundary is permanent (see
-   `docs/decisions.md` 2026-05-18).
+   `docs/decisions.md` 2026-05-18). Immediately after Code Reviewer
+   returns `APPROVED` and before the phase's D8 state-machine mutations,
+   the `docs-updater`/`docs-reviewer` pair runs as the primary pass —
+   non-interactively, consuming the working-tree diff / captured attempt
+   `diff.patch` — to sync `docs/` with the change in the same worktree
+   (implement-time docs-sync); gated by `docs_sync` in
+   `docs/context/methodology.md` and a per-invocation `--no-docs` flag;
+   any operator question defers to the implementation report (see
+   `docs/decisions.md` 2026-07-16).
 3. **Approval** — three commands after human validation: `/relay-commit`
    commits locally (no push); `/relay-pr` pushes + opens the PR;
    `/relay-approve` merges the PR, deletes the branch and worktree in
-   collision-safe order, then runs Docs Updater and Docs Reviewer to keep
-   `docs/context/` and `docs/domain/` in sync with what was actually
-   implemented. All three Pillar 3 commands shipped (v0.14.0–v0.17.0).
+   collision-safe order, then runs Docs Updater and Docs Reviewer as a
+   low-delta safety-net reconciliation pass — primary docs-sync now
+   happens at implement time (Pillar 2); Pillar 3's pass catches only
+   decisions made after implementation (see `docs/decisions.md`
+   2026-07-16). All three Pillar 3 commands shipped (v0.14.0–v0.17.0).
 
 ## Interactivity boundary
 

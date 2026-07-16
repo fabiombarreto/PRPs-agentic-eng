@@ -50,6 +50,11 @@ PRD stage and only when an agent hits a problem it cannot resolve.
    or requests changes. Otherwise this step is skipped silently.
 7. An Implementer agent executes the approved plan; a Code Reviewer
    checks the result against business rules.
+7.5. Immediately after the Code Reviewer returns `APPROVED` — and before
+   the plan/PRD state advances — a docs pair (`docs-updater`/`docs-reviewer`)
+   runs non-interactively to sync `docs/` with the change directly in the
+   worktree; any question it would have asked a human is deferred to the
+   final report instead of interrupting the run.
 8. A Test Runner spins up the isolated test environment, runs the suite,
    and classifies failures. If anything fails, it loops: ask the
    Implementer to fix, re-run, repeat — up to a configurable retry limit.
@@ -63,17 +68,20 @@ its recovery strategies and the decision is outside its competence.
 All artifacts produced by this flow (PRD, plan, reports) live under
 `PRPs/` at the repo root — see `docs/context/architecture.md`.
 
-## 3. Approval flow (Pillar 3 — planned)
+## 3. Approval flow (Pillar 3 — shipped; docs cycle is now a safety net)
 
 Once the PR is ready, the user triggers the approval flow.
 
-1. User runs `/approve-implementation`.
+1. User runs `/relay-approve <pr>`.
 2. The system merges the PR, deletes the feature branch, and cleans up the
    worktree.
-3. A Docs Updater agent compares what was implemented against the existing
-   `docs/context/` and `docs/domain/` files and updates them accordingly.
+3. A Docs Updater agent runs a low-delta safety-net reconciliation pass —
+   primary docs-sync already happened at Implementation-flow step 7.5 — and
+   compares what was merged against the existing `docs/context/` and
+   `docs/domain/` files, updating them for any decisions made after
+   implementation.
 4. A Docs Reviewer checks the updated documentation and asks the human
-   about any ambiguous rules encountered during the implementation.
+   about any ambiguous rules encountered since the implement-time sync.
 5. The project's documentation is now in sync with its new state.
 
 ---

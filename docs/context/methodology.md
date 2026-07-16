@@ -1,38 +1,79 @@
 ---
 tdd: false
 tdd_evidence: null
-test_frameworks: []
+test_frameworks: ["node:test"]
+docs_sync: true
 ---
 
 # Methodology
 
 ## TDD (Test-Driven Development)
 
-Current state: **not declared** (default).
+Current state: **test-after** — `test_frameworks: ["node:test"]` declares the
+Node built-in test runner; `tdd: false` selects test-after ordering.
 
 The test writer/reviewer pair (`test-writer` + `test-reviewer`) activates when
 `test_frameworks` above is non-empty — in BOTH modes. The `tdd:` value only
 selects ORDERING: `tdd: true` = test-first (the pair authors before the
 Implementer), `tdd: false` = test-after (the pair authors after the Implementer
-+ Code Review). With `test_frameworks: []` (as here) the pair self-skips.
-Heuristics MUST NOT flip these values — only a human edit or an explicit
-declaration during `*init` can.
++ Code Review). With `test_frameworks: ["node:test"]` (as here) the pair is
+ACTIVE in test-after mode. Heuristics MUST NOT flip these values — only a human
+edit or an explicit declaration can.
 
 ### Observed signals
 
-None. This repository has no test suite yet — the plugin is markdown +
-JSON and the Test Runner (Phase 2) is not yet implemented.
+The `validation-suite` feature (2026-07-12) introduces the repo's first Node/ESM
+test surface — `scripts/validate/**/*.test.mjs` run via `node --test`. This
+declares `node:test` as the framework; the relay test-writer/test-reviewer pair
+authors and maintains those tests test-after (after the Implementer + Code
+Review). R-X strict is preserved: the Implementer authors ZERO test files.
 
 ### How to activate
 
-Not applicable for the `relay` repo itself: `relay` is the plugin, not a
-target project that the plugin drives. The TDD contract is exercised
-against **target** projects run through the context-builder skill, not
-against this repository.
+Already active for the `validation-suite` work: the repo now self-hosts a test
+surface (`scripts/validate/`). Because a framework is declared, the relay test
+pair authors and maintains the checker unit tests — the Implementer never authors
+them (R-X strict). Ordering is test-after (`tdd: false`): Implementer + Code
+Review land production code first, then the pair authors the tests, then
+`/relay-test` runs them.
 
-Kept at `tdd: false` with `test_frameworks: []` — the test pair self-skips for
-this repo (no declared framework). This documents the contract and provides the
-reference format other projects inherit when the skill processes them.
+Resolved from the `validation-suite` PRD Open Question #5 on 2026-07-12: having
+the Implementer author the checkers' own tests directly conflicts with R-X strict
+(`docs/decisions.md` [2026-05-06], [2026-07-10]); declaring the framework routes
+test authorship through the compliant mechanism.
+
+## Docs Sync
+
+Current state: **true** (default) — `docs_sync: true` in the
+frontmatter above is the per-project master switch that gates
+automated `docs/` knowledge-base synchronization by the
+`docs-updater` / `docs-reviewer` pair. Both `/relay-implement`
+(Phase 2) and `/relay-approve` (Phase 3) now read `docs_sync`:
+`docs-updater` records it in the manifest's effective-configuration
+header, and each command wires its own skip logic — self-skipping
+its respective docs cycle when `docs_sync_enabled == false`.
+
+`docs_sync` governs BOTH the implement-time and approve-time docs
+cycles. Setting `docs_sync: false` disables automated docs sync for
+this project entirely — the docs-updater/docs-reviewer pair will
+self-skip in both commands. `--no-docs` is a separate, per-invocation
+override, shipped on both `/relay-implement` and `/relay-approve` —
+it overrides `docs_sync` for a single run without changing the
+persisted project-level default.
+
+### How to override
+
+1. Change `docs_sync: true` to `docs_sync: false` above to disable
+   automated docs sync for this project. This is a manual human edit
+   to this file — `context-builder` never produces a `false` value
+   itself.
+2. Heuristics MUST NOT flip this value — only a human edit can.
+   `context-builder` `*init` always emits the deterministic default
+   `docs_sync: true` (never heuristically inferred); `*update`
+   preserves an existing value untouched and backfills
+   `docs_sync: true` only when the key is entirely absent — never
+   flipping a set value to `false`, mirroring the `tdd` preservation
+   precedent above.
 
 ## Other methodologies
 

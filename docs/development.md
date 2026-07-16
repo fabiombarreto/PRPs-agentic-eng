@@ -9,8 +9,9 @@ How to extend `relay` locally.
 - Optional: MCP Context7 configured, for testing the context-builder's
   `docs/libs/` generation path
 
-There is no language runtime, no package manager, and no test runner to
-install.
+The plugin ships no runtime dependency, but the repo now carries a Node/ESM
+validation suite that self-tests the plugin's consistency — so Node 18+ and a
+one-time `npm install` are needed to run it (see Testing / validation below).
 
 ## Install the plugin locally
 
@@ -61,6 +62,29 @@ When editing files under `docs/`:
   under their size limits (see `plugins/relay/skills/context-builder/SKILL.md`).
 - Re-run the context-builder in `*update` or `*validate` mode after large
   changes, to catch limit or anti-pattern violations.
+
+## Testing / validation
+
+The repo self-tests with a Node/ESM validation suite. After `npm install`:
+
+- `npm run validate` — 8 static consistency checks over the plugin (frontmatter
+  schemas, command/agent registration vs the doc site, path integrity,
+  version-parity, dispatch graph, artifact naming, `.sh`/`.ps1` parity, and the
+  native `claude plugin validate --strict` wrapper). Exits non-zero with a named
+  check + `file:line` on any violation; fast enough to run on every commit.
+- `node --test scripts/validate/checks/*.test.mjs scripts/eval.test.mjs scripts/normalize-test-output.test.mjs` —
+  the `node:test` unit tests for the checks and the Test Runner scripts.
+- `npm run eval` — on-demand promptfoo evals of the reviewer agents against
+  golden fixtures. Needs `ANTHROPIC_API_KEY`; costs tokens, so it is manual.
+- `npm run setup-hooks` — one-time; wires the pre-commit hook that runs
+  `npm run validate` and blocks a commit on any violation.
+
+Adding a check: create `scripts/validate/checks/<name>.mjs` returning
+`{ name, ok, findings }`, register it in `scripts/validate/index.mjs`, scope its
+reads to `plugins/relay/` (never `prp-core/`), and let the test pair author the
+`node:test` unit test-after — the Implementer authors no test files (R-X strict).
+Full rationale, cost, and maintenance guidance:
+`documentation/guide/validation-suite.html`.
 
 ## Commit hygiene
 

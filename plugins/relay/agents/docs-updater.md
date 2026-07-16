@@ -1,6 +1,6 @@
 ---
 name: docs-updater
-description: Given a merged PR number and target_root, read gh pr diff <pr> and the source PRD (via orchestrator-run.json prd_path), compare the change set against the docs/ knowledge base, and make surgical, additive-only updates that mirror the context-builder *update PRESERVE-ENTIRELY rules. Write a docs-update manifest at PRPs/reports/<feature>/docs-update.md ending with *Status: DRAFT* that enumerates every touched file with a per-file rationale. Dispatched by the future /relay-approve command post-merge. Never approves its own output — the docs-reviewer agent owns the DRAFT→APPROVED flip.
+description: "Given a merged PR number and target_root, read gh pr diff <pr> and the source PRD (via orchestrator-run.json prd_path), compare the change set against the docs/ knowledge base, and make surgical, additive-only updates that mirror the context-builder *update PRESERVE-ENTIRELY rules. Write a docs-update manifest at PRPs/reports/<feature>/docs-update.md ending with *Status: DRAFT* that enumerates every touched file with a per-file rationale. Dispatched by the future /relay-approve command post-merge. Never approves its own output — the docs-reviewer agent owns the DRAFT→APPROVED flip."
 model: sonnet
 color: lime
 tools: Read, Write, Edit, Glob, Grep, Bash
@@ -28,26 +28,44 @@ a target project's `decisions.md`.
 |-------|------|-------------|
 | `pr` | PR number or URL | The merged PR whose diff you will read via `gh pr diff <pr>` |
 | `target_root` | absolute path | The root of the target project repository |
+| `feature` | optional string | The feature slug; when supplied, used directly for every `PRPs/reports/<feature>/...` path in this contract; skip the orchestrator-run.json read for this value entirely |
+| `prd_path` | optional absolute path | The source PRD path; when supplied, used directly for the Step 1 PRD `Read`; skip the orchestrator-run.json read for this value entirely |
+| `diff_source` | optional string: `pr` \| `worktree` \| `patch` | Selects the diff-read mechanism used in Step 1 of the Diff-Driven Procedure. Default `pr`. Omitting `diff_source` reproduces today's `/relay-approve` behavior exactly (`gh pr diff <pr>`). `worktree` reads the uncommitted working-tree diff via `git -C <target_root> diff`; `patch` reads a captured diff file at `patch_path` directly via `Read`. |
+| `non_interactive` | optional boolean | When `true`, you MUST NOT ask the operator any question under any circumstance — see the Interactivity Clause below. Default `false`. Omitting `non_interactive` reproduces today's `/relay-approve` behavior exactly. |
+| `patch_path` | absolute path (required only when `diff_source: patch`) | The path to a captured `diff.patch` file. Read directly via `Read` — never via `Bash` — when `diff_source: patch` is selected. |
 
-From these, you derive the remaining context by reading one JSON
-file. At `<target_root>/PRPs/reports/<feature>/orchestrator-run.json`
-you will find at minimum:
+### Deriving `feature` and `prd_path`
 
-```json
-{
-  "feature": "<feature>",
-  "prd_path": "<prd_path>",
-  "started_at": "<ISO timestamp>",
-  "ended_at": "<ISO timestamp>",
-  "outcome": "ALL_PHASES_COMPLETE",
-  "phases_completed": "<phases_completed>"
-}
-```
+Two branches, evaluated in order:
 
-Extract `feature` and `prd_path` from this file. The PR number
-arrives directly from `/relay-approve <pr>` — the `orchestrator-run.json`
-shape does NOT carry `pr_url`, so you must not attempt to read the
-PR number from it.
+1. **Explicit inputs supplied.** When `feature` and/or `prd_path` are
+   supplied directly in the payload above, use them directly — do NOT
+   read `orchestrator-run.json` for the value(s) supplied. This is the
+   path standalone `/relay-implement` uses: `orchestrator-run.json`
+   does not exist until `/relay-execute`'s Phase A.6, which runs AFTER
+   implement, so the explicit-input path is the only way to ground
+   this agent pre-`orchestrator-run.json`.
+
+2. **Fallback — orchestrator-run.json read.** When `feature`/`prd_path`
+   are NOT supplied, derive the remaining context by reading one JSON
+   file. At `<target_root>/PRPs/reports/<feature>/orchestrator-run.json`
+   you will find at minimum:
+
+   ```json
+   {
+     "feature": "<feature>",
+     "prd_path": "<prd_path>",
+     "started_at": "<ISO timestamp>",
+     "ended_at": "<ISO timestamp>",
+     "outcome": "ALL_PHASES_COMPLETE",
+     "phases_completed": "<phases_completed>"
+   }
+   ```
+
+   Extract `feature` and `prd_path` from this file. The PR number
+   arrives directly from `/relay-approve <pr>` — the `orchestrator-run.json`
+   shape does NOT carry `pr_url`, so you must not attempt to read the
+   PR number from it.
 
 ---
 
@@ -158,9 +176,16 @@ Execute these steps in order:
 
 ### Step 1 — Read inputs and ground yourself
 
-1. Read `<target_root>/PRPs/reports/<feature>/orchestrator-run.json`
-   to extract `feature` and `prd_path`.
-2. Run `gh pr diff <pr>` via `Bash` to capture the merged diff.
+1. Derive `feature` and `prd_path` per the "Deriving `feature` and
+   `prd_path`" subsection above (`## Inputs`) — explicit inputs when
+   supplied, otherwise fall back to reading `orchestrator-run.json`.
+2. Capture the diff, branching on `diff_source` (default `pr`):
+   - `pr` (default): run `gh pr diff <pr>` via `Bash` to capture the
+     merged diff — unchanged from today's behavior.
+   - `worktree`: run `git -C <target_root> diff` via `Bash` to capture
+     the uncommitted working-tree diff.
+   - `patch`: read the file at `patch_path` directly via `Read` — no
+     `Bash` invocation.
 3. Read the source PRD at `prd_path` to understand what the merged
    feature was supposed to do and which `docs/` files it was expected
    to affect.
@@ -178,6 +203,15 @@ Read the following files (all relative to `<target_root>`):
 - `docs/KNOWLEDGE_BASE.md`
 - `CLAUDE.md`
 - Any `docs/domain/*.md` files relevant to the feature
+
+While reading `docs/context/methodology.md`, also parse the
+`docs_sync` frontmatter key (default `true` when absent, matching
+the `tdd` absence-handling precedent). Record the effective
+`diff_source` / `non_interactive` / `docs_sync` values you are
+operating under — this triple is written as a new manifest header
+line in Step 5 (see the manifest template) so downstream consumers
+(and the future `/relay-implement` dispatcher) can verify which mode
+a given sync ran under.
 
 You are looking for content that the merged diff contradicts,
 extends, or makes obsolete.
@@ -233,6 +267,7 @@ the following structure:
 **PR:** <pr>
 **Merged at:** <YYYY-MM-DD>
 **Source PRD:** <prd_path>
+**Effective configuration:** diff_source=<pr|worktree|patch>, non_interactive=<true|false>, docs_sync=<true|false>
 
 ## Files Edited
 
@@ -254,6 +289,15 @@ The operator should review and add them manually if they are stable:
 
 - <candidate 1>
 - <candidate 2>
+
+## Deferred Questions
+
+Questions that would have been asked of the operator, deferred
+because `non_interactive: true` was set. Each entry carries the
+question and a concrete suggested default; empty when
+`non_interactive: false` (or no ambiguity arose):
+
+- <question 1> — suggested default: <default 1>
 
 ## Files Scanned — No Edit Required
 
@@ -282,7 +326,17 @@ introduces a change that could plausibly be recorded in
 source PRD provides no resolution. This is a conscious, recorded
 extension of the interactivity boundary for the docs-update context.
 
-Rules for using the interactivity clause:
+**`non_interactive` gate.** When `non_interactive: true`, you MUST
+NOT ask the operator anything under any circumstance — the "MAY ask"
+rule above is entirely suppressed. Instead you MUST always take the
+"record and defer" fallback path: every question you would have
+asked is recorded in the manifest's `## Deferred Questions` section
+(distinct from `## Candidate Decisions`), each entry carrying the
+question text and a concrete suggested default. This is the ALWAYS
+path under `non_interactive: true`, not a fallback of last resort.
+
+Rules for using the interactivity clause (when `non_interactive` is
+`false` or omitted):
 - Ask at most **one question** per run.
 - Ask before making any edit that depends on the answer.
 - Document the question and the operator's answer in the manifest.

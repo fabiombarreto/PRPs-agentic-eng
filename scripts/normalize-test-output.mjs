@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // @ts-check
 /**
- * Normalize JUnit XML output from pytest/Playwright/Vitest into the relay
- * canonical test-output schema.
+ * Normalize JUnit XML output from pytest/Playwright/Vitest/node:test into the
+ * relay canonical test-output schema.
  *
  * Schema definition: docs/context/test-output-schema.md (relay plugin repo)
  *
  * Usage:
- *   node normalize-test-output.mjs --framework <pytest|playwright|vitest> \
+ *   node normalize-test-output.mjs --framework <pytest|playwright|vitest|node:test> \
  *        --junit <path> [--tier unit|integration|e2e] [--run-id <uuid>] \
  *        [--attempt N] [--coverage <path>] [--trace <path>]
  *
@@ -21,8 +21,9 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 
-const VALID_FRAMEWORKS = ['pytest', 'playwright', 'vitest'];
+const VALID_FRAMEWORKS = ['pytest', 'playwright', 'vitest', 'node:test'];
 const VALID_TIERS = ['unit', 'integration', 'e2e'];
 
 function parseArgs(argv) {
@@ -40,7 +41,7 @@ function parseArgs(argv) {
 
 function printHelp() {
   process.stdout.write(`Usage:
-  node normalize-test-output.mjs --framework <pytest|playwright|vitest> --junit <path>
+  node normalize-test-output.mjs --framework <pytest|playwright|vitest|node:test> --junit <path>
       [--tier <unit|integration|e2e>] [--run-id <uuid>] [--attempt <N>]
       [--coverage <path>] [--trace <path>]
 
@@ -54,10 +55,25 @@ function die(code, msg) {
   process.exit(code);
 }
 
+/** Resolve one Unicode code point to a string, or null if out of range so the
+ * caller can leave the original entity text untouched (never throws). */
+function fromCharRef(code) {
+  if (!Number.isInteger(code) || code < 0 || code > 0x10ffff) return null;
+  try {
+    return String.fromCodePoint(code);
+  } catch {
+    return null;
+  }
+}
+
 function decodeXml(s) {
-  // CDATA first, then standard entities.
+  // CDATA first, then numeric character references (node:test encodes newlines
+  // in failure messages as &#10;), then named entities with &amp; last so an
+  // escaped entity like &amp;lt; is not double-decoded.
   return s
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/&#x([0-9a-fA-F]+);/g, (whole, hex) => fromCharRef(parseInt(hex, 16)) ?? whole)
+    .replace(/&#(\d+);/g, (whole, dec) => fromCharRef(parseInt(dec, 10)) ?? whole)
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
@@ -75,14 +91,48 @@ function parseAttrs(attrString) {
   return attrs;
 }
 
+// Opening-tag attribute run. A raw `>` is legal inside a quoted XML attribute
+// value, and node:test's JUnit reporter emits `>` literally inside name="..."
+// and message="..." (it only escapes `<` as `&lt;`, never `>`). A naive `[^>]*?`
+// ends the tag at that raw `>`, so a self-closing `<testcase name="a>b"/>` looks
+// unterminated and the lazy `>...</testcase>` body branch swallows the following
+// siblings — undercounting tests and misattributing (or dropping) failures.
+// Matching quoted spans wholesale means only an *unquoted* `>` closes the tag.
+// Interpolate wrapped in a capturing group, `(${TAG_ATTRS})`, to keep the
+// attribute string as group 1 (parseAttrs still reads double-quoted values from
+// it unchanged).
+const TAG_ATTRS = `(?:"[^"]*"|'[^']*'|[^>"'])*?`;
+
 /**
  * Extract every <testsuite> block from the JUnit XML, regardless of whether
  * the root is <testsuite> or <testsuites>. JUnit allows nested <testsuite>
  * but we treat nested occurrences as siblings for counting purposes; real-world
  * JUnit from pytest/Playwright/Vitest doesn't nest.
+ *
+ * node:test is handled framework-specifically. Node's built-in
+ * `--test-reporter=junit` emits two shapes that both defeat suite-attribute
+ * summing:
+ *   - bare: a <testsuites> root with <testcase> elements nested directly
+ *     beneath it — no <testsuite> wrapper and no summary attributes at all
+ *     (Node reports totals only in trailing XML comments);
+ *   - wrapped: one <testsuite> per describe()/suite() block, arbitrarily
+ *     NESTED, whose tests/failures counts do not sum cleanly across the nesting
+ *     (an outer suite's `tests` already includes its inner suites).
+ * In both shapes the ground truth is the <testcase> elements, so we treat the
+ * entire <testsuites> body as one synthesized suite and let buildCounts /
+ * sumDurationMs derive the totals by walking <testcase> elements (each appears
+ * exactly once in the document regardless of nesting depth). Returns [] when no
+ * <testcase> is present so the caller's malformed-input guard still fires.
  */
-function parseSuites(xml) {
-  const pattern = /<testsuite\b([^>]*?)(?:\s*\/>|>([\s\S]*?)<\/testsuite>)/g;
+export function parseSuites(xml, framework) {
+  if (framework === 'node:test') {
+    const root = new RegExp(`<testsuites\\b(${TAG_ATTRS})(?:\\s*/>|>([\\s\\S]*?)</testsuites>)`).exec(xml);
+    const body = root && root[2] ? root[2] : xml;
+    if (!/<testcase\b/.test(body)) return [];
+    return [{ attrs: {}, body, synthesized: true }];
+  }
+
+  const pattern = new RegExp(`<testsuite\\b(${TAG_ATTRS})(?:\\s*/>|>([\\s\\S]*?)</testsuite>)`, 'g');
   const out = [];
   let m;
   while ((m = pattern.exec(xml)) !== null) {
@@ -91,9 +141,52 @@ function parseSuites(xml) {
   return out;
 }
 
-function buildCounts(suites) {
+/**
+ * Count pass/fail/skip/total directly from the <testcase> elements in a
+ * synthesized suite body (node:test), walking every <testcase> regardless of
+ * any intervening <testsuite> nesting. A testcase is failed if its body
+ * contains a nested <failure> or <error>, skipped if it contains a nested
+ * <skipped>, otherwise passed. The nested element is the reliable signal:
+ * node:test also puts a `failure="..."` attribute on the <testcase> open tag,
+ * but an unescaped `>` in the message can truncate attribute parsing, whereas
+ * the nested <failure> tag always survives inside the captured body.
+ */
+export function countTestcases(body) {
   let passed = 0, failed = 0, skipped = 0, total = 0;
-  for (const { attrs } of suites) {
+  const tcPattern = new RegExp(`<testcase\\b(${TAG_ATTRS})(?:\\s*/>|>([\\s\\S]*?)</testcase>)`, 'g');
+  let m;
+  while ((m = tcPattern.exec(body)) !== null) {
+    total += 1;
+    const tcBody = m[2] || '';
+    if (/<(failure|error)\b/.test(tcBody)) failed += 1;
+    else if (/<skipped\b/.test(tcBody)) skipped += 1;
+    else passed += 1;
+  }
+  return { passed, failed, skipped, total };
+}
+
+function sumTestcaseTimeSec(body) {
+  let sec = 0;
+  const tcPattern = new RegExp(`<testcase\\b(${TAG_ATTRS})(?:\\s*/>|>[\\s\\S]*?</testcase>)`, 'g');
+  let m;
+  while ((m = tcPattern.exec(body)) !== null) {
+    const t = parseFloat(parseAttrs(m[1]).time || '0');
+    if (!isNaN(t)) sec += t;
+  }
+  return sec;
+}
+
+export function buildCounts(suites) {
+  let passed = 0, failed = 0, skipped = 0, total = 0;
+  for (const { attrs, body, synthesized } of suites) {
+    if (synthesized) {
+      const c = countTestcases(body);
+      passed += c.passed;
+      failed += c.failed;
+      skipped += c.skipped;
+      total += c.total;
+      continue;
+    }
     const t = parseInt(attrs.tests || '0', 10);
     const f = parseInt(attrs.failures || '0', 10);
     const e = parseInt(attrs.errors || '0', 10);
@@ -106,25 +199,29 @@ function buildCounts(suites) {
   return { passed, failed, skipped, total };
 }
 
-function sumDurationMs(suites) {
+export function sumDurationMs(suites) {
   let totalSec = 0;
-  for (const { attrs } of suites) {
+  for (const { attrs, body, synthesized } of suites) {
+    if (synthesized) {
+      totalSec += sumTestcaseTimeSec(body);
+      continue;
+    }
     const t = parseFloat(attrs.time || '0');
     if (!isNaN(t)) totalSec += t;
   }
   return Math.round(totalSec * 1000);
 }
 
-function determineOutcome(counts) {
+export function determineOutcome(counts) {
   if (counts.total === 0) return 'SKIPPED_UPSTREAM_FAILURE';
   if (counts.failed > 0) return 'FAILED';
   return 'PASSED';
 }
 
-function collectFailures(suites) {
+export function collectFailures(suites) {
   const out = [];
-  const tcPattern = /<testcase\b([^>]*?)(?:\s*\/>|>([\s\S]*?)<\/testcase>)/g;
-  const failPattern = /<(failure|error)\b([^>]*?)(?:\s*\/>|>([\s\S]*?)<\/\1>)/;
+  const tcPattern = new RegExp(`<testcase\\b(${TAG_ATTRS})(?:\\s*/>|>([\\s\\S]*?)</testcase>)`, 'g');
+  const failPattern = new RegExp(`<(failure|error)\\b(${TAG_ATTRS})(?:\\s*/>|>([\\s\\S]*?)</\\1>)`);
   for (const { attrs: sAttrs, body } of suites) {
     const suiteName = sAttrs.name || '';
     let m;
@@ -195,9 +292,9 @@ function main() {
     die(2, `error: cannot read ${junitPath}: ${err.message}`);
   }
 
-  const suites = parseSuites(xml);
-  if (suites.length === 0 && !xml.includes('<testsuite')) {
-    die(2, `error: no <testsuite> elements found in ${junitPath} (malformed JUnit XML?)`);
+  const suites = parseSuites(xml, args.framework);
+  if (suites.length === 0 && !xml.includes('<testsuite') && !xml.includes('<testcase')) {
+    die(2, `error: no <testsuite>/<testcase> elements found in ${junitPath} (malformed JUnit XML?)`);
   }
 
   const counts = buildCounts(suites);
@@ -233,4 +330,7 @@ function main() {
   process.stdout.write(JSON.stringify(record, null, 2) + '\n');
 }
 
-main();
+// Run only when executed directly as a CLI, not when imported by tests.
+if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
+  main();
+}

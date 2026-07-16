@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Validation suite — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Guide</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Validation suite</span>
+      </div>
+
+      <h1>Validation suite</h1>
+      <p class="page-subtitle">The plugin tests <em>itself</em>. <code>npm run validate</code> runs a set of consistency and cross-reference checks over the relay plugin, and <code>npm run eval</code> checks the reviewer agents against golden fixtures. This is the plugin's own self-test — distinct from <a href="running-tests.html">Running tests</a>, which covers the <code>/relay-test</code> Test Runner that runs a <em>target project's</em> suite.</p>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Two different meanings of "tests"</div>
+        <p><strong>This page</strong> is about the checks that verify the relay plugin repository is internally consistent. The <a href="running-tests.html">Running tests</a> page and the <a href="../concepts/pipeline.html">Test Runner</a> are about running the suite of a project that relay is <em>delivering a feature into</em>. Same word, different subject.</p>
+      </div>
+
+      <h2 id="why">Why the suite exists</h2>
+
+      <p>The relay repository is almost entirely markdown prompts and JSON config. There is no compiler and no application code to unit-test, so correctness lives in <strong>consistency invariants and cross-reference integrity</strong>: a command that dispatches an agent by name, a doc that cites a script path, a changelog that must match the plugin manifest version, a site index that must list every shipped command.</p>
+
+      <p>Those invariants rot silently. A rename leaves dead references; an edit desynchronizes an index; a malformed frontmatter field makes an agent load with empty metadata at runtime. Nothing catches it until the plugin misbehaves in a user's environment. Several written contracts (the three-file registration rule and the version lock-step rule in <a href="../AGENTS.md">AGENTS.md</a>) existed only as prose with no machine enforcement.</p>
+
+      <div class="callout callout--success">
+        <div class="callout__title">It found real bugs on day one</div>
+        <p>Beyond the known cross-reference gaps it was built to catch, the first full run surfaced <strong>six agent/command files whose YAML frontmatter failed to parse</strong> (they loaded with empty metadata at runtime) and <strong>two agents missing their required <code>tools</code> field</strong> — latent defects no one had noticed.</p>
+      </div>
+
+      <h2 id="two-layers">Why it is built this way</h2>
+
+      <p>The suite is two layers with deliberately different cost and trigger, because deterministic structural checks and LLM-judgment checks do not belong on the same gate.</p>
+
+      <div class="kv">
+        <dt>Layer 1 — static validation (<code>npm run validate</code>)</dt>
+        <dd>Deterministic. No LLM, no network, runs in seconds. Parses files and asserts invariants, exiting non-zero with a named check and a <code>file:line</code> on any violation. Cheap enough to run on every commit, so it is wired into a pre-commit hook.</dd>
+        <dt>Layer 2 — behavioral evals (<code>npm run eval</code>)</dt>
+        <dd>Non-deterministic. Uses <a href="https://www.promptfoo.dev">promptfoo</a> to feed the reviewer agents' own instructions plus a golden fixture to the Anthropic API and asserts the verdict token (a clean fixture must produce <code>APPROVED</code>, a flawed one <code>CHANGES_REQUESTED</code>). Costs API tokens, so it is manual and on-demand, never on the commit gate.</dd>
+      </div>
+
+      <p>Other deliberate choices:</p>
+
+      <ul>
+        <li><strong>Node / ESM.</strong> Parity with the existing <code>scripts/*.mjs</code> tooling, and promptfoo is Node-native. No new language was added to the repo.</li>
+        <li><strong>Scoped to <code>plugins/relay/</code>.</strong> Every structural check reads only the relay plugin surface (plus <code>docs/</code> and <code>documentation/</code> as targets). It never treats <code>plugins/prp-core/</code> — the upstream reference plugin — as relay code.</li>
+        <li><strong>Precision over recall.</strong> A check that fires on legitimate content is worse than useless: it can never let the tree go green, and it trains people to ignore it. Checks are anchored to narrow, must-resolve reference classes rather than broad greps, so example paths, historical citations, and target-project artifacts are not flagged.</li>
+        <li><strong>The tests are authored by relay's own test pair.</strong> <code>docs/context/methodology.md</code> declares <code>test_frameworks: ["node:test"]</code> with <code>tdd: false</code> (test-after). Under R-X strict the Implementer authors zero test files; the <code>test-writer</code> / <code>test-reviewer</code> pair authors and maintains the checker unit tests after the implementation is code-reviewed. See <a href="../concepts/tdd-track.html">the test track</a>.</li>
+      </ul>
+
+      <h2 id="the-checks">The eight static checks</h2>
+
+      <p><code>npm run validate</code> runs each check module under <code>scripts/validate/checks/</code> and aggregates the findings. Each check is a pure function returning <code>{ name, ok, findings }</code> plus a thin file-reading wrapper.</p>
+
+      <table>
+        <thead>
+          <tr><th>Check</th><th>What it asserts</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>version-parity</code></td><td><code>plugins/relay/.claude-plugin/plugin.json</code> version equals the latest released heading in <code>documentation/changelog.html</code> (the AGENTS.md lock-step rule).</td></tr>
+          <tr><td><code>native-validate</code></td><td>Wraps <code>claude plugin validate ./plugins/relay --strict</code> and surfaces its failures (malformed frontmatter, kebab-case, wrong-type fields). Degrades cleanly if the <code>claude</code> CLI is absent.</td></tr>
+          <tr><td><code>registration-parity</code></td><td>The set of shipped commands and agents matches what the doc site registers — NAV, the search index, and the changelog stay in sync (the three-file rule).</td></tr>
+          <tr><td><code>path-existence</code></td><td>Referenced paths that must resolve in this repo actually exist (script paths, plugin-asset references, intra-repo doc links).</td></tr>
+          <tr><td><code>dispatch-graph</code></td><td>Every <code>subagent_type</code> a command dispatches, and every <code>Next: /relay-x</code> pointer, resolves to a real agent or command file.</td></tr>
+          <tr><td><code>frontmatter-schema</code></td><td>Frontmatter conforms to a per-type JSON Schema (via ajv): commands, agents, and skills each have their required fields.</td></tr>
+          <tr><td><code>artifact-naming</code></td><td>Pipeline artifacts under <code>PRPs/plans/</code> follow the naming convention (no doubled <code>.plan.review.jsonl</code> segment).</td></tr>
+          <tr><td><code>bootstrap-parity</code></td><td>The context-builder skill emits both a <code>.sh</code> and a <code>.ps1</code> worktree-bootstrap template, so Windows hosts have parity.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Full per-check report</div>
+        <p>For each check — the functionality it guards, a concrete passing example, and a concrete failing example with the exact finding text — see the <a href="../reference/validation-checks.html">Validation checks</a> reference.</p>
+      </div>
+
+      <h2 id="running">Running it</h2>
+
+      <p>Prerequisites: Node 18+ and <code>npm install</code> once (this is the repo's first package manifest — the plugin itself still ships no runtime dependency).</p>
+
+      <pre><code class="language-bash">npm install                 # one-time, installs the suite's dev dependencies
+npm run validate            # run all eight static checks
+node --test scripts/validate/checks/*.test.mjs scripts/eval.test.mjs   # the unit tests for the checks
+npm run eval                # behavioral evals of the reviewer agents (needs ANTHROPIC_API_KEY)
+npm run setup-hooks         # one-time: install the pre-commit gate</code></pre>
+
+      <p><code>npm run validate</code> prints one line per check and a summary, and exits non-zero if any check found a violation:</p>
+
+      <pre><code class="language-default">[PASS] version-parity
+[FAIL] registration-parity
+  documentation/assets/data/search-index.json — command "relay-worktree" is registered under plugins/relay/commands/ but is not referenced in the search index
+...
+2 passed, 6 failed (8 checks run)</code></pre>
+
+      <p>After <code>npm run setup-hooks</code>, the same command runs automatically on every <code>git commit</code> and blocks the commit on any violation. The hook is committed under <code>.githooks/</code>; <code>setup-hooks</code> points git's <code>core.hooksPath</code> at it (a per-clone git-config step, not auto-applied on clone).</p>
+
+      <p><code>npm run eval</code> without <code>ANTHROPIC_API_KEY</code> set exits cleanly with a guidance message rather than failing — the eval layer is optional and never blocks a routine task.</p>
+
+      <h2 id="cost">What it costs to run</h2>
+
+      <div class="kv">
+        <dt>Static layer (<code>npm run validate</code> + unit tests)</dt>
+        <dd>Effectively free — no network, no LLM, a few seconds of local CPU. Run it as often as you like; the pre-commit hook does.</dd>
+        <dt>Eval layer (<code>npm run eval</code>)</dt>
+        <dd>One Anthropic API call per fixture case. That is real token spend and takes on the order of seconds-to-minutes per model, which is exactly why it is a separate, manual command and not part of the commit gate. Run it when you change a reviewer agent's prompt, not on every edit.</dd>
+      </div>
+
+      <div class="callout callout--warn">
+        <div class="callout__title">Rebuilding the suite through the relay pipeline is expensive</div>
+        <p>The suite was built by dogfooding relay on itself (<code>/relay-prd</code> then <code>/relay-execute</code>). That autonomous run spanned roughly fifty agent invocations across five phases — every phase runs a writer/reviewer pair, and the semantic code-review layer is strict enough that trivial changes can take several implement attempts. Extending the suite <em>through the full autonomous pipeline</em> is therefore a meaningful token spend. A small, well-scoped change — adding one check, tightening one regex — is far cheaper to do by hand and then let the test pair cover test-after.</p>
+      </div>
+
+      <h2 id="maintaining">Maintaining the suite</h2>
+
+      <h3 id="add-a-check">Adding a check</h3>
+
+      <ol>
+        <li>Create <code>scripts/validate/checks/&lt;name&gt;.mjs</code>. Export a pure function <code>check&lt;Name&gt;(inputs)</code> that returns <code>{ name, ok, findings: [{ message, file, line }] }</code>, plus a thin wrapper that reads the real files and delegates to it. Mirror an existing check, for example <code>version-parity.mjs</code>.</li>
+        <li>Register it in the runner's check list in <code>scripts/validate/index.mjs</code>.</li>
+        <li>Scope every file read to <code>plugins/relay/</code>, <code>docs/</code>, or <code>documentation/</code>. Never read <code>plugins/prp-core/</code>.</li>
+        <li>Let the test pair add the unit test (<code>scripts/validate/checks/&lt;name&gt;.test.mjs</code>) test-after — the Implementer must not author test files (R-X strict). If you are hand-editing, mirror the pure-function-with-in-memory-fixtures style of the existing <code>*.test.mjs</code>.</li>
+      </ol>
+
+      <h3 id="keeping-green">Keeping it green</h3>
+
+      <ul>
+        <li><strong>Fix the cause, not the check.</strong> When a check turns red, the finding is almost always a real inconsistency — fix the underlying file. The suite has already caught broken frontmatter and dead references this way.</li>
+        <li><strong>When a check false-positives, tighten it — do not weaken it.</strong> Narrow the reference class or add a precise exclusion for legitimate content (examples, historical citations). Never broaden it into a shape that can never go green, and never delete a test to force a pass — the <a href="post-green-review.html">post-green reviewer</a> blocks that.</li>
+        <li><strong>Renames ripple.</strong> If you add, rename, or remove a command or agent, <code>registration-parity</code> will fail until you update the three coupled doc-site files (NAV, search index, changelog) per <a href="../AGENTS.md">AGENTS.md</a> §6. That is the check doing its job.</li>
+        <li><strong>Cutting a doc-site release bumps the plugin manifest.</strong> <code>version-parity</code> enforces the AGENTS.md §7.5 lock-step rule: a minor or major changelog release must bump <code>plugin.json</code> to the same value in the same commit.</li>
+      </ul>
+
+      <h2 id="in-development">Using it in day-to-day development</h2>
+
+      <ul>
+        <li><strong>Let the hook run.</strong> After the one-time <code>npm run setup-hooks</code>, every commit is validated automatically. A blocked commit is the suite telling you a contract is broken — read the named check and <code>file:line</code>, fix it, and re-commit.</li>
+        <li><strong>Run it before opening a PR.</strong> <code>npm run validate</code> is fast; running it (and the unit tests) before pushing keeps reviewers focused on substance instead of consistency nits.</li>
+        <li><strong>Run the evals when you touch a reviewer prompt.</strong> If you edit <code>test-reviewer.md</code> (or another reviewer agent), <code>npm run eval</code> checks that a clean fixture still earns <code>APPROVED</code> and a flawed one <code>CHANGES_REQUESTED</code> — a cheap guard against a prompt edit that silently changes a verdict. Mind the token cost.</li>
+        <li><strong>Treat a red check as signal, not noise.</strong> The checks are deliberately narrow, so a failure is very likely a genuine problem rather than a false alarm.</li>
+      </ul>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

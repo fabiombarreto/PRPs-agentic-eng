@@ -16,6 +16,9 @@ wheels/
 # relay — per-feature worktrees (ephemeral)
 .worktrees/
 
+# Node — validation harness dependencies (package-lock.json stays committed)
+node_modules/
+
 # Claude Code — per-user local overrides (project-wide settings.json stays committed)
 .claude/settings.local.json
 .claude/

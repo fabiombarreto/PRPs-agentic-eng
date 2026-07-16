@@ -30,13 +30,13 @@ phases.
 - **Used by:** A1–A4 infra components, Test Runner (B1). Graceful degradation
   when absent: Test Runner runs locally and flags the risk in the report.
 
-## GitHub CLI (`gh`) (planned — Phase 3/4)
+## GitHub CLI (`gh`)
 
 - **Purpose:** open pull requests from the Report + PR Creator agent; merge
-  PRs during `/approve-implementation`.
+  PRs during `/relay-approve <pr>`.
 - **Auth type:** the user's local `gh` credential — the plugin never stores
   tokens.
-- **Used by:** PR Creator agent, `/approve-implementation` command.
+- **Used by:** PR Creator agent, `/relay-approve <pr>` command.
 
 ## Git worktrees (planned — Phase 3)
 

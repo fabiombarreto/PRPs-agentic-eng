@@ -1,0 +1,18 @@
+{
+  "name": "relay-repo",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "validate": "node scripts/validate/index.mjs",
+    "eval": "node scripts/eval.mjs",
+    "setup-hooks": "node scripts/setup-hooks.mjs"
+  },
+  "devDependencies": {
+    "ajv": "^8.20.0",
+    "node-html-parser": "^9.0.0",
+    "promptfoo": "^0.121.18"
+  }
+}

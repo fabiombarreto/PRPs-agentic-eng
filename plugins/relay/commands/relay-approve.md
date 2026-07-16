@@ -131,6 +131,10 @@ If the file does not exist, note it and continue (the docs-updater will attempt 
 
 Record `target_root` as the repository root (the current working directory, resolved absolutely).
 
+### P7 — Read `docs_sync` from `docs/context/methodology.md`
+
+Read `<target_root>/docs/context/methodology.md` frontmatter and extract the `docs_sync` key, recording `docs_sync_enabled` (boolean). Default `true` when the key is absent, mirroring the `tdd` absence-handling precedent and `docs-updater.md`'s own default-true-when-absent handling of the same key (`docs/context/methodology.md:45-65`). If `docs/context/methodology.md` itself does not exist, also default `docs_sync_enabled = true` and note the absence — do not HALT (mirrors the existing soft-fail treatment of a missing `orchestrator-run.json` in P6).
+
 ---
 
 ## Phase 1: MERGE
@@ -274,7 +278,9 @@ Emit an actionable message:
 
 ## Phase 3: DOCS CYCLE
 
-If `no_docs_flag = true`, skip this phase entirely and proceed to Phase 4.
+If `no_docs_flag == true` OR `docs_sync_enabled == false`, skip this phase entirely and proceed to Phase 4 (log a one-line skip note naming which of the two gated it). Record `docs_sync_outcome = "SKIPPED (--no-docs)"` when `no_docs_flag == true` (checked first — `--no-docs` takes precedence over `docs_sync_enabled` when both are true), otherwise `docs_sync_outcome = "SKIPPED (docs_sync: false)"` when only `docs_sync_enabled == false` triggered the skip.
+
+This pass is **idempotent** against implement-time sync: when `/relay-implement`'s own docs-sync sub-phase (Phase A.3.5) already synced `docs/` for this feature, `docs-updater`'s comparison logic evaluates against the *current* state of each target file (not merely diff presence), so an edit already present in `docs/` produces no delta on this second pass — operators should expect a low-delta or near-empty manifest in that case, not treat it as a failure. The `docs-updater` invocation for this phase may also consult the implement-time manifest at `PRPs/reports/<feature>/docs-update.md` (when present) to avoid re-proposing edits already applied — noted here as documentation of existing/expected behavior, not a new agent input or contract change.
 
 Set:
 ```
@@ -344,7 +350,7 @@ Re-read `PRPs/reports/<feature>/docs-update.md` and confirm it ends with `*Statu
 
 ## Phase 4: DOCS COMMIT + PUSH
 
-If `no_docs_flag = true`, skip this phase.
+If `no_docs_flag == true` OR `docs_sync_enabled == false`, skip this phase entirely (log a one-line skip note naming which of the two gated it). Record `docs_sync_outcome = "SKIPPED (--no-docs)"` when `no_docs_flag == true` (checked first — `--no-docs` takes precedence over `docs_sync_enabled` when both are true), otherwise `docs_sync_outcome = "SKIPPED (docs_sync: false)"` when only `docs_sync_enabled == false` triggered the skip.
 
 ### Step 4.1 — Stage docs changes
 
@@ -400,7 +406,7 @@ Emit:
 >
 > Merge:      MERGED at `<mergedAt>`
 > Cleanup:    worktree removed, local branch deleted, remote branch deleted, prune complete
-> Docs:       [APPROVED + pushed to `<base-branch>` | skipped (--no-docs) | APPROVED + push FAILED (see FAILED_DOCS_PUSH_BLOCKED)]
+> Docs:       [APPROVED + pushed to `<base-branch>` | skipped (--no-docs) | skipped (docs_sync: false) | APPROVED + push FAILED (see FAILED_DOCS_PUSH_BLOCKED)]
 > Manifest:   PRPs/reports/<feature>/docs-update.md — *Status: APPROVED*
 > Verdict log: PRPs/reports/<feature>/docs-review.jsonl
 >

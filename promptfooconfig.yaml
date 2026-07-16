@@ -1,0 +1,50 @@
+# Behavioral evals for the `test-reviewer` agent (plugins/relay/agents/test-reviewer.md).
+#
+# Feeds the agent's own verbatim instructions plus the existing golden
+# synthetic-b8-fixture-1 clean/dirty fixtures as input, and asserts the
+# byte-exact verdict token the agent must emit: `APPROVED` for the clean
+# fixture, `CHANGES_REQUESTED` for the dirty fixture.
+#
+# Run via `npm run eval` (requires ANTHROPIC_API_KEY; see scripts/eval.mjs).
+# All file:// paths below are repo-root-relative (they resolve relative to
+# this file's directory). Scoped to plugins/relay/ only — the upstream
+# reference plugin tree is intentionally out of scope for this eval.
+description: relay test-reviewer verdict evals over the synthetic-b8-fixture-1 golden fixtures
+
+prompts:
+  - |
+    {{agentInstructions}}
+    ---
+    Review the following TDD suite and emit your B8 verdict line.
+    ## mini-PRD
+    {{miniPrd}}
+    ## suite manifest (tdd-initial-suite.diff)
+    {{suite}}
+
+providers:
+  # Model id is configurable — any current Claude model works; a cheaper
+  # tier is acceptable since only the verdict token is asserted.
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+
+defaultTest:
+  vars:
+    agentInstructions: file://plugins/relay/agents/test-reviewer.md
+
+tests:
+  - description: clean fixture → APPROVED
+    vars:
+      miniPrd: file://PRPs/reports/tdd-writer-reviewer/synthetic-b8-fixture-1/clean/mini-prd.md
+      suite:   file://PRPs/reports/tdd-writer-reviewer/synthetic-b8-fixture-1/clean/tdd-initial-suite.diff
+    assert:
+      - type: contains
+        value: APPROVED
+      - type: not-contains
+        value: CHANGES_REQUESTED
+
+  - description: dirty fixture → CHANGES_REQUESTED
+    vars:
+      miniPrd: file://PRPs/reports/tdd-writer-reviewer/synthetic-b8-fixture-1/dirty/mini-prd.md
+      suite:   file://PRPs/reports/tdd-writer-reviewer/synthetic-b8-fixture-1/dirty/tdd-initial-suite.diff
+    assert:
+      - type: contains
+        value: CHANGES_REQUESTED
