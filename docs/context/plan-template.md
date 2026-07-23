@@ -108,7 +108,14 @@ mandatory fields.
 > sections** (Summary through Notes) AFTER the `## Source` prefix.
 > Including the prefix as section #1 yields **15** in total — and
 > that is what plan-reviewer R2 walks. Both views are consistent;
-> the template treats Source as a first-class section.
+> the template treats Source as a first-class section. A plan whose
+> target project declares `figma_track: true` AND whose `design_source`
+> Metadata row reads `figma` carries one additional conditional
+> section (`## Design Source`, immediately after `## Metadata`) — 16
+> sections total for that case only. Every other plan (`figma_track`
+> absent/false, or `design_source: none`) stays at the fixed 15 — the
+> conditional section adds nothing when absent, preserving the
+> "nothing changes when figma_track is off" invariant.
 
 ```markdown
 # Feature: {Phase Name} ({Phase N} of {feature})
@@ -184,7 +191,35 @@ mandatory fields.
 6. `## Metadata`
 
    Table with the keys: Type, Complexity, Systems Affected,
-   Dependencies, Estimated Tasks, Source PRD line ref.
+   Dependencies, Estimated Tasks, Source PRD line ref, and,
+   conditionally, `design_source`.
+
+   **`design_source` (conditional).** Present (`figma | none`) only
+   when the target project's `docs/context/methodology.md` declares
+   `figma_track: true`; absent entirely otherwise. Never inferred —
+   sourced non-heuristically by `plan-writer` (PRD mode: copied
+   verbatim from the source PRD's `## Design Source` row for this
+   phase; description mode: derived from an explicit `--design-spec`
+   CLI flag) and structurally checked (never inferred or inserted) by
+   `plan-reviewer`'s `R-COH-DESIGN-SOURCE-MISSING`. See
+   `plugins/relay/agents/plan-writer.md` /
+   `plugins/relay/agents/plan-reviewer.md`.
+
+   **Conditional `## Design Source` section (only when
+   `design_source: figma`).** Immediately follows `## Metadata`, before
+   `## Mandatory Reading`, ONLY when the Metadata table's
+   `design_source` row reads `figma`. Table of this phase's in-scope
+   frames drawn from the referenced APPROVED Design Spec:
+
+   | Node-id | Name-path | Route | Viewport | Diff threshold | Ref PNG path |
+   |---------|-----------|-------|----------|-----------------|---------------|
+   | {node-id} | {name-path} | {route} | {viewport} | {diff threshold} | `PRPs/designs/<feature>/refs/<node-id>.png` |
+
+   Fully ABSENT (not an empty section — no heading at all) when
+   `design_source: none` or the `design_source` row itself is absent
+   (i.e. `figma_track` off). `plan-reviewer`'s R2 dual-branch note on
+   item 6 enforces the presence/absence match between the Metadata row
+   and this section.
 
 7. `## Mandatory Reading`
 

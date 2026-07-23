@@ -125,6 +125,36 @@ This is the only file this command ever writes.
 
 ---
 
+## Visual Fidelity section (figma_track-gated)
+
+In addition to the seven-field case table above, append a "## Visual
+Fidelity" section to the written `qa-report.md` — present ONLY when
+BOTH conditions hold: (1) the target project's
+`docs/context/methodology.md` declares `figma_track: true`, and (2)
+at least one `phase-*/visual/*/fidelity-report.json` artifact is
+found under the resolved `<feature>`'s `PRPs/reports/<feature>/`
+directory (the same glob-equivalent discovery walk
+`scripts/generate-final-report.mjs`'s `findFidelityReportPaths` uses
+over `phase-*/visual/*/fidelity-report.json`). Absent entirely — no
+heading, no "N/A" placeholder — for a non-Figma project or when no
+fidelity artifact exists yet, reproducing the identical
+`figma_track_declared`-gated omission idiom `/relay-implement`'s own
+`Visual:` line already established (Figma Implementation Track Phase
+7).
+
+When present, aggregate every discovered `fidelity-report.json`'s
+frame entries — support both `compare.mjs`'s bare-array shape and a
+`{ frames: [...] }`-wrapped shape, same as the aggregation approach
+in Task 3 of this phase's plan — into a table: one row per frame,
+carrying `node_id`, `route`, `diff_percent`, `threshold`, and
+`status`. This section is informational, sourced entirely from
+already-persisted evidence on disk — it never runs the
+visual-verification tooling itself (that is `/relay-implement`'s
+Phase A.3.4 or the standalone `/relay-visual-review` command's job;
+this command never dispatches an agent, per its Constraints below).
+
+---
+
 ## Phase 2 — Preconditions (HALTs)
 
 Check these before writing any file.

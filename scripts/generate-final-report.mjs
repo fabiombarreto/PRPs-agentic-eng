@@ -122,6 +122,49 @@ function loadAttemptRecords(reportsDir) {
   });
 }
 
+function findFidelityReportPaths(reportsDir) {
+  // Discovers <reports-dir>/phase-*/visual/*/fidelity-report.json artifacts
+  // (glob-equivalent directory walk via node:fs — Figma Implementation
+  // Track Phase 7). Returns [] when the reports dir carries no phase-*
+  // subdirectories or no visual/ artifacts at all (the common case for a
+  // non-Figma project — see loadVisualFidelityFrames' omission idiom).
+  const found = [];
+  if (!existsSync(reportsDir)) return found;
+  for (const entry of readdirSync(reportsDir)) {
+    if (!entry.startsWith('phase-')) continue;
+    const phaseDir = join(reportsDir, entry);
+    if (!statSync(phaseDir).isDirectory()) continue;
+    const visualDir = join(phaseDir, 'visual');
+    if (!existsSync(visualDir) || !statSync(visualDir).isDirectory()) continue;
+    for (const attempt of readdirSync(visualDir)) {
+      const attemptDir = join(visualDir, attempt);
+      if (!statSync(attemptDir).isDirectory()) continue;
+      const reportPath = join(attemptDir, 'fidelity-report.json');
+      if (existsSync(reportPath)) {
+        found.push({ phase: entry, attempt, path: reportPath });
+      }
+    }
+  }
+  return found;
+}
+
+function loadVisualFidelityFrames(reportsDir) {
+  // Aggregates every discovered fidelity-report.json's frame entries.
+  // compare.mjs (the FULL rung) writes a bare JSON array; the degraded-rung
+  // stub and hand-authored fixtures may wrap it as `{ frames: [...] }` —
+  // support both shapes rather than assuming one.
+  const frames = [];
+  for (const { phase, attempt, path: reportPath } of findFidelityReportPaths(reportsDir)) {
+    const data = readJsonIfExists(reportPath);
+    if (!data) continue;
+    const entries = Array.isArray(data) ? data : Array.isArray(data.frames) ? data.frames : [];
+    for (const frame of entries) {
+      frames.push({ phase, attempt, ...frame });
+    }
+  }
+  return frames;
+}
+
 function buildFailureHistogram(attempts) {
   const histogram = { legitimate: 0, infra: 0, flaky: 0, weak_test: 0, unclassified: 0 };
   for (const { record } of attempts) {
@@ -314,6 +357,24 @@ function buildMarkdown(reportsDir, runData, reviewData, attempts) {
     if (runData?.tdd_reviews) lines.push(`- B8 reviews: \`${runData.tdd_reviews}\``);
     if (!runData?.tdd_initial_suite_diff && !runData?.tdd_reviews) {
       lines.push('- (no TDD artifacts recorded in run.json — may have been a degraded run)');
+    }
+    lines.push('');
+  }
+
+  // Visual Fidelity (Figma Implementation Track Phase 7) — omitted entirely
+  // (no heading, no "N/A" placeholder) when zero fidelity-report.json
+  // artifacts are found under the reports dir, reproducing the
+  // figma_track_declared-gated omission idiom /relay-implement's own
+  // `Visual:` line already established.
+  const visualFrames = loadVisualFidelityFrames(reportsDir);
+  if (visualFrames.length > 0) {
+    lines.push('## Visual Fidelity');
+    lines.push('');
+    lines.push('| Phase | Node ID | Route | Diff % | Threshold | Status |');
+    lines.push('|-------|---------|-------|--------|-----------|--------|');
+    for (const f of visualFrames) {
+      const diffPct = f.diff_percent == null ? '—' : f.diff_percent;
+      lines.push(`| ${f.phase} | ${f.node_id ?? '—'} | ${f.route ?? '—'} | ${diffPct} | ${f.threshold ?? '—'} | ${f.status ?? '—'} |`);
     }
     lines.push('');
   }

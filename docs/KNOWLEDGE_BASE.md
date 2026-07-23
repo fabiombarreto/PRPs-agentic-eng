@@ -23,13 +23,19 @@ User-facing intro: see `README.md` at the repository root.
 
 → docs/context/architecture.md — plugin layout, phases, relationship to upstream prp-core, Pillar 2/3 docs-sync split (implement-time primary, approve-time safety net)
 → docs/context/conventions.md — frontmatter, file naming, hook script conventions
-→ docs/context/integrations.md — Claude Code runtime, Context7 MCP (planned), Docker (planned)
+→ docs/context/integrations.md — Claude Code runtime, Context7 MCP (planned), Figma MCP (planned), Docker (planned)
 → docs/context/constraints.md — early-stage status, graceful-degradation mandate
 → docs/context/methodology.md — single source of truth for methodology declarations (TDD opt-in)
 → docs/context/prd-template.md — canonical shape of every PRD the pipeline produces (fork of prp-core with relay adaptations)
 → docs/context/settings-allowlist.md — catalog of allow/deny patterns the context-builder emits into `.claude/settings.json` for each target project
 → docs/context/redaction-policy.md — catalog of patterns the Test Runner applies when writing reports, so secret values never reach a committed file
 → docs/context/test-output-schema.md — canonical JSON schema every test framework output is normalized into (consumed by B3/B4/B5/B6 of the Test Runner)
+→ docs/context/component-map-template.md — canonical shape of `docs/design/component-map.md`, the versioned Figma-to-code component map that `design-map-writer`/`design-map-reviewer` reference as authoritative (Figma Implementation Track Phase 3)
+→ docs/context/design-spec-template.md — canonical shape of `PRPs/designs/<feature>/design-spec.md`, the per-feature, human-approved Design Spec that `design-spec-writer`/`design-spec-reviewer` reference as authoritative (Figma Implementation Track Phase 4)
+
+## Design System (Figma Track)
+
+→ docs/design/dogfood-runbook.md — checklist a human operator runs against a real downstream project to exercise the Figma Implementation Track's Phase 7 end-to-end success signal
 
 ## Domain
 

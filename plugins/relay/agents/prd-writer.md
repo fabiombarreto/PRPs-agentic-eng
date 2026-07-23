@@ -275,6 +275,33 @@ Ask the scope and risk questions:
 >    Each written as Given/When/Then or explicit input/output.
 > 9. **Open questions** — what's still unsettled?
 
+**Item 7.5 — Per-phase Figma declaration (conditional, `figma_track:
+true` only).** When the target's `docs/context/methodology.md`
+declares `figma_track: true`, immediately after capturing the
+Implementation phases list (item 7 above), ask explicitly, for EVERY
+row just captured, whether that phase implements a layout already
+defined in Figma:
+
+> For each phase above, does it implement a layout already defined in
+> Figma?
+> - If yes: share the Figma URL and the specific frame(s)/name-path(s)
+>   that phase implements.
+> - If no: a brief confirmation is enough — say "no" or "not
+>   applicable".
+>
+> Please answer for every phase listed — including phases that don't
+> obviously look like frontend work (a `figma_track: true` project may
+> still have backend-only or docs-only phases; those get an explicit
+> "no" too, never a silent skip).
+
+Every phase gets an answer; none may be silently skipped. Record the
+per-phase declarations (Figma URL/frames, or an explicit "none") for
+use in Step 7.4 item 15.5 (`## Design Source` section assembly).
+
+When `figma_track` is `false` or absent, item 7.5 is a silent no-op —
+Phase 6 proceeds exactly as it does today; no additional question is
+asked.
+
 If the user leaves an item deferred, accept it and record it as an
 Open Question or as `TBD - needs validation` in the corresponding
 PRD section. Do not re-ask.
@@ -374,6 +401,15 @@ Fill sections in this order (from the template):
 13. Solution Detail (MoSCoW, MVP Scope, User Flow)
 14. Technical Approach (Feasibility, TDD routing, Architecture Notes, Technical Risks)
 15. Implementation Phases (table + Phase Details)
+15.5. `## Design Source` (conditional — only when
+    `docs/context/methodology.md` declares `figma_track: true`) — one
+    row per `## Implementation Phases` table row, per
+    `docs/context/prd-template.md`'s registered shape, using the
+    per-phase answers captured in Phase 6 item 7.5. Every phase row
+    MUST have a corresponding declaration row — never omit one,
+    including phases that don't obviously look like frontend work.
+    When `figma_track` is `false` or absent, this section is NOT
+    emitted at all — no heading, no placeholder.
 16. Decisions Log
 17. Research Summary (Market Context + Technical Context)
 18. Trailing status lines

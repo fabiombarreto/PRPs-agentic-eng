@@ -195,6 +195,23 @@ Current value of `tdd` in `docs/context/methodology.md`: **{true | false}**.
 
 ---
 
+## Design Source
+
+*(Conditional — present ONLY when the target project's
+`docs/context/methodology.md` declares `figma_track: true`; absent
+entirely, not an empty section, when `figma_track` is `false` or
+absent.)*
+
+One row per `## Implementation Phases` table row above — no phase may
+be silently omitted, including phases that don't obviously look like
+frontend work:
+
+| Phase # | Declaration (figma \| none) | Figma URL / frames (when figma) |
+|---------|------------------------------|-----------------------------------|
+| {#} | {figma \| none} | {Figma URL / frame reference, or "-" when none} |
+
+---
+
 ## Decisions Log
 
 | Decision | Choice | Alternatives | Rationale |

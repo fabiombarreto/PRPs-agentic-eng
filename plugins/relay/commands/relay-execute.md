@@ -757,6 +757,24 @@ Append a completion record to `orchestrator_run_log`:
 }
 ```
 
+**`visual_outcome` field (Figma Implementation Track Phase 7 — gated,
+mirrors `/relay-implement`'s own `Visual:` line idiom exactly).** When
+the just-adopted `/relay-implement` protocol (Step A.4.1) emitted a
+`Visual:` line in its Final output surface for this phase — present
+only when that phase's own `figma_track_declared == true` (per
+`relay-implement.md` Phase A.0) — capture the line's `<visual_outcome>`
+value (`APPROVED` / a named degraded rung / `BUDGET_EXCEEDED` /
+`BUDGET_EXCEEDED_REVERTED` / `SKIPPED (not figma-sourced)` /
+`SKIPPED (--no-visual)`) and add it to the completion record above as
+a `visual_outcome` key. When the `Visual:` line was absent for this
+phase (`figma_track_declared == false`, or the target project does
+not declare `figma_track` at all), the `visual_outcome` key is
+OMITTED from the completion record entirely — not `null`, a
+genuinely absent key, matching the line-omission idiom
+`/relay-implement`'s own `Visual:` line already established (PRD AC-1
+of `figma-implementation-track.prd.md`): a non-Figma project's
+`orchestrator-run.json` stays byte-identical to today's.
+
 Write / overwrite `PRPs/reports/<feature>/orchestrator-run.json` with the full log:
 
 ```json
@@ -797,6 +815,33 @@ When Phase A.1 finds no more actionable rows and `phases_completed` is non-empty
 > Next step (Pillar 3): review the changes, run any manual tests, then:
 >   1. /relay:relay-commit <feature>  — commit locally (reversible; no push)
 >   2. /relay:relay-pr <feature>      — push branch + open PR
+
+**Gated visual-fidelity rollup line (Figma Implementation Track Phase
+7).** Immediately after the "Orchestrator audit log at ..." line
+above, add one additional line — present ONLY when at least one
+completion record in `orchestrator_run_log` carries a `visual_outcome`
+key (i.e. `figma_track_declared == true` for at least one completed
+phase this session); OMITTED ENTIRELY (no line, no `SKIPPED` marker,
+nothing) when zero completion records carry the key, so a non-Figma
+project's terminal summary stays byte-identical to today's:
+
+> Visual fidelity: <N> phase(s) APPROVED, <M> degraded, <K>
+> mismatch/budget-exceeded (see
+> PRPs/reports/<feature>/orchestrator-run.json).
+
+Tally `<N>` / `<M>` / `<K>` from every completion record's
+`visual_outcome` value across the session: `<N>` counts `APPROVED`;
+`<M>` counts any named degraded rung (`DEGRADED_STATIC_ONLY` /
+`DEGRADED_PROVISION_FAILED` / `SKIPPED (not figma-sourced)` /
+`SKIPPED (--no-visual)`); `<K>` counts `BUDGET_EXCEEDED` /
+`BUDGET_EXCEEDED_REVERTED`. Phases without a `visual_outcome` key
+(i.e. `figma_track_declared == false` for that phase, or the target
+project does not declare `figma_track` at all — the same omission
+condition defined above) are excluded from all three counts; note
+this is distinct from a phase whose own plan simply isn't
+Figma-sourced under an active `figma_track_declared == true` project
+— that case still carries a `visual_outcome` key
+(`SKIPPED (not figma-sourced)`) and is counted in `<M>` above.
 
 ### HALT paths
 

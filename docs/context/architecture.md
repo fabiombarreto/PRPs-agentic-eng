@@ -22,7 +22,7 @@ The plugin is composed of four Claude Code asset types:
 | Type | Folder | Purpose | Status |
 |------|--------|---------|--------|
 | Skills | `plugins/relay/skills/` | Reusable, prompt-based capabilities loaded on demand. Currently: `context-builder`. | 1 present |
-| Commands | `plugins/relay/commands/` | `/relay-*` slash commands users invoke. | 15 implemented (including `/relay-commit` v0.14.0, dual-mode since v0.16.0, `/relay-pr` v0.15.0, `/relay-approve` v0.17.0, and `/relay-qa-report` as the QA / Support command); see `docs/api-reference.md` |
+| Commands | `plugins/relay/commands/` | `/relay-*` slash commands users invoke. | 18 implemented (including `/relay-commit` v0.14.0, dual-mode since v0.16.0, `/relay-pr` v0.15.0, `/relay-approve` v0.17.0, `/relay-qa-report` as the QA / Support command, and three standalone `figma_track`-gated Figma Implementation Track commands — `/relay-design-map`, `/relay-design-spec`, `/relay-visual-review`); see `docs/api-reference.md` |
 | Agents | `plugins/relay/agents/` | Specialized sub-agents (PRD Writer, Plan Writer, Test Runner, etc.). | planned, not yet implemented |
 | Hooks | `plugins/relay/hooks/` | Event-triggered scripts (Stop, PostToolUse, etc.) wired in `hooks/hooks.json`. | planned, not yet implemented |
 
@@ -43,13 +43,29 @@ plugin covers three pillars:
 1. **Initialization** — `context-builder` skill (present) generates
    `/context`, `/domain`, `/libs` plus `decision-gate.md`, `decisions.md`,
    `anti-patterns.md` for any target project. Validates MCP Context7 before
-   starting and auto-generates `docs/libs/` when available.
+   starting and auto-generates `docs/libs/` when available. The Figma MCP
+   server (planned, Pillar 2 extension) is confirmed reachable from
+   Task-dispatched subagents as well as the main session — see
+   `docs/decisions.md` 2026-07-22 — though the baseline design keeps Figma
+   MCP calls in the interactive commands only.
 2. **Implementation (single command)** — a chain of writer/reviewer agent
    pairs: PRD → Plan → (optional TDD) → Implementer → Code Reviewer →
    Test Runner (with auto-correction loop). Terminates with all phases
    complete and uncommitted changes in `.worktrees/<feature>/`. Does NOT
    commit or create a PR — that boundary is permanent (see
-   `docs/decisions.md` 2026-05-18). Immediately after Code Reviewer
+   `docs/decisions.md` 2026-05-18). When the target project declares
+   `figma_track: true` and the plan being implemented carries
+   `design_source: figma`, immediately after Code Reviewer returns
+   `APPROVED` — and before the docs-sync pass below —
+   `/relay-implement`'s `Phase A.3.4` dispatches the `visual-verifier`
+   agent non-interactively to orchestrate the self-contained
+   `plugins/relay/scripts/visual/` tooling (provision → capture →
+   compare) against the plan's `## Design Source` table and the
+   referenced Design Spec, returning `VISUAL_VERIFIED` / `VISUAL_DEGRADED`
+   / `VISUAL_MISMATCH` and writing `fidelity-report.json`; bounded by its
+   own `max_visual_retries` budget and a per-invocation `--no-visual`
+   flag, always non-blocking (see `docs/decisions.md` 2026-07-23
+   Visual-verification loop). Immediately after Code Reviewer
    returns `APPROVED` and before the phase's D8 state-machine mutations,
    the `docs-updater`/`docs-reviewer` pair runs as the primary pass —
    non-interactively, consuming the working-tree diff / captured attempt
@@ -69,8 +85,9 @@ plugin covers three pillars:
 
 ## Interactivity boundary
 
-Relay is not fully autonomous end-to-end. The pipeline has a single
-explicit boundary at PRD approval:
+Relay is not fully autonomous end-to-end. The pipeline has a primary
+explicit boundary at PRD approval, plus one deliberately recorded
+extension (see the Design Spec bullet below):
 
 - **Interactive (up to and including PRD Reviewer):** the PRD Writer runs
   a 6-phase Q&A flow with the user (Initiate → Foundation → Grounding →
@@ -95,6 +112,19 @@ explicit boundary at PRD approval:
   (dual mode since v0.16.0: an existing worktree → deterministic worktree
   commit; no/other argument → review + commit the current branch);
   `/relay-pr` pushes + opens the PR; `/relay-approve` merges and cleans up.
+- **Deliberately re-extended, `figma_track`-gated:** the standalone
+  `/relay-design-spec` command (Figma Implementation Track, Phase 4)
+  inline-adopts a second writer/reviewer pair —
+  `design-spec-writer`/`design-spec-reviewer` — directly in the main
+  conversation, mirroring the PRD pair's shape: the Writer runs a
+  restate-and-wait gate plus a bounded batched Q&A round, and the
+  Reviewer (`invocation_context: main`) asks the user directly "Aprovar
+  o Design Spec?" and owns the `DRAFT → APPROVED` flip only after both
+  the rubric passing AND the user's own explicit affirmative reply. This
+  is the **second** place in relay (after PRD authoring) where a
+  reviewer dialogues with the user before flipping status. It is gated
+  behind `figma_track: true` and never runs inside the autonomous
+  `/relay-execute` loop. See `docs/decisions.md` [2026-07-23].
 
 The boundary exists because the highest-leverage moment to catch scope
 drift or misunderstanding is during PRD authoring. Resolving ambiguity at
@@ -111,6 +141,9 @@ All pipeline artifacts live under `PRPs/` at the repository root:
 | `PRPs/plans/<feature>-phase-<N>-<slug>.plan.md` | Implementation plans, one per PRD phase (`plan-writer` writes DRAFT; `plan-reviewer` flips to APPROVED). Per-phase pattern recorded in `docs/decisions.md` 2026-04-25. |
 | `PRPs/plans/completed/<basename>.plan.md` | Archived implementation plans after `/relay-implement` reaches APPROVED rubric and performs D8 Mutation b. Archive path codified in `docs/decisions.md` 2026-04-30; relay equivalent of prp-core's `.claude/PRPs/plans/completed/` (the upstream path violates the no-`.claude/`-writes rule). |
 | `PRPs/reports/<feature>/` | Test Runner execution reports, attempts log, per-attempt diffs, final report; when TDD is active, also `tdd-initial-suite.diff` and `tdd-reviews.md`; per-attempt diffs from `/relay-implement` at `phase-<N>/attempts/<i>/diff.patch` plus `record.json` (recorded in `docs/decisions.md` 2026-04-30). |
+| `PRPs/reports/design-map/evidence/` | Persisted Figma evidence bundle (library search results, node-scoped metadata, opportunistic Code Connect map) written by `/relay-design-map` before dispatching `design-map-writer`/`design-map-reviewer` — the sole Figma-fact source either agent is permitted to read (Figma Implementation Track Phase 3; MCP-access-point decision, `docs/decisions.md` 2026-07-22). The durable map itself lives outside `PRPs/`, at `docs/design/component-map.md` — see `docs/decisions.md` 2026-07-23. |
+| `PRPs/designs/<feature>/design-spec.md` | Per-feature Design Spec (written DRAFT by `design-spec-writer`, flipped to `APPROVED` by `design-spec-reviewer` only after the user's own explicit affirmative reply) — a business-grounded, evidence-backed contract turning one feature's Figma design into an artifact the rest of the autonomous pipeline trusts blindly. Sibling paths under the same feature directory: `raw/` (persisted Figma traversal evidence), `refs/` (reference screenshots), `design-spec-review.jsonl` (reviewer's append-only verdict log). Canonical shape: `docs/context/design-spec-template.md`. Figma Implementation Track Phase 4; standalone via `/relay-design-spec`, never invoked by `/relay-execute` — see `docs/decisions.md` [2026-07-23]. |
+| `PRPs/reports/<feature>/phase-<N>/visual/<attempt>/fidelity-report.json` | Per-attempt visual-verification artifact — one entry per in-scope frame (`node_id`, `route`, `diff_percent`, `threshold`, `status`) — written by `compare.mjs` on the FULL rung, or directly by the `visual-verifier` agent on either degraded rung. Sibling artifact root to the same attempt's `diff.patch`. Figma Implementation Track Phase 6; dispatched by `/relay-implement`'s Phase A.3.4 — see `docs/decisions.md` [2026-07-23] Visual-verification loop. |
 | `.worktrees/<feature>/` | Per-feature isolated git worktrees created by `/relay-worktree`. Each worktree checks out branch `feature/<feature>` from the base ref (default `origin/main` → `origin/master` → `HEAD` fallback chain). Idempotent: silently reused when the worktree exists on the expected branch; HALT loud on branch divergence. Worktrees persist until Pillar 3 (`/relay-approve`) removes them post-merge. Path sidesteps the `.claude/` permission gate — documented in `docs/decisions.md` 2026-05-11 D1. |
 
 Artifacts are NEVER written under `.claude/`. Claude Code enforces
@@ -122,7 +155,7 @@ The canonical PRD shape is defined in `docs/context/prd-template.md`.
 
 ## Command surface
 
-Relay exposes **15 commands**, organized by role. Full
+Relay exposes **18 commands**, organized by role. Full
 table and contracts in `docs/api-reference.md`; rationale in
 `docs/decisions.md`. Summary of the philosophy:
 
@@ -143,6 +176,35 @@ table and contracts in `docs/api-reference.md`; rationale in
   (Pillar 2) and Pillar 3 to enumerate per-case test coverage before
   manual testing; it is not part of the autonomous loop and is never
   called by `/relay-execute`.
+- **A standalone, human-triggered setup command sits outside all three
+  pillars.** `/relay-design-map` (Figma Implementation Track, Phase 3)
+  builds or additively refreshes a per-project Figma-to-code component
+  map (`docs/design/component-map.md`) via the `design-map-writer`/
+  `design-map-reviewer` pair; it is invoked once per project (or
+  re-run with `--refresh`), is never called by `/relay-execute`, and
+  gates the one sanctioned `figma_track: true` flip behind an
+  explicit, quoted human confirmation.
+- **A second standalone, human-triggered command inline-adopts a
+  writer/reviewer pair and extends the interactivity boundary.**
+  `/relay-design-spec` (Figma Implementation Track, Phase 4) inline-adopts
+  `design-spec-writer`/`design-spec-reviewer` directly in the main
+  conversation — mirroring how `/relay-prd` bundles
+  `prd-writer`/`prd-reviewer` — rather than `Task`-dispatching an
+  MCP-free pair the way `/relay-design-map` does. It performs all Figma
+  MCP querying itself, in this session, as the Writer's own protocol
+  directs; it is never called by `/relay-execute`. See "Interactivity
+  boundary" above and `docs/decisions.md` [2026-07-23].
+- **A third standalone, human-triggered command mirrors
+  `/relay-implement`'s own visual-verification dispatch, read-only.**
+  `/relay-visual-review` (Figma Implementation Track, Phase 7) is a
+  single-shot, non-mutating standalone re-check of visual fidelity —
+  it dispatches the already-shipped `visual-verifier` agent exactly
+  once against a plan whose `## Metadata` carries `design_source:
+  figma` (reusing `/relay-implement`'s own Phase A.3.4 dispatch
+  payload shape with an `attempt: 1` sentinel, per
+  `/relay-code-review`'s precedent), surfaces `VISUAL_VERIFIED` /
+  `VISUAL_DEGRADED` / `VISUAL_MISMATCH`, performs zero D8 mutations,
+  and is never called by `/relay-execute`.
 
 Happy path for day-to-day use: `/relay-prd` → `/relay-execute` →
 (human validates + manual testing, aided by `/relay-qa-report`) →
@@ -202,6 +264,7 @@ to preserve a clean diff and to avoid spurious formatting churn.
 │   └── prp-core/             REFERENCE — Wirasm upstream, do not modify for relay
 └── docs/                     this documentation tree
     ├── context/              stack, conventions, integrations, constraints
+    ├── design/               Figma Implementation Track design-system artifacts (dogfood-runbook.md; component-map.md when figma_track: true)
     ├── domain/               glossary, flows; areas/ is a stub
     ├── planning/             source-of-truth planning docs (HTML + DOCX)
     └── *.md                  tier-3 developer docs + governance files

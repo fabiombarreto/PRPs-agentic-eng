@@ -16,6 +16,16 @@ Automatic cycle in which the Test Runner identifies failures, asks the
 Implementer to fix them, re-runs the tests, and repeats until green or a
 configurable retry limit is reached.
 
+## Component map
+
+Per-project, cross-feature table (`docs/design/component-map.md`) mapping
+Figma library components to real code components in the target project's
+design system. Built or additively refreshed by `/relay-design-map` via
+the `design-map-writer`/`design-map-reviewer` pair; a durable
+knowledge-base artifact, not a per-run pipeline artifact (see
+`docs/decisions.md` 2026-07-23). Part of the Figma Implementation Track
+(Phase 3).
+
 ## Context-builder
 
 Phase 1 component that documents the target project into structured files
@@ -30,12 +40,52 @@ reviewing. Forces consultation of `docs/decisions.md`,
 `docs/anti-patterns.md`, and `docs/context/architecture.md`. See
 `docs/decision-gate.md`.
 
+## Design Source
+
+`design_source: figma | none` — a mandatory, non-heuristic Metadata field
+on every plan/PRD phase when the target project declares
+`figma_track: true`; NEVER inferred by a reviewer (diverges deliberately
+from the `phase_type` precedent — see `docs/decisions.md` 2026-07-23).
+When `figma`, a conditional `## Design Source` section (table of in-scope
+frames: node-id, name-path, route, viewport, diff threshold, ref PNG
+path) accompanies the field in both `docs/context/plan-template.md` and
+`docs/context/prd-template.md`. Absence under `figma_track: true` is a
+structural `CHANGES_REQUESTED` (`plan-reviewer`'s
+`R-COH-DESIGN-SOURCE-MISSING`, `prd-reviewer`'s
+`R-COH-DESIGN-SOURCE-INCOMPLETE`), never self-healed. Part of the Figma
+Implementation Track (Phase 5).
+
+## Design Spec
+
+Per-feature, human-approved contract (`PRPs/designs/<feature>/design-spec.md`)
+turning one feature's Figma design into a business-grounded,
+evidence-backed intermediate artifact — reference screenshots, an
+embedded token map, REUSE/NEW/ASSUMPTION component-mapping rows (citing
+the Component map's `CM-<n>` ids), an implementation delta, and
+per-frame visual acceptance criteria. Written by `design-spec-writer`,
+inline-adopted (never `Task`-dispatched) alongside `design-spec-reviewer`
+by `/relay-design-spec`; flips to `APPROVED` only after the user's own
+explicit affirmative reply — the single point of human contact with the
+raw Figma interpretation. Part of the Figma Implementation Track
+(Phase 4).
+
 ## Environment probe
 
 Step executed at the start of an autonomous run that detects which
 capabilities are available in the target project (Docker, test frameworks,
 `gh` CLI, etc.) so the pipeline can skip components with absent
 prerequisites.
+
+## Fidelity report
+
+`fidelity-report.json` — per-attempt artifact written by the
+`visual-verifier` agent (`PRPs/reports/<feature>/phase-<N>/visual/<attempt>/`)
+recording one entry per in-scope frame (`node_id`, `route`,
+`diff_percent`, `threshold`, `status`). Written by `compare.mjs` on the
+FULL rung; written directly by the agent as a degraded-mode stub on
+either degradation rung, so degradation stays visible in the artifact
+itself, never only in the command's own `visual_outcome`. Part of the
+Figma Implementation Track (Phase 6).
 
 ## Flakiness
 
@@ -114,6 +164,19 @@ files (R-X strict).
 Specialized agent that executes the test suite, interprets results,
 coordinates the auto-correction loop, and produces the execution report.
 Component B1 of the Phase 2 plan.
+
+## Visual-verification loop
+
+Bounded, non-blocking sub-phase (`/relay-implement`'s `Phase A.3.4`)
+that dispatches the `visual-verifier` agent immediately after the Code
+Reviewer returns `APPROVED`, when `figma_track: true` and the plan's
+`design_source: figma`. Orchestrates `provision.mjs` → `capture.mjs` →
+`compare.mjs` against the plan's Design Source and the referenced
+Design Spec's Visual Acceptance Criteria, classifying every frame as
+`VISUAL_VERIFIED`, `VISUAL_DEGRADED` (a named degradation rung, always
+non-blocking), or `VISUAL_MISMATCH` (triggers one bounded fix round,
+then a deterministic revert on non-convergence). Part of the Figma
+Implementation Track (Phase 6).
 
 ## Worktree
 

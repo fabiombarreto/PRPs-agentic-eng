@@ -209,6 +209,22 @@
         <li><strong><code>/relay-approve &lt;pr&gt;</code></strong> <span class="badge badge--done">shipped v0.17.0</span> &mdash; merges the PR, deletes the feature branch and worktree in collision-safe order, then runs Docs Updater and Docs Reviewer agents as a safety-net pass to keep <code>docs/context/</code> and <code>docs/domain/</code> in sync with what was merged &mdash; the pair's primary sync now happens earlier, during <code>/relay-implement</code> (Pillar 2).</li>
       </ol>
 
+      <h3 id="next-figma-track">Figma Implementation Track</h3>
+
+      <p>A cross-cutting, strictly opt-in track (<code>figma_track: true</code> in a target project's <code>docs/context/methodology.md</code>, default off, never flipped by heuristic) layered on top of the five project-level phases above rather than replacing them. All of its own phases have now shipped:</p>
+
+      <ol>
+        <li><strong>Phase 1 &mdash; Opt-in gate</strong> <span class="badge badge--done">shipped</span> &mdash; the <code>figma_track</code> methodology key, default off, and the <code>gating-structure</code> deterministic check in <code>npm run validate</code>.</li>
+        <li><strong>Phase 2 &mdash; MCP-access spike</strong> <span class="badge badge--done">shipped</span> &mdash; a one-time empirical finding (Figma MCP reachable from both the main session and Task-dispatched subagents) recorded directly in <code>docs/decisions.md</code> (2026-07-22), not a repeatable shipped artifact.</li>
+        <li><strong>Phase 3 &mdash; Component map</strong> <span class="badge badge--done">shipped</span> &mdash; <code>/relay-design-map</code> plus the <code>design-map-writer</code>/<code>design-map-reviewer</code> pair, building <code>docs/design/component-map.md</code>.</li>
+        <li><strong>Phase 4 &mdash; Design Spec</strong> <span class="badge badge--done">shipped</span> &mdash; <code>/relay-design-spec</code> plus the inline-adopted <code>design-spec-writer</code>/<code>design-spec-reviewer</code> pair.</li>
+        <li><strong>Phase 5 &mdash; Plan Integration</strong> <span class="badge badge--done">shipped</span> &mdash; the <code>design_source</code> Metadata field, the conditional <code>## Design Source</code> plan section, and the <code>research-design</code> grounding subagent.</li>
+        <li><strong>Phase 6 &mdash; Visual loop</strong> <span class="badge badge--done">shipped</span> &mdash; <code>plugins/relay/scripts/visual/</code> tooling, the <code>visual-verifier</code> agent, and <code>/relay-implement</code>'s Phase A.3.4 (bounded, non-blocking degradation ladder with post-visual fix round and deterministic revert).</li>
+        <li><strong>Phase 7 &mdash; Surface integration + self-improvement</strong> <span class="badge badge--done">shipped</span> &mdash; the final phase, closing the track out. Ships the standalone <a href="../reference/commands.html#relay-visual-review"><code>/relay-visual-review</code></a> command; a <code>figma_track</code>-gated "Visual Fidelity" section in the PR body (<code>scripts/generate-final-report.mjs</code>) and in <a href="../reference/relay-qa-report.html"><code>/relay-qa-report</code></a>; a per-phase <code>visual_outcome</code> field plus a gated terminal rollup line in <code>/relay-execute</code>'s <code>orchestrator-run.json</code>; <code>docs-updater</code>'s write scope extended to <code>docs/design/component-map.md</code> so a confirmed <code>REUSE</code> row's <code>Confidence</code> upgrades to <code>verified:auto</code> from fresh <code>VISUAL_VERIFIED</code> evidence &mdash; the self-improvement loop the component-map template has referenced since Phase 3, now with a closing mechanism; and registration of the full track's command/agent surface across <code>docs/api-reference.md</code>, <code>docs/context/architecture.md</code>, and this site.</li>
+      </ol>
+
+      <p>Every new surface Phase 7 adds reuses the exact <code>figma_track_declared</code>-gated presence/omission idiom <code>/relay-implement</code>'s own <code>Visual:</code> line already established &mdash; a non-Figma project's output stays byte-identical to today's. See <a href="../reference/commands.html#design-system">Commands &mdash; Design system (Figma track)</a> and <code>PRPs/prds/figma-implementation-track.prd.md</code>.</p>
+
       <h3 id="next-phase-5">Phase 5 (CI/CD)</h3>
 
       <p>Integration with real CI: GitHub Actions workflows that invoke relay, external-service gating, automated merge rules. Last phase, furthest out.</p>

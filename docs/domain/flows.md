@@ -50,6 +50,17 @@ PRD stage and only when an agent hits a problem it cannot resolve.
    or requests changes. Otherwise this step is skipped silently.
 7. An Implementer agent executes the approved plan; a Code Reviewer
    checks the result against business rules.
+7.4. **When the target project declares `figma_track: true` and the
+   plan being implemented is Figma-sourced (`design_source: figma`):**
+   immediately after the Code Reviewer returns `APPROVED` — and before
+   the docs pair below — a `visual-verifier` agent orchestrates a
+   headless-browser capture-and-compare loop against the plan's Design
+   Source and the referenced Design Spec's reference screenshots,
+   returning `VISUAL_VERIFIED`, `VISUAL_DEGRADED`, or `VISUAL_MISMATCH`.
+   A `VISUAL_MISMATCH` triggers at most one bounded fix round before
+   either converging or deterministically reverting to the last
+   Code-Reviewer-approved state; the sub-phase never halts the run. For
+   non-Figma projects this step is inert — nothing changes.
 7.5. Immediately after the Code Reviewer returns `APPROVED` — and before
    the plan/PRD state advances — a docs pair (`docs-updater`/`docs-reviewer`)
    runs non-interactively to sync `docs/` with the change directly in the
@@ -60,7 +71,10 @@ PRD stage and only when an agent hits a problem it cannot resolve.
    Implementer to fix, re-run, repeat — up to a configurable retry limit.
 9. A post-green reviewer confirms tests were not weakened to pass.
 10. A Report + PR Creator agent writes an execution report and opens the
-    pull request.
+    pull request — when `figma_track: true` and at least one phase
+    captured visual-verification evidence, the report and PR body also
+    carry a Visual Fidelity section summarizing per-frame results
+    (Figma Implementation Track Phase 7).
 
 The autonomous portion only surfaces to the human when an agent exhausts
 its recovery strategies and the decision is outside its competence.
@@ -79,7 +93,11 @@ Once the PR is ready, the user triggers the approval flow.
    primary docs-sync already happened at Implementation-flow step 7.5 — and
    compares what was merged against the existing `docs/context/` and
    `docs/domain/` files, updating them for any decisions made after
-   implementation.
+   implementation. For `figma_track: true` projects, this pass also
+   upgrades a `REUSE`-mapped `docs/design/component-map.md` row's
+   Confidence to `verified:auto` when corroborated by fresh
+   `VISUAL_VERIFIED` evidence from the merged feature — the component
+   map's self-improvement loop (Figma Implementation Track Phase 7).
 4. A Docs Reviewer checks the updated documentation and asks the human
    about any ambiguous rules encountered since the implement-time sync.
 5. The project's documentation is now in sync with its new state.
@@ -96,3 +114,8 @@ Once the PR is ready, the user triggers the approval flow.
   an actionable message asking the human to complete the context-builder.
 - **No `gh` credentials** → Report + PR Creator outputs the `gh` command
   the human should run manually instead of opening the PR directly.
+- **Visual-verification tooling fails to provision (network-blocked /
+  restricted environment) or the dev server never becomes ready** → the
+  visual-verification sub-phase degrades to a non-blocking
+  `VISUAL_DEGRADED` result (still verifies token conformance statically)
+  rather than halting `/relay-implement`.

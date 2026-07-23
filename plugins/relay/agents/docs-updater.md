@@ -162,6 +162,7 @@ You MAY write to or edit the following files only:
 | `<target_root>/docs/anti-patterns.md` | Surgical additive edit only for a pattern the merged diff or source PRD states explicitly; inferred or ambiguous patterns are recorded as candidates in the manifest (PRESERVE rule) |
 | `<target_root>/CLAUDE.md` | Surgical additive edit only |
 | `<target_root>/docs/KNOWLEDGE_BASE.md` | Update index entries when a new `docs/` file is added |
+| `<target_root>/docs/design/component-map.md` | Surgical additive edit only — upgrade an existing REUSE-mapped row's `Confidence` to `verified:auto` + `verified_at` when corroborated by a fresh `VISUAL_VERIFIED` `fidelity-report.json` entry; never create or reorder rows (Figma Implementation Track Phase 7 — see Step 3.5) |
 | `<target_root>/PRPs/reports/<feature>/docs-update.md` | CREATE — the manifest (the primary deliverable) |
 
 Everything outside this scope is read-only. When a diff change
@@ -243,6 +244,70 @@ For every file in the merged diff, ask:
 
 When in doubt, record in the manifest and defer to the operator.
 Do NOT write a candidate decision into `decisions.md` directly.
+
+### Step 3.5 — Component-map `verified:auto` upgrade (figma-sourced phases only)
+
+Self-improvement loop for the Figma Implementation Track (Phase 7):
+strengthens a `REUSE`-mapped `docs/design/component-map.md` row's
+evidence trail from confirmed post-implementation visual-verification,
+never invents a row, and never runs when the target project has not
+opted into the Figma track.
+
+1. **Gate.** `Read` `<target_root>/docs/context/methodology.md`.
+   If `figma_track` is absent or `false`, skip this step entirely —
+   record nothing in the manifest (this is the identical
+   `figma_track_declared`-gated omission idiom `/relay-implement`'s
+   own `Visual:` line already established: no line, no `SKIPPED`
+   marker, nothing).
+2. **Locate the merged feature's Figma-sourced phase plan(s).** `Glob`
+   `PRPs/plans/completed/<feature>-phase-*-*.plan.md` (the common
+   case — D8 Mutation b already archived the plan by the time
+   docs-updater runs at implement-time, since Phase A.3.5 runs before
+   Phase A.4) and, as a fallback for a plan not yet archived,
+   `PRPs/plans/<feature>-phase-*-*.plan.md`. For each match, `Read`
+   its `## Metadata` table; keep only plans whose `design_source` row
+   reads `figma`. If none match, skip the remaining sub-steps —
+   record nothing in the manifest (this feature's merged diff carries
+   no Figma-sourced phase).
+3. **For each Figma-sourced phase plan, look for fresh evidence.**
+   `Glob` `PRPs/reports/<feature>/phase-<N>/visual/*/fidelity-report.json`
+   (`<N>` from the plan's filename). If none exist, skip this plan —
+   no visual-verification evidence was captured for this phase (the
+   `figma_track_declared` gate was on, but `visual_verification_enabled`
+   may have been false for this specific phase, or the visual loop
+   never ran). `Read` the most recent (highest-numbered attempt)
+   `fidelity-report.json`; keep only frame entries whose `status`
+   equals `"PASS"`.
+4. **Trace each PASS frame's `node_id` to a real `CM-<n>` id.** Cross
+   reference the plan's `## Design Source` table (the `Node-id`
+   column) to confirm the frame is in this phase's declared scope,
+   then `Read` `PRPs/designs/<feature>/design-spec.md`'s `##
+   Component Mapping` section to find that `node_id`'s row — only a
+   row classified `REUSE` (never `NEW` or `ASSUMPTION`) citing a real
+   `CM-<n>` id is eligible. A `PASS` frame that does not trace to a
+   real `REUSE` `CM-<n>` row is NOT upgraded and is NOT recorded as an
+   error — it simply carries no self-improvement signal for the map.
+5. **Upgrade the row — narrow `Edit`, never invent, never clobber.**
+   `Read` `docs/design/component-map.md`. For each `CM-<n>` id
+   resolved in step 4, locate that exact row (the full existing table
+   line). If the row's current `Confidence` cell already reads
+   `verified:auto`, skip it (already upgraded — idempotent). If it
+   reads `CONFIRMED` or `INFERRED`, apply an `Edit` with `old_string`
+   set to the row's full, verbatim existing line and `new_string` set
+   to the same line with the `Confidence` cell replaced by
+   `verified:auto` and the `verified_at` cell replaced by today's
+   date (`<YYYY-MM-DD>`, UTC). This is a strengthen-only operation —
+   corroborating fresh `VISUAL_VERIFIED` evidence for a row humans
+   already trusted enough to mark `REUSE`. Never touch a row lacking
+   fresh corroborating evidence (step 3/4 above); never create a new
+   `CM-<n>` row from this step; never reorder existing rows.
+6. **Record every upgrade (and every considered-but-skipped
+   candidate) in the manifest.** Each applied upgrade becomes a
+   "Files Edited" entry for `docs/design/component-map.md` naming the
+   `CM-<n>` id and the source `fidelity-report.json` path as the
+   rationale. A `PASS` frame considered but not traceable to a real
+   `REUSE` row is noted under "Files Scanned — No Edit Required" with
+   the reason (untraceable node_id, or not a `REUSE` classification).
 
 ### Step 4 — Apply surgical edits
 

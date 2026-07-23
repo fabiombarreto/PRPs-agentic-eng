@@ -305,8 +305,10 @@ Proceed to Phase 2 (GROUNDING).
 
 ## Phase 2 — GROUNDING (research dispatch)
 
-Invoke the two research subagents **in parallel** via the `Task`
-tool, in a SINGLE message with two tool calls:
+Invoke the research subagents **in parallel** via the `Task` tool, in
+a SINGLE message with two tool calls — or three, when a
+`design_spec_path` is available (see the conditional third bullet
+below):
 
 - `subagent_type: research-codebase`
   - `topic`: 1–3 sentences describing the phase being planned. Use
@@ -330,10 +332,24 @@ tool, in a SINGLE message with two tool calls:
     docs updates, frontmatter tweaks), pass a single
     `focus_areas: ["industry conventions for <topic>"]` and accept
     a `degradation_reason` return.
+- `subagent_type: research-design` **(conditional — only when a
+  `design_spec_path` is available, i.e. `design_source: figma` and an
+  APPROVED Design Spec was resolved for this phase per Step 4.4 item
+  5's sourcing rule; when absent, the dispatch is EXACTLY the existing
+  two calls above — unchanged from today)**
+  - `design_spec_path`: the APPROVED Design Spec's absolute path.
+  - `component_map_path`: `<target_root>/docs/design/component-map.md`.
+  - `target_root`: same as the other two calls.
+  - `roots`: the design-system clone root, when known from
+    `docs/context/design-system.md`; otherwise omit.
 
 Parse each subagent's returned JSON block per the contract in
-`plugins/relay/agents/research-codebase.md` and
-`plugins/relay/agents/research-web.md`. Handle each independently:
+`plugins/relay/agents/research-codebase.md`,
+`plugins/relay/agents/research-web.md`, and — when dispatched —
+`plugins/relay/agents/research-design.md`. All three share the same
+`{findings, gaps, degradation_reason, scope_cap_reached}` return
+shape, so no special-casing is required for the conditional third
+subagent. Handle each independently:
 
 - If `findings` is non-empty: keep all findings for use in the plan's
   "Patterns to Mirror" and "Mandatory Reading" sections. Preserve
@@ -475,6 +491,37 @@ rubric R8a/R8b/R8c do not apply in description mode (note this
 explicitly in the plan body: "R8b does not apply in description
 mode — no (PRD AC-N) token required").
 
+### Step 4.3.5 — Design Source section (conditional)
+
+*Runs immediately after Step 4.3, before Step 4.4's body sections.*
+
+When `design_source: figma` (Step 4.4 item 5's Metadata value,
+resolved before this step — Metadata assembly and this conditional
+section are resolved together since both key off the same
+non-heuristic source), emit a `## Design Source` section per
+`docs/context/plan-template.md`'s registered shape, citing the
+APPROVED Design Spec's path and this phase's in-scope frame subset:
+
+```
+## Design Source
+
+| Node-id | Name-path | Route | Viewport | Diff threshold | Ref PNG path |
+|---------|-----------|-------|----------|-----------------|---------------|
+| {node-id} | {name-path} | {route} | {viewport} | {diff threshold} | `PRPs/designs/<feature>/refs/<node-id>.png` |
+```
+
+Rows are drawn from the APPROVED Design Spec's `## Visual Acceptance
+Criteria` section, filtered to frames whose `Phase assignment` column
+(when present) matches row N, or the Design Spec's full frame set when
+no `Phase assignment` column exists (single-phase spec).
+
+When `design_source: none` or the key is absent from Metadata
+(`figma_track` off), emit NOTHING — no `## Design Source` heading, no
+placeholder, no empty section. This is the load-bearing "nothing
+changes when figma_track is off" guarantee for the plan body: a
+non-Figma plan's section list stays byte-identical to today's 15
+sections.
+
 ### Step 4.4 — Body sections (14 mandatory)
 
 Assemble in this order:
@@ -524,6 +571,36 @@ Assemble in this order:
    `phase_type: scaffold` or `phase_type: foundation` on a feature
    phase would bypass the framework-mismatch check or skip the TDD
    suite incorrectly.
+
+   Conditionally, when the target's `docs/context/methodology.md`
+   declares `figma_track: true`, add a `design_source: figma | none`
+   row to the same Metadata table — sourced as follows, NEVER inferred
+   from plan content the way `phase_type` is: in **PRD mode**, copy
+   verbatim the per-phase declaration from the source PRD's `##
+   Design Source` section for row N (added by `prd-writer.md` Step
+   7.4 item 15.5); in **description mode**, `figma` only when a
+   `--design-spec <path>` CLI flag was passed (forwarded by
+   `relay-plan.md`'s flags-first preamble) referencing an APPROVED
+   Design Spec, `none` otherwise. When `figma_track: true` and no
+   declaration is sourceable (PRD mode: the source PRD lacks the `##
+   Design Source` section or lacks row N's declaration row;
+   description mode: not applicable — the CLI-flag source is always
+   deterministic), HALT with:
+
+   > `FAILED_DESIGN_SOURCE_UNDECLARED`: the target project declares
+   > `figma_track: true`, but no `design_source` declaration could be
+   > sourced for this phase. (PRD mode: the source PRD's `## Design
+   > Source` section is missing a declaration row for phase <N>.) No
+   > DRAFT plan has been written. Resolve the missing declaration
+   > (re-run `/relay-prd` to capture it, or hand-edit the PRD's `##
+   > Design Source` table) and re-run `/relay-plan`.
+
+   Do NOT write a DRAFT in this case. Do NOT default `design_source`
+   to `none` when `figma_track: true` and the declaration is missing —
+   that would silently mask an undeclared phase as "confirmed no
+   Figma involvement" rather than surfacing the real gap. When
+   `figma_track` is `false` or absent, `design_source` is not added
+   at all — the Metadata table is byte-identical to today.
 6. `## Mandatory Reading` — table of files (priority, path, lines,
    why) drawn from research-codebase findings + the PRD's Phase
    Details. Every row's path must come from a real research finding

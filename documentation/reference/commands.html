@@ -242,6 +242,52 @@
         <dd>Diff mode on a clean working tree HALTs with <code>FAILED_NOTHING_TO_REPORT</code> and writes no file; an existing <code>PRPs/reports/&lt;feature&gt;/qa-report.md</code> triggers the anti-overwrite guard (confirm-then-continue, or leave it in place) so recorded manual statuses are never silently clobbered.</dd>
       </div>
 
+      <h2 id="design-system">Design system (Figma track)</h2>
+
+      <p>A standalone, human-triggered setup command for the Figma Implementation Track. It is invoked once per project (or re-run with <code>--refresh</code>) to build the reusable Figma-to-code component map that later Figma-track phases (Design Spec, Plan Integration) consume. It is never invoked by <code>/relay-execute</code> and never runs as part of the autonomous Pillar 2 loop.</p>
+
+      <h3 id="relay-design-map"><code>/relay-design-map [--refresh]</code> <span class="badge badge--done">implemented</span></h3>
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>No required argument. Optional <code>--refresh</code> flag selects an additive re-scan instead of the one-time setup path. Reads <code>docs/context/design-system.md</code> frontmatter (package name, local design-system clone path, token module path, Figma library file keys, <code>dev_server</code> block).</dd>
+        <dt>Output</dt>
+        <dd><code>docs/design/component-map.md</code> with status <code>*Status: APPROVED*</code> — a versioned, human-curatable table mapping Figma library components to real code components, plus a <code>## Conventions</code> section and an <code>## UNMAPPED</code> section. Evidence bundles persisted at <code>PRPs/reports/design-map/evidence/</code>. Review log at <code>docs/design/component-map-review.jsonl</code>. On explicit human confirmation only, a single <code>Edit</code> flips <code>figma_track: true</code> in the target project's <code>docs/context/methodology.md</code>.</dd>
+        <dt>Mode</dt>
+        <dd>Interactive setup command with an internal autonomous stretch. All Figma MCP querying (<code>search_design_system</code>, node-scoped <code>get_metadata</code>, opportunistic <code>get_code_connect_map</code>; budget <code>max_library_search_calls=40</code>) happens in this command's own session — never inside a dispatched agent, per the Phase 2 MCP-access-point decision (<code>docs/decisions.md</code> 2026-07-22). The <code>design-map-writer</code>/<code>design-map-reviewer</code> pair is dispatched in a bounded <code>max_map_review_retries=2</code> loop over the persisted evidence, mirroring <code>/relay-implement</code>'s Phase A.3.5 retry-loop shape. The final <code>figma_track</code> flip requires an explicit, quoted human confirmation — the one sanctioned non-heuristic path to set that key, per <code>docs/anti-patterns.md</code>.</dd>
+        <dt>Preconditions</dt>
+        <dd><code>FAILED_FIGMA_MCP_UNAVAILABLE</code> (no Figma MCP tools discoverable via <code>ToolSearch</code> in this session — never silently degrades to a Figma-free run); <code>FAILED_DESIGN_SYSTEM_CONFIG_MISSING</code> (no <code>docs/context/design-system.md</code> — run <code>context-builder *update</code> first); <code>FAILED_MAP_REVIEW_BUDGET_EXCEEDED</code> (the writer/reviewer loop exhausted its retry budget — HALTs loudly naming the failing <code>R-DM&lt;i&gt;</code> items rather than silently accepting a failing map).</dd>
+        <dt>Preflight</dt>
+        <dd>Once the map is <code>APPROVED</code>, a best-effort preflight report checks: <code>node</code> present; <code>scripts/visual/</code> dependency install (a documented, non-blocking note when the directory is absent — that tooling ships in Phase 6); the configured dev script exists; the configured port is free. Preflight failures are surfaced as notes in the confirmation summary, never a HALT.</dd>
+        <dt>Notes</dt>
+        <dd>Agents: <a href="agents.html#design-map-writer"><code>design-map-writer</code></a> (writer, MCP-free, pure evidence-interpreter) and <a href="agents.html#design-map-reviewer"><code>design-map-reviewer</code></a> (reviewer, MCP-free, six-item <code>R-DM1</code>&ndash;<code>R-DM6</code> rubric, owns the map's DRAFT&rarr;APPROVED flip). Canonical map shape defined in <code>docs/context/component-map-template.md</code>. See <code>PRPs/prds/figma-implementation-track.prd.md</code> Implementation Phases row 3.</dd>
+      </div>
+
+      <h3 id="relay-design-spec"><code>/relay-design-spec &lt;figma-url&gt; [feature-or-description]</code> <span class="badge badge--done">implemented</span></h3>
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>A Figma design URL (first token; HALTs <code>FAILED_INVALID_FIGMA_URL</code> if it does not parse as a <code>figma.com/design/...</code> URL) followed by optional free text naming the feature. When the remaining text is empty, <code>feature</code> is derived from the Figma URL's file-name segment instead. Reads <code>docs/design/component-map.md</code> when present (absence is a documented degraded mode, not a HALT).</dd>
+        <dt>Output</dt>
+        <dd><code>PRPs/designs/&lt;feature&gt;/design-spec.md</code> with status <code>*Status: APPROVED*</code> only after the user's own explicit affirmative reply — a business-grounded intermediate contract with a <code>## Frame Inventory</code>, a <code>## Component Mapping</code> (REUSE/NEW/ASSUMPTION rows citing <code>CM-&lt;n&gt;</code> ids), an embedded <code>## Token Map</code>, an <code>## Implementation Delta</code>, and per-frame <code>## Visual Acceptance Criteria</code>. Evidence persisted at <code>PRPs/designs/&lt;feature&gt;/raw/</code>; reference screenshots at <code>PRPs/designs/&lt;feature&gt;/refs/</code>. Review log at <code>PRPs/designs/&lt;feature&gt;/design-spec-review.jsonl</code>.</dd>
+        <dt>Mode</dt>
+        <dd>Interactive, inline-adopted writer/reviewer pair — mirrors <code>/relay-prd</code>'s bundling, never <code>Task</code>-dispatched (contrast <code>/relay-design-map</code>'s Task-dispatched, MCP-free pair). All Figma MCP querying (node-scoped <code>get_metadata</code>, chunked <code>get_design_context</code> at 6&ndash;8 calls per chunk with persist-then-discard evidence capture, <code>get_variable_defs</code>, per-frame <code>get_screenshot</code> at 1x; hard cap <code>max_figma_nodes=20</code>) happens in this session, directed by the adopted <code>design-spec-writer</code> protocol. A bounded batched Q&amp;A round (max 2 rounds, stuck-detection converts remaining ambiguity to explicit <code>ASSUMPTION</code> rows) surfaces only genuinely ambiguous regions. The adopted <code>design-spec-reviewer</code> (<code>invocation_context: main</code>) runs a seven-item, MCP-free rubric and asks "Aprovar o Design Spec?" directly &mdash; only the user's own explicit reply flips the status. Exhaustion after <code>max_spec_review_retries=2</code> offers retry-or-abort, never a silent loop.</dd>
+        <dt>Preconditions</dt>
+        <dd><code>FAILED_FIGMA_TRACK_NOT_ACTIVE</code> (<code>figma_track</code> is not <code>true</code> in <code>docs/context/methodology.md</code> &mdash; run <code>/relay-design-map</code> first); <code>FAILED_FIGMA_MCP_UNAVAILABLE</code> (no Figma MCP tools discoverable via <code>ToolSearch</code> in this session &mdash; never silently degrades to a Figma-free run).</dd>
+        <dt>Notes</dt>
+        <dd>Agents: <a href="agents.html#design-spec-writer"><code>design-spec-writer</code></a> (writer, inline-adopted, performs Figma MCP calls directly) and <a href="agents.html#design-spec-reviewer"><code>design-spec-reviewer</code></a> (reviewer, inline-adopted, MCP-free, owns the spec's DRAFT&rarr;APPROVED flip). Canonical spec shape defined in <code>docs/context/design-spec-template.md</code>. Never invoked by <code>/relay-execute</code>. Wiring the Design Spec into <code>plan-writer</code>/<code>prd-writer</code> is a future phase's job. See <code>PRPs/prds/figma-implementation-track.prd.md</code> Implementation Phases row 4.</dd>
+      </div>
+
+      <h3 id="relay-visual-review"><code>/relay-visual-review &lt;plan-path&gt;</code> <span class="badge badge--done">implemented</span></h3>
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>A plan whose <code>## Metadata</code> carries <code>design_source: figma</code>, ending <code>*Status: APPROVED*</code> or <code>*Status: IMPLEMENTED*</code>. Resolves the referenced APPROVED Design Spec at <code>PRPs/designs/&lt;feature&gt;/design-spec.md</code>.</dd>
+        <dt>Output</dt>
+        <dd>One of <code>VISUAL_VERIFIED</code> / <code>VISUAL_DEGRADED</code> / <code>VISUAL_MISMATCH</code>, plus the <code>fidelity-report.json</code> path. The only on-disk writes are the freshly captured <code>diff.patch</code> and the artifacts <code>visual-verifier</code> itself writes under <code>PRPs/reports/&lt;feature&gt;/phase-&lt;N&gt;/</code>.</dd>
+        <dt>Mode</dt>
+        <dd>Autonomous, single-shot. Dispatches the <code>visual-verifier</code> agent exactly once via <code>Task</code> with an <code>attempt: 1</code> sentinel, mirroring <a href="#relay-code-review"><code>/relay-code-review</code></a>'s standalone dispatch shape and reusing <code>/relay-implement</code>'s own Phase A.3.4 dispatch payload verbatim.</dd>
+        <dt>Notes</dt>
+        <dd>Performs zero D8 mutations and never edits the plan or any PRD &mdash; byte-identical before/after, exactly like <code>/relay-code-review</code>. Never edits application source &mdash; that remains <code>/relay-implement</code>'s Phase A.3.4 fix-round-and-revert responsibility. Preconditions HALT when <code>figma_track</code> is not declared in <code>docs/context/methodology.md</code>, when the plan lacks <code>design_source: figma</code>, or when the referenced Design Spec is missing or not <code>APPROVED</code>. A Should-item of the Figma Implementation Track. See <code>PRPs/prds/figma-implementation-track.prd.md</code> Implementation Phases row 7.</dd>
+      </div>
+
       <h2 id="pillar3">Pillar 3 — Commit, PR &amp; Approval</h2>
 
       <p>Pillar 3 commands are triggered by the human after reviewing <code>/relay-execute</code>&rsquo;s output and running any manual tests. Each command is local and reversible before the next one is run.</p>

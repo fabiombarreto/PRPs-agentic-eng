@@ -24,6 +24,10 @@ See:
 - `${CLAUDE_PLUGIN_ROOT}/agents/research-codebase.md`
   and `research-web.md` — subagents the Writer invokes via `Task`
   during its Phase 2 GROUNDING.
+- `${CLAUDE_PLUGIN_ROOT}/agents/research-design.md` — the
+  conditional third subagent the Writer invokes via `Task` during
+  its Phase 2 GROUNDING, alongside `research-codebase.md` and
+  `research-web.md`, when a Design Spec is available.
 - `${CLAUDE_PLUGIN_ROOT}/docs/context/prd-template.md` —
   canonical PRD shape; the command reads the Implementation Phases
   table from a PRD that conforms to this template.
@@ -46,8 +50,62 @@ planned*.
 
 ## Phase 0 — Input-type detection
 
-`$ARGUMENTS` MUST be a single non-empty string. If the argument is
-blank/whitespace, HALT with:
+### Step 0.0 — Parse arguments — extract flags first
+
+Before any blank-check or mode detection, scan the raw `$ARGUMENTS`
+string for two optional flags and strip them, leaving a residual
+string that Step 0.1's blank-check and the Detection step below
+operate on — never the raw `$ARGUMENTS`. This ordering exists so a
+flag-bearing invocation like `/relay-plan PRPs/prds/x.prd.md
+--no-figma` never risks misrouting into the wrong mode.
+
+- **`--no-figma`** — if present anywhere in `$ARGUMENTS`, strip the
+  token and record `no_figma_flag = true`. Absent → `no_figma_flag =
+  false`.
+- **`--design-spec <value>`** — if present, strip the flag token AND
+  its immediately following value token as a pair, and record
+  `design_spec_override = <value>` (resolved to an absolute path
+  relative to the cwd when relative). Absent → `design_spec_override
+  = null`.
+
+The **residual string** (`$ARGUMENTS` with both flag-value pairs
+removed, then trimmed) is what Step 0.1's blank-check and the
+Detection step below evaluate — never the original unstripped
+`$ARGUMENTS`.
+
+**`--design-spec` precondition (new).** When `design_spec_override` is
+set, verify it points to a readable file whose trailing status line
+equals `*Status: APPROVED*`. If not:
+
+> The `--design-spec` value `<value>` does not resolve to an APPROVED
+> Design Spec. `/relay-plan --design-spec` requires an existing file
+> ending `*Status: APPROVED*`. Run `/relay-design-spec` first, or
+> omit the flag.
+
+HALT — do not proceed to Phase A/B. Otherwise, forward
+`design_spec_path = design_spec_override` to `plan-writer` (see the
+Execution-context lists in Phase A / Phase B below, both of which now
+carry `design_spec_path` when set).
+
+**Auto-derivation (PRD mode only, when no override was given).** When
+`mode = prd` (per the Detection step below) and `design_spec_override`
+is `null`, auto-derive `design_spec_path` from the source PRD's own
+`## Design Source` section for the current phase row (row N, selected
+by the Writer's Phase 1.3) — only when that row's declaration reads
+`figma` and names a resolvable Design Spec path. The explicit
+`--design-spec` override, when present, ALWAYS wins over this
+auto-derivation.
+
+`no_figma_flag`, when `true`, forces `design_spec_path` to remain
+unset regardless of any auto-derivation or PRD declaration — an
+explicit per-invocation escape hatch for a phase the PRD declared
+`figma` but the operator wants to plan without Figma grounding this
+run.
+
+### Step 0.1 — Blank-check and mode detection
+
+`$ARGUMENTS` (the residual string after Step 0.0) MUST be a single
+non-empty string. If the argument is blank/whitespace, HALT with:
 
 > /relay-plan requires a PRD path or a feature description. Usage:
 >   /relay-plan PRPs/prds/<feature>.prd.md
@@ -56,15 +114,15 @@ blank/whitespace, HALT with:
 >   /relay-plan PRPs/prds/plan-authoring.prd.md
 >   /relay-plan "Add dark mode toggle to the settings panel"
 
-**Detection step** — examine the argument value:
+**Detection step** — examine the residual argument value:
 
 - If the argument ends with `.prd.md` → set `mode = prd`, record
   `prd_path` as the resolved absolute path, and proceed to the
   existing P1–P4 preconditions then **Phase A**.
 - Otherwise → set `mode = description`, record `description =
-  $ARGUMENTS` (the raw free-text string), record `target_root` as
-  the current working directory, and proceed to P1.D and P3.D then
-  **Phase B**.
+  $ARGUMENTS` (the residual free-text string, flags already
+  stripped), record `target_root` as the current working directory,
+  and proceed to P1.D and P3.D then **Phase B**.
 
 ---
 
@@ -196,6 +254,9 @@ Execution context to pass into the Writer's Phase 0 setup:
 
 - `prd_path`: the resolved absolute path verified by P1–P4.
 - `target_root`: the cwd.
+- `design_spec_path`: the resolved path from Step 0.0's
+  `--design-spec` override or PRD-mode auto-derivation, when set
+  (absent/null otherwise).
 
 Run Phases 0 through 5 as specified by `plan-writer.md`. At Phase
 2 GROUNDING, the Writer invokes the research subagents in a single
@@ -230,6 +291,10 @@ Execution context to pass into the Writer's Phase 0.B setup:
 
 - `description`: the raw free-text string from `$ARGUMENTS`.
 - `target_root`: the cwd.
+- `design_spec_path`: the resolved path from Step 0.0's
+  `--design-spec` override, when set (absent/null otherwise; no
+  PRD-mode auto-derivation applies in description mode — there is no
+  source PRD).
 
 Run Phase 0.B then Phase 1.B (flat filename + collision check),
 then Phases 2–4 (grounding, Decision Gate, plan body), then

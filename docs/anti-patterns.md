@@ -86,6 +86,24 @@ because the enforcement code does not yet exist.
 
 ---
 
+## Flipping `figma_track` (or any future opt-in gating key) by heuristic
+
+**What it is:** Inferring that a project wants the Figma implementation track active from Figma-shaped file names, `.fig` references, pasted Figma URLs, or design-tool mentions in commit history or docs, and flipping `figma_track: true` (or backfilling any value other than the deterministic default) automatically instead of via explicit human/command action.
+**Why it's forbidden:** `figma_track` follows the same non-heuristic contract already established for `docs_sync` and `tdd`: default-`false` emission on `*init`, preserve-on-`*update` of an already-set value, and backfill-only-when-the-key-is-entirely-absent. A run whose behavior depends on Figma involvement being detected rather than declared reintroduces exactly the "forgot to check" vs. "doesn't apply" ambiguity the methodology-declaration model exists to prevent (`docs/decisions.md` [2026-04-19] Methodology declaration).
+**What to do instead:** Read `figma_track` from `docs/context/methodology.md` frontmatter only. `*init` always emits `figma_track: false`; `*update` preserves an existing value untouched and backfills `false` only when the key is entirely absent. The value flips to `true` only via a human edit to the file or the explicit confirmation step of the future `/relay-design-map` command (Phase 3 of the Figma implementation track) — never by heuristic detection. Enforced deterministically by the `gating-structure` check in `npm run validate` (`scripts/validate/checks/gating-structure.mjs`), extensible to future opt-in keys by appending to its `SITES` registry.
+**Areas affected:** context-builder skill, `npm run validate` (gating-structure check), the future Figma implementation track (Phases 2–7)
+
+---
+
+## Querying the Figma MCP from a dispatched writer/reviewer agent
+
+**What it is:** A Task-dispatched agent (e.g. `design-map-writer`, `design-map-reviewer`, or any future Figma Implementation Track writer/reviewer) calls a Figma MCP tool (`search_design_system`, `get_metadata`, `get_code_connect_map`, etc.) directly, instead of reading only the Figma evidence already persisted to disk by the interactive command that dispatched it.
+**Why it's forbidden:** Confirmed technically reachable (`docs/decisions.md` 2026-07-22 MCP-access spike), but the baseline architecture deliberately keeps all Figma MCP calls in the interactive command's own session (`/relay-design-map`, and the future `/relay-design-spec`) so the entire autonomous stretch of the pipeline stays structurally independent of Figma/MCP availability, and Figma context-budget management stays centralized in one place.
+**What to do instead:** Dispatched agents read Figma facts exclusively from the persisted evidence bundle the calling command writes before dispatch (e.g. `PRPs/reports/design-map/evidence/` for `/relay-design-map`). `design-map-writer` (`Read, Write, Edit, Glob, Grep`) and `design-map-reviewer` (`Read, Edit, Write`) carry no Figma-MCP tool or `Bash`/`WebFetch` in their allowlists — enforced structurally, not just by instruction.
+**Areas affected:** `design-map-writer` agent, `design-map-reviewer` agent, `/relay-design-map` command, `design-spec-reviewer` agent (Phase 4, shipped 2026-07-23 — MCP-free by its own `Read, Edit, Write` tools allowlist regardless of `invocation_context`). **Not** `design-spec-writer`: Phase 4 shipped it inline-adopted by `/relay-design-spec` (never `Task`-dispatched), so it queries the Figma MCP directly in its own session by design — this anti-pattern's premise (a *Task-dispatched* agent bypassing persisted evidence) does not apply to an inline-adopted role. See `docs/decisions.md` [2026-07-23] Design Spec pair extends the interactivity boundary. Also `research-design` agent (Phase 5, shipped 2026-07-23 — the conditional third `plan-writer` GROUNDING subagent; MCP-free by its own `Read, Glob, Grep` tools allowlist, with no Figma-MCP-specific entry needed since it has no MCP tool access mechanism at all; verifies `CM-<n>` mappings exclusively against `docs/design/component-map.md` and the design-system clone already on disk, self-citing this exact anti-pattern by name in its own protocol). Also `visual-verifier` agent (Phase 6, shipped 2026-07-23 — dispatched non-interactively by `/relay-implement`'s Phase A.3.4 immediately after code-review `APPROVED`; MCP-free by its own `Read, Write, Glob, Grep, Bash, BashOutput, KillBash` tools allowlist, with no Figma-MCP-specific entry needed since it has no MCP tool access mechanism at all; reads only the already-persisted Design Spec and reference PNGs already on disk, self-citing this exact anti-pattern by name in its own protocol).
+
+---
+
 <!-- Template for future entries:
 
 ## [pattern name]

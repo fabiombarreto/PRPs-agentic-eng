@@ -595,6 +595,7 @@ tdd: false                # true | false — the only key consulted by the TDD t
 tdd_evidence: null        # null | "<path-or-short-reason>" | "user-declared"
 test_frameworks: []       # array of frameworks detected in the scan (informative only)
 docs_sync: true           # true | false — per-project master switch for automated docs/ sync (docs-updater/docs-reviewer)
+figma_track: false        # true | false — opt-in switch for the Figma implementation track (design-to-code); default off, never heuristically flipped
 ---
 
 # Methodology
@@ -639,6 +640,14 @@ in CONTRIBUTING.md / README.md. None of these activate TDD on their own.]
   `tdd` default-emission precedent. Never heuristically inferred; always
   emitted deterministically on every `*init` run (`docs/decisions.md`
   [2026-04-19]).
+- Always emit `figma_track: false` — the per-project opt-in switch for the
+  Figma implementation track (design-to-code) defaults to off, mirroring
+  the `docs_sync` default-emission precedent verbatim. Never heuristically
+  inferred from Figma-related file names, `.fig` references, or
+  design-tool content; always emitted deterministically on every `*init`
+  run. Flips to `true` only via a human edit to this file or the explicit
+  confirmation step of the future `/relay-design-map` command (Phase 3 of
+  the Figma implementation track) — never by heuristic detection.
 
 **Update behavior:**
 
@@ -658,6 +667,16 @@ in CONTRIBUTING.md / README.md. None of these activate TDD on their own.]
     project initialized before this key existed), backfill
     `docs_sync: true` — this is the ONLY case where `*update` adds this
     key; never remove or flip an existing value.
+  - **`figma_track` preservation**: if `figma_track` is already present
+    in the frontmatter, preserve its value untouched — validated
+    human/command input, same treatment as `docs_sync`. If the key is
+    entirely absent (a project initialized before this key existed),
+    backfill `figma_track: false` — this is the ONLY case where
+    `*update` adds this key; never remove or flip an existing value.
+    Heuristics (Figma file names, `.fig` references, design-tool
+    mentions in commit history or docs) MUST NOT flip this value —
+    only a human edit or the future `/relay-design-map` confirmation
+    step can.
 - If the file is missing: run Init behavior.
 
 **Reporting (both modes):**
@@ -1001,6 +1020,11 @@ Whenever the Decision Gate is activated, the AI MUST consult:
 <!-- [DYNAMIC] Add one row per docs/domain/areas/*.md file found in Phase 3:
 | `docs/domain/areas/[area].md` | Business rules for [area] |
 -->
+<!-- [DYNAMIC] When `figma_track: true` in docs/context/methodology.md, add:
+| `docs/design-system.md` | Figma design-system source of truth (component tokens, library file keys, dev server config) — generated in Phase 3 of the Figma implementation track |
+Detection alone (figma_track: false) does NOT add this row or generate the
+file — emit at most a one-line "observed signal, not generated" report note.
+-->
 
 Consulting these sources is MANDATORY. The AI CANNOT proceed
 without having verified them when the gate is active.
@@ -1311,6 +1335,12 @@ Must include entries for:
 - `docs/domain/` — entries for `glossary.md`, `flows.md`, and one entry
   per `docs/domain/areas/*.md` file
 - `docs/libs/` folder — one collective entry
+- `docs/design-system.md` — conditionally-generated entry, added ONLY
+  when `figma_track: true` in `docs/context/methodology.md`. When
+  `figma_track` is `false` or absent, do NOT add a KB entry for it —
+  the file does not exist yet (generated in Phase 3 of the Figma
+  implementation track); emit at most a one-line "observed signal, not
+  generated" report note instead.
 - Root `README.md` pointer (when present) — one short entry, placed at
   the top of the KB under an `## Intro` section before the
   Architecture & Development section, so humans reading top-down see
@@ -1358,6 +1388,14 @@ Before implementing anything, read:
 
 Domain areas: [list area names here, one per line]
 ```
+
+- **Conditional `docs/design-system.md` pointer:** ONLY when
+  `figma_track: true` in `docs/context/methodology.md`, add one more
+  bullet to the `Context & Domain` list above:
+  `- docs/design-system.md — Figma design-system source of truth (see
+  docs/context/methodology.md figma_track)`. Omit this bullet entirely
+  when `figma_track` is `false` or absent — the file does not exist yet
+  (generated in Phase 3 of the Figma implementation track).
 
 - **Required `Test Guardrail` section** (always loaded — this is the
   Tier-1 surface that prevents silent test-skipping on non-pipeline
@@ -1524,6 +1562,7 @@ section is present (it must survive Emergency Compression).
 | Integrations | ❌ | 1-2 line summary | ❌ | Full in integrations.md | ❌ |
 | Constraints | ❌ | 1-2 line summary | ❌ | Full in constraints.md | ❌ |
 | Methodology declaration | ❌ | 1-line summary | ❌ | Full in methodology.md | ❌ |
+| Design system (Figma, `figma_track: true` only) | ❌ | 1-line summary (conditional) | ❌ | Full in design-system.md (Phase 3, conditional) | ❌ |
 | Test guardrail | Mandatory rules (short, always loaded) | 1-line summary | ❌ | Full protocol in testing.md | ❌ |
 | Business rules | ❌ | ❌ | ❌ | ❌ | Full in /areas/*.md |
 | Domain glossary | ❌ | 1-line summary | ❌ | ❌ | Full in glossary.md |

@@ -227,6 +227,15 @@ inserted between them:
 11. `## Solution Detail`
 12. `## Technical Approach`
 13. `## Implementation Phases`
+
+    **Conditional `## Design Source` dual-branch note
+    (figma_track-gated; mirrors `plan-reviewer`'s analogous item-6
+    note since prd-reviewer has no existing dual-branch heading of its
+    own):** When `figma_track: true` for the target project (read
+    `docs/context/methodology.md`), `## Design Source` MUST appear
+    immediately after `## Implementation Phases`, before `## Decisions
+    Log`; when `figma_track` is `false` or absent, `## Design Source`
+    MUST be absent. A mismatch fails R2.
 14. `## Decisions Log`
 15. `## Research Summary`
 
@@ -346,6 +355,22 @@ Two execution stages, in order:
 - Fail when any cited token is not in the defined set AND does NOT
   match the contextual filter. `reason` names the orphan citation
   and the `file:line` where it appears.
+
+#### R-COH-DESIGN-SOURCE-INCOMPLETE — every Implementation Phases row has a Design Source declaration
+
+- **Zero-emission branch:** if `## Design Source` is absent from the
+  PRD (the common case — `figma_track` off), emit NO row at all for
+  this check. Do NOT fail in this case.
+- Otherwise (`## Design Source` is present): count the `##
+  Implementation Phases` table's data rows and the `## Design Source`
+  table's data rows.
+  - **Row-count mismatch** → fail. `reason` states both counts and
+    names the missing phase number(s) (the `#` values present in `##
+    Implementation Phases` but absent from `## Design Source`).
+  - **Row counts match, but a `Declaration` cell is empty for any
+    row** → fail. `reason` names the phase number(s) with an empty
+    `Declaration` cell.
+  - Otherwise → `{ "id": "R-COH-DESIGN-SOURCE-INCOMPLETE", "passed": true }`.
 
 ### Bounded K=5 LLM judgment pass
 

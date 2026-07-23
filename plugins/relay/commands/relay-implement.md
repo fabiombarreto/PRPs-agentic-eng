@@ -55,6 +55,8 @@ If the Decision Gate cannot be emitted because one of the three sources is unrea
 
 Extract flags first, before the positional plan-path parse. Scan `$ARGUMENTS` for the literal token `--no-docs`; when present, strip it from `$ARGUMENTS` and record `no_docs_flag = true` (default `false`) — mirrors `relay-approve.md`'s own `--no-docs` → `no_docs_flag` extraction (`plugins/relay/commands/relay-approve.md:28-32`).
 
+Scan `$ARGUMENTS` for the literal token `--no-visual`; when present, strip it from `$ARGUMENTS` and record `no_visual_flag = true` (default `false`) — sibling extraction to `--no-docs` above, consumed by Phase A.3.4's gate (below).
+
 `$ARGUMENTS` (after flag extraction) MUST be a single non-empty path-like string. Treat the argument as the plan path; resolve it as absolute, or as relative to the current working directory. If the argument is blank/whitespace, HALT with:
 
 > /relay-implement requires a plan path. Usage:
@@ -213,6 +215,8 @@ Set the budget caps and counters:
 
 Read `<target_root>/docs/context/methodology.md` frontmatter and extract the `docs_sync` key, recording `docs_sync_enabled` (boolean). Default `true` when the key is absent, mirroring the `tdd` absence-handling precedent and `docs-updater.md`'s own default-true-when-absent handling of the same key (`docs/context/methodology.md:45-65`). Precedence rule, evaluated by Phase A.3.5's gate: `no_docs_flag` (set in `## Parse arguments`) always wins over `docs_sync_enabled` — either one alone is sufficient to skip the docs-sync sub-phase.
 
+Also read the same `docs/context/methodology.md` frontmatter for the `figma_track` key, recording `figma_track_declared = (figma_track == true)` (boolean; default `false` when the key is absent — mirrors the non-heuristic `figma_track` contract, `docs/anti-patterns.md:89-95`). Then `Read` the plan at `<plan_path>` and check its `## Metadata` table's `design_source` row (present only when `figma_track_declared == true` at plan-authoring time, per `plan-writer.md` Step 4.4 item 5); derive `visual_verification_enabled = figma_track_declared AND this plan's design_source == "figma"`. Both derivations reuse existing declarations verbatim — never a new methodology.md key (`docs/decisions.md` [2026-04-19] "Flipping `figma_track` ... by heuristic"). Precedence rule, evaluated by Phase A.3.4's gate: `no_visual_flag` (set in `## Parse arguments`) always wins over `visual_verification_enabled` — either one alone is sufficient to skip the visual-verification sub-phase.
+
 Soft-fail concurrency diagnostic per source PRD D18: `Glob` `<artifact_root>*/diff.patch` for any in-flight attempt (heuristic: a `diff.patch` whose corresponding `<basename>.code-review.jsonl` line shows neither APPROVED nor a final HALT). If found, emit warning `"concurrent /relay-implement detected for <feature> (is_prd_less=<is_prd_less>); orchestrator must serialize"` and **continue** (do not block). Robust file-lock semantics deferred until `/relay-execute` is designed.
 
 ### Phase A.1 — Per-attempt pre-flight checks (in order)
@@ -360,6 +364,36 @@ The code-reviewer arbitrates the dispute. It appends one verdict line to `code-r
   > to re-author against the disambiguation.
 
 In all `DISPUTE_UPHELD_*` cases, the loop terminates structurally; the orchestrator (or developer) decides the recovery path.
+
+### Phase A.3.4 — Visual-verification dispatch
+
+Triggered exactly once when Phase A.3 standard-mode returns APPROVED — never on an arbitration-mode verdict (mirrors Phase A.3.5's own trigger phrasing below, and runs immediately BEFORE it).
+
+1. **Gate.** If `no_visual_flag == true` OR `visual_verification_enabled == false`, skip the entire visual-verification sub-phase (log a one-line skip note naming which of the two gated it) and proceed directly to Phase A.3.5. Record `visual_outcome = "SKIPPED (--no-visual)"` when `no_visual_flag == true` (checked first — `--no-visual` takes precedence over `visual_verification_enabled` when both are true), otherwise `visual_outcome = "SKIPPED (not figma-sourced)"`.
+2. **Budget init.** Otherwise, initialise `visual_review_attempts = 0`, `max_visual_retries = 2` — its own budget, independent of `max_implement_retries`/`disputes_used`/`max_docs_review_retries`.
+3. **Step A — dispatch `visual-verifier` via `Task`:**
+
+   ```
+   Task(subagent_type="visual-verifier",
+        prompt={
+          plan_path: <plan_path>,
+          target_root: <target_root>,
+          design_spec_path: <from the plan's ## Design Source section>,
+          attempt: <attempt>,
+          diff_target: "<artifact_root><attempt>/diff.patch",
+          non_interactive: true,
+        })
+   ```
+
+4. **Step B — branch on the returned verdict:**
+   - **`VISUAL_VERIFIED`** → `visual_outcome = "APPROVED"`; proceed to Phase A.3.5.
+   - **`VISUAL_DEGRADED`** → record the named rung (e.g. `DEGRADED_STATIC_ONLY`); log a warning; proceed to Phase A.3.5 WITHOUT halting (this is the AC-5 non-blocking guarantee).
+   - **`VISUAL_MISMATCH`** → increment `visual_review_attempts`.
+     - If `visual_review_attempts <= max_visual_retries`: dispatch one post-visual fix round — re-invoke `implementer` via `Task` with the `fidelity-report.json`'s failing frames as `prior_feedback`, then `code-reviewer` via `Task` in standard mode to re-approve the code change, then re-dispatch `visual-verifier` via `Task`.
+       - If that round's `code-reviewer` step itself returns `CHANGES_REQUESTED`, OR the re-dispatched `visual-verifier` still returns `VISUAL_MISMATCH`: perform a **deterministic revert** — `git checkout <last code-reviewer-APPROVED commit/diff> -- <files touched by the fix attempt>` (using the same `files_changed_by_attempt` bookkeeping Phase A.2 already maintains, mirroring the oscillation-detection precedent at `plugins/relay/commands/relay-implement.md:239-250`) so the worktree returns to exactly the last APPROVED state; set `visual_outcome = "BUDGET_EXCEEDED_REVERTED"`; proceed to Phase A.3.5 WITHOUT halting.
+       - Otherwise (the fix round's `code-reviewer` returns `APPROVED` and the re-dispatched `visual-verifier` returns `VISUAL_VERIFIED` or `VISUAL_DEGRADED`): set `visual_outcome` from that re-dispatch's own verdict (`"APPROVED"` or the named degraded rung); proceed to Phase A.3.5.
+     - If `visual_review_attempts > max_visual_retries` without ever dispatching a fix round: set `visual_outcome = "BUDGET_EXCEEDED"`; proceed to Phase A.3.5 WITHOUT halting.
+5. **No commit issued.** This sub-phase performs no commit action of any kind — any edits from the post-visual fix round land uncommitted in the worktree (or are reverted per Step B above), per the Pillar 2 "never commit" invariant (`docs/decisions.md` 2026-05-18).
 
 ### Phase A.3.5 — Docs-sync dispatch
 
@@ -523,6 +557,7 @@ On the success path (Phase A.3 standard-mode APPROVED + all applicable D8 mutati
 > Code-review verdict at
 > `PRPs/plans/<basename>.code-review.jsonl` (line <line_index>).
 > Docs: `<docs_sync_outcome>` (`APPROVED` / `BUDGET_EXCEEDED` / `SKIPPED (--no-docs)` / `SKIPPED (docs_sync: false)`). When `docs_deferred_questions` is non-empty, see `PRPs/reports/<feature>/docs-update.md`'s `## Deferred Questions` section (writer-side questions) and/or `PRPs/reports/<feature>/docs-review.jsonl`'s `deferred_question` field (reviewer-side questions) — the two artifacts Task 5 Step 6 sources the list from.
+> Visual: `<visual_outcome>` (`APPROVED` / named degraded rung, e.g. `DEGRADED_STATIC_ONLY` / `BUDGET_EXCEEDED` / `BUDGET_EXCEEDED_REVERTED` / `SKIPPED (not figma-sourced)` / `SKIPPED (--no-visual)`) — **this line's very presence is gated on `figma_track_declared`** (Phase A.0): shown ONLY when `figma_track_declared == true`; when `figma_track_declared == false` the line is OMITTED ENTIRELY (no line, no `SKIPPED` marker, nothing), so a non-Figma project's output stays byte-identical to today's (PRD AC-1 of `figma-implementation-track.prd.md`).
 > Worktree ready for `/relay:relay-test PRPs/plans/completed/<basename>.plan.md`.
 
 **PRD-less mode (`is_prd_less == true`):**
@@ -534,6 +569,7 @@ On the success path (Phase A.3 standard-mode APPROVED + all applicable D8 mutati
 > Code-review verdict at
 > `PRPs/plans/<basename>.code-review.jsonl` (line <line_index>).
 > Docs: `<docs_sync_outcome>` (`APPROVED` / `BUDGET_EXCEEDED` / `SKIPPED (--no-docs)` / `SKIPPED (docs_sync: false)`). When `docs_deferred_questions` is non-empty, see `PRPs/reports/<feature>/docs-update.md`'s `## Deferred Questions` section (writer-side questions) and/or `PRPs/reports/<feature>/docs-review.jsonl`'s `deferred_question` field (reviewer-side questions) — the two artifacts Task 5 Step 6 sources the list from.
+> Visual: `<visual_outcome>` (`APPROVED` / named degraded rung, e.g. `DEGRADED_STATIC_ONLY` / `BUDGET_EXCEEDED` / `BUDGET_EXCEEDED_REVERTED` / `SKIPPED (not figma-sourced)` / `SKIPPED (--no-visual)`) — **this line's very presence is gated on `figma_track_declared`** (Phase A.0): shown ONLY when `figma_track_declared == true`; when `figma_track_declared == false` the line is OMITTED ENTIRELY (no line, no `SKIPPED` marker, nothing), so a non-Figma project's output stays byte-identical to today's (PRD AC-1 of `figma-implementation-track.prd.md`).
 > Worktree ready for `/relay:relay-test PRPs/plans/completed/<basename>.plan.md`.
 
 On HALT (one of `FAILED_AFTER_N_RETRIES`, `FAILED_TIME_BUDGET_EXCEEDED`, `FAILED_OSCILLATION_DETECTED`, `FAILED_DISPUTE_CAP_EXCEEDED`, `DISPUTE_UPHELD_TEST_WRONG`, `DISPUTE_UPHELD_PRD_AMBIGUOUS`, `PARTIAL_D8_FAILURE`, or any precondition HALT), the user-facing message is the verbatim halt message defined in the relevant Phase A.* sub-section above, and the command exits without performing further mutations.

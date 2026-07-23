@@ -24,6 +24,7 @@ import { runDispatchGraphCheck } from './checks/dispatch-graph.mjs';
 import { runFrontmatterSchemaCheck } from './checks/frontmatter-schema.mjs';
 import { runArtifactNamingCheck } from './checks/artifact-naming.mjs';
 import { runBootstrapParityCheck } from './checks/bootstrap-parity.mjs';
+import { runGatingStructureCheck } from './checks/gating-structure.mjs';
 
 function die(code, msg) {
   process.stderr.write(msg + '\n');
@@ -42,6 +43,7 @@ const CHECKS = [
   runFrontmatterSchemaCheck,
   runArtifactNamingCheck,
   runBootstrapParityCheck,
+  runGatingStructureCheck,
 ];
 
 function runChecks(checks) {

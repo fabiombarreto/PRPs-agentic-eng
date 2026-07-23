@@ -131,6 +131,14 @@ section-assembly contract):
 4. `## Problem Statement`
 5. `## Solution Statement`
 6. `## Metadata`
+
+   **Conditional `## Design Source` dual-branch note
+   (figma_track-gated).** When the plan's Metadata `design_source`
+   row reads `figma`, `## Design Source` MUST appear immediately after
+   `## Metadata`, before `## Mandatory Reading`; when `design_source`
+   reads `none` or is absent, `## Design Source` MUST be absent. A
+   mismatch between the two (row says `figma` but the section is
+   missing, or vice versa) fails R2.
 7. `## Mandatory Reading`
 8. `## Patterns to Mirror`
 9. `## Files to Change`
@@ -430,6 +438,56 @@ exit code the plan author chose.
   offending command verbatim, and stating the fix form:
   `if <check>; then echo "FAIL: …"; exit 1; else echo "PASS: …"; fi`.
 
+#### R-COH-DESIGN-SOURCE-MISSING — design_source declared when figma_track is active
+
+**Deliberate divergence from Phase 0's `phase_type` behavior — stated
+explicitly:** "has Figma or not" is a business decision the reviewer
+cannot manufacture on the plan-writer's behalf, unlike `phase_type` (a
+structural classification the reviewer can safely infer from
+observable plan content). This check does NOT insert or infer a
+`design_source` value under any circumstance — an absence is recorded
+as a structural defect, full stop.
+
+- Read `<target_root>/docs/context/methodology.md`. Extract the
+  `figma_track:` value from the frontmatter.
+- **Zero-emission branch:** if `figma_track` is `false`, absent, or
+  `methodology.md` itself is missing, emit NO row at all for this
+  check — not even a `passed: true` row — keeping a non-Figma plan's
+  `rubric[]` array byte-identical to today. Do NOT fail in this case.
+- Otherwise (`figma_track: true`): scan the plan's `## Metadata` table
+  for a first-cell value matching `design_source` (case-insensitive).
+  - **Present** (value `figma` or `none`) → emit
+    `{ "id": "R-COH-DESIGN-SOURCE-MISSING", "passed": true }`.
+  - **Absent** → emit
+    `{ "id": "R-COH-DESIGN-SOURCE-MISSING", "passed": false, "reason": "target project declares figma_track: true but the plan's Metadata table has no design_source row; plan-reviewer does NOT insert or infer this value the way it does phase_type — re-run plan-writer or hand-edit the declaration" }`.
+  - This check is READ-ONLY. Unlike Phase 0's `phase_type` pre-pass, it
+    never performs an `Edit` — an absent `design_source` under
+    `figma_track: true` is always a CHANGES_REQUESTED-triggering
+    structural defect, never a self-healing opportunity.
+
+#### R-COH-DESIGN-GROUNDED — UI/frontend tasks reference the Design Source frame set
+
+- **Zero-emission branch:** if `## Design Source` is absent from the
+  plan (the common case — `figma_track` off, or `design_source:
+  none`), emit NO row at all for this check, mirroring
+  `R-COH-VALIDATE-FRAMEWORK-MISMATCH`'s silent-degradation-branch
+  precedent for an empty `test_frameworks` array. Do NOT fail in this
+  case.
+- Otherwise (`## Design Source` is present — i.e. `design_source:
+  figma`): parse `## Step-by-Step Tasks` for `### Task <i>: ...`
+  headings. For each task whose `**ACTION**:` line names a UI/frontend
+  file (heuristic: file extension in `.tsx`, `.jsx`, `.vue`, `.svelte`,
+  or a path segment containing `components/`, `pages/`, `views/`,
+  `screens/`), grep its body for a frame reference (a node-id from the
+  `## Design Source` table, e.g. `123:456`) or a `CM-<n>` id.
+  - A matching task with zero frame/`CM-<n>` references fails this
+    check. `reason` names the orphan task by its `### Task <i>:`
+    heading verbatim.
+  - Otherwise emit `{ "id": "R-COH-DESIGN-GROUNDED", "passed": true }`
+    — either every UI/frontend task references at least one frame or
+    `CM-<n>` id, or no task's `**ACTION**:` line names a UI/frontend
+    file (nothing to check — vacuously true).
+
 ### Bounded K=5 LLM judgment pass
 
 After the deterministic checks emit their rows, run a single LLM pass
@@ -488,10 +546,17 @@ zero findings under that classification, and `false` when a
 contradiction was found (with a non-empty `reason`).
 
 The total `rubric[]` length per run is `8 (R1–R8) + 6 (deterministic
-R-COH-*) + ≤5 (K=5 pass) = 14 to 19 rows`. The "exactly 8" wording
-at the five sites is replaced by "R1–R8 always present, no duplicates
-among R1–R8; R-COH-* rows additional" — see the JSONL format section
-below.
+R-COH-*) + ≤5 (K=5 pass) = 14 to 19 rows` for a project where
+`figma_track` is absent/`false` (the baseline case — unchanged from
+before this section existed). When the target declares
+`figma_track: true`, up to 2 additional conditional deterministic rows
+(`R-COH-DESIGN-SOURCE-MISSING`, `R-COH-DESIGN-GROUNDED`) may also
+appear, widening the range to `14 to 21 rows`; both are zero-emission
+(contribute nothing) when their own gating condition is not met, so
+the baseline 14–19 range is exact for every non-Figma project. The
+"exactly 8" wording at the five sites is replaced by "R1–R8 always
+present, no duplicates among R1–R8; R-COH-* rows additional" — see the
+JSONL format section below.
 
 When the K=5 pass emits N findings (N < 5), the remaining slots are
 NOT padded with `passed: true` rows — only emitted findings appear.

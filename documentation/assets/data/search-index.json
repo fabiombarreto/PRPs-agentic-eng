@@ -144,6 +144,60 @@
     "excerpt": "The /relay-qa-report human validation gate command: four-way argument router (PRD, plan, description, diff mode), seven-field per-case schema, honesty guarantee for uncovered cases, record.json coverage grounding, anti-overwrite and FAILED_NOTHING_TO_REPORT HALTs."
   },
   {
+    "title": "/relay-design-map",
+    "path": "reference/commands.html#relay-design-map",
+    "category": "Reference",
+    "excerpt": "Build or refresh docs/design/component-map.md — a versioned, human-curatable map from Figma library components to real code components. Queries the Figma library in the main session, persists evidence to PRPs/reports/design-map/evidence/, dispatches the design-map-writer/design-map-reviewer pair in a bounded retry loop, runs a preflight report, then asks for explicit confirmation before flipping figma_track: true. Part of the Figma Implementation Track (Phase 3)."
+  },
+  {
+    "title": "design-map-writer",
+    "path": "reference/agents.html#design-map-writer",
+    "category": "Reference",
+    "excerpt": "Writer agent invoked by /relay-design-map. Reads persisted Figma evidence plus the local design-system clone and writes docs/design/component-map.md conforming to the canonical component-map-template.md shape. Never queries the Figma MCP directly; never approves its own output."
+  },
+  {
+    "title": "design-map-reviewer",
+    "path": "reference/agents.html#design-map-reviewer",
+    "category": "Reference",
+    "excerpt": "Reviewer agent invoked by /relay-design-map after design-map-writer. Validates a DRAFT component-map.md against the six-item R-DM1-R-DM6 rubric (import-path resolution, evidence cross-reference, prop/variant existence, duplicate-id guard, honest inventory_truncated scoping, non-empty Conventions) and owns the DRAFT-to-APPROVED flip. MCP-free."
+  },
+  {
+    "title": "/relay-design-spec",
+    "path": "reference/commands.html#relay-design-spec",
+    "category": "Reference",
+    "excerpt": "Turn a Figma URL into a human-approved, business-grounded Design Spec. Adopts design-spec-writer then design-spec-reviewer inline in the main conversation (never Task-dispatched), performing all Figma MCP querying itself. Writes PRPs/designs/<feature>/design-spec.md; flips to APPROVED only after the user's own explicit affirmative reply. Part of the Figma Implementation Track (Phase 4)."
+  },
+  {
+    "title": "design-spec-writer",
+    "path": "reference/agents.html#design-spec-writer",
+    "category": "Reference",
+    "excerpt": "Writer agent inline-adopted by /relay-design-spec (never Task-dispatched). Interprets a Figma URL into a business-grounded Design Spec via restate-and-wait confirmation, chunked persist-then-discard MCP traversal, component-map-lensed REUSE/NEW/AMBIGUOUS classification, and a bounded batched Q&A round. Never approves its own output."
+  },
+  {
+    "title": "design-spec-reviewer",
+    "path": "reference/agents.html#design-spec-reviewer",
+    "category": "Reference",
+    "excerpt": "Reviewer agent inline-adopted by /relay-design-spec (never Task-dispatched) with invocation_context: main. Validates a DRAFT design-spec.md against the seven-item R-DS1-R-DS7 rubric, MCP-free, and owns the human-confirmed DRAFT-to-APPROVED flip after the user's own explicit affirmative reply."
+  },
+  {
+    "title": "research-design",
+    "path": "reference/agents.html#research-design",
+    "category": "Reference",
+    "excerpt": "Third grounding subagent invoked by plan-writer during Phase 2 GROUNDING, alongside research-codebase and research-web, only when a design_spec_path is available (design_source: figma). Verifies every CM-<n> id a Design Spec's Component Mapping cites still resolves against docs/design/component-map.md and the design-system clone, flags stale mappings, and harvests real usage snippets for the plan's own Patterns to Mirror section. Text-only; never queries the Figma MCP; never reads image files. Part of the Figma Implementation Track (Phase 5)."
+  },
+  {
+    "title": "visual-verifier",
+    "path": "reference/agents.html#visual-verifier",
+    "category": "Reference",
+    "excerpt": "Dispatched non-interactively by /relay-implement's Phase A.3.4 (Visual-verification dispatch), immediately after code-review APPROVED, AND by the standalone /relay-visual-review command. Orchestrates the self-contained plugins/relay/scripts/visual/ tooling (provision -> capture -> compare) against a plan's ## Design Source table and the referenced APPROVED Design Spec's ## Visual Acceptance Criteria table, writes fidelity-report.json, and returns VISUAL_VERIFIED, VISUAL_DEGRADED, or VISUAL_MISMATCH. Degrades gracefully through DEGRADED_STATIC_ONLY / DEGRADED_PROVISION_FAILED rungs rather than blocking delivery; never edits application code; never queries the Figma MCP. Part of the Figma Implementation Track (Phase 6; dispatcher extended in Phase 7)."
+  },
+  {
+    "title": "/relay-visual-review",
+    "path": "reference/commands.html#relay-visual-review",
+    "category": "Reference",
+    "excerpt": "Standalone, single-shot, non-mutating re-check of visual fidelity for a plan whose ## Metadata carries design_source: figma. Dispatches the visual-verifier agent exactly once (attempt: 1 sentinel, mirroring /relay-code-review's dispatch shape), surfaces VISUAL_VERIFIED / VISUAL_DEGRADED / VISUAL_MISMATCH plus the fidelity-report.json path, and performs zero D8 mutations. Part of the Figma Implementation Track (Phase 7)."
+  },
+  {
     "title": "Decisions",
     "path": "governance/decisions.html",
     "category": "Governance",
