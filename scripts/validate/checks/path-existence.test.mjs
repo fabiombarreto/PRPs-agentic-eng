@@ -29,6 +29,7 @@ import { writeFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { checkPathExistence, runPathExistenceCheck } from './path-existence.mjs';
+import { withScanRootLock } from './scan-root-lock.mjs';
 
 // ---------------------------------------------------------------------------
 // PRPs/prds/validation-suite.prd.md AC-5 — referenced-path existence
@@ -73,7 +74,14 @@ test('checkPathExistence: fails naming the dangling reference (raw token + resol
 // before the assertion and deleted in a `finally` block immediately after,
 // so it never persists in the working tree (and never leaks into the
 // AC-10 test below, which runs after this one completes).
-test('runPathExistenceCheck: catches the PRD AC-5 worked example — a dangling .py reference is flagged while the real .mjs sibling is not (hole #3 shape; wrapper-level regex extraction + real existsSync classification)', () => {
+// This test writes its fixture directly into docs/ — one of
+// runPathExistenceCheck()'s real SCAN_ROOTS — so while the fixture exists it
+// is visible to any other test file's concurrent real-wrapper scan of the
+// same tree (node:test runs test files concurrently by default; see
+// scan-root-lock.mjs). withScanRootLock serializes the write→scan→cleanup
+// critical section against those other tests instead of leaving the race in
+// place.
+test('runPathExistenceCheck: catches the PRD AC-5 worked example — a dangling .py reference is flagged while the real .mjs sibling is not (hole #3 shape; wrapper-level regex extraction + real existsSync classification)', async () => {
   const fixtureRelPath = 'docs/.tmp-path-existence-ac5-fixture.md';
   const fixtureAbsPath = resolve(fixtureRelPath);
   const fixtureContent = [
@@ -91,28 +99,30 @@ test('runPathExistenceCheck: catches the PRD AC-5 worked example — a dangling 
   ].join('\n');
   const danglingLineNumber = fixtureContent.split('\n').findIndex((l) => l.includes('normalize-test-output.py')) + 1;
 
-  writeFileSync(fixtureAbsPath, fixtureContent, 'utf-8');
-  try {
-    const result = runPathExistenceCheck();
+  await withScanRootLock(async () => {
+    writeFileSync(fixtureAbsPath, fixtureContent, 'utf-8');
+    try {
+      const result = runPathExistenceCheck();
 
-    const danglingFinding = result.findings.find(
-      (f) => f.file === fixtureRelPath && f.message.includes('normalize-test-output.py')
-    );
-    assert.ok(
-      danglingFinding,
-      `expected a dangling-reference finding naming ${fixtureRelPath}, got findings: ${JSON.stringify(result.findings)}`
-    );
-    assert.equal(danglingFinding.line, danglingLineNumber);
+      const danglingFinding = result.findings.find(
+        (f) => f.file === fixtureRelPath && f.message.includes('normalize-test-output.py')
+      );
+      assert.ok(
+        danglingFinding,
+        `expected a dangling-reference finding naming ${fixtureRelPath}, got findings: ${JSON.stringify(result.findings)}`
+      );
+      assert.equal(danglingFinding.line, danglingLineNumber);
 
-    const mjsFalsePositive = result.findings.find((f) => f.message.includes('normalize-test-output.mjs'));
-    assert.equal(
-      mjsFalsePositive,
-      undefined,
-      `the real, already-existing .mjs sibling must never be flagged as dangling, got: ${JSON.stringify(mjsFalsePositive)}`
-    );
-  } finally {
-    rmSync(fixtureAbsPath, { force: true });
-  }
+      const mjsFalsePositive = result.findings.find((f) => f.message.includes('normalize-test-output.mjs'));
+      assert.equal(
+        mjsFalsePositive,
+        undefined,
+        `the real, already-existing .mjs sibling must never be flagged as dangling, got: ${JSON.stringify(mjsFalsePositive)}`
+      );
+    } finally {
+      rmSync(fixtureAbsPath, { force: true });
+    }
+  });
 });
 
 test('checkPathExistence: aggregates every dangling reference with no short-circuit (a passing reference never masks a failing one)', () => {
