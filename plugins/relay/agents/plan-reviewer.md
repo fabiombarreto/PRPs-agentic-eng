@@ -430,6 +430,64 @@ exit code the plan author chose.
   offending command verbatim, and stating the fix form:
   `if <check>; then echo "FAIL: …"; exit 1; else echo "PASS: …"; fi`.
 
+#### R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE — forbidden-reference greps are diff-scoped and prohibition-aware
+
+Guards against a distinct failure mode from R-COH-VALIDATE-ALWAYS-PASS
+immediately above: a Validation command that DOES exit non-zero on a
+match (so it is not a cosmetic gate) but is scoped to match the WRONG
+thing — content the diff never introduced, or this repo's own standard
+quoted-prohibition sentence — producing a false CHANGES_REQUESTED
+against a structurally sound implementation. Confirmed twice in
+dogfood against the `figma-implementation-track` feature (see
+`PRPs/plans/completed/figma-implementation-track-phase-2-mcp-access-spike.plan.md`
+and `...-phase-3-component-map.plan.md`, both `## Notes` sections):
+both offending commands had real exit-code semantics and would have
+passed R-COH-VALIDATE-ALWAYS-PASS, yet both still produced a false
+positive that blocked a correct diff.
+
+- Scan every command body in `## Validation Commands` (Levels 1–3) and
+  every `**VALIDATE**:` command in `## Step-by-Step Tasks`.
+- A command is **in scope** when it contains a `grep` (or `rg`)
+  invocation asserting the ABSENCE of a forbidden-reference literal —
+  `\.claude/PRPs`, `.claude/PRPs/`, `.claude/prps`, or any quoted
+  string that also appears verbatim in `docs/anti-patterns.md`'s
+  enumerated forbidden-pattern list — in the shape "match found →
+  fail" (`grep -q <pattern> … && exit 1`, `if grep … ; then echo
+  FAIL; exit 1; fi`, or equivalent). Positive-presence greps (asserting
+  a string IS present, e.g. R7/R8-style content checks) are out of
+  scope.
+- **(a) Not diff-scoped.** The grep's target is a bare file or glob
+  path (e.g. `docs/decisions.md`, `plugins/relay/agents/*.md`)
+  instead of the output of a `git diff` invocation limited to the
+  phase's own changed paths (e.g. `git diff --unified=0 <base> --
+  <paths> | grep -E "^\+[^+]" | grep <pattern>`). Fails because a
+  whole-file grep matches content the diff never introduced — the
+  exact shape of the Phase 2 dogfood false positive against
+  pre-existing historical prose in `docs/decisions.md` /
+  `docs/context/architecture.md`.
+- **(b) Prohibition idiom not excluded.** The command is diff-scoped
+  but greps for `\.claude/PRPs` (or an equivalent forbidden-reference
+  literal) without also filtering out lines matching this repo's
+  standard quoted-prohibition sentence — the phrase `MUST NOT appear`,
+  used verbatim by `docs-updater.md`, `docs-reviewer.md`,
+  `plan-writer.md`, `plan-reviewer.md`, `prd-reviewer.md`,
+  `test-writer.md`, `code-reviewer.md` to describe this very rule (a
+  `grep -qv "MUST NOT appear"` stage, or equivalent negative filter,
+  is required). Fails because any new agent/doc file that correctly
+  cites the standard prohibition sentence will false-positive — the
+  exact shape of the Phase 3 dogfood false positive against
+  `design-map-writer.md` / `design-map-reviewer.md`'s own
+  correctly-worded anti-pattern warnings.
+- A command in scope fails this check if EITHER (a) or (b) applies.
+  Reason names the Level (or task heading), quotes the offending
+  command verbatim, states which of (a)/(b) tripped, and gives the
+  fix shape: `git diff --unified=0 <base> -- <paths> | grep -E
+  "^\+[^+]" | grep <pattern> | grep -qv "MUST NOT appear"`.
+- PASS iff every in-scope command is both diff-scoped and excludes
+  the quoted-prohibition idiom. A plan with zero in-scope commands
+  (most plans introduce no forbidden-reference check) passes this
+  row trivially.
+
 ### Bounded K=5 LLM judgment pass
 
 After the deterministic checks emit their rows, run a single LLM pass
@@ -487,8 +545,8 @@ contradictions / the deterministic check held / the K=5 pass returned
 zero findings under that classification, and `false` when a
 contradiction was found (with a non-empty `reason`).
 
-The total `rubric[]` length per run is `8 (R1–R8) + 6 (deterministic
-R-COH-*) + ≤5 (K=5 pass) = 14 to 19 rows`. The "exactly 8" wording
+The total `rubric[]` length per run is `8 (R1–R8) + 7 (deterministic
+R-COH-*) + ≤5 (K=5 pass) = 15 to 20 rows`. The "exactly 8" wording
 at the five sites is replaced by "R1–R8 always present, no duplicates
 among R1–R8; R-COH-* rows additional" — see the JSONL format section
 below.
@@ -802,7 +860,8 @@ One JSON object per line, appended (never truncated). Shape:
     { "id": "R-COH-VALIDATE-FRAMEWORK-MISMATCH", "passed": true, "reason": "test_frameworks empty in methodology.md; framework-mismatch check skipped" },
     { "id": "R-COH-PATTERN-SOURCE-MISSING", "passed": true },
     { "id": "R-COH-MANDATORY-READING-MISSING", "passed": true },
-    { "id": "R-COH-VALIDATE-ALWAYS-PASS", "passed": true }
+    { "id": "R-COH-VALIDATE-ALWAYS-PASS", "passed": true },
+    { "id": "R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE", "passed": true }
   ],
   "action": "final_flip",
   "user_message": ""

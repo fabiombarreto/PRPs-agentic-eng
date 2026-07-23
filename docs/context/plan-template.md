@@ -7,7 +7,7 @@ Canonical shape of every plan produced in the `relay` pipeline. Stored at
 canonical plan-shape reference). Relay drops the UX Before/After ASCII
 section (relay features have no UI surface), constrains the agent
 contract to Validation Levels 1–3 (Levels 4–6 are per-project content if
-applicable, not part of the fixed structure), and adds four mandatory
+applicable, not part of the fixed structure), and adds six mandatory
 extensions documented below.
 
 **Keeping the fork in sync:** when the upstream template evolves, update
@@ -67,6 +67,17 @@ command-surface decision).
    R-L1/R-L2/R-L3 gate scores PASS iff exit code is 0, so a masked
    failure passes review silently. plan-reviewer's
    R-COH-VALIDATE-ALWAYS-PASS check enforces this.
+
+6. **Forbidden-reference grep scope.** Any Validation or per-task
+   `VALIDATE:` command that checks for an introduced forbidden
+   reference (e.g. `\.claude/PRPs`) MUST scope its grep to the
+   `git diff` output for the phase's own changed paths — not the
+   whole file — and MUST exclude lines matching this repo's standard
+   quoted-prohibition sentence (`MUST NOT appear`) that other agent
+   files legitimately cite verbatim. A command satisfying exit-code
+   semantics (extension 5) can still false-positive on either gap.
+   plan-reviewer's R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE check enforces
+   both.
 
 ---
 
@@ -254,7 +265,11 @@ mandatory fields.
     exit 1; else echo "PASS: …"; fi`, or let the tool's own status
     propagate under `set -euo pipefail`. See `plan-writer.md`
     Step 4.4 item 11 for the full wrong→right examples.
-    plan-reviewer R-COH-VALIDATE-ALWAYS-PASS enforces this.
+    plan-reviewer R-COH-VALIDATE-ALWAYS-PASS enforces this. A
+    forbidden-reference grep (e.g. `\.claude/PRPs`) must additionally
+    be diff-scoped and exclude the standard `MUST NOT appear`
+    quoted-prohibition idiom — see mandatory extension 6 above;
+    plan-reviewer R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE enforces this.
 
 13. `## Acceptance Criteria`
 
