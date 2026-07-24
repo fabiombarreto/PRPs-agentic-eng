@@ -103,6 +103,16 @@ lives in `/relay-implement` — not in this agent.
    with the message defined at the end of Phase 0 — character for
    character, including the `/relay-implement` substitution. No code
    is changed; no validation is run.
+9. **No new component files for REUSE-mapped Figma nodes (Figma
+   track only).** When the target project's
+   `docs/context/methodology.md` declares `figma_track: true` and
+   this plan's `## Metadata` table's `design_source` row reads
+   `figma`, a CREATE-action task whose target node/`CM-<n>` is
+   classified REUSE in the feature's Design Spec `## Component
+   Mapping` table halts per Step 2.3.5 rather than being executed —
+   the mapped import path must be reused, never duplicated.
+   Zero-effect on any plan where `figma_track` is off or
+   `design_source` is not `figma`.
 
 ---
 
@@ -115,6 +125,19 @@ Before Phase 1, do these reads (all relative to `<target_root>`):
   present" and default the TDD routing string to the
   methodology-missing canonical text from `prd-writer.md` Step 7.4
   (lines 382–386). Do NOT halt.
+- Also from `docs/context/methodology.md`, capture the
+  `figma_track:` value. When `figma_track: true`, additionally scan
+  the plan's `## Metadata` table for its `design_source` row. When
+  `design_source: figma`, resolve `design_spec_path =
+  <target_root>/PRPs/designs/<feature>/design-spec.md` (same
+  convention and same `<feature>` value as Step 1.1's basename
+  parse) and `Read` it if present, holding its `## Component
+  Mapping` REUSE rows (`{node_id, cm_id, import_path}` per row) in
+  context for the Step 2.3.5 guard. When `figma_track` is
+  false/absent, or `design_source` is `none`/absent, or the Design
+  Spec cannot be read, hold an empty REUSE-row set and do NOT halt —
+  this mirrors the existing `tdd:`-missing degradation on the same
+  line.
 - `<plan_path>` — read end-to-end and hold the content in context.
   In particular, locate and remember:
   - The plan title (line 1, after `# `).
@@ -355,6 +378,40 @@ If the implementer instead believes a test contradicts the PRD —
 not because the plan asked for a test edit, but because a passing
 implementation appears genuinely impossible against the existing
 test — emit `TEST_CONTRACT_DISPUTE` per Phase 4.B.
+
+### Step 2.3.5 — REUSE-mapped Figma node guard (Figma track only)
+
+Zero-effect when the Phase 0 REUSE-row set (captured per the
+conditional `figma_track`/`design_source` Phase 0 read) is empty —
+this is the common case (`figma_track` off, `design_source` not
+`figma`, or the Design Spec unresolvable) and requires no action
+here.
+
+Otherwise: before applying a CREATE action (Step 2.2), check
+whether the task's target node-id/`CM-<n>` (the same reference
+`R-COH-DESIGN-GROUNDED` already requires UI/frontend plan tasks to
+carry) matches a held REUSE row. If it does, halt with a structured
+error of this shape:
+
+```
+REUSE_VIOLATION_REJECTED:
+  task_index: <i>
+  task_action: <verbatim ACTION line>
+  reused_import_path: <the REUSE row's mapped import path, verbatim>
+  rationale: |
+    A CREATE action was requested for a Figma node the feature's
+    Design Spec Component Mapping table classifies REUSE — the
+    mapped import path above must be reused, never duplicated. The
+    plan task above asks for a direct create; this is a
+    plan-rubric defect upstream, not something the implementer
+    silently obeys.
+```
+
+Do NOT proceed to the next task. Do NOT continue to Phase 3. Do NOT
+emit a Phase 4 verdict — this is a halt, not a third verdict shape.
+Exit with the structured error. (The COMMAND interprets this as a
+non-retryable failure of the current attempt, mirroring Step 2.3's
+`TEST_FILE_EDIT_REJECTED` handling exactly.)
 
 ### Step 2.4 — Move on
 

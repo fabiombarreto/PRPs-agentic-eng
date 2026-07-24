@@ -192,10 +192,17 @@ every other relay artifact's status convention:
    already exist in the design system, per this feature's Problem
    Statement.
 
-5. **A future `R-COH-DS-REUSE` code-review check** (referenced by
-   `PRPs/prds/figma-implementation-track.prd.md` AC-2, not built in
-   this phase) — will enforce, against real implementation diffs,
-   that a `CONFIRMED`/`INFERRED` row's cited import path is actually
-   reused rather than duplicated. This template's `R-DM1` rubric item
-   in `design-map-reviewer` lays the structural foundation that check
-   will build on.
+5. **The `R-COH-DS-REUSE` code-review check** (shipped in
+   `plugins/relay/agents/code-reviewer.md`'s R-COH-* coherence layer,
+   fulfilling `PRPs/prds/figma-implementation-track.prd.md` AC-2 — a
+   gap-closing addition landed after all 7 Implementation Phases rows
+   were already `complete`) — enforces, against real implementation
+   diffs, that a Figma node the feature's Design Spec `## Component
+   Mapping` table classifies `REUSE` (citing a real `CM-<n>` id) is
+   not re-created: a plan task whose `## Files to Change` action is
+   `CREATE` of a file other than the REUSE row's cited import path
+   fails the review, citing that import path verbatim. Zero-emission
+   unless `figma_track: true` and the plan's `design_source: figma`.
+   This template's `R-DM1` rubric item in `design-map-reviewer` laid
+   the structural foundation (import-path resolution) this check
+   builds on.

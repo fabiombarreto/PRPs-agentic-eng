@@ -804,6 +804,23 @@ On `VISUAL_MISMATCH`, `/relay-implement` dispatches at most one bounded post-vis
 
 ---
 
+## [2026-07-23] `R-COH-DS-REUSE` + implementer CREATE-guard ship AC-2 ("Reuse enforced") as a gap-closing addition after all 7 Figma Implementation Track phases
+
+**Context:** `PRPs/prds/figma-implementation-track.prd.md` AC-2 ("Given a Design Spec that cites a REUSE component-map row for a Figma node, when the Implementer or Code Reviewer processes the corresponding task, then a new component file for that node is never created — the code-reviewer's coherence check fails the diff if it is, citing the mapped import path") was never assigned to any of the PRD's 7 Implementation Phases rows — all 7 are `complete`, yet AC-2 stayed unbuilt. `docs/context/component-map-template.md`'s own Lifecycle section had forward-referenced this exact check by name ("a future `R-COH-DS-REUSE` code-review check ... not built in this phase") since Phase 3. This entry records a standalone, description-mode gap-closing change (no new PRD phase row, no new plan) that builds it directly against the already-APPROVED PRD's AC-2.
+
+**Decision:** Two coordinated, additive edits:
+
+- **`code-reviewer.md`** gains a fifth deterministic `R-COH-*` check, `R-COH-DS-REUSE` (rubric-count sites updated 4→5 deterministic / 13-19→14-20 total standard-mode rows). Zero-emission (no rubric row at all, not even `passed: true`) unless `figma_track: true` AND the plan's `design_source: figma` — the identical two-part gate `R-COH-DESIGN-SOURCE-MISSING`/`R-COH-DESIGN-GROUNDED` already use. When active, it resolves `PRPs/designs/<feature>/design-spec.md`, parses its `## Component Mapping` table for `Verdict == REUSE` rows (extracting `{node_id, cm_id, import_path}` from the Evidence cell), and FAILs an in-scope task whose `## Files to Change` action is `CREATE` of a file other than the REUSE row's cited import path — the `reason` string cites that import path verbatim, per AC-2's own wording. A silent-degradation branch (`passed: true` with a specific reason) covers an unresolvable Design Spec, zero REUSE rows, or no in-scope task — mirroring `R-COH-REGISTRY-MISSING`/`R-COH-CONFIG-DANGLING`'s existing silent-degradation idiom rather than inventing a new one.
+- **`implementer.md`** gains Hard Constraint #9 plus a conditional Phase 0 read (methodology `figma_track` + the plan's `design_source` Metadata row +, when both are Figma-flavored, the Design Spec's REUSE rows held in context) and a new **Step 2.3.5** guard: before applying a CREATE action, if the task's target node/`CM-<n>` matches a held REUSE row, halt with a structured `REUSE_VIOLATION_REJECTED` error (naming the task index, the verbatim ACTION line, and the reused import path) instead of executing the CREATE — mirroring Step 2.3's existing `TEST_FILE_EDIT_REJECTED` halt shape exactly, rather than a third novel halt pattern.
+
+Both edits are zero-effect on any plan where `figma_track` is off or `design_source` is not `figma`, preserving AC-1 ("nothing changes when `figma_track` is off") byte-for-byte.
+
+**Reason:** AC-2 requires enforcement against a *real implementation diff*, which only exists once code-review and implementation are both live — the Design Spec (Phase 4) and Design Source Metadata (Phase 5) are the two prerequisites, and both were already in place, but no phase's own scope line ever named building the enforcement check itself, so it fell through the phase table. Reusing the already-battle-tested two-part gate, silent-degradation idiom, and `TEST_FILE_EDIT_REJECTED`-shaped halt keeps this addition structurally consistent with the rest of the R-COH-* coherence layer and the implementer's existing halt vocabulary instead of introducing new mechanics for a single check.
+
+**Areas affected:** `plugins/relay/agents/code-reviewer.md` (new `R-COH-DS-REUSE` deterministic check + rubric-count sites + JSONL example row), `plugins/relay/agents/implementer.md` (new Hard Constraint #9, conditional Phase 0 read, new Step 2.3.5 guard + `REUSE_VIOLATION_REJECTED` halt shape), `docs/context/component-map-template.md` (Lifecycle item 5 forward-reference resolved to reflect the shipped check), `PRPs/prds/figma-implementation-track.prd.md` AC-2 (now built).
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision

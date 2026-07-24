@@ -510,6 +510,45 @@ listed in `<target_root>/docs/context/code-review-registries.md`'s
   with reason "no registries declared; check skipped".
 - FAIL with the new file path + the missing registry path(s).
 
+#### R-COH-DS-REUSE — REUSE-mapped Figma nodes are not duplicated
+
+**Zero-emission branch:** unless `<target_root>/docs/context/methodology.md`
+declares `figma_track: true` AND the plan's `## Metadata` table's
+`design_source` row reads `figma` (the same two-part gate
+`R-COH-DESIGN-SOURCE-MISSING`/`R-COH-DESIGN-GROUNDED` already apply in
+`plan-reviewer.md`), emit NO row at all for this check — not even a
+`passed: true` row — keeping a non-Figma diff's `rubric[]` array
+byte-identical to today. Do NOT fail in this case.
+
+Otherwise (`figma_track: true` and `design_source: figma`):
+
+- Resolve `design_spec_path = <target_root>/PRPs/designs/<feature>/design-spec.md`
+  (reusing the `<feature>` value already parsed in this agent's own
+  Phase 0 basename parsing).
+- `Read` `design_spec_path` and parse its `## Component Mapping`
+  table for `Verdict == REUSE` rows, extracting `{node_id, cm_id,
+  import_path}` from each row's Evidence cell (`CM-<n>` ({resolved
+  import path}) shape per `docs/context/design-spec-template.md`).
+- **Silent-degradation branch:** when the Design Spec can't be
+  resolved/read (including description-mode plans where the path
+  isn't derivable), when the spec has zero REUSE rows, or when no
+  plan task references any REUSE-mapped node, emit
+  `{ "id": "R-COH-DS-REUSE", "passed": true, "reason": "<specific
+  reason>" }` — mirroring `R-COH-REGISTRY-MISSING`'s and
+  `R-COH-CONFIG-DANGLING`'s existing silent-degradation branches.
+  Never zero-emission once the two-part gate above is active; never
+  a hard failure in this branch.
+- For each REUSE row, grep the plan's `## Step-by-Step Tasks` body
+  (already held in context from Phase 0) for the row's node-id or
+  `CM-<n>` id — same technique as `R-COH-DESIGN-GROUNDED` — to find
+  in-scope tasks.
+- For each in-scope REUSE row, FAIL when that task's `## Files to
+  Change` action is `CREATE` of a file that is NOT the REUSE row's
+  cited import path. The `reason` string MUST cite the mapped
+  import path verbatim (per AC-2's own wording: "citing the mapped
+  import path").
+- Otherwise emit `{ "id": "R-COH-DS-REUSE", "passed": true }`.
+
 ### Bounded sub-agent dispatch (code-reviewer-semantic via Task)
 
 After the four deterministic checks emit their rows, dispatch the
@@ -601,9 +640,9 @@ pass returned zero findings under that classification, and `false`
 when a contradiction was found (with a non-empty `reason`).
 
 The total `rubric[]` length per standard-mode run is `8 (R-S/R-L/
-R-SEM/R-X) + 4 (deterministic R-COH-*) + ≤5 (K=5 sub-agent
+R-SEM/R-X) + 5 (deterministic R-COH-*) + ≤5 (K=5 sub-agent
 findings) + 1 (R-COH-TASK-CONTRADICTION, always) + ≤1 (R-COH-
-SEMANTIC-DEGRADED on degradation) = 13 to 19 rows`. The "exactly
+SEMANTIC-DEGRADED on degradation) = 14 to 20 rows`. The "exactly
 8" wording at the three sites is replaced by "R-S*/R-L*/R-SEM/R-X
 always present, no duplicates among them; R-COH-* rows additional"
 — see the JSONL format section below.
@@ -911,6 +950,7 @@ follows D10 of the source PRD.
     { "id": "R-COH-CALLER-DRIFT", "passed": true },
     { "id": "R-COH-CONFIG-DANGLING", "passed": true, "reason": "no config files in diff" },
     { "id": "R-COH-REGISTRY-MISSING", "passed": true, "reason": "no registries declared; check skipped" },
+    { "id": "R-COH-DS-REUSE", "passed": true },
     { "id": "R-COH-TASK-CONTRADICTION", "passed": true }
   ],
   "action": "final_flip",
