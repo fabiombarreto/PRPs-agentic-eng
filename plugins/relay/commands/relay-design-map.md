@@ -133,18 +133,61 @@ authoritative while being empty).
 ### P2 — Design-system config present
 
 Check for `docs/context/design-system.md` at the target project root.
-If absent:
 
-> FAILED_DESIGN_SYSTEM_CONFIG_MISSING: `docs/context/design-system.md`
-> does not exist. `/relay-design-map` needs this file's frontmatter
-> (package name, local design-system clone path, token module path,
-> Figma library file keys) to know where to look for real code
-> components and which Figma library to query.
-> Run `context-builder *update` first to generate it, or create the
-> file by hand with the required frontmatter keys, then re-run
-> `/relay-design-map`.
+If absent, scaffold a starter file, then still HALT:
 
-If present, proceed to Phase A.
+1. **Infer what is cheaply available.** Read the target project's
+   root `package.json` when present: use its `"name"` field for
+   `package_name`; use a `scripts.dev` or `scripts.start` entry (in
+   that preference order) for `dev_server.command` when discoverable.
+   Leave any value that cannot be cheaply inferred unset and mark it
+   with the `[INFERRED - VALIDATE]` placeholder instead of guessing —
+   mirroring the marker convention at
+   `plugins/relay/skills/context-builder/SKILL.md:100`.
+2. **Write** `docs/context/design-system.md` with YAML frontmatter
+   carrying `package_name`, `local_clone_path`, `tokens_module`,
+   `figma_library_file_keys` (a list), and a `dev_server` block
+   (`command`, `port`):
+
+   ```yaml
+   ---
+   package_name: <inferred from package.json "name", or "[INFERRED - VALIDATE] fill in the design-system package name">
+   local_clone_path: "[INFERRED - VALIDATE] fill in the local path to the design-system's cloned repo"
+   tokens_module: "[INFERRED - VALIDATE] fill in the path to the token module"
+   figma_library_file_keys:
+     - "[INFERRED - VALIDATE] fill in the Figma library file key(s) this project's design system lives in"
+   dev_server:
+     command: <inferred from package.json scripts.dev/scripts.start, or "[INFERRED - VALIDATE] fill in the dev-server start command">
+     port: "[INFERRED - VALIDATE] fill in the dev-server port"
+   ---
+
+   # Design System Config
+
+   Scaffolded by `/relay-design-map` on first run. This file is
+   COMMAND-OWNED: `/relay-design-map`'s P2 precondition writes it when
+   absent; `context-builder *update` only registers and preserves it,
+   never generates or overwrites it. Fill in every
+   `[INFERRED - VALIDATE]` placeholder above, then re-run
+   `/relay-design-map`.
+   ```
+
+3. **HALT** with a new, accurate message naming exactly which keys
+   need a human value:
+
+   > FAILED_DESIGN_SYSTEM_CONFIG_INCOMPLETE: `docs/context/design-system.md`
+   > did not exist, so `/relay-design-map` scaffolded a starter file at
+   > that path with `[INFERRED - VALIDATE]` placeholders. The following
+   > keys still need a human value before this command can run:
+   > `figma_library_file_keys`, `local_clone_path`, and any other field
+   > still marked `[INFERRED - VALIDATE]` in the scaffolded file (also
+   > double-check `package_name` and `dev_server.command` — they were
+   > only inferred from `package.json` when discoverable).
+   > Fill in the listed keys in `docs/context/design-system.md`, then
+   > re-run `/relay-design-map`.
+
+   Do NOT proceed to Phase A. Exit non-zero.
+
+If present, proceed to Phase A — unchanged.
 
 ---
 
@@ -262,14 +305,17 @@ degrades gracefully by design (see NOT Building / Risks in the source
 plan).
 
 1. **`node` present.** Check `node --version` resolves. Note pass/fail.
-2. **Visual-tooling dependency install (best-effort).** Attempt a
-   dry-run `npm install --prefix plugins/relay/scripts/visual/` if
-   plugins/relay/scripts/visual/ exists. If it does not exist yet
-   (it is Phase 6's deliverable, not shipped as of this phase), record
-   a documented note: "plugins/relay/scripts/visual/ not present yet —
-   visual regression tooling ships in Phase 6 of the Figma Implementation
-   Track; this is expected, not an error." Never HALT on this
-   absence.
+2. **Visual-tooling dependency install (best-effort).**
+   `plugins/relay/scripts/visual/` ships as of Phase 6 of the Figma
+   Implementation Track and is expected to be present
+   (`provision.mjs`, `capture.mjs`, `compare.mjs`, `package.json`).
+   Attempt a dry-run `npm install --prefix plugins/relay/scripts/visual/`.
+   In the rare case the directory is missing — e.g. a partial or
+   incomplete checkout — record a documented note:
+   "plugins/relay/scripts/visual/ not present — this directory ships
+   as of Phase 6 of the Figma Implementation Track; its absence here
+   suggests an incomplete checkout, not an error in this command."
+   Never HALT on this absence.
 3. **Dev script exists.** Check that `design_system_config`'s
    `dev_server` block names a start command that resolves in the
    target project's package manifest (e.g. an `npm run <script>`
@@ -348,7 +394,7 @@ entry).
 ### HALT paths (named codes with actionable messages)
 
 - `FAILED_FIGMA_MCP_UNAVAILABLE` — P1: no Figma MCP tools discoverable.
-- `FAILED_DESIGN_SYSTEM_CONFIG_MISSING` — P2: `docs/context/design-system.md` absent.
+- `FAILED_DESIGN_SYSTEM_CONFIG_INCOMPLETE` — P2: `docs/context/design-system.md` absent or incomplete — a starter file was scaffolded; re-run after filling the listed keys.
 - `FAILED_MAP_REVIEW_BUDGET_EXCEEDED` — Phase C: `max_map_review_retries` exhausted.
 
 No artifact is written and no `figma_track` flip occurs on any HALT
@@ -379,8 +425,9 @@ path. Exit non-zero.
    silent pass-through to Phase D.
 6. **Preflight failures never HALT.** Phase D's four checks are
    best-effort notes surfaced to the human in the Phase E summary,
-   consistent with this phase's designed graceful degradation around
-   the not-yet-shipped plugins/relay/scripts/visual/ tooling (Phase 6).
+   including graceful degradation for the rare case of an incomplete
+   checkout missing the plugins/relay/scripts/visual/ tooling (shipped
+   as of Phase 6).
 7. **Never invoked by `/relay-execute`.** This is a standalone,
    human-triggered setup command outside the autonomous Pillar 2
    orchestration.
