@@ -195,6 +195,58 @@ Current value of `tdd` in `docs/context/methodology.md`: **{true | false}**.
 
 ---
 
+## Visual-First Mode
+
+*(Conditional — present ONLY when the target project's
+`docs/context/methodology.md` declares `figma_track: true`; absent
+entirely, not an empty section, when `figma_track` is `false` or
+absent.)*
+
+**visual_first:** `true` | `false`
+
+Never inferred from PRD content — the same non-heuristic,
+explicit-declaration-only contract every opt-in gating key in this
+pipeline follows (mirrors the "What We're NOT Building" guarantee of
+`PRPs/prds/figma-visual-first-track.prd.md` itself: "Any heuristic
+inference of `visual_first` or `phase_scope` from PRD/plan content").
+`visual_first: true` means every phase in the `## Implementation
+Phases` table above must be strictly scope-pure — either wholly
+visual or wholly logic, never mixed — paired 1:1 via the existing
+`Depends` column (`PRPs/prds/figma-visual-first-track.prd.md` AC-2).
+`visual_first: false` (or this section's absence when `figma_track`
+itself is off) means Implementation Phases keep v1's existing
+single-phase shape, unchanged. Phase 2 of
+`PRPs/prds/figma-visual-first-track.prd.md` implements the
+phase-pairing mechanism below.
+
+### Phase-pairing mechanism
+
+1. Because the `## Implementation Phases` table above carries no
+   dedicated scope column (per the source PRD's own Decisions Log
+   "Scope-flag placement" row), a `visual_first: true` PRD marks each
+   phase's scope directly in the `Phase` cell using a mandatory
+   leading bracket tag — `[VISUAL] {Phase Name}` (scope-pure visual
+   phase: UI + mocked data only) or `[LOGIC] {Phase Name}` (scope-pure
+   logic phase: real business rules on an already-locked visual) —
+   mirroring `docs/context/mock-sentinels.md`'s
+   `[RELAY-MOCK-DATA]`/`[RELAY-MOCK-BEHAVIOR]` bracket-tag convention.
+2. Every phase row carries exactly one of the two tags, never both,
+   never neither.
+3. Pairing uses the table's existing `Depends` column: a `[LOGIC]`
+   row's `Depends` cell names exactly the `#` of its one paired
+   `[VISUAL]` row (a lone value, not part of a comma-separated list),
+   and a `[VISUAL]` row is named by exactly one `[LOGIC]` row's
+   `Depends` cell — strict 1:1, never N:1, per the source PRD's own
+   "Visual/logic pairing" Decisions Log row.
+4. Per source PRD AC-2's "(and vice versa)" clause, every phase —
+   visual or logic — belongs to exactly one pair; a visual-first PRD
+   has no standalone, unpaired phase.
+5. `prd-reviewer`'s `R-COH-VISUAL-PAIRING-INCOMPLETE` check enforces
+   all of the above structurally, failing `CHANGES_REQUESTED`
+   otherwise.
+
+---
+
 ## Design Source
 
 *(Conditional — present ONLY when the target project's

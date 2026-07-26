@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * Unit tests for the new check — gating-structure — the pure
+ * Unit tests for the check — gating-structure — the pure
  * `checkGatingStructure` function and the `runGatingStructureCheck` thin
  * wrapper exported by scripts/validate/checks/gating-structure.mjs.
  *
@@ -13,19 +13,53 @@
  * frontmatter-schema.test.mjs's AC-10 real-wrapper test and
  * native-validate.test.mjs's real-invocation precedent).
  *
- * Source PRD: PRPs/prds/figma-implementation-track.prd.md
- * Source plan: PRPs/plans/completed/figma-implementation-track-phase-1-foundations.plan.md
- * Existing-coverage scan: no prior test file exercises gating-structure.mjs
- * (it is a brand-new production module introduced by this phase — confirmed
- * via directory scan of scripts/validate/checks/*.test.mjs before authoring).
+ * Source PRDs / plans (this file now covers TWO registered SITES entries,
+ * added by two different features):
+ *   - figma_track site: PRPs/prds/figma-implementation-track.prd.md
+ *     (v1), PRPs/plans/completed/figma-implementation-track-phase-1-foundations.plan.md
+ *   - visual_first_approval site: PRPs/prds/figma-visual-first-track.prd.md
+ *     (v2), PRPs/plans/completed/figma-visual-first-track-phase-1-foundations.plan.md
  *
- * Traceability (plan Acceptance Criteria, phase 1 in-scope subset):
- *   AC-A2 (PRD AC-4 "Non-heuristic declaration always present") — the
+ * Lifecycle update (2026-07-24, EXISTING_TEST_UPDATED): the
+ * figma-visual-first-track Phase 1 plan extended gating-structure.mjs's
+ * `SITES` registry from 1 entry (`figma_track`) to 2
+ * (`figma_track`, `visual_first_approval`) — by design, per the module's own
+ * "Extensible by design" docstring. `checkGatingStructure` requires ALL
+ * registered sites' markers present in `skillContent` for a globally empty
+ * `findings` array; the pre-existing `ALL_MARKERS_PRESENT` fixture (and the
+ * five tests built on it) predated that growth and covered `figma_track`
+ * markers only, so — confirmed by actually running this file before making
+ * any change — 5 of its 8 tests started failing the moment the 2nd site
+ * landed (`ok:true`/`findings:[]` assertions found 3 unexpected
+ * visual_first_approval findings; the "3 independent findings" test found 6
+ * instead of 3). This is NOT a production defect: `npm run validate`'s own
+ * `gating-structure` check, and this file's own untouched real-wrapper test
+ * below, both still pass — the real, already-implemented SKILL.md correctly
+ * documents both sites. The defect was confined to the synthetic fixture's
+ * staleness. Fix applied here: `ALL_MARKERS_PRESENT` is extended to also
+ * carry all three `visual_first_approval` markers (so "all markers present"
+ * again means all markers for every currently-registered site, matching
+ * what the fixture's own name always promised); the three
+ * "fails naming ... figma_track marker" tests need no further change once
+ * the fixture is extended (verified empirically); the
+ * "reports all three findings independently" test is rescoped explicitly to
+ * figma_track (new input fixture: visual_first_approval fully satisfied,
+ * figma_track markers absent) with an added site-scoping assertion — the
+ * original figma_track-3-independent-findings property is preserved in
+ * full, never weakened, just no longer ambiguous now that a 2nd
+ * independently-required site exists. Four new tests mirror the same shape
+ * for visual_first_approval's own three markers (previously impossible to
+ * write — the site did not exist). Full justification recorded in
+ * PRPs/reports/figma-visual-first-track/test-suite.diff's Lifecycle ledger.
+ *
+ * Traceability (plan Acceptance Criteria, phase 1 in-scope subset, both
+ * features):
+ *   v1 AC-A2 (PRD AC-4 "Non-heuristic declaration always present") — the
  *     gating-structure check verifies all three non-heuristic properties
  *     (default-false emission, preserve-on-update, backfill-only-when-
  *     absent) are documented for the `figma_track` site. Covered by the
  *     pure-function marker tests below.
- *   AC-A1 (PRD AC-1 "Inert when off") — the one check this phase adds to
+ *   v1 AC-A1 (PRD AC-1 "Inert when off") — the one check this phase adds to
  *     `npm run validate` passes with zero Figma-related findings against
  *     the real, already-implemented SKILL.md. Covered by the real-wrapper
  *     test below (the complementary "Given absent figma_track" precondition
@@ -33,6 +67,13 @@
  *     figma_track key — is asserted separately in
  *     scripts/validate/checks/figma-track-phase1.test.mjs, which also
  *     carries the AC-A3/AC-A4 delta tests).
+ *   v2 AC-A7 (PRD AC-4 "Non-heuristic declaration always present", source:
+ *     PRPs/prds/figma-visual-first-track.prd.md) — the gating-structure
+ *     check verifies the same three non-heuristic properties are documented
+ *     for the new `visual_first_approval` site, extending the same
+ *     deterministic enforcement figma_track already has. Covered by the new
+ *     pure-function marker tests below and by the (untouched)
+ *     real-wrapper test, which now transitively covers both sites.
  *
  * Run: node --test scripts/validate/checks/gating-structure.test.mjs
  */
@@ -47,12 +88,17 @@ import { checkGatingStructure, runGatingStructureCheck } from './gating-structur
 const SKILL_PATH = 'plugins/relay/skills/context-builder/SKILL.md';
 const INDEX_PATH = 'scripts/validate/index.mjs';
 
-// Minimal synthetic prose carrying all three markers the real `figma_track`
-// site config in gating-structure.mjs requires. Deliberately NOT copied
-// verbatim from the real SKILL.md prose — these fixtures exercise the check
-// logic itself, independent of the real file's exact wording (that
-// real-content assertion lives in the real-wrapper test below and in
-// figma-track-phase1.test.mjs).
+// Minimal synthetic prose carrying all three markers EVERY currently-
+// registered SITES entry requires (figma_track + visual_first_approval).
+// Deliberately NOT copied verbatim from the real SKILL.md prose — these
+// fixtures exercise the check logic itself, independent of the real file's
+// exact wording (that real-content assertion lives in the real-wrapper test
+// below and in figma-track-phase1.test.mjs). Extended 2026-07-24 (see the
+// header comment's Lifecycle update) to also carry visual_first_approval's
+// three markers — a fixture named "ALL_MARKERS_PRESENT" must mean all
+// markers for every registered site, not just the site that existed when
+// the fixture was first written; keeping it single-source avoids the two
+// site's "present" fixtures silently drifting apart.
 const ALL_MARKERS_PRESENT = `
 ## Methodology
 
@@ -64,6 +110,15 @@ frontmatter, preserve its value untouched on *update.
 
 If the key is entirely absent, backfill \`figma_track: false\` — the ONLY
 case where *update adds this key.
+
+- Always emit \`visual_first_approval: auto\` on every *init run —
+  deterministic default, never heuristically inferred.
+
+**\`visual_first_approval\` preservation**: if the key is already present
+in the frontmatter, preserve its value untouched on *update.
+
+If the key is entirely absent, backfill \`visual_first_approval: auto\` —
+the ONLY case where *update adds this key.
 `;
 
 function withoutLine(content, needle) {
@@ -78,7 +133,7 @@ function withoutLine(content, needle) {
 // markers for the registered `figma_track` site.
 // ---------------------------------------------------------------------------
 
-test('checkGatingStructure: ok:true with zero findings when all three figma_track markers are present', () => {
+test('checkGatingStructure: ok:true with zero findings when every registered site\'s markers (figma_track, visual_first_approval) are all present', () => {
   const result = checkGatingStructure({ skillContent: ALL_MARKERS_PRESENT });
 
   assert.equal(result.name, 'gating-structure');
@@ -115,15 +170,94 @@ test('checkGatingStructure: fails naming "backfill-only-when-absent" when the "b
   assert.match(result.findings[0].message, /"backfill-only-when-absent"/);
 });
 
-test('checkGatingStructure: reports all three findings independently when all three markers are missing', () => {
-  const result = checkGatingStructure({ skillContent: '## Methodology\n\nNothing about figma_track here.\n' });
+test('checkGatingStructure: reports all three figma_track findings independently when all three figma_track markers are missing (visual_first_approval otherwise fully satisfied)', () => {
+  const content = `
+## Methodology
+
+Nothing about figma_track here.
+
+- Always emit \`visual_first_approval: auto\` on every *init run.
+
+\`visual_first_approval\` preservation: preserve on update.
+
+If absent, backfill \`visual_first_approval: auto\`.
+`;
+  const result = checkGatingStructure({ skillContent: content });
 
   assert.equal(result.ok, false);
   assert.equal(result.findings.length, 3);
-  const ids = result.findings.map((f) => f.message);
-  assert.ok(ids.some((m) => /"default-false-emission"/.test(m)));
-  assert.ok(ids.some((m) => /"preserve-on-update"/.test(m)));
-  assert.ok(ids.some((m) => /"backfill-only-when-absent"/.test(m)));
+  const messages = result.findings.map((f) => f.message);
+  assert.ok(messages.every((m) => /site "figma_track"/.test(m)));
+  assert.ok(messages.some((m) => /"default-false-emission"/.test(m)));
+  assert.ok(messages.some((m) => /"preserve-on-update"/.test(m)));
+  assert.ok(messages.some((m) => /"backfill-only-when-absent"/.test(m)));
+});
+
+// ---------------------------------------------------------------------------
+// AC-A7 (PRD AC-4, source: PRPs/prds/figma-visual-first-track.prd.md) — the
+// gating-structure check's 2nd registered site, visual_first_approval:
+// checkGatingStructure verifies all three non-heuristic markers
+// (default-auto-emission, preserve-on-update, backfill-only-when-absent)
+// independently, extending the same deterministic enforcement figma_track
+// already has. Mirrors the figma_track marker tests above exactly; new
+// this session (the site did not exist before this phase).
+// ---------------------------------------------------------------------------
+
+test('checkGatingStructure: fails naming site "visual_first_approval" and marker "default-auto-emission" when the "Always emit `visual_first_approval: auto`" marker is missing (figma_track otherwise fully satisfied)', () => {
+  const content = withoutLine(ALL_MARKERS_PRESENT, 'Always emit `visual_first_approval: auto`');
+  const result = checkGatingStructure({ skillContent: content });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.findings.length, 1);
+  assert.match(result.findings[0].message, /site "visual_first_approval"/);
+  assert.match(result.findings[0].message, /"default-auto-emission"/);
+  assert.equal(result.findings[0].file, SKILL_PATH);
+});
+
+test('checkGatingStructure: fails naming site "visual_first_approval" and marker "preserve-on-update" when the "`visual_first_approval` preservation" marker is missing (figma_track otherwise fully satisfied; site name asserted explicitly since the marker id "preserve-on-update" is shared with figma_track\'s own marker)', () => {
+  const content = withoutLine(ALL_MARKERS_PRESENT, '`visual_first_approval` preservation');
+  const result = checkGatingStructure({ skillContent: content });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.findings.length, 1);
+  assert.match(result.findings[0].message, /site "visual_first_approval"/);
+  assert.match(result.findings[0].message, /"preserve-on-update"/);
+});
+
+test('checkGatingStructure: fails naming site "visual_first_approval" and marker "backfill-only-when-absent" when the "backfill `visual_first_approval: auto`" marker is missing (figma_track otherwise fully satisfied)', () => {
+  const content = withoutLine(ALL_MARKERS_PRESENT, 'backfill `visual_first_approval: auto`');
+  const result = checkGatingStructure({ skillContent: content });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.findings.length, 1);
+  assert.match(result.findings[0].message, /site "visual_first_approval"/);
+  assert.match(result.findings[0].message, /"backfill-only-when-absent"/);
+});
+
+test('checkGatingStructure: reports all three visual_first_approval findings independently when all three visual_first_approval markers are missing (figma_track otherwise fully satisfied)', () => {
+  const content = `
+## Methodology
+
+- Always emit \`figma_track: false\` on every *init run — deterministic
+  default, never heuristically inferred.
+
+**\`figma_track\` preservation**: if the key is already present in the
+frontmatter, preserve its value untouched on *update.
+
+If the key is entirely absent, backfill \`figma_track: false\` — the ONLY
+case where *update adds this key.
+
+Nothing about visual_first_approval here.
+`;
+  const result = checkGatingStructure({ skillContent: content });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.findings.length, 3);
+  const messages = result.findings.map((f) => f.message);
+  assert.ok(messages.every((m) => /site "visual_first_approval"/.test(m)));
+  assert.ok(messages.some((m) => /"default-auto-emission"/.test(m)));
+  assert.ok(messages.some((m) => /"preserve-on-update"/.test(m)));
+  assert.ok(messages.some((m) => /"backfill-only-when-absent"/.test(m)));
 });
 
 // ---------------------------------------------------------------------------
@@ -143,10 +277,15 @@ test('checkGatingStructure: reports a loud failing finding (not a throw) when sk
 });
 
 // ---------------------------------------------------------------------------
-// AC-A1 (PRD AC-1) + AC-A2 (PRD AC-4) real-state confirmation — the real,
-// already-implemented SKILL.md documents the figma_track site completely, so
-// the one check this phase adds to `npm run validate` passes with zero
-// Figma-related findings (not just on synthetic fixtures).
+// v1 AC-A1 (PRD AC-1) + v1 AC-A2 (PRD AC-4) + v2 AC-A7 (PRD AC-4, source:
+// PRPs/prds/figma-visual-first-track.prd.md) real-state confirmation — the
+// real, already-implemented SKILL.md documents BOTH registered sites
+// (figma_track, visual_first_approval) completely, so this check passes
+// with zero findings against the real file (not just on synthetic
+// fixtures). Untouched by the 2026-07-24 SITES-growth fixture fix above —
+// this test re-reads the real file fresh on every run, so it transparently
+// already covered visual_first_approval the moment that site's SKILL.md
+// prose landed; no update was needed here.
 // ---------------------------------------------------------------------------
 
 test('runGatingStructureCheck: ok:true with zero findings against the real, already-implemented SKILL.md', () => {

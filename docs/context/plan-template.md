@@ -205,6 +205,62 @@ mandatory fields.
    `plugins/relay/agents/plan-writer.md` /
    `plugins/relay/agents/plan-reviewer.md`.
 
+   **`phase_scope` (conditional).** Present (`visual | logic`) only
+   when the plan's source PRD declares `visual_first: true`; absent
+   entirely otherwise. Never inferred — mirrors `design_source`'s
+   lineage exactly, NOT `phase_type`'s self-healing lineage.
+   `plan-reviewer.md`'s own contrast for `design_source` is the model:
+   "has Figma or not" is a business decision the reviewer cannot
+   manufacture on the plan-writer's behalf, unlike `phase_type` (a
+   structural classification the reviewer can safely infer from
+   observable plan content) — the same holds for `phase_scope`: "is
+   this phase visual or logic" is a business/authoring decision, never
+   something a reviewer manufactures on the plan-writer's behalf.
+   `plan-writer` sources `phase_scope` by reading row N's own `Phase`
+   cell for its mandatory leading `[VISUAL]` or `[LOGIC]` bracket tag
+   (`[VISUAL]` → `phase_scope: visual`; `[LOGIC]` → `phase_scope:
+   logic`) — never inferred from task content. When the source PRD
+   declares `visual_first: true` and row N's `Phase` cell does not
+   begin with exactly one recognized tag, `plan-writer` HALTs with
+   `FAILED_PHASE_SCOPE_UNDECLARED` before any DRAFT plan is written.
+
+   **What `phase_scope: visual` implies for the plan body.** Every
+   task under `## Step-by-Step Tasks` is restricted to UI-and-mocks
+   scope: no task may imply a real network call, persistence write, or
+   real business-logic mutation, and every data-display or
+   interactive-action task must name the type-matched
+   `[RELAY-MOCK-DATA]` or `[RELAY-MOCK-BEHAVIOR]` sentinel it will
+   emit — see `docs/context/mock-sentinels.md` for the sentinel
+   convention and `plugins/relay/agents/plan-reviewer.md`'s
+   `R-COH-VISUAL-SCOPE-PURITY` check, which structurally enforces the
+   same rule. Unlike `design_source`, `phase_scope` has no companion
+   conditional section — the source PRD names no such companion.
+
+   **What `phase_scope: logic` implies for the plan body.** Every
+   `phase_scope: logic` plan MUST author at least one task under
+   `## Step-by-Step Tasks` that resolves every `[RELAY-MOCK-DATA]` and
+   `[RELAY-MOCK-BEHAVIOR]` sentinel left behind by the paired visual
+   phase, per `docs/context/mock-sentinels.md`'s Swap semantics:
+   replacing each `[RELAY-MOCK-DATA]` literal with its real data source
+   at the exact sentinel site, and filling each `[RELAY-MOCK-BEHAVIOR]`
+   handler with real business logic inside the already-approved
+   choreography. The task (or tasks) MUST be backed by at least one
+   VALIDATE command that greps the paired visual phase's touched files
+   for both sentinel tokens and fails (non-zero exit) if either remains
+   — per `docs/context/mock-sentinels.md`'s "Zero remaining sentinels —
+   no deferral path" rule, this VALIDATE accepts no count threshold and
+   no recorded-justification exception. See
+   `plugins/relay/agents/plan-writer.md` Step 4.4 item 10 for the full
+   authoring rule and `plugins/relay/agents/plan-reviewer.md`'s new
+   `R-COH-SENTINEL-RESOLUTION-MISSING` check, which structurally
+   enforces the same rule. Like the visual branch, `phase_scope: logic`
+   has no companion conditional section of its own — it reuses the
+   existing conditional `## Design Source` section (governed by
+   `design_source`, not `phase_scope`) when applicable; see the
+   `## Design Source` conditional-section paragraph below for the
+   frame-inheritance rule a logic-scoped plan follows when
+   `design_source: figma`.
+
    **Conditional `## Design Source` section (only when
    `design_source: figma`).** Immediately follows `## Metadata`, before
    `## Mandatory Reading`, ONLY when the Metadata table's
@@ -219,7 +275,10 @@ mandatory fields.
    `design_source: none` or the `design_source` row itself is absent
    (i.e. `figma_track` off). `plan-reviewer`'s R2 dual-branch note on
    item 6 enforces the presence/absence match between the Metadata row
-   and this section.
+   and this section. **Exception for `phase_scope: logic` plans:** the
+   filter key is the PAIRED VISUAL phase's row number (read from row
+   N's own `Depends` cell), never row N's own number — see
+   `plugins/relay/agents/plan-writer.md` Step 4.3.5 for the full rule.
 
 7. `## Mandatory Reading`
 

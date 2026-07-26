@@ -596,6 +596,7 @@ tdd_evidence: null        # null | "<path-or-short-reason>" | "user-declared"
 test_frameworks: []       # array of frameworks detected in the scan (informative only)
 docs_sync: true           # true | false — per-project master switch for automated docs/ sync (docs-updater/docs-reviewer)
 figma_track: false        # true | false — opt-in switch for the Figma implementation track (design-to-code); default off, never heuristically flipped
+visual_first_approval: auto  # auto | human — default approval mode for the Figma Visual-First Track's visual-first blocking gate; only meaningful when figma_track: true
 ---
 
 # Methodology
@@ -648,6 +649,15 @@ in CONTRIBUTING.md / README.md. None of these activate TDD on their own.]
   run. Flips to `true` only via a human edit to this file or the explicit
   confirmation step of the future `/relay-design-map` command (Phase 3 of
   the Figma implementation track) — never by heuristic detection.
+- Always emit `visual_first_approval: auto` — the per-project default
+  approval mode for the Figma Visual-First Track's visual-first
+  blocking gate defaults to `auto`, mirroring the `figma_track`
+  default-emission precedent verbatim. Never heuristically inferred;
+  always emitted deterministically on every `*init` run. Flips to
+  `human` only via a human edit to this file or the explicit
+  confirmation step of the future `/relay-visual-approve` command
+  (Phase 6 of `PRPs/prds/figma-visual-first-track.prd.md`) — never by
+  heuristic detection. Only meaningful when `figma_track: true`.
 
 **Update behavior:**
 
@@ -677,6 +687,15 @@ in CONTRIBUTING.md / README.md. None of these activate TDD on their own.]
     mentions in commit history or docs) MUST NOT flip this value —
     only a human edit or the future `/relay-design-map` confirmation
     step can.
+  - **`visual_first_approval` preservation**: if `visual_first_approval`
+    is already present in the frontmatter, preserve its value
+    untouched — validated human/command input, same treatment as
+    `figma_track`. If the key is entirely absent (a project
+    initialized before this key existed), backfill
+    `visual_first_approval: auto` — this is the ONLY case where
+    `*update` adds this key; never remove or flip an existing value.
+    Heuristics MUST NOT flip this value — only a human edit or the
+    future `/relay-visual-approve` confirmation step can.
 - If the file is missing: run Init behavior.
 
 **Reporting (both modes):**

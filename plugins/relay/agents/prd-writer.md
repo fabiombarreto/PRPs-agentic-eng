@@ -255,6 +255,30 @@ direction. Do not re-run both by default.
 
 ## Phase 6 — DECISIONS (scope + risks + open questions)
 
+**Item 6.5 — Visual-first mode declaration (conditional, `figma_track:
+true` only).** When the target's `docs/context/methodology.md`
+declares `figma_track: true`, immediately before the Decisions
+blockquote below — since its answer shapes how item 7 (inside the
+blockquote) must be captured — ask the user:
+
+> Is this PRD visual-first? Visual-first means every phase in your
+> Implementation Phases table will be strictly split into a
+> scope-pure visual phase (UI built against mocked data, blocking
+> visual-verified before any logic exists) paired 1:1 with a
+> scope-pure logic phase (wires the real business rules once the
+> visual is locked). Answer yes or no.
+
+Record the answer as `visual_first: true | false` — this is never
+inferred from the feature description, Foundation answers, or any
+other prior dialogue, the same non-heuristic contract
+`figma_track`/`design_source` follow. A "yes" answer means item 7
+below must capture the phase list as strict visual/logic pairs (see
+item 7's own conditional note).
+
+When `figma_track` is `false` or absent, Item 6.5 is a silent no-op —
+no additional question is asked, and `visual_first` is never
+recorded.
+
 Ask the scope and risk questions:
 
 > **Decisions:**
@@ -270,7 +294,15 @@ Ask the scope and risk questions:
 > 6. **Key technical risks** — up to 3, each with likelihood and
 >    proposed mitigation?
 > 7. **Implementation phases** — a rough ordered list; each phase
->    produces something observable.
+>    produces something observable. (If item 6.5 above recorded
+>    `visual_first: true`:
+>    every phase must belong to exactly one visual/logic pair —
+>    describe each frontend surface as a strictly-paired visual
+>    phase + logic phase, e.g. 'Dashboard UI' then 'Dashboard
+>    Logic'. Any backend-only or docs-only work folds into
+>    whichever paired logic phase it most naturally supports;
+>    per `PRPs/prds/figma-visual-first-track.prd.md`'s AC-2, a
+>    visual-first PRD has no standalone, unpaired phase.)
 > 8. **Acceptance Criteria** — at least 3 observable AC-N items.
 >    Each written as Given/When/Then or explicit input/output.
 > 9. **Open questions** — what's still unsettled?
@@ -400,7 +432,25 @@ Fill sections in this order (from the template):
 12. Users & Context
 13. Solution Detail (MoSCoW, MVP Scope, User Flow)
 14. Technical Approach (Feasibility, TDD routing, Architecture Notes, Technical Risks)
-15. Implementation Phases (table + Phase Details)
+15. Implementation Phases (table + Phase Details) — when Item 6.5
+    recorded `visual_first: true`, assemble the table applying the
+    `[VISUAL]`/`[LOGIC]` phase-name tag + strict 1:1 `Depends`
+    pairing described in `docs/context/prd-template.md`'s `##
+    Visual-First Mode` section: every entry from the paired list
+    captured in item 7 becomes one tagged row, and a `[LOGIC]` row's
+    `Depends` cell names exactly its one paired `[VISUAL]` row's `#`.
+    When `visual_first` is `false`, absent, or `figma_track` is off,
+    assemble the table exactly as today (no tags, ordinary `Depends`
+    semantics).
+15.4. `## Visual-First Mode` (conditional — only when
+    `docs/context/methodology.md` declares `figma_track: true`) —
+    per `docs/context/prd-template.md`'s registered shape, emit the
+    single `**visual_first:**` line (value `true` or `false`)
+    sourced verbatim from Item 6.5's answer — never inferred.
+    Positioned immediately after `## Implementation Phases`, before
+    the conditional `## Design Source` section (item 15.5). When
+    `figma_track` is `false` or absent, the section is NOT emitted at
+    all — no heading, no placeholder.
 15.5. `## Design Source` (conditional — only when
     `docs/context/methodology.md` declares `figma_track: true`) — one
     row per `## Implementation Phases` table row, per

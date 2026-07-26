@@ -438,6 +438,63 @@ exit code the plan author chose.
   offending command verbatim, and stating the fix form:
   `if <check>; then echo "FAIL: …"; exit 1; else echo "PASS: …"; fi`.
 
+#### R-COH-ACTION-VALIDATE-CONTRADICTION — a task's ACTION prose does not contradict that SAME task's own VALIDATE command
+
+**Unconditional — always emitted, never zero-emission.** Unlike the
+four `figma_track`/`phase_scope`-gated conditional checks below,
+every plan has `### Task <i>` entries carrying `**ACTION**:` and
+`**VALIDATE**:` content, and there is no project- or plan-level
+declaration this check could gate on — so it always contributes
+exactly one row to `rubric[]`. Its nearest sibling in this respect is
+`R-COH-VALIDATE-ALWAYS-PASS`, also unconditional.
+
+- Parse `## Step-by-Step Tasks` for `### Task <i>: ...` headings.
+  Evaluate each task independently — this check never compares
+  across tasks — reading its `**ACTION**:` prose against that SAME
+  task's own `**VALIDATE**:` command(s).
+- Within a task's `**ACTION**:` prose, look for a quoted or
+  backticked literal string (text set off by a pair of backticks or
+  double quotes) that the prose instructs be INSERTED, ADDED, or
+  WRITTEN into a specific file — the file named in the
+  `### Task <i>:` heading, or a file path stated explicitly in the
+  ACTION prose.
+- **(a) Insert-vs-reject contradiction.** FAILS when that SAME
+  task's `**VALIDATE**:` command(s) check the SAME file for the SAME
+  literal and assert it must be ABSENT or occur zero times — e.g. a
+  `grep -c "<literal>" <file>` whose expected count is `0`, or a
+  `grep -q "<literal>" <file>` used inside an "if found, FAIL" shape
+  — because literal compliance with the ACTION (inserting the
+  literal) would make the task's own VALIDATE fail. `reason` quotes
+  the offending ACTION fragment, the offending VALIDATE fragment, and
+  the contradicting literal, verbatim.
+- **(b) Remove-vs-require contradiction (the inverse).** FAILS when a
+  task's ACTION instead instructs REMOVING, DELETING, or STRIPPING a
+  quoted/backticked literal from a file, while that SAME task's
+  VALIDATE requires or asserts the literal's PRESENCE in that SAME
+  file (e.g. a bare `grep -q "<literal>" <file>` with no absence
+  framing, expected to succeed) — literal compliance with the ACTION
+  would make the VALIDATE fail for the opposite reason. `reason`
+  quotes both fragments and the literal, verbatim, the same way as
+  (a).
+- A task with no quoted/backticked literal in its ACTION, or whose
+  VALIDATE targets a different file or a different literal than the
+  one named in its own ACTION, does not trip either condition for
+  that task.
+- Otherwise (no offending task found — including vacuously, on a
+  plan with zero tasks matching this shape at all) →
+  `{ "id": "R-COH-ACTION-VALIDATE-CONTRADICTION", "passed": true }`.
+
+**Known limitation (recorded, not blocking):** this is a heuristic
+textual scan over plan-authored prose, not real execution —
+`plan-reviewer` has no `Bash` tool and cannot execute a task's
+VALIDATE command to observe its real exit code; it matches literals
+textually against the ACTION prose, so it can both miss an obfuscated
+or paraphrased contradiction (the literal reworded, or split across a
+sentence) and false-positive on an incidental match. It is a
+plan-authoring-time gate, not the final safety net; the real
+enforcement remains the Implementer actually running the task's own
+VALIDATE command.
+
 #### R-COH-DESIGN-SOURCE-MISSING — design_source declared when figma_track is active
 
 **Deliberate divergence from Phase 0's `phase_type` behavior — stated
@@ -487,6 +544,121 @@ as a structural defect, full stop.
     — either every UI/frontend task references at least one frame or
     `CM-<n>` id, or no task's `**ACTION**:` line names a UI/frontend
     file (nothing to check — vacuously true).
+
+#### R-COH-VISUAL-SCOPE-PURITY — `phase_scope: visual` plans contain no side-effecting tasks and no unsentineled data/action tasks
+
+**Deliberate mirror of `R-COH-DESIGN-SOURCE-MISSING`/`R-COH-DESIGN-GROUNDED`'s
+zero-emission/otherwise shape, applied to the `phase_scope` field's own
+non-heuristic lineage.** This check never infers or repairs plan
+content — an offending task is always a structural defect, never a
+self-healing opportunity.
+- **Zero-emission branch:** if the plan's `## Metadata` table has no
+  row whose first cell matches `phase_scope` (case-insensitive), OR
+  the row's value is `logic` (not `visual`), emit NO row at all for
+  this check — not even `passed: true`. Do NOT fail in either case.
+- **Otherwise** (`phase_scope: visual`): parse `## Step-by-Step Tasks`
+  for `### Task <i>: ...` headings. For each task, scan its
+  `**ACTION**:` line and body prose — EXCLUDING its `**VALIDATE**:`
+  line/block — for two independent fail conditions:
+  - **(a) Forbidden side-effect vocabulary present.** A
+    case-insensitive match against any of: a client-call shape
+    (`fetch(`, `axios`, `XMLHttpRequest`, `WebSocket(`), a
+    persistence-method-call shape (`.save(`, `.persist(`), a SQL-write
+    shape (`INSERT INTO`, `DELETE FROM`, `UPDATE <table> SET`), a
+    REST-write shape (`POST /`, `PUT /`, `PATCH /`, `DELETE /`), or an
+    explicit real-side-effect phrase (`real API call`, `real network
+    call`, `real database`, `writes to the database`, `persists the
+    data`, `calls the real backend/service/server`) — FAILS this task
+    regardless of sentinel presence elsewhere in its body. `reason`
+    quotes the offending task heading and the matched phrase verbatim.
+  - **(b) Data/action task with no type-matched sentinel.** A task
+    whose `**ACTION**:` line matches a data-display signal word
+    (`display`, `render`, `show`, `populate`, `load`) but whose body
+    never mentions `RELAY-MOCK-DATA`, OR matches an interactive-action
+    signal word (`wire`, `bind`, `handle`, `on click`, `on submit`,
+    `on change`, `button`, `toggle`, `form submit`) but whose body
+    never mentions `RELAY-MOCK-BEHAVIOR` — FAILS. `reason` quotes the
+    offending task heading and states which sentinel class is
+    missing. A task matching neither signal class (pure
+    layout/structural work) is exempt from this sub-check — vacuously
+    fine.
+  - A single offending task can trip both (a) and (b); name every
+    offending task in `reason`.
+  - Otherwise → `{ "id": "R-COH-VISUAL-SCOPE-PURITY", "passed": true }`.
+
+**Known limitation (recorded, not blocking):** this is a textual
+heuristic scan over plan-authored task PROSE, not real code — it
+cannot see an actual diff (no code exists yet at plan-review time) and
+can both miss a cleverly-worded side effect and false-positive on an
+incidental word match. It is a plan-authoring-time gate, not the final
+safety net; Phase 5 (`Implement-time gate`) of
+`PRPs/prds/figma-visual-first-track.prd.md` is where a real diff gets
+checked against real code, out of this check's scope.
+
+#### R-COH-SENTINEL-RESOLUTION-MISSING — `phase_scope: logic` plans contain a sentinel-resolution task and its zero-remaining VALIDATE
+
+**Deliberate mirror of `R-COH-VISUAL-SCOPE-PURITY`'s
+zero-emission/otherwise shape, applied to the opposite `phase_scope`
+value.** Like its visual counterpart, this check never infers or
+repairs plan content — an offending (missing) task or VALIDATE is
+always a structural defect, never a self-healing opportunity. It is
+also mutually exclusive with `R-COH-VISUAL-SCOPE-PURITY`: both key off
+the same `## Metadata` `phase_scope` cell, which carries exactly one
+value per plan, so at most one of the two checks ever emits a row on
+a given run.
+- **Zero-emission branch:** if the plan's `## Metadata` table has no
+  row whose first cell matches `phase_scope` (case-insensitive), OR
+  the row's value is `visual` (not `logic`), emit NO row at all for
+  this check — not even `passed: true`. Do NOT fail in either case.
+- **Otherwise** (`phase_scope: logic`): parse `## Step-by-Step Tasks`
+  for `### Task <i>: ...` headings and every `**VALIDATE**:` command
+  (task-level and `## Validation Commands` Level 2/3 blocks), and
+  check two independent conditions:
+  - **(a) No sentinel-resolution task.** FAIL if NEITHER
+    `RELAY-MOCK-DATA` NOR `RELAY-MOCK-BEHAVIOR` appears anywhere in
+    `## Step-by-Step Tasks`'s task bodies. `reason`: no task
+    references either sentinel token; a `phase_scope: logic` plan
+    must author a mandatory sentinel-resolution task.
+  - **(b) No full-coverage zero-remaining VALIDATE.** FAIL if
+    EITHER (b1) no `**VALIDATE**:` command (task-level) and no
+    `## Validation Commands` Level 2/3 command block contains
+    `RELAY-MOCK` at all — no sentinel-targeting VALIDATE exists at
+    all — OR (b2) the VALIDATE text collectively names one sentinel
+    class (`RELAY-MOCK-DATA` or `RELAY-MOCK-BEHAVIOR`) but not the
+    other, AND no VALIDATE command contains a class-agnostic
+    `RELAY-MOCK` match that covers both by construction — a bare
+    common-prefix grep (e.g. `grep -r "RELAY-MOCK-" src/`), an
+    alternation (e.g. `grep -rE "RELAY-MOCK-(DATA|BEHAVIOR)"` or
+    `grep -r "RELAY-MOCK-DATA\|RELAY-MOCK-BEHAVIOR"`), or two
+    separate greps naming one literal token each all satisfy full
+    coverage and do NOT trip this sub-condition. `reason`
+    distinguishes the two failure modes: (b1) states no VALIDATE
+    command references any sentinel token; (b2) names which
+    sentinel class the VALIDATE text covers and which class is
+    missing.
+  - The exit-code CORRECTNESS of a matched VALIDATE command (does it
+    actually fail non-zero on a match, rather than the forbidden
+    always-pass idiom) is NOT re-checked here — that is already
+    `R-COH-VALIDATE-ALWAYS-PASS`'s job, run independently over every
+    VALIDATE command in the plan regardless of `phase_scope`. This
+    check only confirms a sentinel-targeting VALIDATE exists; the two
+    checks compose rather than duplicate.
+  - A single plan can fail both (a) and (b) simultaneously; name both
+    in `reason` when so.
+  - Otherwise → `{ "id": "R-COH-SENTINEL-RESOLUTION-MISSING", "passed": true }`.
+
+**Known limitation (recorded, not blocking):** like
+`R-COH-VISUAL-SCOPE-PURITY`, this is a textual heuristic scan over
+plan-authored task PROSE, not real code — it confirms the plan
+AUTHORED a resolution task and a sentinel-targeting VALIDATE, not that
+the task's ledger is complete against the paired visual phase's
+ACTUAL files (that would require reading those files and
+cross-referencing counts, out of this check's bounded scope —
+`plan-reviewer` has no `Glob`/`Grep` tool) or that the VALIDATE was
+ever executed. It is a plan-authoring-time gate, not the final safety
+net; the real zero-remaining-sentinel enforcement against real code
+happens when the Implementer actually runs this plan's VALIDATE
+command.
 
 ### Bounded K=5 LLM judgment pass
 
@@ -545,15 +717,33 @@ contradictions / the deterministic check held / the K=5 pass returned
 zero findings under that classification, and `false` when a
 contradiction was found (with a non-empty `reason`).
 
-The total `rubric[]` length per run is `8 (R1–R8) + 6 (deterministic
-R-COH-*) + ≤5 (K=5 pass) = 14 to 19 rows` for a project where
+The total `rubric[]` length per run is `8 (R1–R8) + 7 (deterministic
+R-COH-*) + ≤5 (K=5 pass) = 15 to 20 rows` for a project where
 `figma_track` is absent/`false` (the baseline case — unchanged from
 before this section existed). When the target declares
 `figma_track: true`, up to 2 additional conditional deterministic rows
 (`R-COH-DESIGN-SOURCE-MISSING`, `R-COH-DESIGN-GROUNDED`) may also
-appear, widening the range to `14 to 21 rows`; both are zero-emission
-(contribute nothing) when their own gating condition is not met, so
-the baseline 14–19 range is exact for every non-Figma project. The
+appear, and — independently, on a plan whose `## Metadata` declares
+`phase_scope` (itself only reachable inside a `figma_track: true`
+project, per the source PRD's own MoSCoW: `visual_first` is gated on
+`figma_track: true`) — exactly one of two mutually-exclusive 3rd
+conditional deterministic rows may also appear:
+`R-COH-VISUAL-SCOPE-PURITY` (on `phase_scope: visual`) or
+`R-COH-SENTINEL-RESOLUTION-MISSING` (on `phase_scope: logic`), since a
+single plan's `phase_scope` cell carries exactly one value and can
+never be both at once. Together these widen the range to
+`15 to 23 rows` in the maximal case (both design rows present, plus
+exactly one of the two mutually-exclusive phase_scope rows, plus the
+full 5-row K=5 pass) — the range never extends to a 24th row, because
+`R-COH-VISUAL-SCOPE-PURITY` and `R-COH-SENTINEL-RESOLUTION-MISSING`
+can never both fire on the same plan. Each of the four conditional
+rows is independently zero-emission (contributes nothing) when its
+own gating condition is not met, so the baseline 15–20 range is exact
+for every non-Figma project, and the 15–22 range from the prior
+`design_source` shipment remains exact for a `figma_track: true`
+project whose plan has no `phase_scope` row at all (neither `visual`
+nor `logic` — `visual_first: false`, or the PRD predates the
+visual-first track). The
 "exactly 8" wording at the five sites is replaced by "R1–R8 always
 present, no duplicates among R1–R8; R-COH-* rows additional" — see the
 JSONL format section below.
@@ -867,7 +1057,8 @@ One JSON object per line, appended (never truncated). Shape:
     { "id": "R-COH-VALIDATE-FRAMEWORK-MISMATCH", "passed": true, "reason": "test_frameworks empty in methodology.md; framework-mismatch check skipped" },
     { "id": "R-COH-PATTERN-SOURCE-MISSING", "passed": true },
     { "id": "R-COH-MANDATORY-READING-MISSING", "passed": true },
-    { "id": "R-COH-VALIDATE-ALWAYS-PASS", "passed": true }
+    { "id": "R-COH-VALIDATE-ALWAYS-PASS", "passed": true },
+    { "id": "R-COH-ACTION-VALIDATE-CONTRADICTION", "passed": true }
   ],
   "action": "final_flip",
   "user_message": ""

@@ -19,9 +19,11 @@
  *   runGatingStructureCheck() — thin wrapper that reads
  *     `plugins/relay/skills/context-builder/SKILL.md` and delegates.
  *
- * Extensible by design: this module intentionally starts with a single
+ * Extensible by design: this module intentionally started with a single
  * site (`figma_track`, added by
- * PRPs/plans/figma-implementation-track-phase-1-foundations.plan.md Task 3).
+ * PRPs/plans/figma-implementation-track-phase-1-foundations.plan.md Task 3)
+ * and now registers a 2nd site (`visual_first_approval`, added by
+ * PRPs/plans/figma-visual-first-track-phase-1-foundations.plan.md Task 5).
  * Later phases of the Figma implementation track (or any future opt-in
  * methodology key) append a new entry to the `SITES` array below instead
  * of creating a new check module — mirroring the R-COH-* additive-rubric
@@ -51,6 +53,14 @@ const SITES = [
       { id: 'default-false-emission', pattern: /always emit `figma_track: false`/i },
       { id: 'preserve-on-update', pattern: /`figma_track`\s*preservation/i },
       { id: 'backfill-only-when-absent', pattern: /backfill\s*`figma_track: false`/i },
+    ],
+  },
+  {
+    key: 'visual_first_approval',
+    markers: [
+      { id: 'default-auto-emission', pattern: /always emit `visual_first_approval: auto`/i },
+      { id: 'preserve-on-update', pattern: /`visual_first_approval`\s*preservation/i },
+      { id: 'backfill-only-when-absent', pattern: /backfill\s*`visual_first_approval: auto`/i },
     ],
   },
 ];

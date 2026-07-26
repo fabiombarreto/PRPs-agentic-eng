@@ -32,6 +32,7 @@ User-facing intro: see `README.md` at the repository root.
 → docs/context/test-output-schema.md — canonical JSON schema every test framework output is normalized into (consumed by B3/B4/B5/B6 of the Test Runner)
 → docs/context/component-map-template.md — canonical shape of `docs/design/component-map.md`, the versioned Figma-to-code component map that `design-map-writer`/`design-map-reviewer` reference as authoritative (Figma Implementation Track Phase 3)
 → docs/context/design-spec-template.md — canonical shape of `PRPs/designs/<feature>/design-spec.md`, the per-feature, human-approved Design Spec that `design-spec-writer`/`design-spec-reviewer` reference as authoritative (Figma Implementation Track Phase 4)
+→ docs/context/mock-sentinels.md — the [RELAY-MOCK-DATA]/[RELAY-MOCK-BEHAVIOR] inline sentinel convention for phase_scope: visual plans (Figma Visual-First Track)
 
 ## Design System (Figma Track)
 

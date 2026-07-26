@@ -75,6 +75,94 @@
  *     R-COH-DESIGN-SOURCE-INCOMPLETE fails on any row-count mismatch or
  *     empty Declaration cell.
  *
+ * Lifecycle update (2026-07-25, EXISTING_TEST_UPDATED, performed by the
+ * figma-visual-first-track Phase 3 test-writer session): Phase 3 of the
+ * separate figma-visual-first-track feature (v2,
+ * PRPs/prds/figma-visual-first-track.prd.md, unrelated to this v1 feature
+ * except for sharing plan-reviewer.md as a read target) inserted a new
+ * R-COH-VISUAL-SCOPE-PURITY check into plan-reviewer.md and rewrote the
+ * "## The R-COH-* coherence layer" rubric[]-length-range paragraph this
+ * file's own AC-4/AC-A1 "states the rubric[] length range stays the exact
+ * 14-19-row baseline..." test (below) reads, to account for a 3rd
+ * conditional deterministic row. Confirmed broken by directly reading the
+ * post-diff plan-reviewer.md content (not assumed — independently
+ * corroborated by a dedicated search pass before this fix was made): the
+ * paragraph's closing sentence changed from "both are zero-emission
+ * (contribute nothing) when their own gating condition is not met, so the
+ * baseline 14–19 range is exact for every non-Figma project." to "Each of
+ * the three conditional rows is independently zero-emission (contributes
+ * nothing) when its own gating condition is not met, so the baseline 14–19
+ * range is exact for every non-Figma project, and the 14–21 range from the
+ * prior `design_source` shipment remains exact for a `figma_track: true`
+ * project whose plan is not `phase_scope: visual`." The underlying property
+ * this test verifies (non-Figma projects keep the exact 14-19 baseline
+ * because every conditional row is independently zero-emission) is still
+ * fully true — only the wording grew a third conditional row and a
+ * trailing clause. Anti-weakening check: the fix below *replaces* the one
+ * now-stale regex with a new one matching the current wording of the SAME
+ * claim; no assertion is dropped, no scope is narrowed. Full justification
+ * recorded in PRPs/reports/figma-visual-first-track/test-suite.diff's
+ * Lifecycle ledger (phase 3 revision).
+ *
+ * Lifecycle update (2026-07-26, EXISTING_TEST_UPDATED, performed by the
+ * figma-visual-first-track Phase 4 test-writer session): Phase 4 of the
+ * same figma-visual-first-track feature rewrote the SAME rubric[]-length-
+ * range paragraph again — Task 8 of that phase's plan replaced "Each of the
+ * three conditional rows is independently zero-emission..." with "Each of
+ * the four conditional rows is independently zero-emission..." (a new
+ * mutually-exclusive R-COH-SENTINEL-RESOLUTION-MISSING row now joins
+ * R-COH-VISUAL-SCOPE-PURITY as the 3rd conditional slot, plus the two
+ * design_source rows and the K=5 pass make four conditional row classes
+ * total). Confirmed broken by directly reading the post-diff
+ * plan-reviewer.md content (independently corroborated by a dedicated
+ * search-agent pass before this fix was made): the regex below matched
+ * "three" literally, which no longer appears in that sentence. The
+ * underlying property this test verifies (non-Figma projects keep the
+ * exact 14-19 baseline because every conditional row is independently
+ * zero-emission) is still fully true — only the row-class count word
+ * changed. Anti-weakening check: the fix below changes exactly the one
+ * word ("three" → "four") inside the existing regex; the matched span, its
+ * start anchor, and its end anchor are otherwise byte-identical, so no
+ * assertion is dropped and no scope is narrowed. Full justification
+ * recorded in PRPs/reports/figma-visual-first-track/test-suite.diff's
+ * Lifecycle ledger (phase 4 revision).
+ *
+ * Lifecycle update (2026-07-26, EXISTING_TEST_UPDATED, performed by the
+ * plan-reviewer-action-validate-contradiction-check test-writer session,
+ * test-after per docs/context/methodology.md — a distinct session from the
+ * figma-visual-first-track Phase 4 one recorded immediately above, though
+ * also dated 2026-07-26): the standalone
+ * plan-reviewer-action-validate-contradiction-check plan (description
+ * mode, no source PRD;
+ * PRPs/plans/completed/plan-reviewer-action-validate-contradiction-check.plan.md)
+ * added a 7th FIXED deterministic R-COH-* check
+ * (R-COH-ACTION-VALIDATE-CONTRADICTION) to plan-reviewer.md and rewrote
+ * the SAME rubric[]-length-range paragraph this file's own AC-4/AC-A1
+ * "states the rubric[] length range stays the exact 14-19-row
+ * baseline..." test (below) reads, shifting the baseline numeral from
+ * `14 to 19 rows` to `15 to 20 rows` (the maximal case also shifts, from
+ * 14 to 22 to 15 to 23, but that numeral is not exercised by this file's
+ * own regex). Confirmed broken by directly reading the post-diff
+ * plan-reviewer.md content: the baseline sentence now reads "8 (R1-R8) +
+ * 7 (deterministic R-COH-*) + up to 5 (K=5 pass) = 15 to 20 rows" and the
+ * closing sentence now reads "...so the baseline 15-20 range is exact for
+ * every non-Figma project...". The underlying property this test verifies
+ * (non-Figma projects keep the exact baseline range because every
+ * conditional row is independently zero-emission) is still fully true —
+ * only the baseline numeral moved; the "four conditional rows" wording
+ * this test's own regex also matches is UNCHANGED by this shipment (the
+ * new check is FIXED, not a fifth conditional row), so that portion of
+ * the regex needs no edit. Anti-weakening check: the fix below changes
+ * exactly the one numeral pair ("14–19" to "15–20") inside the existing
+ * regex; the matched span, its start anchor, and its end anchor are
+ * otherwise byte-identical, so no assertion is dropped and no scope is
+ * narrowed. Per this file's own established convention (see the two
+ * Lifecycle update paragraphs above, both of which scoped their diff to
+ * the regex only), the test title is intentionally left as-is — only the
+ * regex numeral is updated. Full justification recorded in
+ * PRPs/reports/plan-reviewer-action-validate-contradiction-check/test-suite.diff's
+ * Lifecycle ledger.
+ *
  * Run: node --test scripts/validate/checks/figma-track-phase5.test.mjs
  */
 
@@ -270,7 +358,7 @@ test('AC-4/AC-A1: plan-reviewer.md states the rubric[] length range stays the ex
   );
   assert.match(
     collapsed,
-    /both are zero-emission \(contribute nothing\) when their own gating condition is not met, so the baseline 14–19 range is exact for every non-Figma project\./
+    /Each of the four conditional rows is independently zero-emission \(contributes nothing\) when its own gating condition is not met, so the baseline 15–20 range is exact for every non-Figma project/
   );
 });
 

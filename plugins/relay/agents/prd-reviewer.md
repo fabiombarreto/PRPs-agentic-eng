@@ -228,14 +228,19 @@ inserted between them:
 12. `## Technical Approach`
 13. `## Implementation Phases`
 
-    **Conditional `## Design Source` dual-branch note
-    (figma_track-gated; mirrors `plan-reviewer`'s analogous item-6
-    note since prd-reviewer has no existing dual-branch heading of its
-    own):** When `figma_track: true` for the target project (read
-    `docs/context/methodology.md`), `## Design Source` MUST appear
-    immediately after `## Implementation Phases`, before `## Decisions
-    Log`; when `figma_track` is `false` or absent, `## Design Source`
-    MUST be absent. A mismatch fails R2.
+    **Conditional `## Visual-First Mode` + `## Design Source`
+    dual-branch note (both figma_track-gated; mirrors
+    `plan-reviewer`'s analogous item-6 note since prd-reviewer has no
+    existing dual-branch heading of its own):** When `figma_track:
+    true` for the target project (read
+    `docs/context/methodology.md`), BOTH conditional sections MUST
+    appear, in this exact order: `## Visual-First Mode` immediately
+    after `## Implementation Phases`, then `## Design Source`
+    immediately after `## Visual-First Mode`, before `## Decisions
+    Log`. When `figma_track` is `false` or absent, BOTH sections MUST
+    be absent. A mismatch (either section present/absent
+    inconsistently with `figma_track`, or present out of order) fails
+    R2.
 14. `## Decisions Log`
 15. `## Research Summary`
 
@@ -371,6 +376,29 @@ Two execution stages, in order:
     row** → fail. `reason` names the phase number(s) with an empty
     `Declaration` cell.
   - Otherwise → `{ "id": "R-COH-DESIGN-SOURCE-INCOMPLETE", "passed": true }`.
+
+#### R-COH-VISUAL-PAIRING-INCOMPLETE — every visual-first phase is scope-pure and 1:1 Depends-paired
+
+- **Zero-emission branch:** if `## Visual-First Mode` is absent from
+  the PRD (the common case — `figma_track` off), OR the section is
+  present but its `visual_first:` value reads `false`, emit NO row at
+  all for this check; do NOT fail in either case.
+- **Otherwise** (`## Visual-First Mode` is present AND `visual_first:
+  true`): for every `## Implementation Phases` data row, read the
+  `Phase` cell's leading tag. Fail conditions, each naming the
+  offending phase number(s) in `reason`:
+  - (a) a row's `Phase` cell does not start with exactly one of
+    `[VISUAL]` or `[LOGIC]` (missing both, or carrying both) —
+    scope-impure or unmarked;
+  - (b) an unpaired `[VISUAL]` row — no `[LOGIC]` row's `Depends`
+    cell names that row's `#` as a lone value;
+  - (c) an unpaired or malformed `[LOGIC]` row — its `Depends` cell
+    is empty, names a non-existent phase number, names a `[LOGIC]`
+    phase instead of a `[VISUAL]` phase, or lists more than one phase
+    number;
+  - (d) non-1:1 fan-in — more than one `[LOGIC]` row's `Depends` cell
+    names the same `[VISUAL]` row.
+  - Otherwise → `{ "id": "R-COH-VISUAL-PAIRING-INCOMPLETE", "passed": true }`.
 
 ### Bounded K=5 LLM judgment pass
 

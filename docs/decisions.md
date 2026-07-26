@@ -833,6 +833,154 @@ Both edits are zero-effect on any plan where `figma_track` is off or `design_sou
 
 ---
 
+## [2026-07-25] Visual-first phase-pairing: `[VISUAL]`/`[LOGIC]` bracket tag on the `Phase` cell + strict 1:1 `Depends` pairing (Figma Visual-First Track Phase 2)
+
+**Context:** Phase 2 of `PRPs/prds/figma-visual-first-track.prd.md` (Implementation Phases row 2, "PRD authoring") ships the mechanism a `visual_first: true` PRD uses to express AC-2's mandatory strict visual/logic phase separation inside the existing `## Implementation Phases` table, with no new table column and no new orchestrator sequencing primitive. The source PRD's own Decisions Log posed two related items at authoring time: "Scope-flag placement" — a plan-level choice, `phase_scope: visual | logic` as a new non-heuristic field in the plan's `## Metadata` table, chosen over a new PRD-table column and over reusing `phase_type` — and "Visual/logic pairing" (strict 1:1 via the existing `Depends` column vs. N:1, deferred). The PRD itself was silent on how a visual-first PRD marks per-row scope at the PRD level; the `[VISUAL]`/`[LOGIC]` Phase-cell bracket tag actually shipped here is this Phase 2 plan's own authoring-time invention (`PRPs/plans/figma-visual-first-track-phase-2-prd-authoring.plan.md` Notes: "neither the source PRD nor Phase 1 specified how an individual PRD phase row should declare its visual/logic scope"), which reuses the "Scope-flag placement" row's rejection of a new PRD-table column as a carried-over constraint on the design. The 2026-07-24 Phase 1 docs-sync deliberately withheld the "Visual-first architectural direction" as a Candidate Decision pending "the first point where this direction has real, observable behavior to anchor the entry to," explicitly naming Phase 2 ("PRD authoring") as the suggested timing (`PRPs/reports/figma-visual-first-track/docs-update.md`, superseded by this sync's manifest). This entry records the shipped mechanics so future agents consult the decision instead of re-deriving it.
+
+**Decision:** A `visual_first: true` PRD marks each `## Implementation Phases` row's scope directly in the `Phase` cell using a mandatory leading bracket tag — `[VISUAL] {Phase Name}` or `[LOGIC] {Phase Name}` — rather than a dedicated table column, mirroring `docs/context/mock-sentinels.md`'s `[RELAY-MOCK-DATA]`/`[RELAY-MOCK-BEHAVIOR]` bracket-tag idiom (Phase 1). Every row carries exactly one of the two tags, never both, never neither. Pairing reuses the existing `Depends` column with a strict 1:1 rule: a `[LOGIC]` row's `Depends` cell names exactly the `#` of its one paired `[VISUAL]` row (a lone value, never comma-separated), and a `[VISUAL]` row is named by exactly one `[LOGIC]` row's `Depends` cell — never N:1. Per AC-2's "(and vice versa)" clause, every phase belongs to exactly one pair; a visual-first PRD has no standalone, unpaired phase. `prd-writer` gains a `figma_track`-gated Item 6.5 question in Phase 6 DECISIONS ("Is this PRD visual-first?", recorded verbatim as `visual_first: true | false`, never inferred) plus Step 7.4 items 15 and 15.4, which assemble the tagged, paired rows and emit a single `**visual_first:**` line inside the new `## Visual-First Mode` section, positioned immediately after `## Implementation Phases` and before the conditional `## Design Source` section. `prd-reviewer` enforces the shape structurally and read-only via the new `R-COH-VISUAL-PAIRING-INCOMPLETE` deterministic check — zero-emission unless `## Visual-First Mode` is present AND `visual_first: true`; otherwise it fails `CHANGES_REQUESTED` on a missing/doubled tag, an unpaired `[VISUAL]`/`[LOGIC]` row, a malformed or multi-valued `Depends` cell, or non-1:1 fan-in — and its item-13 dual-branch section-order note (mirroring `plan-reviewer`'s analogous item-6 note) now orders `## Visual-First Mode` before `## Design Source` when both are `figma_track`-gated-present. Canonical shape lives in `docs/context/prd-template.md`'s `## Visual-First Mode` → `### Phase-pairing mechanism` subsection.
+
+**Reason:** A new table column would widen every PRD's Implementation Phases table even in the common `visual_first: false`/`figma_track: false` case unless made conditional with extra ceremony; reusing `phase_type` would conflate a reviewer-inferable structural classification (`docs/decisions.md` [2026-05-14]) with a business-level scope declaration that must never be inferred — the same non-heuristic reasoning that already separated `design_source` from `phase_type` (`docs/decisions.md` [2026-07-23] `design_source` declaration). Tagging the `Phase` cell instead reuses a convention already proven one phase earlier in this same track rather than inventing a second bracket-tag idiom. Strict 1:1 via `Depends` maps directly onto the dependency primitive the orchestrator's own state machine already understands (`docs/decisions.md` [2026-05-01] D6), with no ambiguity about which logic phase owns which visual phase; N:1 was deferred as a future extension per the source PRD's own Open Questions, consistent with this project's "no legacy carve-out, no premature generalization" posture elsewhere in this log.
+
+**Areas affected:** `docs/context/prd-template.md` (`## Visual-First Mode` + `### Phase-pairing mechanism` section); `plugins/relay/agents/prd-writer.md` (Item 6.5 question, item 7 amendment, Step 7.4 items 15 and 15.4); `plugins/relay/agents/prd-reviewer.md` (item-13 dual-branch section-order note, new `R-COH-VISUAL-PAIRING-INCOMPLETE` check); future Phase 3 (`plan-writer`/`plan-reviewer` `phase_scope: visual` handling) and Phase 4 (`phase_scope: logic` + sentinel-ledger resolution) consumers of the paired rows this mechanism produces.
+
+---
+
+## [2026-07-25] `phase_scope` non-heuristic sourcing + `R-COH-VISUAL-SCOPE-PURITY` enforcement ship (Figma Visual-First Track Phase 3)
+
+**Context:** Phase 1 (Foundations) registered `phase_scope: visual | logic` as a plan-Metadata field stub without a sourcing mechanism; the [2026-07-25] Visual-first phase-pairing entry above (Phase 2) forward-referenced "future Phase 3 (`plan-writer`/`plan-reviewer` `phase_scope: visual` handling)" as the phase that would resolve it. Phase 3 of `PRPs/prds/figma-visual-first-track.prd.md` (Implementation Phases row 3, "Plan authoring — visual phase") now ships that sourcing mechanism plus `plan-reviewer`'s structural enforcement of visual-scope task purity. This entry records the shipped mechanics so future agents consult the decision instead of re-deriving it.
+
+**Decision:** `plan-writer` sources `phase_scope` non-heuristically, mirroring `design_source`'s lineage (`docs/decisions.md` [2026-07-23] `design_source` declaration) rather than `phase_type`'s self-healing one (`docs/decisions.md` [2026-05-14]): it reads Implementation Phases row N's own `Phase` cell for its mandatory leading `[VISUAL]`/`[LOGIC]` bracket tag (the tag `prd-writer` emits per the [2026-07-25] Visual-first phase-pairing entry) — never inferred from the row's `Description` cell, Phase Details prose, or any task content. When the source PRD declares `visual_first: true` and the row's `Phase` cell does not begin with exactly one recognized tag, `plan-writer` HALTs with `FAILED_PHASE_SCOPE_UNDECLARED` before writing any DRAFT plan, rather than silently defaulting to `logic`. This HALT is a defense-in-depth backstop, not the expected path — `prd-reviewer`'s `R-COH-VISUAL-PAIRING-INCOMPLETE` check (shipped Phase 2) already structurally guarantees every row carries exactly one valid tag before a `visual_first: true` PRD can reach `APPROVED`.
+
+For a `phase_scope: visual` plan, every task under `## Step-by-Step Tasks` is restricted to UI-and-mocks scope: no task's `**ACTION**:` line or body prose may contain forbidden side-effect vocabulary (client-call, persistence-write, SQL-write, or REST-write shapes, or an explicit real-side-effect phrase), and every data-display or interactive-action task must name the type-matched `[RELAY-MOCK-DATA]`/`[RELAY-MOCK-BEHAVIOR]` sentinel it will emit. `docs/context/mock-sentinels.md` (Phase 1) becomes a mandatory P0 `## Mandatory Reading` row on every `phase_scope: visual` plan. `plan-reviewer` enforces both rules structurally via the new zero-emission deterministic check `R-COH-VISUAL-SCOPE-PURITY` — no rubric row at all unless `## Metadata` carries `phase_scope: visual` — which never infers or repairs an offending task (always a structural defect). The check's own text records a known limitation: it is a textual scan over plan-authored task prose, not a real diff (no code exists yet at plan-review time), so it can miss a cleverly-worded side effect or false-positive on an incidental word match; Phase 5 (Implement-time gate) is where a real diff gets checked against real code.
+
+The rubric-length range in `plan-reviewer.md` widens to `14 to 22 rows` in the maximal case (all three conditional rows — `R-COH-DESIGN-SOURCE-MISSING`, `R-COH-DESIGN-GROUNDED`, and now `R-COH-VISUAL-SCOPE-PURITY` — present at once). Each conditional row remains independently zero-emission, so the 14–19 baseline is unchanged for non-Figma projects and the 14–21 range is unchanged for a `figma_track: true` project whose plan is not `phase_scope: visual`.
+
+**Reason:** "Is this phase visual or logic" is a business/authoring decision no reviewer may manufacture on the plan-writer's behalf — the same reasoning that already separated `design_source` from the reviewer-inferable `phase_type` (`docs/decisions.md` [2026-07-23]). Reusing the already-proven non-heuristic lineage, the `[VISUAL]`/`[LOGIC]` bracket-tag idiom `prd-writer` already emits (Phase 2), and the existing zero-emission/otherwise shape of `R-COH-DESIGN-SOURCE-MISSING`/`R-COH-DESIGN-GROUNDED` keeps this addition structurally consistent with the rest of the R-COH-* coherence layer instead of inventing new mechanics.
+
+**Areas affected:** `plugins/relay/agents/plan-writer.md` (Hard Constraint #12; Phase 0 read of the PRD's `visual_first` value; Step 4.4 item 5 `phase_scope` Metadata sourcing + `FAILED_PHASE_SCOPE_UNDECLARED` HALT; item 6 mandatory `mock-sentinels.md` P0 reading; item 10 task-restriction rule; anti-patterns bullet); `plugins/relay/agents/plan-reviewer.md` (new `R-COH-VISUAL-SCOPE-PURITY` deterministic check; rubric-length range 14–21 → 14–22); `docs/context/plan-template.md` (`phase_scope` conditional Metadata field resolved from stub to the sourcing mechanism + HALT shape); future Phase 4 (`phase_scope: logic` + sentinel-ledger resolution, per the source PRD's own Implementation Phases row 4) consumer of this mechanism.
+
+---
+
+## [2026-07-25] `phase_scope: logic` sentinel-ledger resolution + `R-COH-SENTINEL-RESOLUTION-MISSING` enforcement ship (Figma Visual-First Track Phase 4)
+
+**Context:** The [2026-07-25] entry directly above (`phase_scope` non-heuristic sourcing + `R-COH-VISUAL-SCOPE-PURITY` enforcement ship) forward-referenced "future Phase 4 (`phase_scope: logic` + sentinel-ledger resolution, per the source PRD's own Implementation Phases row 4)" as the phase that would resolve the paired logic-side half of the mechanism. Phase 4 of `PRPs/prds/figma-visual-first-track.prd.md` (Implementation Phases row 4, "Plan authoring — logic phase + sentinel ledger") now ships that resolution. This entry records the shipped mechanics so future agents consult the decision instead of re-deriving it.
+
+**Decision:** `plan-writer`'s Phase 2 GROUNDING extends its existing `research-codebase` dispatch for a `[LOGIC]`-tagged row (source PRD declares `visual_first: true`): it resolves the paired visual phase's row number from row N's own `Depends` cell, reads that row's `PRP Plan` cell, and extends the dispatch's `focus_areas` with `RELAY-MOCK-DATA`/`RELAY-MOCK-BEHAVIOR` occurrences and `roots` with the paired visual phase's touched files (from its `## Files to Change` table); the returned findings become the initial sentinel ledger, falling back to `TBD - needs validation` (never halting) if the paired plan is unreadable. New Hard Constraint #13 (mirroring #12's visual-side dual-branch, never-inferred lineage) and a Step 4.4 item 10 amendment require every `phase_scope: logic` plan to author at least one task resolving every ledger entry per `docs/context/mock-sentinels.md`'s Swap semantics — replacing each `[RELAY-MOCK-DATA]` literal with its real data source at the exact sentinel site, filling each `[RELAY-MOCK-BEHAVIOR]` handler with real logic inside the already-approved choreography — backed by at least one VALIDATE command that greps the paired visual phase's own touched files for both sentinel tokens and fails (non-zero exit) if either remains: no count threshold, no recorded-justification exception, per `docs/context/mock-sentinels.md`'s "Zero remaining sentinels — no deferral path" rule and the source PRD's own Decisions Log "Sentinel deferral policy" row ("Never allowed — logic-phase validation requires zero remaining sentinels"). Step 4.4 item 6 additionally makes `docs/context/mock-sentinels.md` and the paired visual phase's own plan file mandatory P0 `## Mandatory Reading` rows on every `phase_scope: logic` plan.
+
+Step 4.3.5's `## Design Source` conditional section gains a frame-filter exception for `phase_scope: logic` plans: because the Design Spec's `Phase assignment` column (when present) names the VISUAL phase that renders each frame, never the logic phase that later wires real data behind it, a logic-scoped plan filters frames by the paired visual phase's row number (read from row N's own `Depends` cell) instead of row N's own number — inheriting the SAME locked frame set the paired visual phase already declared, rather than deriving an empty or mismatched set.
+
+`plan-reviewer` gains the new zero-emission deterministic check `R-COH-SENTINEL-RESOLUTION-MISSING`, a deliberate mirror of `R-COH-VISUAL-SCOPE-PURITY`'s zero-emission/otherwise shape applied to the opposite `phase_scope` value: it emits no rubric row at all unless `## Metadata` carries `phase_scope: logic`; otherwise it fails when either (a) no task references `RELAY-MOCK-DATA`/`RELAY-MOCK-BEHAVIOR` anywhere in `## Step-by-Step Tasks`, or (b) the `**VALIDATE**:` commands (task-level or `## Validation Commands` Level 2/3), collectively, name no sentinel token at all or only one sentinel class without a class-agnostic `RELAY-MOCK` match covering both. It is mutually exclusive with `R-COH-VISUAL-SCOPE-PURITY` — both key off the same single-valued `phase_scope` Metadata cell, so at most one of the two ever emits a row for a given plan. The rubric-length range's maximum stays `22 rows` (two conditional design-source rows, plus exactly one of the two mutually-exclusive `phase_scope` rows, plus the full 5-row K=5 pass, on top of the 8 R1–R8 + 6 fixed R-COH-* baseline) — it never reaches a 23rd row, since `R-COH-VISUAL-SCOPE-PURITY` and `R-COH-SENTINEL-RESOLUTION-MISSING` can never both fire on the same plan.
+
+**Reason:** Resolving the sentinel ledger is the other half of the visual/logic split this track exists to enable — a visual phase that locks a deterministic mock diff is only safe if the paired logic phase is structurally guaranteed to remove every mock before completion (source PRD AC-5). Deriving the ledger from the paired visual phase's own touched files only, never the whole repo or other visual/logic pairs in the same feature, keeps resolution scoped to the exact 1:1 pair each logic phase resolves. Reusing `R-COH-VISUAL-SCOPE-PURITY`'s zero-emission/otherwise shape for the new check keeps the R-COH-* coherence layer structurally consistent rather than inventing new mechanics; the mutual-exclusivity property falls directly out of `phase_scope` being single-valued, not a new design choice. The frame-inheritance exception is necessary because a logic phase does not itself render any frame — the Design Spec's own `Phase assignment` column only ever names visual phases, so filtering by row N's own number would silently produce an empty or wrong frame set for every logic-scoped plan.
+
+**Areas affected:** `plugins/relay/agents/plan-writer.md` (Hard Constraint #13; Phase 2 GROUNDING ledger-dispatch extension; Step 4.3.5 frame-inheritance exception; Step 4.4 item 6 mandatory-reading amendment; Step 4.4 item 10 mandatory sentinel-resolution-task rule; anti-patterns bullet); `plugins/relay/agents/plan-reviewer.md` (new `R-COH-SENTINEL-RESOLUTION-MISSING` deterministic check; rubric-length-range prose now accounts for the two mutually-exclusive `phase_scope` rows); `docs/context/plan-template.md` (`phase_scope: logic` implications paragraph; `## Design Source` frame-filter exception). This closes the forward reference from the Phase 3 entry above; per the source PRD's own Implementation Phases table, Phase 5 (Implement-time gate) and Phase 6 (Orchestrator wiring) are the remaining phases of this track.
+
+---
+
+## [2026-07-26] R-COH-ACTION-VALIDATE-CONTRADICTION: a 7th FIXED deterministic plan-reviewer check catching ACTION/VALIDATE self-contradiction; rubric[] arithmetic shifts to 15–20/15–23
+
+**Context:** `plan-reviewer`'s additive R-COH-* coherence layer had no
+check cross-referencing a single task's own `**ACTION**:` prose
+against that SAME task's own `**VALIDATE**:` command. A real instance
+escaped review: `PRPs/plans/completed/figma-visual-first-track-phase-4-plan-logic-ledger.plan.md`
+Task 8 instructed inserting the literal `` `14 to 23` `` into
+`plugins/relay/agents/plan-reviewer.md` (as part of a clarifying "NOT
+`14 to 23`" aside) while that SAME task's own VALIDATE asserted
+`grep -q "14 to 23" plugins/relay/agents/plan-reviewer.md` must find
+nothing — literal compliance with the ACTION was structurally
+impossible. `plan-reviewer` APPROVED the plan anyway: it verified the
+rubric-row arithmetic was correct but never cross-checked the ACTION
+prose against the VALIDATE command of the SAME task. The Implementer
+deviated from the plan's literal ACTION text (landing "the range
+never extends to a 23rd row" instead of the plan's literal
+instruction) and self-reported the judgment call; `code-reviewer`
+independently ruled the deviation justified. No mechanism existed to
+catch the authoring-time defect itself, before implementation.
+
+**Decision:** `plan-reviewer` gains a 7th FIXED deterministic
+`R-COH-*` check, `R-COH-ACTION-VALIDATE-CONTRADICTION`, positioned
+immediately after `R-COH-VALIDATE-ALWAYS-PASS` and immediately before
+`R-COH-DESIGN-SOURCE-MISSING` — preserving "fixed checks first,
+conditional checks after". For each `### Task <i>` in `##
+Step-by-Step Tasks`, it detects two contradiction shapes between that
+task's own ACTION and its own VALIDATE: (a) the ACTION instructs
+inserting a quoted/backticked literal into a file while the VALIDATE
+asserts a zero count of that same literal in that same file; and (b)
+the inverse — the ACTION instructs removing a literal while the
+VALIDATE requires its presence. It is a textual scan performed by the
+reviewer over the plan already in memory (`plan-reviewer`'s tool
+grant is `Read, Edit, Write` — no `Bash`, no `Grep` — so it cannot
+execute the VALIDATE command itself), in the same voice as
+`R-COH-VALIDATE-ALWAYS-PASS`, and closes with a "Known limitation"
+paragraph matching `R-COH-VISUAL-SCOPE-PURITY`/`R-COH-SENTINEL-RESOLUTION-MISSING`'s
+own shape.
+
+**Deliberately UNCONDITIONAL, not a 5th zero-emission conditional
+row.** Unlike the four existing declaration-gated zero-emission
+checks (`R-COH-DESIGN-SOURCE-MISSING`/`R-COH-DESIGN-GROUNDED` gated on
+`figma_track`; `R-COH-VISUAL-SCOPE-PURITY`/`R-COH-SENTINEL-RESOLUTION-MISSING`
+gated on `phase_scope`), `R-COH-ACTION-VALIDATE-CONTRADICTION` has no
+project- or plan-level declaration to gate on — every plan has
+ACTION+VALIDATE tasks by construction (the plan template already
+mandates this shape on every task). It therefore always contributes
+exactly one row to `rubric[]`, `passed: true` vacuously on a plan
+with no task matching the tractable contradiction shape, mirroring
+`R-COH-VALIDATE-ALWAYS-PASS`'s own unconditional precedent, not the
+four conditional siblings' zero-emission one.
+
+**Rubric[] arithmetic shifts.** The `### Logging discipline`
+paragraph in `plugins/relay/agents/plan-reviewer.md` is updated for 7
+fixed deterministic checks (was 6): baseline (non-Figma)
+`8 (R1–R8) + 7 (deterministic R-COH-*) + ≤5 (K=5 pass) = 15 to 20
+rows` (was 14 to 19); maximal (two design rows plus exactly one of
+the two mutually-exclusive `phase_scope` rows, plus the full 5-row
+K=5 pass) = `15 to 23 rows` (was 14 to 22); the range never extends
+to a 24th row (was 23rd), because `R-COH-VISUAL-SCOPE-PURITY` and
+`R-COH-SENTINEL-RESOLUTION-MISSING` remain mutually exclusive. The
+preserved range for a `figma_track: true` project whose plan has no
+`phase_scope` row at all shifts from 14–21 to 15–22. The "four
+conditional rows" wording is UNCHANGED — the new check is FIXED, not
+a fifth conditional row, so the count of conditional rows stays four.
+**This entry's numerals supersede the "rubric[] length 14–19" numeral
+recorded in the [2026-07-09] entry's "Areas affected" line above**
+(`docs/decisions.md` [2026-07-09] "Validation commands must carry
+real exit-code semantics..."), which predates this shipment.
+
+**Reason:** The escaped instance demonstrates the gap is real, not
+hypothetical: a plan can be structurally well-formed (correct
+rubric-row arithmetic, correct ordering, correct wording) while still
+being internally self-contradictory at the single-task granularity
+R1–R8 and the six prior R-COH-* checks do not examine. The check is
+deliberately scoped to the tractable, high-value subset (quoted/
+backticked literal + same-file zero-count/presence grep) rather than
+attempting general natural-language contradiction detection,
+consistent with this layer's existing deterministic checks
+(mechanical, not LLM-judged) and its separate bounded K=5 LLM pass
+(which already covers broader, harder-to-mechanize contradiction
+classes). Making it UNCONDITIONAL rather than a fifth zero-emission
+conditional row is correct because — unlike Figma/visual-first
+involvement, which is a business decision the reviewer cannot
+manufacture — every plan already has ACTION+VALIDATE task pairs by
+construction; there is no "doesn't apply" case to gate on, only a
+"found nothing" vacuous-pass case, mirroring
+`R-COH-VALIDATE-ALWAYS-PASS`'s own precedent exactly.
+
+**Areas affected:** `plugins/relay/agents/plan-reviewer.md` (new
+`#### R-COH-ACTION-VALIDATE-CONTRADICTION` deterministic check,
+positioned between `R-COH-VALIDATE-ALWAYS-PASS` and
+`R-COH-DESIGN-SOURCE-MISSING`; `### Logging discipline`
+rubric[]-length arithmetic 14–19/14–22 → 15–20/15–23, 23rd → 24th row
+wording, 14–21 → 15–22 preserved range; `## review.jsonl format`
+example block gains a matching row); `scripts/validate/checks/figma-visual-first-track-phase3.test.mjs`
+and `scripts/validate/checks/figma-track-phase5.test.mjs` (both
+assert verbatim sentences from the updated paragraph —
+`EXISTING_TEST_UPDATED` follow-up by the test pair, test-after per
+`docs/context/methodology.md`); this entry's own numerals now the
+canonical rubric[]-length reference, superseding the [2026-07-09]
+entry's stale "14–19" mention.
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision

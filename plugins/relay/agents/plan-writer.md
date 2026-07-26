@@ -135,6 +135,39 @@ task, and exit cleanly when there is nothing to plan.
     `|| echo`). `plan-reviewer`'s R-COH-VALIDATE-ALWAYS-PASS check
     rejects plans that violate this. See Step 4.4 item 11 for the
     full wrong→right table.
+12. **`phase_scope: visual` task purity (when applicable).** When
+    the plan's `## Metadata` carries `phase_scope: visual`, every
+    task under `## Step-by-Step Tasks` MUST stay within UI-and-mocks
+    scope: no task's `**ACTION**:` prose may imply a real network
+    call, database/persistence write, or real business-logic
+    mutation (see the forbidden-pattern vocabulary in Step 4.4 item
+    10), and every task that displays a datum or wires an
+    interactive handler MUST name the `[RELAY-MOCK-DATA]` or
+    `[RELAY-MOCK-BEHAVIOR]` sentinel (type-matched: data →
+    `RELAY-MOCK-DATA`, interactive action → `RELAY-MOCK-BEHAVIOR`)
+    it will emit, per `docs/context/mock-sentinels.md`.
+    `plan-reviewer`'s new `R-COH-VISUAL-SCOPE-PURITY` check (Phase 3
+    of `PRPs/prds/figma-visual-first-track.prd.md`) rejects any plan
+    that violates this. Not applicable — silent no-op — when
+    `phase_scope` is absent or `logic`, mirroring `design_source`'s
+    own dual-branch, never-inferred lineage.
+13. **`phase_scope: logic` sentinel-ledger resolution (when
+    applicable).** When the plan's `## Metadata` carries `phase_scope:
+    logic`, the plan MUST author at least one task under `##
+    Step-by-Step Tasks` that resolves every
+    `[RELAY-MOCK-DATA]`/`[RELAY-MOCK-BEHAVIOR]` sentinel found in the
+    paired visual phase's touched files (see the ledger-derivation
+    rule in Phase 2 GROUNDING and the task-authoring rule in Step 4.4
+    item 10), backed by at least one VALIDATE command that fails
+    (non-zero exit) if any such sentinel remains — no count threshold,
+    no recorded-justification exception, per
+    `docs/context/mock-sentinels.md`'s "no deferral path" rule and the
+    source PRD's own Decisions Log ("Sentinel deferral policy: Never
+    allowed"). `plan-reviewer`'s new `R-COH-SENTINEL-RESOLUTION-MISSING`
+    check (Phase 4 of `PRPs/prds/figma-visual-first-track.prd.md`)
+    rejects any plan that violates this. Not applicable — silent
+    no-op — when `phase_scope` is absent or `visual`, mirroring
+    constraint #12's own dual-branch, never-inferred lineage.
 
 ---
 
@@ -160,6 +193,9 @@ Before Phase 1, do these reads:
     signal blocks).
   - The Acceptance Criteria section (AC-1 through AC-N) — needed for
     R8 traceability when assembling the plan's Acceptance Criteria.
+  - The PRD's `## Visual-First Mode` section's `visual_first:` value
+    if present, else treat as `visual_first: false` (section
+    absent).
 
 ---
 
@@ -324,6 +360,32 @@ below):
   - `roots`: the path inferred from `Description` if it names a
     directory (e.g. `plugins/relay/agents/` for an agent phase);
     otherwise omit.
+  - **`phase_scope: logic` ledger-dispatch (conditional).** When the
+    source PRD declares `visual_first: true` (Phase 0) and row N's own
+    `Phase` cell carries a leading `[LOGIC]` tag (the same tag Step
+    4.4 item 5 later formalizes into `phase_scope: logic` — this
+    dispatch reads the tag directly, ahead of that formal assignment,
+    since GROUNDING runs before Step 4.4), first resolve the paired
+    visual phase's row number from row N's own `Depends` cell (already
+    parsed in Phase 1; guaranteed a single bare value for a `[LOGIC]`
+    row per `docs/context/prd-template.md`'s Phase-pairing mechanism),
+    then `Read` that row's `PRP Plan` cell path. Hold that plan's `##
+    Files to Change` table (the file set to search) and its `##
+    Design Source` table, if present (consumed by Step 4.3.5), in
+    context for the remainder of this run. Then extend this
+    `research-codebase` dispatch: `focus_areas` gains two entries
+    targeting `RELAY-MOCK-DATA` and `RELAY-MOCK-BEHAVIOR` sentinel
+    occurrences, and `roots` is set to the paired visual phase's
+    touched files/directories from its `## Files to Change` table. The
+    returned `findings` (each carrying a `path:line` `source` field)
+    become the initial sentinel ledger Step 4.4 item 10 requires. If
+    the paired visual row's `PRP Plan` cell is empty/unreadable
+    (should not happen — Step 1.3's `Depends`-completeness gate
+    already guarantees the visual row is `complete` with a populated
+    `PRP Plan` cell before a paired logic row is ever actionable),
+    fall back to `TBD - needs validation` for the ledger rather than
+    halting — a defensive fallback per Hard Constraint #6, not an
+    expected path.
 - `subagent_type: research-web`
   - `topic`: same 1–3 sentence description.
   - `focus_areas`: 1–2 broader patterns the phase intersects (e.g.
@@ -522,6 +584,25 @@ changes when figma_track is off" guarantee for the plan body: a
 non-Figma plan's section list stays byte-identical to today's 15
 sections.
 
+**`phase_scope: logic` frame-inheritance (conditional).** When this
+row's `phase_scope` (Step 4.4 item 5) is `logic` AND `design_source:
+figma`, do NOT filter the Design Spec's frames by row N's own number
+— row N is the logic row, and the Design Spec's `Phase assignment`
+column, when present, names the VISUAL phase that renders each frame,
+never the logic phase that later wires real data behind it. Instead,
+filter using the paired visual phase's row number, read from row N's
+own `Depends` cell (guaranteed single-valued for a `[LOGIC]` row per
+`docs/context/prd-template.md`'s Phase-pairing mechanism; already
+resolved during Phase 2's ledger-dispatch extension above, so no
+re-read is required here). This is how a `phase_scope: logic` plan's
+`## Design Source` section inherits the SAME locked frame set the
+paired visual phase's plan already declared — the frames Phase A.3.4's
+real-data regression (Phase 5 of this same track, not built here) will
+re-verify — rather than deriving an empty or mismatched set from the
+logic row's own number. When `phase_scope` is absent or `visual`, this
+paragraph does not apply — the existing row-N filter (unchanged)
+governs.
+
 ### Step 4.4 — Body sections (14 mandatory)
 
 Assemble in this order:
@@ -601,10 +682,68 @@ Assemble in this order:
    Figma involvement" rather than surfacing the real gap. When
    `figma_track` is `false` or absent, `design_source` is not added
    at all — the Metadata table is byte-identical to today.
+
+   **`phase_scope` (conditional, non-heuristic — mirrors
+   `design_source`'s exact lineage).** Present (`visual | logic`) only
+   when the source PRD's `## Visual-First Mode` section declares
+   `visual_first: true` (captured during Phase 0's read-through);
+   absent entirely otherwise — including in description mode, where
+   there is no PRD to declare `visual_first` at all, so `phase_scope`
+   is never sourced or emitted. Never inferred from row N's
+   `Description` cell, its Phase Details Goal/Scope text, or any task
+   content — sourced by reading row N's own `Phase` cell for its
+   mandatory leading `[VISUAL]` or `[LOGIC]` bracket tag (registered
+   in `docs/context/prd-template.md`'s `## Visual-First Mode` →
+   `### Phase-pairing mechanism`, shipped by Phase 2 of
+   `PRPs/prds/figma-visual-first-track.prd.md`): `[VISUAL]` →
+   `phase_scope: visual`; `[LOGIC]` → `phase_scope: logic`. When the
+   source PRD declares `visual_first: true` and row N's `Phase` cell
+   does not begin with exactly one recognized tag (missing, both, or
+   malformed), HALT with:
+
+   > `FAILED_PHASE_SCOPE_UNDECLARED`: the source PRD declares
+   > `visual_first: true`, but Implementation Phases row <N>'s `Phase`
+   > cell ("<verbatim Phase cell text>") does not begin with a
+   > recognized `[VISUAL]` or `[LOGIC]` tag. No DRAFT plan has been
+   > written. Resolve the missing/malformed tag (re-run `/relay-prd`
+   > to regenerate the row, or hand-edit the PRD's `Phase` cell to add
+   > the leading tag) and re-run `/relay-plan`.
+
+   Do NOT write a DRAFT in this case. Do NOT default `phase_scope` to
+   `logic` or omit it silently when `visual_first: true` and the tag
+   is missing — that would mask a scope-purity gap the same way
+   silently defaulting `design_source` to `none` would mask an
+   undeclared Figma phase. In practice this HALT should rarely fire:
+   `prd-reviewer`'s `R-COH-VISUAL-PAIRING-INCOMPLETE` check already
+   structurally guarantees every row carries exactly one valid tag
+   before a `visual_first: true` PRD can reach `APPROVED` — this HALT
+   is a defense-in-depth backstop (e.g. against a hand-edited PRD row
+   post-approval), not the expected common case. When `visual_first`
+   is `false`, absent, or the source PRD has no `## Visual-First Mode`
+   section at all (`figma_track` off), `phase_scope` is not added to
+   `## Metadata` at all — the table is byte-identical to today.
 6. `## Mandatory Reading` — table of files (priority, path, lines,
    why) drawn from research-codebase findings + the PRD's Phase
    Details. Every row's path must come from a real research finding
-   or be the PRD itself; never invent.
+   or be the PRD itself; never invent. When `phase_scope: visual`
+   (from item 5 above), always include `docs/context/mock-sentinels.md`
+   as a P0 `## Mandatory Reading` row — the sentinel convention and
+   zero-side-effects/zero-remaining rules every task in this plan must
+   satisfy, and the exact reference the Implementer needs when
+   executing the plan's tasks. Symmetrically, when `phase_scope: logic`
+   (from item 5 above), always include `docs/context/mock-sentinels.md`
+   as a P0 `## Mandatory Reading` row (the swap-semantics section —
+   resolving `[RELAY-MOCK-DATA]` by replacing the literal with its real
+   source, resolving `[RELAY-MOCK-BEHAVIOR]` by filling the real
+   handler inside the already-approved choreography — and the
+   zero-remaining, no-deferral rule this phase's mandatory resolution
+   task must satisfy) AND include the paired visual phase's plan file
+   (resolved via row N's own `Depends` cell, per the Phase 2
+   ledger-dispatch extension above) as a second P0 row — the concrete
+   ledger source: its `## Files to Change` table names every file the
+   resolution task must sweep for sentinels, and its `## Design
+   Source` table (when present) is what Step 4.3.5's frame-inheritance
+   amendment inherits verbatim.
 7. `## Patterns to Mirror` — at least one snippet per architectural
    anchor identified by research-codebase. Every snippet header is
    `# SOURCE: <path>:<line-range>` followed by the copy-pasted code,
@@ -628,6 +767,93 @@ Assemble in this order:
       command must carry real exit-code semantics — see item 11's
       *Exit-code semantics* rule; a `**VALIDATE**` that prints
       "FAIL" but still exits 0 is a cosmetic gate.
+
+    **`phase_scope: visual` task restriction (conditional).** When
+    the plan's `## Metadata` carries `phase_scope: visual` (from item
+    5), every task under this section MUST stay within UI-and-mocks
+    scope:
+    - **Forbidden side-effect vocabulary.** No task's `**ACTION**:`
+      line or body prose (excluding its `**VALIDATE**:` line/block —
+      a defensive VALIDATE grep for the ABSENCE of one of these
+      tokens is expected and must not itself trip this rule) may
+      contain, case-insensitively: a client-call shape (`fetch(`,
+      `axios`, `XMLHttpRequest`, `WebSocket(`), a
+      persistence-method-call shape (`.save(`, `.persist(`), a
+      SQL-write shape (`INSERT INTO`, `DELETE FROM`, `UPDATE <table>
+      SET`), a REST-write shape (`POST /`, `PUT /`, `PATCH /`,
+      `DELETE /`), or an explicit real-side-effect phrase (`real API
+      call`, `real network call`, `real database`, `writes to the
+      database`, `persists the data`, `calls the real
+      backend/service/server`). A task naming one of these patterns
+      describes a `phase_scope: logic` concern and does not belong in
+      a visual-scoped plan.
+    - **Mandatory, type-matched sentinel naming.** A task whose
+      `**ACTION**:` line displays or loads a datum (signal words:
+      `display`, `render`, `show`, `populate`, `load`) MUST name the
+      `[RELAY-MOCK-DATA]` sentinel it will emit at that site. A task
+      whose `**ACTION**:` line wires an interactive handler (signal
+      words: `wire`, `bind`, `handle`, `on click`, `on submit`, `on
+      change`, `button`, `toggle`, `form submit`) MUST name the
+      `[RELAY-MOCK-BEHAVIOR]` sentinel it will emit at that site. A
+      task matching both signal classes must name both. A purely
+      structural task with neither a displayed datum nor an
+      interactive handler (e.g., static markup, styling) needs
+      neither sentinel — do not force one.
+    - Reuse the exact sentinel shape documented in
+      `docs/context/mock-sentinels.md`.
+
+    `plan-reviewer`'s new `R-COH-VISUAL-SCOPE-PURITY` check (Phase 3
+    of `PRPs/prds/figma-visual-first-track.prd.md`) enforces both
+    rules structurally. Not applicable — no restriction, no rubric
+    row — when `phase_scope` is absent or `logic`.
+
+    **`phase_scope: logic` mandatory sentinel-resolution task
+    (conditional).** When the plan's `## Metadata` carries
+    `phase_scope: logic` (from item 5), the plan MUST author at least
+    one task that resolves every
+    `[RELAY-MOCK-DATA]`/`[RELAY-MOCK-BEHAVIOR]` sentinel left behind by
+    the paired visual phase:
+    - **Derive the ledger.** Use the findings from the Phase 2
+      ledger-dispatch extension (each
+      `RELAY-MOCK-DATA`/`RELAY-MOCK-BEHAVIOR` match becomes one ledger
+      entry: `file:line`, sentinel class, evidence snippet). When the
+      dispatch returns no sentinel findings, treat the ledger as empty
+      and note this explicitly in the task body and in `## Risks and
+      Mitigations` — do not invent entries.
+    - **Author the resolution task(s).** At least one `### Task <i>:
+      ...` heading whose `**ACTION**:` enumerates the ledger (inline,
+      or by reference to the paired visual plan's Mandatory Reading
+      row) and requires, per `docs/context/mock-sentinels.md`'s Swap
+      semantics: for every `[RELAY-MOCK-DATA]` entry, replace the
+      literal mock value with the real data source at the exact
+      sentinel site (the displayed shape does not change, only where
+      the value comes from); for every `[RELAY-MOCK-BEHAVIOR]` entry,
+      fill in the real handler/business logic in the middle of the
+      already-approved choreography (the timing, sequencing, and
+      visual states locked in during the visual phase are preserved;
+      only the substance of what the handler does changes). Large
+      ledgers MAY be split across multiple tasks (e.g., one per
+      touched file); at least one such task MUST exist regardless of
+      ledger size.
+    - **Mandatory zero-remaining VALIDATE — no deferral path.** At
+      least one `**VALIDATE**:` command (task-level, or a `##
+      Validation Commands` Level 2/3 block) MUST grep the paired
+      visual phase's touched files for both sentinel tokens and FAIL
+      (non-zero exit, per Hard Constraint #11) if either is still
+      found. Per `docs/context/mock-sentinels.md`'s "Zero remaining
+      sentinels — no deferral path" section and the source PRD's own
+      Decisions Log ("Sentinel deferral policy: Never allowed"), this
+      VALIDATE MUST NOT accept a count threshold, a recorded
+      justification, or any other exception — the check is a strict
+      zero, with no deferral of any kind. Scope the grep to the paired
+      visual phase's OWN touched files only (the 1:1 pair this logic
+      phase resolves), never the whole repo and never other
+      visual/logic pairs elsewhere in the same feature.
+
+    `plan-reviewer`'s new `R-COH-SENTINEL-RESOLUTION-MISSING` check
+    enforces both the task's presence and the VALIDATE's presence
+    structurally. Not applicable — no requirement, no rubric row —
+    when `phase_scope` is absent or `visual`.
 11. `## Validation Commands` — Levels 1–3 only:
     - **Level 1 STATIC_ANALYSIS** (lint / type-check / markdown-lint
       / YAML parse, depending on the phase's deliverable).
@@ -861,6 +1087,24 @@ invoked separately by `/relay-plan-review`.
   always exits 0 and can never fail the `code-reviewer` R-L gate.
   Emit `if …; then echo "FAIL: …"; exit 1; fi` — or let the tool's
   own non-zero status propagate — instead. See Step 4.4 item 11.
+- **Authoring a side-effecting task inside a `phase_scope: visual`
+  plan.** A task naming a real network call, persistence write, or
+  business mutation (or a displayed-datum/interactive-action task
+  with no type-matched sentinel) belongs in the paired `phase_scope:
+  logic` plan (Phase 4 of `PRPs/prds/figma-visual-first-track.prd.md`),
+  never here. `plan-reviewer`'s `R-COH-VISUAL-SCOPE-PURITY` check
+  rejects it.
+- **Authoring a `phase_scope: logic` plan with no sentinel-resolution
+  task, or with one whose VALIDATE accepts anything short of zero
+  remaining sentinels.** A `phase_scope: logic` plan MUST contain at
+  least one task resolving every
+  `[RELAY-MOCK-DATA]`/`[RELAY-MOCK-BEHAVIOR]` sentinel in the paired
+  visual phase's files, backed by a VALIDATE that fails on any
+  remaining sentinel — no count threshold, no recorded-justification
+  exception, per `docs/context/mock-sentinels.md`'s "no deferral path"
+  rule and the source PRD's own Decisions Log ("Sentinel deferral
+  policy: Never allowed"). `plan-reviewer`'s
+  `R-COH-SENTINEL-RESOLUTION-MISSING` check rejects it.
 
 ---
 
