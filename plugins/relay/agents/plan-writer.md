@@ -134,7 +134,10 @@ task, and exit cleanly when there is nothing to plan.
     propagate (a bare `grep -q <pattern> <paths>` with no
     `|| echo`). `plan-reviewer`'s R-COH-VALIDATE-ALWAYS-PASS check
     rejects plans that violate this. See Step 4.4 item 11 for the
-    full wrong→right table.
+    full wrong→right table — including the diff-scope and
+    prohibition-idiom traps that apply specifically to
+    forbidden-reference greps (e.g. `\.claude/PRPs`), enforced by
+    `plan-reviewer`'s R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE check.
 12. **`phase_scope: visual` task purity (when applicable).** When
     the plan's `## Metadata` carries `phase_scope: visual`, every
     task under `## Step-by-Step Tasks` MUST stay within UI-and-mocks
@@ -908,6 +911,41 @@ Assemble in this order:
     command exit non-zero, it is a cosmetic gate — rewrite it.
     `plan-reviewer`'s R-COH-VALIDATE-ALWAYS-PASS rejects plans whose
     Level or `VALIDATE` commands can never fail.
+
+    **Diff-scope and prohibition-idiom traps (mandatory when a
+    VALIDATE command greps for a forbidden-reference literal like
+    `\.claude/PRPs`).** A command can have correct exit-code
+    semantics per the rule above and *still* be wrong, by matching
+    the wrong thing. Two dogfood incidents against the
+    `figma-implementation-track` feature confirm this is a real,
+    repeatable trap (see
+    `PRPs/plans/completed/figma-implementation-track-phase-2-mcp-access-spike.plan.md`
+    and `...-phase-3-component-map.plan.md`, `## Notes` sections):
+
+    ```
+    # WRONG — whole-file grep: false-positives on pre-existing prose
+    # the diff never touched (e.g. historical commentary elsewhere in
+    # the file describing an unrelated convention):
+    grep -q "\.claude/PRPs" docs/decisions.md
+
+    # WRONG — diff-scoped, but still false-positives on this repo's
+    # own standard quoted-prohibition sentence, which other agent
+    # files legitimately cite verbatim:
+    git diff --unified=0 <base> -- <paths> | grep -E "^\+[^+]" | grep -q "\.claude/PRPs"
+
+    # RIGHT — diff-scoped AND excludes the standard quoted-prohibition
+    # idiom, so only a real newly-introduced write-target reference fails:
+    if git diff --unified=0 <base> -- <paths> | grep -E "^\+[^+]" \
+         | grep "\.claude/PRPs" | grep -qv "MUST NOT appear"; then
+      echo "FAIL: forbidden .claude/PRPs reference introduced outside a quoted prohibition"; exit 1
+    else
+      echo "PASS: no forbidden path references introduced outside quoted prohibitions"
+    fi
+    ```
+
+    Any forbidden-reference VALIDATE command that skips either the
+    diff-scoping or the `MUST NOT appear` exclusion is rejected by
+    `plan-reviewer`'s `R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE` check.
 12. `## Acceptance Criteria` — bulleted list.
     - **PRD mode (`description_mode = false`):** every bullet must
       reference at least one PRD `AC-N` it derives from (rubric R8).
@@ -1105,6 +1143,15 @@ invoked separately by `/relay-plan-review`.
   rule and the source PRD's own Decisions Log ("Sentinel deferral
   policy: Never allowed"). `plan-reviewer`'s
   `R-COH-SENTINEL-RESOLUTION-MISSING` check rejects it.
+- **Unscoped or prohibition-blind forbidden-reference greps.** A
+  `**VALIDATE**` or Level command checking for an introduced
+  `\.claude/PRPs` (or similar) reference must grep the `git diff`
+  output, not the whole file, and must exclude the standard
+  `MUST NOT appear` quoted-prohibition idiom other agent files
+  legitimately cite. Either gap produces a false CHANGES_REQUESTED
+  against a correct diff. See Step 4.4 item 11's diff-scope and
+  prohibition-idiom traps; `plan-reviewer`'s
+  R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE rejects both gaps.
 
 ---
 
