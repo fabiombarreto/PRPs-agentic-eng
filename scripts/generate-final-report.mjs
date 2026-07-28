@@ -193,7 +193,9 @@ function loadPhaseScopes(reportsDir, phases) {
   // sourcing lineage (Figma Visual-First Track Phase 7). Returns a
   // Map<phase, 'visual'|'logic'|null>; null when no plan file is
   // found, more than one matches, or no phase_scope row is present.
-  // Never throws.
+  // Never throws. A genuine read failure on a found plan file
+  // additionally emits a `warning: could not read ...` line to
+  // stderr before falling back to null.
   const plansRoot = resolve(reportsDir, '..', '..');
   const scopes = new Map();
   for (const phase of phases) {
@@ -211,7 +213,8 @@ function loadPhaseScopes(reportsDir, phases) {
       const content = readFileSync(planPath, 'utf-8');
       const scopeMatch = /\|\s*phase_scope\s*\|\s*(visual|logic)\s*\|/i.exec(content);
       scopes.set(phase, scopeMatch ? scopeMatch[1].toLowerCase() : null);
-    } catch {
+    } catch (err) {
+      process.stderr.write(`warning: could not read ${planPath}: ${err.message}\n`);
       scopes.set(phase, null);
     }
   }
@@ -224,13 +227,17 @@ function loadVisualApprovalLine(reportsDir, phase) {
   // 6) — and formats its last recorded decision as one markdown line.
   // Returns null when the file is absent, empty, or its last line
   // fails to parse as JSON, or carries neither an "approved" nor a
-  // "rejected" decision. Never throws.
+  // "rejected" decision. Never throws. A genuine read or parse
+  // failure (past the `existsSync` absence guard) additionally
+  // emits a `warning: could not read|parse ...` line to stderr
+  // before returning null.
   const jsonlPath = join(reportsDir, phase, 'visual-approval.jsonl');
   if (!existsSync(jsonlPath)) return null;
   let content;
   try {
     content = readFileSync(jsonlPath, 'utf-8');
-  } catch {
+  } catch (err) {
+    process.stderr.write(`warning: could not read ${jsonlPath}: ${err.message}\n`);
     return null;
   }
   const nonEmptyLines = content.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
@@ -238,7 +245,8 @@ function loadVisualApprovalLine(reportsDir, phase) {
   let entry;
   try {
     entry = JSON.parse(nonEmptyLines[nonEmptyLines.length - 1]);
-  } catch {
+  } catch (err) {
+    process.stderr.write(`warning: could not parse ${jsonlPath}: ${err.message}\n`);
     return null;
   }
   const decision = entry.decision;
