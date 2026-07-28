@@ -163,6 +163,60 @@
  * PRPs/reports/plan-reviewer-action-validate-contradiction-check/test-suite.diff's
  * Lifecycle ledger.
  *
+ * Lifecycle update (2026-07-28, EXISTING_TEST_UPDATED, performed by the
+ * add-an-8th-fixed-deterministic-check-r-coh-validate-search test-writer
+ * session, test-after per docs/context/methodology.md): the standalone
+ * add-an-8th-fixed-deterministic-check-r-coh-validate-search plan
+ * (description mode, no source PRD;
+ * PRPs/plans/add-an-8th-fixed-deterministic-check-r-coh-validate-search.plan.md)
+ * added an 8th FIXED deterministic R-COH-* check
+ * (R-COH-VALIDATE-SEARCH-AMBIGUOUS, positioned after
+ * R-COH-ACTION-VALIDATE-CONTRADICTION and before R-COH-DESIGN-SOURCE-MISSING)
+ * to plan-reviewer.md and rewrote the SAME rubric[]-length-range paragraph
+ * this file's own AC-4/AC-A1 "states the rubric[] length range stays the
+ * exact ...-row baseline..." test (below) reads, shifting the baseline
+ * numeral from `15–20` to `16–21` (the maximal case also shifts, from
+ * 15 to 23 to 16 to 24, but that numeral is not exercised by this file's
+ * own regex). Confirmed broken by directly reading the post-diff
+ * plan-reviewer.md content: the closing sentence now reads "...so the
+ * baseline 16–21 range is exact for every non-Figma project...". The
+ * underlying property this test verifies (non-Figma projects keep the
+ * exact baseline range because every conditional row is independently
+ * zero-emission) is still fully true — only the baseline numeral moved;
+ * the "four conditional rows" wording this test's own regex also matches
+ * is UNCHANGED by this shipment (the new check is FIXED, not a fifth
+ * conditional row), so that portion of the regex needs no edit.
+ * Anti-weakening check: the fix below changes exactly the one numeral
+ * pair ("15–20" to "16–21") inside the existing regex; the matched span,
+ * its start anchor, and its end anchor are otherwise byte-identical, so
+ * no assertion is dropped and no scope is narrowed.
+ *
+ * Departing from this file's own prior established convention (see the
+ * three Lifecycle update paragraphs above, all of which scoped their diff
+ * to the regex only and left the test title untouched): this revision
+ * ALSO updates the test title, which by this point was three generations
+ * stale ("14-19-row baseline" from the very first shift, and "the two new
+ * conditional rows" — a count that grew from two to four across the
+ * [2026-07-25] and [2026-07-26] Phase 4 shifts recorded above, neither
+ * reflected in the title). `test-reviewer`, reviewing this same session's
+ * own new plan-reviewer-validate-search-ambiguous-check.test.mjs file,
+ * flagged the drift as a genuine, free-to-fix hygiene defect rather than
+ * a rubric failure. Sibling file figma-visual-first-track-phase3.test.mjs
+ * already updates its own analogous test's title alongside its assertions
+ * on every revision (its own Lifecycle-update paragraphs record this
+ * explicitly); bringing this file's practice into alignment with that
+ * established sibling precedent — rather than perpetuating an unprincipled
+ * divergence between the two files for the same underlying pattern — is
+ * the judgment call made here. The title now reads "...stays the exact
+ * 16-21-row baseline for every non-Figma project — each of the four
+ * conditional rows is independently zero-emission and widens the range
+ * only when its own gating condition is met", accurately describing the
+ * CURRENTLY enforced behavior. No assertion or scope changed — title-only
+ * edit, a documentation-accuracy improvement alongside the regex fix.
+ * Full justification recorded in
+ * PRPs/reports/add-an-8th-fixed-deterministic-check-r-coh-validate-search/test-suite.diff's
+ * Lifecycle ledger.
+ *
  * Run: node --test scripts/validate/checks/figma-track-phase5.test.mjs
  */
 
@@ -342,7 +396,7 @@ test('AC-4/AC-A1: plan-reviewer.md R-COH-DESIGN-GROUNDED is a zero-emission no-o
   );
 });
 
-test('AC-4/AC-A1: plan-reviewer.md states the rubric[] length range stays the exact 14-19-row baseline for every non-Figma project — the two new conditional rows are zero-emission and widen the range only when figma_track: true', () => {
+test('AC-4/AC-A1: plan-reviewer.md states the rubric[] length range stays the exact 16-21-row baseline for every non-Figma project — each of the four conditional rows is independently zero-emission and widens the range only when its own gating condition is met', () => {
   const content = readRepoFile(PLAN_REVIEWER_PATH);
   const block = sliceBetween(
     content,
@@ -358,7 +412,7 @@ test('AC-4/AC-A1: plan-reviewer.md states the rubric[] length range stays the ex
   );
   assert.match(
     collapsed,
-    /Each of the four conditional rows is independently zero-emission \(contributes nothing\) when its own gating condition is not met, so the baseline 15–20 range is exact for every non-Figma project/
+    /Each of the four conditional rows is independently zero-emission \(contributes nothing\) when its own gating condition is not met, so the baseline 16–21 range is exact for every non-Figma project/
   );
 });
 

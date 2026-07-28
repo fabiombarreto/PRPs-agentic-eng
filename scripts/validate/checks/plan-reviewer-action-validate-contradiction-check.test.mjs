@@ -38,8 +38,8 @@
  *     same-input, same-assertion duplicate (R-DUPLICATE) of already-green
  *     tests. This file's own AC-A5 arithmetic test therefore asserts only
  *     the short numeral/phrase tokens this phase's own Task 2 VALIDATE
- *     command greps for (`7 (deterministic`, `15 to 20 rows`,
- *     `15 to 23 rows`, `24th row`, `Each of the four conditional rows is
+ *     command greps for (`8 (deterministic`, `16 to 21 rows`,
+ *     `16 to 24 rows`, `25th row`, `Each of the four conditional rows is
  *     independently zero-emission`) — a Level-3-Validation-Command-made-
  *     permanent smoke check, not a re-assertion of the full sentences.
  *   - Neither of those two files, nor any other file in this directory,
@@ -308,14 +308,14 @@ test('AC-A7: plan-reviewer.md\'s ## review.jsonl format example JSON block inclu
 // docs/decisions.md's [2026-07-26] entry.
 // ---------------------------------------------------------------------------
 
-test('AC-A4: plan-reviewer.md carries exactly 11 total #### R-COH-* deterministic-check headings — the 7 fixed checks (ending with the new R-COH-ACTION-VALIDATE-CONTRADICTION) in order, followed by the 4 conditional checks in their existing order — preserving "fixed checks first, conditional checks after"', () => {
+test('AC-A4: plan-reviewer.md carries exactly 12 total #### R-COH-* deterministic-check headings — the 8 fixed checks (ending with the new R-COH-VALIDATE-SEARCH-AMBIGUOUS) in order, followed by the 4 conditional checks in their existing order — preserving "fixed checks first, conditional checks after"', () => {
   const content = readRepoFile(PLAN_REVIEWER_PATH);
   const headingMatches = [...content.matchAll(/^#### (R-COH-[A-Z-]+)/gm)].map((m) => m[1]);
 
   assert.equal(
     headingMatches.length,
-    11,
-    `expected exactly 11 total #### R-COH-* headings (7 fixed + 4 conditional), found ${headingMatches.length}: ${headingMatches.join(', ')}`
+    12,
+    `expected exactly 12 total #### R-COH-* headings (8 fixed + 4 conditional), found ${headingMatches.length}: ${headingMatches.join(', ')}`
   );
 
   const expectedFixed = [
@@ -326,18 +326,19 @@ test('AC-A4: plan-reviewer.md carries exactly 11 total #### R-COH-* deterministi
     'R-COH-MANDATORY-READING-MISSING',
     'R-COH-VALIDATE-ALWAYS-PASS',
     'R-COH-ACTION-VALIDATE-CONTRADICTION',
+    'R-COH-VALIDATE-SEARCH-AMBIGUOUS',
   ];
   const expectedConditional = ['R-COH-DESIGN-SOURCE-MISSING', 'R-COH-DESIGN-GROUNDED', 'R-COH-VISUAL-SCOPE-PURITY', 'R-COH-SENTINEL-RESOLUTION-MISSING'];
 
   assert.deepEqual(
-    headingMatches.slice(0, 7),
+    headingMatches.slice(0, 8),
     expectedFixed,
-    'expected the 7 fixed deterministic checks first, in this exact order, ending with the new R-COH-ACTION-VALIDATE-CONTRADICTION check'
+    'expected the 8 fixed deterministic checks first, in this exact order, ending with the new R-COH-VALIDATE-SEARCH-AMBIGUOUS check'
   );
   assert.deepEqual(
-    headingMatches.slice(7),
+    headingMatches.slice(8),
     expectedConditional,
-    'expected the 4 conditional checks after the 7 fixed ones, in their existing relative order'
+    'expected the 4 conditional checks after the 8 fixed ones, in their existing relative order'
   );
 });
 
@@ -359,18 +360,18 @@ test('AC-A6 (regression guard): the forbidden literal "14 to 23" is absent from 
 // (both fixed this same session; see this file's header comment).
 // ---------------------------------------------------------------------------
 
-test('AC-A5: plan-reviewer.md\'s ### Logging discipline paragraph reads 7 fixed deterministic checks, a 15-to-20-row baseline, a 15-to-23-row maximal case, "24th row", and preserves the "Each of the four conditional rows is independently zero-emission" wording verbatim (the new check is FIXED, not a fifth conditional row)', () => {
+test('AC-A5: plan-reviewer.md\'s ### Logging discipline paragraph reads 8 fixed deterministic checks, a 16-to-21-row baseline, a 16-to-24-row maximal case, "25th row", and preserves the "Each of the four conditional rows is independently zero-emission" wording verbatim (the new check is FIXED, not a fifth conditional row)', () => {
   const content = readRepoFile(PLAN_REVIEWER_PATH);
   const block = sliceBetween(content, 'The total `rubric[]` length per run is', 'When the K=5 pass emits N findings');
   assert.ok(block, 'expected an extractable rubric[] length-range paragraph');
   const collapsed = collapseWs(/** @type {string} */ (block));
 
   assert.ok(
-    collapsed.includes('8 (R1–R8) + 7 (deterministic R-COH-*) + ≤5 (K=5 pass) = 15 to 20 rows'),
-    'expected the updated baseline arithmetic (7 fixed checks, 15 to 20 rows)'
+    collapsed.includes('8 (R1–R8) + 8 (deterministic R-COH-*) + ≤5 (K=5 pass) = 16 to 21 rows'),
+    'expected the updated baseline arithmetic (8 fixed checks, 16 to 21 rows)'
   );
-  assert.ok(collapsed.includes('15 to 23 rows'), 'expected the updated 15-to-23-row maximal case');
-  assert.ok(collapsed.includes('24th row'), 'expected the "24th row" never-extends-to wording');
+  assert.ok(collapsed.includes('16 to 24 rows'), 'expected the updated 16-to-24-row maximal case');
+  assert.ok(collapsed.includes('25th row'), 'expected the "25th row" never-extends-to wording');
   assert.ok(
     collapsed.includes('Each of the four conditional rows is independently zero-emission'),
     'expected the preserved "four conditional rows" wording — unchanged, since the new check is FIXED, not a fifth conditional row'

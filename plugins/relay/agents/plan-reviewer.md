@@ -495,6 +495,96 @@ plan-authoring-time gate, not the final safety net; the real
 enforcement remains the Implementer actually running the task's own
 VALIDATE command.
 
+#### R-COH-VALIDATE-SEARCH-AMBIGUOUS — position-based search terms feeding an ordering comparison must be provably unique, or explicitly sentineled as first-match-intended
+
+**Unconditional — always emitted, never zero-emission.** Like
+`R-COH-VALIDATE-ALWAYS-PASS` and `R-COH-ACTION-VALIDATE-CONTRADICTION`,
+this check has no project- or plan-level declaration to gate on — a
+position-based search inside a `**VALIDATE**:` command or a `##
+Validation Commands` block is plan CONTENT, not a declaration
+(`figma_track`, `phase_scope`, `design_source`, and `test_frameworks`
+are the only gating declarations any conditional check in this layer
+keys off, and none of them bears on whether a plan happens to author
+an `indexOf`/`lastIndexOf` ordering assertion) — so it always
+contributes exactly one row to `rubric[]`. Its nearest sibling in this
+respect is `R-COH-ACTION-VALIDATE-CONTRADICTION`: that check catches
+ACTION and VALIDATE DISAGREEING on a literal — the ACTION's literal
+text and the VALIDATE's search string contradict each other. This
+check catches a different class: ACTION and VALIDATE AGREE on the
+literal, but the literal is not proven unique in the file the
+VALIDATE searches. The two checks are complementary, not overlapping
+— a task can trip one, both, or neither.
+
+- Scope: every `**VALIDATE**:` command under `## Step-by-Step Tasks`,
+  and every command in the `## Validation Commands` Level 1–3 blocks.
+- A site is IN SCOPE for this check only when ALL of the following
+  hold:
+  - (a) the command calls `indexOf(...)` or `lastIndexOf(...)` on
+    some source string;
+  - (b) the resulting index value feeds an ORDERING comparison (`>`,
+    `<`, `>=`, `<=`) against ANOTHER index value derived the same way
+    (via its own `indexOf`/`lastIndexOf` call) — a bare `=== -1` /
+    `!== -1` presence test is OUT OF SCOPE; non-uniqueness cannot
+    break a presence test;
+  - (c) the search string passed to `indexOf`/`lastIndexOf` is a bare
+    identifier or a short fragment that plausibly recurs — not, for
+    instance, a full sentence or an already-disambiguated call-site
+    fragment.
+- For each in-scope site, apply the ESCAPE HATCH first: if that
+  site's `**VALIDATE**:` text, or the prose immediately adjacent to
+  it, carries the sentinel token `RELAY-FIRST-MATCH-INTENDED`
+  followed by a non-empty justification, the site PASSES — do not
+  evaluate the two fail triggers below for it. A bare sentinel with
+  no justification text does NOT satisfy the escape hatch; treat it
+  as absent and continue to the fail triggers.
+- Otherwise, apply two fail triggers, in order:
+  - **(a) Primary trigger — plan-local duplication.** FAILS when the
+    plan's OWN `**ACTION**:` text for that SAME task contains the
+    search string more than once. This is the strongest signal
+    available without reading the target file: if the plan's own
+    prose already repeats the string, the target file — which the
+    ACTION describes editing — plausibly repeats it too.
+  - **(b) Secondary trigger — unqualified short identifier
+    (heuristic, weaker).** FAILS when the search string is a bare
+    identifier (a contiguous run of letters/digits/underscore, no
+    embedded whitespace or punctuation) with NO disambiguating
+    context — no leading `await `, no `function `/`const `/`### `/
+    `## ` anchor immediately before it, no surrounding punctuation
+    (parens, colons, quotes-within-the-match, etc.) — AND the string
+    is shorter than **20 characters**. The 20-character threshold
+    mirrors the closest transferable prior art found during this
+    check's own research grounding: the bioinformatics "Maximal
+    Unique Match" concept trusts a substring as a reliable anchor
+    only when it clears BOTH a uniqueness test and a minimum-length
+    floor (default 20 characters) — a short match is not trusted
+    alone, matching this check's own two-trigger design.
+  - Either trigger firing FAILS the site. `reason` quotes VERBATIM:
+    the offending `### Task <i>:` heading (or the Validation Commands
+    Level name), the search string, and the ordering comparison
+    expression.
+- Otherwise (no in-scope site found at all — including vacuously, on
+  a plan with zero `indexOf`/`lastIndexOf`-based ordering comparisons
+  — or every in-scope site either passes both triggers or carries a
+  justified `RELAY-FIRST-MATCH-INTENDED` sentinel) →
+  `{ "id": "R-COH-VALIDATE-SEARCH-AMBIGUOUS", "passed": true }`.
+
+**Known limitation (recorded, not blocking):** `plan-reviewer`'s tool
+grant is `Read, Edit, Write` — no `Bash`, no `Grep`, no `Glob` — so
+this check cannot execute a VALIDATE command and cannot scan the
+target file to count real occurrences of the search string; verifying
+true uniqueness would require reading the target file and counting
+matches, outside this agent's tool surface. The check therefore
+detects the plan-local proxy signals only (same-task ACTION
+duplication; unqualified short identifiers): it can miss a search
+string that is genuinely non-unique in the target file while
+appearing only once in the plan's own ACTION text, and it can
+false-positive on an incidental, harmless repetition or on a short
+identifier that happens to be unique in the target file. It is a
+plan-authoring-time gate, not the final safety net; the real
+enforcement remains the Implementer actually running the task's own
+VALIDATE command and observing whether it passes against the real
+file.
+
 #### R-COH-DESIGN-SOURCE-MISSING — design_source declared when figma_track is active
 
 **Deliberate divergence from Phase 0's `phase_type` behavior — stated
@@ -717,8 +807,8 @@ contradictions / the deterministic check held / the K=5 pass returned
 zero findings under that classification, and `false` when a
 contradiction was found (with a non-empty `reason`).
 
-The total `rubric[]` length per run is `8 (R1–R8) + 7 (deterministic
-R-COH-*) + ≤5 (K=5 pass) = 15 to 20 rows` for a project where
+The total `rubric[]` length per run is `8 (R1–R8) + 8 (deterministic
+R-COH-*) + ≤5 (K=5 pass) = 16 to 21 rows` for a project where
 `figma_track` is absent/`false` (the baseline case — unchanged from
 before this section existed). When the target declares
 `figma_track: true`, up to 2 additional conditional deterministic rows
@@ -732,14 +822,14 @@ conditional deterministic rows may also appear:
 `R-COH-SENTINEL-RESOLUTION-MISSING` (on `phase_scope: logic`), since a
 single plan's `phase_scope` cell carries exactly one value and can
 never be both at once. Together these widen the range to
-`15 to 23 rows` in the maximal case (both design rows present, plus
+`16 to 24 rows` in the maximal case (both design rows present, plus
 exactly one of the two mutually-exclusive phase_scope rows, plus the
-full 5-row K=5 pass) — the range never extends to a 24th row, because
+full 5-row K=5 pass) — the range never extends to a 25th row, because
 `R-COH-VISUAL-SCOPE-PURITY` and `R-COH-SENTINEL-RESOLUTION-MISSING`
 can never both fire on the same plan. Each of the four conditional
 rows is independently zero-emission (contributes nothing) when its
-own gating condition is not met, so the baseline 15–20 range is exact
-for every non-Figma project, and the 15–22 range from the prior
+own gating condition is not met, so the baseline 16–21 range is exact
+for every non-Figma project, and the 16–23 range from the prior
 `design_source` shipment remains exact for a `figma_track: true`
 project whose plan has no `phase_scope` row at all (neither `visual`
 nor `logic` — `visual_first: false`, or the PRD predates the
@@ -1058,7 +1148,8 @@ One JSON object per line, appended (never truncated). Shape:
     { "id": "R-COH-PATTERN-SOURCE-MISSING", "passed": true },
     { "id": "R-COH-MANDATORY-READING-MISSING", "passed": true },
     { "id": "R-COH-VALIDATE-ALWAYS-PASS", "passed": true },
-    { "id": "R-COH-ACTION-VALIDATE-CONTRADICTION", "passed": true }
+    { "id": "R-COH-ACTION-VALIDATE-CONTRADICTION", "passed": true },
+    { "id": "R-COH-VALIDATE-SEARCH-AMBIGUOUS", "passed": true }
   ],
   "action": "final_flip",
   "user_message": ""

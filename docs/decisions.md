@@ -1023,6 +1023,136 @@ This is relay's **third** interactivity-boundary extension (after PRD approval a
 
 ---
 
+## [2026-07-28] R-COH-VALIDATE-SEARCH-AMBIGUOUS: an 8th FIXED deterministic plan-reviewer check catching non-unique position-based search terms in ordering VALIDATE assertions; rubric[] arithmetic shifts to 16–21/16–24
+
+**Context:** `plan-reviewer`'s additive R-COH-* coherence layer had no
+check for a distinct defect class from the one
+`R-COH-ACTION-VALIDATE-CONTRADICTION` (shipped 2026-07-26) catches: a
+`**VALIDATE**` command computes `str.indexOf(needle)` (or
+`lastIndexOf`) and feeds the result into an ORDERING comparison
+(`aIdx > bIdx`, etc.) asserting one edit site precedes or follows
+another — and the assertion fails on a byte-perfect implementation
+whenever `needle` occurs more than once in the target file, because
+`indexOf` silently resolves to whichever occurrence, not necessarily
+the one the assertion means. Unlike `R-COH-ACTION-VALIDATE-CONTRADICTION`
+(where ACTION and VALIDATE DISAGREE on a literal), this class is one
+where ACTION and VALIDATE AGREE on the string — the string is simply
+not unique in the file being searched. Four confirmed instances across
+two phases of the `figma-visual-first-track` run, all now fixed in
+their respective archived plans:
+`PRPs/plans/completed/figma-visual-first-track-phase-5-implement-time-gate.plan.md`
+Task 2 (`executeInteractionSteps(page` resolved to the function
+definition at the task's own insertion rather than the call site,
+fixed by anchoring on the call-site-unique `await
+executeInteractionSteps(page`); and three sites in
+`PRPs/plans/completed/figma-visual-first-track-phase-6-orchestrator-wiring.plan.md`
+— its Validation Commands Level 3 `editIdx` (resolved to a
+precondition's own "no `resolution` field" text, fixed by anchoring on
+`resolved_at`), and its Task 1 `checkIdx`/Level 3 `p3CheckIdx` pair
+(tightened to a longer, genuinely unique phrase). The same plan's own
+Task 1 `ruleIdx` demonstrates the LEGITIMATE inverse case: a search
+string that is deliberately byte-identical in two places by design
+(the actionable-row rule text, mirrored verbatim into both `P3` and
+`Phase A.1`), where `indexOf`'s first-match is correct, not lucky,
+because document order permanently guarantees which copy comes first.
+
+**Decision:** `plan-reviewer` gains an 8th FIXED deterministic
+`R-COH-*` check, `R-COH-VALIDATE-SEARCH-AMBIGUOUS`, positioned
+immediately after `R-COH-ACTION-VALIDATE-CONTRADICTION`'s Known
+limitation paragraph and immediately before
+`R-COH-DESIGN-SOURCE-MISSING` — preserving "fixed checks first,
+conditional checks after". For each position-based search
+(`indexOf`/`lastIndexOf`) whose result feeds an ordering comparison
+against another same-derived index (a bare `=== -1`/`!== -1` presence
+test is out of scope), the check applies a primary, plan-local
+signal — the plan's OWN `**ACTION**:` text for that same task
+contains the search string more than once — and a secondary, weaker
+heuristic: a bare identifier under 20 characters with no
+disambiguating context (no leading `await `, no
+`function `/`const `/`### `/`## ` anchor, no surrounding punctuation).
+An escape hatch — the sentinel token `RELAY-FIRST-MATCH-INTENDED`
+followed by a non-empty justification, adjacent to the VALIDATE — lets
+a plan author declare a deliberately-duplicated, first-match-intended
+site (mirroring the escape-hatch idiom `R-COH-VISUAL-SCOPE-PURITY`/
+`R-COH-SENTINEL-RESOLUTION-MISSING` already established for
+`RELAY-MOCK-DATA`/`RELAY-MOCK-BEHAVIOR`, using a deliberately
+non-colliding token). Like its nearest sibling
+`R-COH-ACTION-VALIDATE-CONTRADICTION`, it is a textual scan performed
+by the reviewer over the plan already in memory (`plan-reviewer`'s
+tool grant is `Read, Edit, Write` — no `Bash`, no `Grep` — so it
+cannot execute the VALIDATE command itself or count real occurrences
+in the target file), and closes with a "Known limitation" paragraph
+in the same voice.
+
+**Deliberately UNCONDITIONAL, not a 5th zero-emission conditional
+row.** Mirroring `R-COH-ACTION-VALIDATE-CONTRADICTION`'s own
+reasoning: a position-based search inside a `**VALIDATE**:` command is
+plan CONTENT, not a project- or plan-level declaration
+(`figma_track`, `phase_scope`, `design_source`, `test_frameworks` are
+the only gating declarations any conditional check in this layer keys
+off) — there is nothing to gate on. It therefore always contributes
+exactly one row to `rubric[]`, `passed: true` vacuously on a plan with
+no in-scope position-based search at all.
+
+**Rubric[] arithmetic shifts.** The `### Logging discipline`
+paragraph in `plugins/relay/agents/plan-reviewer.md` is updated for 8
+fixed deterministic checks (was 7): baseline (non-Figma)
+`8 (R1–R8) + 8 (deterministic R-COH-*) + ≤5 (K=5 pass) = 16 to 21
+rows` (was 15 to 20); maximal (two design rows plus exactly one of
+the two mutually-exclusive `phase_scope` rows, plus the full 5-row
+K=5 pass) = `16 to 24 rows` (was 15 to 23); the range never extends
+to a 25th row (was 24th), because `R-COH-VISUAL-SCOPE-PURITY` and
+`R-COH-SENTINEL-RESOLUTION-MISSING` remain mutually exclusive. The
+preserved range for a `figma_track: true` project whose plan has no
+`phase_scope` row at all shifts from 15–22 to 16–23. The "four
+conditional rows" wording is UNCHANGED — the new check is FIXED, not
+a fifth conditional row, so the count of conditional rows stays four.
+**This entry's numerals supersede the "15 to 20 rows"/"15 to 23 rows"
+numerals recorded in the [2026-07-26] entry above** (`docs/decisions.md`
+[2026-07-26] "R-COH-ACTION-VALIDATE-CONTRADICTION: a 7th FIXED
+deterministic plan-reviewer check..."), which predates this shipment.
+
+**Reason:** The four confirmed instances demonstrate the gap is real
+and recurring, not hypothetical — a plan can be byte-perfect and still
+have its own VALIDATE fail because a search term the ACTION and
+VALIDATE both agree on happens to recur in the target file. The check
+is deliberately scoped to the plan-local, mechanically-checkable proxy
+signals (same-task ACTION duplication; unqualified short identifiers)
+rather than attempting to verify true uniqueness in the target file —
+`plan-reviewer` has no `Bash`/`Grep` tool and cannot read the target
+file to count occurrences; that would require capability outside this
+agent's tool surface. The escape hatch preserves the one legitimate
+case this class of check would otherwise false-positive on: a
+deliberately duplicated string whose first match is correct by
+construction (document order, not luck) — exactly the shape the
+`ruleIdx` instance above demonstrates. Making it UNCONDITIONAL rather
+than a fifth zero-emission conditional row follows
+`R-COH-ACTION-VALIDATE-CONTRADICTION`'s own precedent exactly: every
+plan already has `**VALIDATE**` commands by construction; there is no
+"doesn't apply" case to gate on, only a "found nothing" vacuous-pass
+case.
+
+**Areas affected:** `plugins/relay/agents/plan-reviewer.md` (new
+`#### R-COH-VALIDATE-SEARCH-AMBIGUOUS` deterministic check, positioned
+between `R-COH-ACTION-VALIDATE-CONTRADICTION` and
+`R-COH-DESIGN-SOURCE-MISSING`; `### Logging discipline`
+rubric[]-length arithmetic 15–20/15–23 → 16–21/16–24, 24th → 25th row
+wording, 15–22 → 16–23 preserved range; `## review.jsonl format`
+example block gains a matching row);
+`scripts/validate/checks/plan-reviewer-action-validate-contradiction-check.test.mjs`,
+`scripts/validate/checks/figma-visual-first-track-phase3.test.mjs`,
+and `scripts/validate/checks/figma-track-phase5.test.mjs` (all three
+assert verbatim numerals from the updated paragraph, and the first
+also asserts an exact `#### R-COH-*` heading count — required
+`EXISTING_TEST_UPDATED` follow-up by the test pair, test-after per
+`docs/context/methodology.md`, routed around `code-reviewer`'s
+universal R-X test-modification guard exactly as the test pair's own
+diff already is (`docs/decisions.md` [2026-07-10])); this entry's own
+numerals now the canonical rubric[]-length reference, superseding the
+[2026-07-26] entry's "15 to 20"/"15 to 23" mention.
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision
