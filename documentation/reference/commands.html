@@ -21,7 +21,7 @@
       </div>
 
       <h1>Commands</h1>
-      <p class="page-subtitle">The full slash-command surface of the relay plugin. Fifteen commands, organized by role (writer / reviewer / infra / orchestrator / QA / Pillar 3). Each command is invocable on its own for testing or manual intervention; the orchestrator (<code>/relay-execute</code>) composes the Pillar 2 stages into a full run.</p>
+      <p class="page-subtitle">The full slash-command surface of the relay plugin. Nineteen commands, organized by role (writer / reviewer / infra / orchestrator / QA / Pillar 3). Each command is invocable on its own for testing or manual intervention; the orchestrator (<code>/relay-execute</code>) composes the Pillar 2 stages into a full run.</p>
 
       <h2 id="happy-path">The happy path</h2>
 
@@ -286,6 +286,23 @@
         <dd>Autonomous, single-shot. Dispatches the <code>visual-verifier</code> agent exactly once via <code>Task</code> with an <code>attempt: 1</code> sentinel, mirroring <a href="#relay-code-review"><code>/relay-code-review</code></a>'s standalone dispatch shape and reusing <code>/relay-implement</code>'s own Phase A.3.4 dispatch payload verbatim.</dd>
         <dt>Notes</dt>
         <dd>Performs zero D8 mutations and never edits the plan or any PRD &mdash; byte-identical before/after, exactly like <code>/relay-code-review</code>. Never edits application source &mdash; that remains <code>/relay-implement</code>'s Phase A.3.4 fix-round-and-revert responsibility. Preconditions HALT when <code>figma_track</code> is not declared in <code>docs/context/methodology.md</code>, when the plan lacks <code>design_source: figma</code>, or when the referenced Design Spec is missing or not <code>APPROVED</code>. A Should-item of the Figma Implementation Track. See <code>PRPs/prds/figma-implementation-track.prd.md</code> Implementation Phases row 7.</dd>
+      </div>
+
+      <h2 id="figma-visual-first-track">Figma Visual-First Track</h2>
+
+      <p>A sibling, dependent standalone command for the Figma Visual-First Track &mdash; reachable only once both <code>figma_track: true</code> and <code>visual_first: true</code> are declared. It is never invoked by <code>/relay-execute</code> and never runs as part of the autonomous Pillar 2 loop.</p>
+
+      <h3 id="relay-visual-approve"><code>/relay-visual-approve &lt;feature-name&gt;</code> <span class="badge badge--done">implemented</span></h3>
+
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>A feature name identifying the single unresolved <code>AWAITING_VISUAL_APPROVAL</code> halt to locate.</dd>
+        <dt>Output</dt>
+        <dd>A recorded approve/reject decision &mdash; one <code>Edit</code> on the paused phase's <code>halt.json</code> plus one appended <code>visual-approval.jsonl</code> audit line.</dd>
+        <dt>Mode</dt>
+        <dd>Deterministic infra command (no writer/reviewer pair). Never invoked by <code>/relay-execute</code>; mirrors <a href="#relay-design-map"><code>/relay-design-map</code></a>'s own confirm-then-single-Edit discipline.</dd>
+        <dt>Notes</dt>
+        <dd>Three HALT codes: <code>FAILED_NOTHING_TO_APPROVE</code>, <code>FAILED_MULTIPLE_PENDING_APPROVALS</code>, <code>FAILED_PLAN_AMBIGUOUS</code>. Figma Visual-First Track Phase 6.</dd>
       </div>
 
       <h2 id="pillar3">Pillar 3 — Commit, PR &amp; Approval</h2>

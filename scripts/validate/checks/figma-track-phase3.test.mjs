@@ -128,6 +128,37 @@
  *     of "design-map" in any of them. Full justification recorded in
  *     PRPs/reports/figma-implementation-track/test-suite.diff's Lifecycle
  *     ledger.
+ *
+ *   Third lifecycle update (2026-07-27, EXISTING_TEST_UPDATED — test-after
+ *     session for figma-visual-first-track Phase 6, "Orchestrator wiring"):
+ *     the new deterministic infra command
+ *     plugins/relay/commands/relay-visual-approve.md legitimately and
+ *     intentionally references `/relay-design-map` three times — its own
+ *     "See:" pointer list ("the confirm-then-single-Edit discipline this
+ *     command's own Phase B/C mirror"), its "## Phase B — Explicit
+ *     confirmation" heading text ("Mirror `/relay-design-map`'s Phase E
+ *     precisely"), and Constraint 3's confirmation-discipline cross-
+ *     reference, plus a fourth bare mention in Constraint 4 ("exactly like
+ *     `/relay-design-map` and `/relay-design-spec`"). This is a direct,
+ *     PRD-authorized mirror relationship: the
+ *     figma-visual-first-track-phase-6-orchestrator-wiring plan's own
+ *     Task 7 **MIRROR** line directs relay-visual-approve.md's Phase B to
+ *     mirror relay-design-map.md's Phase E confirm-then-single-Edit
+ *     discipline "precisely" — an already-APPROVED, correct cross-
+ *     reference, not a regression. Applying the same MINIMAL-exclusion
+ *     discipline established above (never narrowing the scan itself — only
+ *     adding one more excluded filename to the existing set):
+ *     relay-visual-approve.md is added as a fourth excluded name alongside
+ *     relay-design-map.md (self), relay-design-spec.md, and
+ *     relay-visual-review.md. Confirmed by direct read of
+ *     relay-visual-approve.md in full (four "design-map" mentions, all at
+ *     its own Phase B / Constraint 3 / Constraint 4 / "See:" pointer, none
+ *     a dispatch or invocation), and by direct read of every other command
+ *     file under plugins/relay/commands/ — including relay-execute.md
+ *     (this same phase's own orchestrator edits) — to confirm zero
+ *     mentions of "design-map" in any of them. Full justification recorded
+ *     in PRPs/reports/figma-visual-first-track/test-suite.diff's Lifecycle
+ *     ledger.
  *   AC-2 / AC-A2 (Reuse enforced — structural foundation) — the
  *     design-map-reviewer agent's R-DM1 rubric item requires every
  *     CONFIRMED/INFERRED row's cited import path to actually resolve in
@@ -152,10 +183,14 @@ const REVIEWER_PATH = 'plugins/relay/agents/design-map-reviewer.md';
 // The other command files that legitimately mention "design-map" in prose —
 // relay-design-spec.md's P1 precondition HALT message points the user at
 // /relay-design-map (confirmed by direct read, Phase 4 plan Task 3,
-// already-APPROVED), and relay-visual-review.md's P3 precondition HALT
-// message does the same (confirmed by direct read, Phase 7 plan Task 1,
-// already-APPROVED). Every other file under COMMANDS_DIR remains scanned.
-const LEGITIMATE_REFERENCE_FILES = ['relay-design-spec.md', 'relay-visual-review.md'];
+// already-APPROVED), relay-visual-review.md's P3 precondition HALT message
+// does the same (confirmed by direct read, Phase 7 plan Task 1,
+// already-APPROVED), and relay-visual-approve.md mirrors /relay-design-map's
+// Phase E confirm-then-single-Edit discipline per its own Task 7 MIRROR
+// directive (confirmed by direct read, figma-visual-first-track Phase 6
+// plan Task 7, already-APPROVED). Every other file under COMMANDS_DIR
+// remains scanned.
+const LEGITIMATE_REFERENCE_FILES = ['relay-design-spec.md', 'relay-visual-review.md', 'relay-visual-approve.md'];
 
 /**
  * Reads a repo-root-relative file and normalizes line endings to `\n`.
@@ -219,22 +254,26 @@ test('AC-1/AC-A1: runRegistrationParityCheck() returns ok:true with zero finding
 
 // Lifecycle update (2026-07-23, EXISTING_TEST_UPDATED; corrected same day
 // after test-reviewer's CHANGES_REQUESTED on an over-narrow first attempt,
-// then updated a second time same day for Phase 7's relay-visual-review.md —
-// see this file's header comment for the full history, including the
-// second lifecycle-update paragraph). Minimal exclusion: every command file
-// is scanned except relay-design-map.md (self-reference) and the two files
-// whose own precondition HALT messages legitimately reference
-// `/relay-design-map`: relay-design-spec.md (P1) and relay-visual-review.md
-// (P3). This restores/preserves coverage over relay-execute.md AND every
-// command file it inline-adopts (relay-plan.md, relay-plan-review.md,
-// relay-implement.md, relay-write-test.md, relay-test-write-review.md,
-// relay-test.md, relay-test-review.md, relay-worktree.md), per
-// test-reviewer's finding that the PRD's Architecture Notes guarantee
-// covers "the entire autonomous stretch", not relay-execute.md in
-// isolation. See this file's header comment (AC-1/AC-A1 lifecycle notes)
-// and PRPs/reports/figma-implementation-track/test-suite.diff's Lifecycle
-// ledger for the full justification.
-test('AC-1/AC-A1: every OTHER command file under plugins/relay/commands/ (all files except relay-design-map.md itself and the documented precondition pointers in relay-design-spec.md and relay-visual-review.md) never mentions "design-map" in any form — including relay-execute.md, the autonomous orchestrator, and every command file it inline-adopts — so this phase\'s interactive-only writer/reviewer pair can never be accidentally wired into any other command or the autonomous pipeline loop', () => {
+// then updated a second time same day for Phase 7's relay-visual-review.md,
+// then a third time on 2026-07-27 for figma-visual-first-track Phase 6's
+// relay-visual-approve.md — see this file's header comment for the full
+// history, including the second and third lifecycle-update paragraphs).
+// Minimal exclusion: every command file is scanned except
+// relay-design-map.md (self-reference) and the three files whose own
+// precondition/mirror text legitimately references `/relay-design-map`:
+// relay-design-spec.md (P1), relay-visual-review.md (P3), and
+// relay-visual-approve.md (Phase B / Constraint 3 / Constraint 4, mirroring
+// relay-design-map.md's Phase E confirm-then-single-Edit discipline per its
+// own plan Task 7 MIRROR directive). This restores/preserves coverage over
+// relay-execute.md AND every command file it inline-adopts (relay-plan.md,
+// relay-plan-review.md, relay-implement.md, relay-write-test.md,
+// relay-test-write-review.md, relay-test.md, relay-test-review.md,
+// relay-worktree.md), per test-reviewer's finding that the PRD's
+// Architecture Notes guarantee covers "the entire autonomous stretch", not
+// relay-execute.md in isolation. See this file's header comment (AC-1/AC-A1
+// lifecycle notes) and PRPs/reports/figma-visual-first-track/test-suite.diff's
+// Lifecycle ledger for the full justification.
+test('AC-1/AC-A1: every OTHER command file under plugins/relay/commands/ (all files except relay-design-map.md itself and the documented precondition/mirror pointers in relay-design-spec.md, relay-visual-review.md, and relay-visual-approve.md) never mentions "design-map" in any form — including relay-execute.md, the autonomous orchestrator, and every command file it inline-adopts — so this phase\'s interactive-only writer/reviewer pair can never be accidentally wired into any other command or the autonomous pipeline loop', () => {
   const allCommandFiles = readdirSync(resolve(COMMANDS_DIR)).filter((name) => name.endsWith('.md'));
   const scannedFiles = allCommandFiles.filter(
     (name) => name !== NEW_COMMAND_FILE && !LEGITIMATE_REFERENCE_FILES.includes(name)
@@ -253,7 +292,7 @@ test('AC-1/AC-A1: every OTHER command file under plugins/relay/commands/ (all fi
     const content = readRepoFile(`${COMMANDS_DIR}/${fileName}`);
     assert.ok(
       !/design-map/i.test(content),
-      `${fileName} must not mention "design-map" in any form — only relay-design-map.md (itself) and the documented precondition pointers in relay-design-spec.md and relay-visual-review.md may legitimately reference it`
+      `${fileName} must not mention "design-map" in any form — only relay-design-map.md (itself) and the documented precondition/mirror pointers in relay-design-spec.md, relay-visual-review.md, and relay-visual-approve.md may legitimately reference it`
     );
   }
 });

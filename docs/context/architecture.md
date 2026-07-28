@@ -22,7 +22,7 @@ The plugin is composed of four Claude Code asset types:
 | Type | Folder | Purpose | Status |
 |------|--------|---------|--------|
 | Skills | `plugins/relay/skills/` | Reusable, prompt-based capabilities loaded on demand. Currently: `context-builder`. | 1 present |
-| Commands | `plugins/relay/commands/` | `/relay-*` slash commands users invoke. | 18 implemented (including `/relay-commit` v0.14.0, dual-mode since v0.16.0, `/relay-pr` v0.15.0, `/relay-approve` v0.17.0, `/relay-qa-report` as the QA / Support command, and three standalone `figma_track`-gated Figma Implementation Track commands — `/relay-design-map`, `/relay-design-spec`, `/relay-visual-review`); see `docs/api-reference.md` |
+| Commands | `plugins/relay/commands/` | `/relay-*` slash commands users invoke. | 19 implemented (including `/relay-commit` v0.14.0, dual-mode since v0.16.0, `/relay-pr` v0.15.0, `/relay-approve` v0.17.0, `/relay-qa-report` as the QA / Support command, three standalone `figma_track`-gated Figma Implementation Track commands — `/relay-design-map`, `/relay-design-spec`, `/relay-visual-review` — and `/relay-visual-approve`, the sibling Figma Visual-First Track's own standalone command); see `docs/api-reference.md` |
 | Agents | `plugins/relay/agents/` | Specialized sub-agents (PRD Writer, Plan Writer, Test Runner, etc.). | planned, not yet implemented |
 | Hooks | `plugins/relay/hooks/` | Event-triggered scripts (Stop, PostToolUse, etc.) wired in `hooks/hooks.json`. | planned, not yet implemented |
 
@@ -64,8 +64,21 @@ plugin covers three pillars:
    referenced Design Spec, returning `VISUAL_VERIFIED` / `VISUAL_DEGRADED`
    / `VISUAL_MISMATCH` and writing `fidelity-report.json`; bounded by its
    own `max_visual_retries` budget and a per-invocation `--no-visual`
-   flag, always non-blocking (see `docs/decisions.md` 2026-07-23
-   Visual-verification loop). Immediately after Code Reviewer
+   flag (see `docs/decisions.md` 2026-07-23 Visual-verification loop).
+   On a `phase_scope: logic` plan, or any plan with no `phase_scope`
+   Metadata row, the gate stays always non-blocking exactly as
+   originally shipped. On a `phase_scope: visual` plan (Figma
+   Visual-First Track, Phase 5), the gate instead blocks: Phase A.3.4
+   proceeds to the docs-sync pass below (and to D8) only on a genuine
+   `VISUAL_VERIFIED` result under `visual_first_approval: auto`
+   (`docs/context/methodology.md`, default `auto`); every other
+   outcome — including a `VISUAL_VERIFIED` result reached under
+   `visual_first_approval: human`, which always requires a separate
+   explicit human approval before proceeding — HALTs the invocation
+   before docs-sync and D8 ever run (`VISUAL_GATE_BLOCKED` under
+   `auto`, `AWAITING_VISUAL_APPROVAL` under `human`; see
+   `docs/decisions.md` 2026-07-27 Implement-time visual gate).
+   Immediately after Code Reviewer
    returns `APPROVED` and before the phase's D8 state-machine mutations,
    the `docs-updater`/`docs-reviewer` pair runs as the primary pass —
    non-interactively, consuming the working-tree diff / captured attempt
@@ -86,8 +99,8 @@ plugin covers three pillars:
 ## Interactivity boundary
 
 Relay is not fully autonomous end-to-end. The pipeline has a primary
-explicit boundary at PRD approval, plus one deliberately recorded
-extension (see the Design Spec bullet below):
+explicit boundary at PRD approval, plus two deliberately recorded
+extensions (see the Design Spec and Visual Approval bullets below):
 
 - **Interactive (up to and including PRD Reviewer):** the PRD Writer runs
   a 6-phase Q&A flow with the user (Initiate → Foundation → Grounding →
@@ -125,6 +138,27 @@ extension (see the Design Spec bullet below):
   reviewer dialogues with the user before flipping status. It is gated
   behind `figma_track: true` and never runs inside the autonomous
   `/relay-execute` loop. See `docs/decisions.md` [2026-07-23].
+- **Deliberately re-extended a third time, Figma Visual-First
+  Track-scoped:** the standalone `/relay-visual-approve <feature>`
+  command (Figma Visual-First Track, Phase 6) is the **third** place in
+  relay (after PRD authoring and the Design Spec pair) where a human
+  decision gates a pipeline artifact's status — but via a structurally
+  different mechanism than the first two places' synchronous,
+  in-conversation dialogue. `/relay-execute` autonomously drives many
+  phases across one long run with no guaranteed human presence
+  mid-flight, so a `phase_scope: visual` phase under
+  `visual_first_approval: human` instead HALTs
+  (`AWAITING_VISUAL_APPROVAL`, written by `/relay-implement`'s Phase
+  A.3.4) and waits; the human runs `/relay-visual-approve` separately —
+  outside the autonomous loop, never invoked by `/relay-execute` — to
+  review the fidelity report and captured/reference screenshots and
+  record an approve/reject decision (a single `Edit` on the phase's
+  `halt.json` plus an appended `visual-approval.jsonl` audit line); a
+  *later* `/relay-execute` re-invocation then resumes the exact paused
+  phase (Phase A.1's resumable visual-approval check + Phase A.2.5's
+  resume short-circuit), routing rejection feedback into the next
+  implementer attempt automatically. See `docs/decisions.md`
+  [2026-07-27].
 
 The boundary exists because the highest-leverage moment to catch scope
 drift or misunderstanding is during PRD authoring. Resolving ambiguity at
@@ -155,7 +189,7 @@ The canonical PRD shape is defined in `docs/context/prd-template.md`.
 
 ## Command surface
 
-Relay exposes **18 commands**, organized by role. Full
+Relay exposes **19 commands**, organized by role. Full
 table and contracts in `docs/api-reference.md`; rationale in
 `docs/decisions.md`. Summary of the philosophy:
 
@@ -205,6 +239,20 @@ table and contracts in `docs/api-reference.md`; rationale in
   `/relay-code-review`'s precedent), surfaces `VISUAL_VERIFIED` /
   `VISUAL_DEGRADED` / `VISUAL_MISMATCH`, performs zero D8 mutations,
   and is never called by `/relay-execute`.
+- **A fourth standalone, human-triggered command records the Figma
+  Visual-First Track's human-mode visual-approval decision.**
+  `/relay-visual-approve <feature>` (Figma Visual-First Track, Phase 6)
+  locates the single unresolved `AWAITING_VISUAL_APPROVAL` halt for a
+  feature, surfaces the fidelity report plus derived captured/reference
+  screenshot paths, requires an explicit quoted confirmation before
+  recording either decision, and flips the phase's `halt.json` (plus an
+  appended `visual-approval.jsonl` audit line) via a single `Edit` —
+  mirroring `/relay-design-map`'s own confirm-then-flip discipline. It
+  does not resume the pipeline itself — a later `/relay-execute`
+  re-invocation does that (Phase A.1's resumable visual-approval check +
+  Phase A.2.5's resume short-circuit). Never called by `/relay-execute`.
+  See "Interactivity boundary" above and `docs/decisions.md`
+  [2026-07-27].
 
 Happy path for day-to-day use: `/relay-prd` → `/relay-execute` →
 (human validates + manual testing, aided by `/relay-qa-report`) →
@@ -222,7 +270,14 @@ Phases table as its canonical state machine (D6 — 2026-05-01 decision).
 - **Idempotency:** on every invocation, the orchestrator re-reads the PRD
   table from disk. Rows with `Status: complete` are skipped; execution
   resumes from the first `pending` or `in-progress` row. Re-invoking after
-  a budget-exceeded halt is safe and correct.
+  a budget-exceeded halt is safe and correct. A row `in-progress` because
+  of an unresolved `AWAITING_VISUAL_APPROVAL` halt is a distinct case —
+  handled explicitly, as of Figma Visual-First Track Phase 6, rather
+  than falling through to either the actionable-row pick or the "all
+  phases complete" exit: the orchestrator reports the pending human decision
+  when no `resolution` is recorded yet, and resumes that exact phase via
+  Phase A.2.5's short-circuit once `/relay-visual-approve` has recorded
+  one — see "Interactivity boundary" above.
 - **State transitions:** plan-writer back-fills row N `Status` to
   `in-progress` on plan generation; `/relay-implement` flips it to
   `complete` on successful D8 post-approval mutations. The orchestrator

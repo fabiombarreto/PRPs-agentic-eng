@@ -135,6 +135,72 @@
  *     rung, `token_conformant` recorded); Step 4's non-escalation of a
  *     degraded rung to VISUAL_MISMATCH.
  *
+ * Lifecycle update (2026-07-27, EXISTING_TEST_UPDATED, performed by the
+ * figma-visual-first-track Phase 5 test-writer session, resolving a
+ * TEST_CONTRACT_DISPUTE): Phase 5 of the separate figma-visual-first-track
+ * feature (v2, PRPs/prds/figma-visual-first-track.prd.md, unrelated to this
+ * v1 feature except for sharing relay-implement.md/visual-verifier.md as
+ * read targets) made /relay-implement's Phase A.3.4 dual-mode for
+ * phase_scope: visual plans. The Implementer's diff was disputed
+ * (TEST_CONTRACT_DISPUTE) against tests in THIS file, and code-reviewer's
+ * arbitration mode returned DISPUTE_UPHELD_TEST_WRONG — both affected tests
+ * pinned pre-Phase-5 (v1-era) invariants this PRD deliberately supersedes
+ * for the phase_scope: visual case only (source PRD AC-4 of the v2 feature;
+ * v2 plan AC-A1/AC-A6). Fixed in place this session, six assertions total
+ * across the two tests below:
+ *   1. The "AC-A1 ... Phase A.3.4 never issues a HALT ..." test: the
+ *      whole-block `assert.ok(!/\bHALT\b/.test(block), ...)` asserted NO
+ *      HALT directive anywhere in the ENTIRE Phase A.3.4 block. Phase 5
+ *      added two named HALT outcomes (AWAITING_VISUAL_APPROVAL,
+ *      VISUAL_GATE_BLOCKED) inside a new Terminal-routing paragraph,
+ *      confirmed by directly reading the post-diff relay-implement.md
+ *      content (independently corroborated by a dedicated Explore-agent
+ *      sweep before this fix was made). The underlying v1 guarantee (Phase
+ *      A.3.4 never blocks) is still fully true for the NON-visual-scoped
+ *      case (phase_scope absent, or phase_scope: logic) — this is exactly
+ *      the v2 feature's own source PRD AC-6 byte-identical regression
+ *      guarantee — so the fix RESCOPES the assertion to the Terminal-routing
+ *      rule's own `phase_scope_value != "visual"` bullet (verbatim-preserved,
+ *      the byte-identical non-visual path) rather than deleting it; it does
+ *      NOT drop coverage of a still-true property. Additionally, the
+ *      arbitration found FOUR more exact-string assertions in the SAME test
+ *      that broke for an unrelated, purely mechanical reason: Phase 5's Task
+ *      5 appended the literal suffix `(subject to the Terminal-routing rule
+ *      below)` immediately after "proceed to Phase A.3.5" at all five Step B
+ *      sites, so the VISUAL_VERIFIED / VISUAL_DEGRADED /
+ *      BUDGET_EXCEEDED_REVERTED / BUDGET_EXCEEDED bullet-text matches no
+ *      longer found their expected substrings contiguous. Fixed by inserting
+ *      the same marker text into each of the four expected strings — the
+ *      underlying property each assertion pins (which outcome sets which
+ *      visual_outcome value and still reaches "proceed to Phase A.3.5") is
+ *      unchanged; only the now-longer contiguous phrase is.
+ *   2. The "AC-A3 ... Step 0 builds the in-memory frame manifest ..." test:
+ *      asserted the OLD 8-field manifest-shape sentence ending
+ *      `...ref_png, masks}`.` Phase 5 Task 3 changed visual-verifier.md's
+ *      Step 0 sub-step 3 to the 9-field form ending `...ref_png, masks,
+ *      interaction}`.` (the Design Spec's 9th `Interaction` column,
+ *      registered by Phase 1 of the SAME v2 feature, now passed through the
+ *      frame manifest). Fixed by updating the expected string from the
+ *      8-field to the 9-field form — the underlying property (Step 0 builds
+ *      one manifest entry per Visual Acceptance Criteria row) is unchanged;
+ *      only the field count grew by one, which is precisely what Phase 5
+ *      shipped. The missing-property delta this fix does NOT re-cover (the
+ *      new "Read the row's `Interaction` column ... when absent ... set
+ *      interaction: "none"" sentence, and the matching sub-step-2
+ *      prose-enumeration update) is NEW_TEST_REQUIRED and is covered instead
+ *      by figma-visual-first-track-phase5.test.mjs, which cites this test by
+ *      path:line rather than duplicating the object-literal shape string.
+ * Anti-weakening check: both fixes REPLACE stale literal strings with the
+ * CURRENT wording of the SAME claim (or, for fix 1's HALT assertion, narrow
+ * the claim's SCOPE to exactly the sub-case the claim is still true for, per
+ * this v2 PRD's own deliberate, PRD-authorized narrowing of the mechanism —
+ * see figma-visual-first-track-phase-5-implement-time-gate.plan.md's own
+ * Decision Gate "Decisions found" entry dated 2026-07-23). No assertion is
+ * dropped, no test is deleted, and no in-scope AC of this v1 feature's own
+ * phase 6 loses coverage. Full justification recorded in
+ * PRPs/reports/figma-visual-first-track/test-suite.diff's Lifecycle ledger
+ * (phase 5 revision, TEST_CONTRACT_DISPUTE resolution).
+ *
  * Run: node --test scripts/validate/checks/figma-track-phase6.test.mjs
  */
 
@@ -215,7 +281,7 @@ test('AC-A1: Phase A.3.4 (Visual-verification dispatch) sits strictly between Ph
   );
 });
 
-test('AC-A1: Phase A.3.4 never issues a HALT — every terminal branch (both SKIPPED reasons, APPROVED, a named degraded rung, BUDGET_EXCEEDED, BUDGET_EXCEEDED_REVERTED) records visual_outcome and proceeds to Phase A.3.5 instead, unlike the genuine HALT-issuing sections elsewhere in this same command', () => {
+test('AC-A1 (figma-implementation-track.prd.md; scope narrowed 2026-07-27 by figma-visual-first-track.prd.md Phase 5 for the phase_scope: visual case — see this file\'s own Lifecycle update paragraph above): Phase A.3.4 never issues a HALT for the NON-visual-scoped case (phase_scope absent, or phase_scope: logic) — every terminal branch (both SKIPPED reasons, APPROVED, a named degraded rung, BUDGET_EXCEEDED, BUDGET_EXCEEDED_REVERTED) records visual_outcome and proceeds to Phase A.3.5 instead, unlike the genuine HALT-issuing sections elsewhere in this same command', () => {
   const content = readRepoFile(RELAY_IMPLEMENT_PATH);
   const block = sliceBetween(
     content,
@@ -224,19 +290,55 @@ test('AC-A1: Phase A.3.4 never issues a HALT — every terminal branch (both SKI
   );
   assert.ok(block, 'expected an extractable Phase A.3.4 block');
 
-  assert.ok(!/\bHALT\b/.test(block), 'Phase A.3.4 must never contain a HALT directive');
+  // Rescoped (2026-07-27, EXISTING_TEST_UPDATED): the whole-block never-HALT
+  // claim is no longer true unconditionally — figma-visual-first-track.prd.md
+  // Phase 5 added two named HALT outcomes (AWAITING_VISUAL_APPROVAL,
+  // VISUAL_GATE_BLOCKED) inside a new Terminal-routing paragraph for the
+  // phase_scope: visual case. The v1 guarantee this test pins is still true
+  // for the NON-visual-scoped case specifically — scoped here to the
+  // Terminal-routing rule's own `phase_scope_value != "visual"` bullet,
+  // which the v2 phase preserves byte-identically.
+  const nonVisualRoutingBlock = sliceBetween(
+    block,
+    '- When `phase_scope_value != "visual"`',
+    '- When `phase_scope_value == "visual"` AND `visual_approval_mode == "human"`:'
+  );
+  assert.ok(nonVisualRoutingBlock, 'expected an extractable non-visual-scoped Terminal-routing bullet');
+  assert.ok(
+    !/\bHALT\b/.test(/** @type {string} */ (nonVisualRoutingBlock)),
+    'the non-visual-scoped Terminal-routing bullet (phase_scope_value != "visual") must never contain a HALT directive — the byte-identical-to-today guarantee figma-visual-first-track.prd.md Phase 5 deliberately preserves for every plan that is not phase_scope: visual'
+  );
 
   const collapsed = collapseWs(block);
   assert.ok(collapsed.includes('Record `visual_outcome = "SKIPPED (--no-visual)"` when `no_visual_flag == true`'));
   assert.ok(collapsed.includes('otherwise `visual_outcome = "SKIPPED (not figma-sourced)"`'));
-  assert.ok(collapsed.includes('**`VISUAL_VERIFIED`** → `visual_outcome = "APPROVED"`; proceed to Phase A.3.5.'));
+  // 2026-07-27 (EXISTING_TEST_UPDATED): each of the next four expected
+  // strings gained the literal suffix `(subject to the Terminal-routing
+  // rule below)` immediately after "proceed to Phase A.3.5" — Phase 5 Task
+  // 5 of figma-visual-first-track.prd.md inserted it at all five Step B
+  // "proceed to Phase A.3.5" sites. The property each assertion pins (which
+  // outcome sets which visual_outcome value and still reaches "proceed to
+  // Phase A.3.5") is unchanged; only the now-longer contiguous phrase is.
   assert.ok(
     collapsed.includes(
-      '**`VISUAL_DEGRADED`** → record the named rung (e.g. `DEGRADED_STATIC_ONLY`); log a warning; proceed to Phase A.3.5 WITHOUT halting (this is the AC-5 non-blocking guarantee).'
+      '**`VISUAL_VERIFIED`** → `visual_outcome = "APPROVED"`; proceed to Phase A.3.5 (subject to the Terminal-routing rule below).'
     )
   );
-  assert.ok(collapsed.includes('set `visual_outcome = "BUDGET_EXCEEDED_REVERTED"`; proceed to Phase A.3.5 WITHOUT halting.'));
-  assert.ok(collapsed.includes('set `visual_outcome = "BUDGET_EXCEEDED"`; proceed to Phase A.3.5 WITHOUT halting.'));
+  assert.ok(
+    collapsed.includes(
+      '**`VISUAL_DEGRADED`** → record the named rung (e.g. `DEGRADED_STATIC_ONLY`); log a warning; proceed to Phase A.3.5 (subject to the Terminal-routing rule below) WITHOUT halting (this is the AC-5 non-blocking guarantee).'
+    )
+  );
+  assert.ok(
+    collapsed.includes(
+      'set `visual_outcome = "BUDGET_EXCEEDED_REVERTED"`; proceed to Phase A.3.5 (subject to the Terminal-routing rule below) WITHOUT halting.'
+    )
+  );
+  assert.ok(
+    collapsed.includes(
+      'set `visual_outcome = "BUDGET_EXCEEDED"`; proceed to Phase A.3.5 (subject to the Terminal-routing rule below) WITHOUT halting.'
+    )
+  );
 });
 
 test('AC-A1: visual-verifier.md\'s Step 1 maps EVERY provision.mjs outcome (exit 0, 2, 3, or any other/unrecognized code) to a definite branch — proceed FULL or degrade to DEGRADED_PROVISION_FAILED — never an unhandled or unclassified outcome', () => {
@@ -421,9 +523,22 @@ test('AC-A3: visual-verifier.md\'s Step 0 builds the in-memory frame manifest di
   const collapsed = collapseWs(block);
 
   assert.ok(collapsed.includes('`Read` `design_spec_path` and locate the `## Visual Acceptance Criteria` table'));
+  // 2026-07-27 (EXISTING_TEST_UPDATED): the manifest-shape string grew a 9th
+  // field. figma-visual-first-track.prd.md Phase 5 Task 3 passed the Design
+  // Spec's 9th `Interaction` column (registered by that same feature's
+  // Phase 1) through this manifest, changing the shape from the OLD 8-field
+  // form ending `...ref_png, masks}` to the 9-field form ending `...ref_png,
+  // masks, interaction}`. The underlying property this assertion pins (Step
+  // 0 builds one manifest entry per Visual Acceptance Criteria row) is
+  // unchanged; only the field count grew by one, which is exactly what
+  // Phase 5 shipped. The new "Read the row's `Interaction` column..." /
+  // none-default sentence and the sub-step-2 prose-enumeration update are a
+  // missing-property delta NOT re-covered here — see
+  // figma-visual-first-track-phase5.test.mjs (cites this test by path:line
+  // rather than duplicating this object-literal shape string).
   assert.ok(
     collapsed.includes(
-      'Build the in-memory frame manifest: one entry per Visual Acceptance Criteria row — `{node_id, route, preconditions, auth_mode, viewport: {width, height}, diff_threshold, ref_png, masks}`.'
+      'Build the in-memory frame manifest: one entry per Visual Acceptance Criteria row — `{node_id, route, preconditions, auth_mode, viewport: {width, height}, diff_threshold, ref_png, masks, interaction}`.'
     )
   );
 });

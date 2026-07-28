@@ -165,6 +165,90 @@ function loadVisualFidelityFrames(reportsDir) {
   return frames;
 }
 
+function findPlanForPhase(plansRoot, n) {
+  // Manual readdirSync + regex filename match, mirroring
+  // findFidelityReportPaths' own walk style (no npm glob dependency).
+  // Searches PRPs/plans/ first, falling back to PRPs/plans/completed/
+  // only when the first carries no match — the same fallback order
+  // relay-qa-report.md's own phase_scope prose documents. Returns the
+  // matched plan's absolute path when exactly one file matches within
+  // the directory being considered; null when a directory carries zero
+  // or more-than-one match, or does not exist (never throws).
+  const pattern = new RegExp(`^.+-phase-${n}-.+\\.plan\\.md$`);
+  for (const dir of [join(plansRoot, 'plans'), join(plansRoot, 'plans', 'completed')]) {
+    if (!existsSync(dir) || !statSync(dir).isDirectory()) continue;
+    const matches = readdirSync(dir).filter((name) => pattern.test(name));
+    if (matches.length === 1) return join(dir, matches[0]);
+  }
+  return null;
+}
+
+function loadPhaseScopes(reportsDir, phases) {
+  // Given the unique "phase-<N>" directory-name strings already
+  // discovered by findFidelityReportPaths/loadVisualFidelityFrames,
+  // resolve the plans root two levels up from reportsDir
+  // (.../PRPs/reports/<feature>/ -> .../PRPs/) and, for each phase,
+  // read its own plan's ## Metadata table for a phase_scope row —
+  // the Figma Visual-First Track's own non-heuristic phase_scope
+  // sourcing lineage (Figma Visual-First Track Phase 7). Returns a
+  // Map<phase, 'visual'|'logic'|null>; null when no plan file is
+  // found, more than one matches, or no phase_scope row is present.
+  // Never throws.
+  const plansRoot = resolve(reportsDir, '..', '..');
+  const scopes = new Map();
+  for (const phase of phases) {
+    const match = /^phase-(\d+)$/.exec(phase);
+    if (!match) {
+      scopes.set(phase, null);
+      continue;
+    }
+    const planPath = findPlanForPhase(plansRoot, match[1]);
+    if (!planPath) {
+      scopes.set(phase, null);
+      continue;
+    }
+    try {
+      const content = readFileSync(planPath, 'utf-8');
+      const scopeMatch = /\|\s*phase_scope\s*\|\s*(visual|logic)\s*\|/i.exec(content);
+      scopes.set(phase, scopeMatch ? scopeMatch[1].toLowerCase() : null);
+    } catch {
+      scopes.set(phase, null);
+    }
+  }
+  return scopes;
+}
+
+function loadVisualApprovalLine(reportsDir, phase) {
+  // Reads <reportsDir>/<phase>/visual-approval.jsonl — the audit trail
+  // /relay-visual-approve appends to (Figma Visual-First Track Phase
+  // 6) — and formats its last recorded decision as one markdown line.
+  // Returns null when the file is absent, empty, or its last line
+  // fails to parse as JSON, or carries neither an "approved" nor a
+  // "rejected" decision. Never throws.
+  const jsonlPath = join(reportsDir, phase, 'visual-approval.jsonl');
+  if (!existsSync(jsonlPath)) return null;
+  let content;
+  try {
+    content = readFileSync(jsonlPath, 'utf-8');
+  } catch {
+    return null;
+  }
+  const nonEmptyLines = content.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
+  if (nonEmptyLines.length === 0) return null;
+  let entry;
+  try {
+    entry = JSON.parse(nonEmptyLines[nonEmptyLines.length - 1]);
+  } catch {
+    return null;
+  }
+  const decision = entry.decision;
+  if (decision !== 'approved' && decision !== 'rejected') return null;
+  const text = decision === 'approved' ? entry.confirmation_text : entry.rejection_feedback;
+  const textPart = text ? `: "${text}"` : '';
+  const timestamp = entry.timestamp ?? '—';
+  return `- **${phase}** human visual approval: **${decision}**${textPart} (${timestamp})`;
+}
+
 function buildFailureHistogram(attempts) {
   const histogram = { legitimate: 0, infra: 0, flaky: 0, weak_test: 0, unclassified: 0 };
   for (const { record } of attempts) {
@@ -365,18 +449,45 @@ function buildMarkdown(reportsDir, runData, reviewData, attempts) {
   // (no heading, no "N/A" placeholder) when zero fidelity-report.json
   // artifacts are found under the reports dir, reproducing the
   // figma_track_declared-gated omission idiom /relay-implement's own
-  // `Visual:` line already established.
+  // `Visual:` line already established. Since the Figma Visual-First
+  // Track's own Phase 7, the table additionally renders a Scope column
+  // (and, after the table, per-phase recorded human-approval lines)
+  // when — and only when — at least one in-scope phase's own plan
+  // declares a phase_scope row; when none do, both extensions stay
+  // omitted entirely and the table renders byte-identically to the
+  // original base-track shape (see loadPhaseScopes/loadVisualApprovalLine).
   const visualFrames = loadVisualFidelityFrames(reportsDir);
   if (visualFrames.length > 0) {
+    const phasesInScope = [...new Set(visualFrames.map((f) => f.phase))];
+    const phaseScopes = loadPhaseScopes(reportsDir, phasesInScope);
+    const scopeColumnActive = [...phaseScopes.values()].some((v) => v != null);
+
     lines.push('## Visual Fidelity');
     lines.push('');
-    lines.push('| Phase | Node ID | Route | Diff % | Threshold | Status |');
-    lines.push('|-------|---------|-------|--------|-----------|--------|');
+    if (scopeColumnActive) {
+      lines.push('| Phase | Node ID | Route | Diff % | Threshold | Status | Scope |');
+      lines.push('|-------|---------|-------|--------|-----------|--------|-------|');
+    } else {
+      lines.push('| Phase | Node ID | Route | Diff % | Threshold | Status |');
+      lines.push('|-------|---------|-------|--------|-----------|--------|');
+    }
     for (const f of visualFrames) {
       const diffPct = f.diff_percent == null ? '—' : f.diff_percent;
-      lines.push(`| ${f.phase} | ${f.node_id ?? '—'} | ${f.route ?? '—'} | ${diffPct} | ${f.threshold ?? '—'} | ${f.status ?? '—'} |`);
+      const row = `| ${f.phase} | ${f.node_id ?? '—'} | ${f.route ?? '—'} | ${diffPct} | ${f.threshold ?? '—'} | ${f.status ?? '—'}`;
+      lines.push(scopeColumnActive ? `${row} | ${phaseScopes.get(f.phase) ?? '—'} |` : `${row} |`);
     }
     lines.push('');
+
+    const approvalLines = [];
+    for (const phase of phasesInScope) {
+      if (phaseScopes.get(phase) == null) continue;
+      const approvalLine = loadVisualApprovalLine(reportsDir, phase);
+      if (approvalLine != null) approvalLines.push(approvalLine);
+    }
+    if (approvalLines.length > 0) {
+      for (const approvalLine of approvalLines) lines.push(approvalLine);
+      lines.push('');
+    }
   }
 
   lines.push('---');

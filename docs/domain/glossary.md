@@ -215,14 +215,17 @@ true`. Selects how a `phase_scope: visual` phase's blocking
 visual-verification gate is signed off: `auto` lets the machine gate
 (`visual-verifier` returning `VISUAL_VERIFIED`) unlock the paired logic
 phase on its own; `human` additionally requires an explicit human
-approval — the future `/relay-visual-approve` command — after
+approval — via the `/relay-visual-approve` command — after
 inspecting the captures. Follows the same non-heuristic contract as
 `figma_track`: deterministic default-emission on `*init`,
 preserve-on-`*update` of an already-set value, backfill only when the
 key is entirely absent. Enforced deterministically by the
 `gating-structure` check's second `SITES` registry entry (`npm run
 validate`). Part of the Figma Visual-First Track (Phase 1); the
-`human`-mode halt/resume mechanism ships in Phase 6.
+blocking gate itself (both `auto` and `human` modes) and the
+`human`-mode `AWAITING_VISUAL_APPROVAL` halt shipped in Phase 5; the
+`/relay-execute` resume semantics and the dedicated
+`/relay-visual-approve` command shipped in Phase 6.
 
 ## Visual-First Mode
 
@@ -248,16 +251,28 @@ enforces exactly-one-tag-per-row plus strict 1:1 `Depends` pairing,
 
 ## Visual-verification loop
 
-Bounded, non-blocking sub-phase (`/relay-implement`'s `Phase A.3.4`)
-that dispatches the `visual-verifier` agent immediately after the Code
-Reviewer returns `APPROVED`, when `figma_track: true` and the plan's
-`design_source: figma`. Orchestrates `provision.mjs` → `capture.mjs` →
-`compare.mjs` against the plan's Design Source and the referenced
-Design Spec's Visual Acceptance Criteria, classifying every frame as
-`VISUAL_VERIFIED`, `VISUAL_DEGRADED` (a named degradation rung, always
-non-blocking), or `VISUAL_MISMATCH` (triggers one bounded fix round,
-then a deterministic revert on non-convergence). Part of the Figma
-Implementation Track (Phase 6).
+Sub-phase (`/relay-implement`'s `Phase A.3.4`) that dispatches the
+`visual-verifier` agent immediately after the Code Reviewer returns
+`APPROVED`, when `figma_track: true` and the plan's `design_source:
+figma`. Orchestrates `provision.mjs` → `capture.mjs` → `compare.mjs`
+against the plan's Design Source and the referenced Design Spec's
+Visual Acceptance Criteria, classifying every frame as
+`VISUAL_VERIFIED`, `VISUAL_DEGRADED` (a named degradation rung), or
+`VISUAL_MISMATCH` (triggers one bounded fix round, then a
+deterministic revert on non-convergence). On a `phase_scope: logic`
+plan (or a plan with no `phase_scope` row) the loop stays
+non-blocking exactly as originally shipped. On a `phase_scope: visual`
+plan (Figma Visual-First Track), the loop instead blocks: only a
+genuine `VISUAL_VERIFIED` under `visual_first_approval: auto` lets the
+phase proceed past Phase A.3.4 automatically; under
+`visual_first_approval: human`, every outcome — including
+`VISUAL_VERIFIED` — instead HALTs `AWAITING_VISUAL_APPROVAL`, resumed
+by the Figma Visual-First Track Phase 6 human-approval mechanism (the
+`/relay-visual-approve` command plus `/relay-execute`'s own resumable
+visual-approval check); every other `auto`-mode outcome HALTs
+`VISUAL_GATE_BLOCKED`. Part of the Figma Implementation
+Track (Phase 6); the `phase_scope: visual` blocking extension is Figma
+Visual-First Track Phase 5.
 
 ## Worktree
 

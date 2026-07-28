@@ -37,6 +37,7 @@ User-facing intro: see `README.md` at the repository root.
 ## Design System (Figma Track)
 
 → docs/design/dogfood-runbook.md — checklist a human operator runs against a real downstream project to exercise the Figma Implementation Track's Phase 7 end-to-end success signal
+→ docs/design/visual-first-dogfood-runbook.md — checklist a human operator runs against a real downstream project to exercise the Figma Visual-First Track's Phase 7 end-to-end success signal
 
 ## Domain
 

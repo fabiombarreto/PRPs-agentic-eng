@@ -276,10 +276,12 @@ Task(subagent_type="implementer",
        plan_path: <plan_path>,
        target_root: <target_root>,
        attempt: <attempt>,
-       prior_feedback: <last_reviewer_feedback when attempt > 1; null otherwise>,
+       prior_feedback: <last_reviewer_feedback when non-empty; null otherwise>,
        base_commit: <base_commit>,
      })
 ```
+
+`prior_feedback`'s condition reads `last_reviewer_feedback` non-emptiness directly rather than `attempt > 1` — a deliberately narrow generalization (Figma Visual-First Track Phase 6, `docs/decisions.md`): in every pre-Phase-6 code path `last_reviewer_feedback` is populated only together with an `attempt` increment (Phase A.3's `CHANGES_REQUESTED` branch, and the arbitration mode's `DISPUTE_REJECTED` branch), so the two conditions are equivalent for every existing invocation shape; the new condition additionally lets `/relay-execute`'s resume-from-rejected-visual-approval path (`relay-execute.md` Phase A.2.5) seed feedback for a genuine `attempt == 1` dispatch, which the old condition would have silently discarded.
 
 The implementer reads the plan, executes its Step-by-Step Tasks via `Edit`/`Write` directly in the working tree, runs the plan's Validation Commands Levels 1–3 after all tasks complete (D6 — aggregate validation), and returns one of two verdicts:
 
@@ -371,7 +373,8 @@ Triggered exactly once when Phase A.3 standard-mode returns APPROVED — never o
 
 1. **Gate.** If `no_visual_flag == true` OR `visual_verification_enabled == false`, skip the entire visual-verification sub-phase (log a one-line skip note naming which of the two gated it) and proceed directly to Phase A.3.5. Record `visual_outcome = "SKIPPED (--no-visual)"` when `no_visual_flag == true` (checked first — `--no-visual` takes precedence over `visual_verification_enabled` when both are true), otherwise `visual_outcome = "SKIPPED (not figma-sourced)"`.
 2. **Budget init.** Otherwise, initialise `visual_review_attempts = 0`, `max_visual_retries = 2` — its own budget, independent of `max_implement_retries`/`disputes_used`/`max_docs_review_retries`.
-3. **Step A — dispatch `visual-verifier` via `Task`:**
+3. **Dual-mode read (new).** Read the plan at `<plan_path>`'s `## Metadata` table for a `phase_scope` row (values `visual`/`logic`; absent when the source PRD does not declare `visual_first: true`). Record `phase_scope_value` (`"visual"`, `"logic"`, or `null` when the row is absent) — read verbatim, never inferred from row content or task prose (mirrors the non-heuristic `phase_scope` sourcing lineage shipped in Phase 3). Read `<target_root>/docs/context/methodology.md` frontmatter for `visual_first_approval` (values `auto`/`human`); record `visual_approval_mode`, defaulting to `"auto"` only when the key is entirely absent from the frontmatter — mirrors the `figma_track`/`docs_sync` default-when-absent idiom already used earlier in this same Phase A.0 (`plugins/relay/commands/relay-implement.md:203-220`). Non-visual byte-identical guarantee: when `phase_scope_value` is not `"visual"`, steps 4-6 below are unchanged — `phase_scope_value` and `visual_approval_mode` are read but not consulted again until the new terminal-routing paragraph a following task inserts after step 5.
+4. **Step A — dispatch `visual-verifier` via `Task`:**
 
    ```
    Task(subagent_type="visual-verifier",
@@ -385,15 +388,45 @@ Triggered exactly once when Phase A.3 standard-mode returns APPROVED — never o
         })
    ```
 
-4. **Step B — branch on the returned verdict:**
-   - **`VISUAL_VERIFIED`** → `visual_outcome = "APPROVED"`; proceed to Phase A.3.5.
-   - **`VISUAL_DEGRADED`** → record the named rung (e.g. `DEGRADED_STATIC_ONLY`); log a warning; proceed to Phase A.3.5 WITHOUT halting (this is the AC-5 non-blocking guarantee).
+5. **Step B — branch on the returned verdict:**
+   - **`VISUAL_VERIFIED`** → `visual_outcome = "APPROVED"`; proceed to Phase A.3.5 (subject to the Terminal-routing rule below).
+   - **`VISUAL_DEGRADED`** → record the named rung (e.g. `DEGRADED_STATIC_ONLY`); log a warning; proceed to Phase A.3.5 (subject to the Terminal-routing rule below) WITHOUT halting (this is the AC-5 non-blocking guarantee).
    - **`VISUAL_MISMATCH`** → increment `visual_review_attempts`.
      - If `visual_review_attempts <= max_visual_retries`: dispatch one post-visual fix round — re-invoke `implementer` via `Task` with the `fidelity-report.json`'s failing frames as `prior_feedback`, then `code-reviewer` via `Task` in standard mode to re-approve the code change, then re-dispatch `visual-verifier` via `Task`.
-       - If that round's `code-reviewer` step itself returns `CHANGES_REQUESTED`, OR the re-dispatched `visual-verifier` still returns `VISUAL_MISMATCH`: perform a **deterministic revert** — `git checkout <last code-reviewer-APPROVED commit/diff> -- <files touched by the fix attempt>` (using the same `files_changed_by_attempt` bookkeeping Phase A.2 already maintains, mirroring the oscillation-detection precedent at `plugins/relay/commands/relay-implement.md:239-250`) so the worktree returns to exactly the last APPROVED state; set `visual_outcome = "BUDGET_EXCEEDED_REVERTED"`; proceed to Phase A.3.5 WITHOUT halting.
-       - Otherwise (the fix round's `code-reviewer` returns `APPROVED` and the re-dispatched `visual-verifier` returns `VISUAL_VERIFIED` or `VISUAL_DEGRADED`): set `visual_outcome` from that re-dispatch's own verdict (`"APPROVED"` or the named degraded rung); proceed to Phase A.3.5.
-     - If `visual_review_attempts > max_visual_retries` without ever dispatching a fix round: set `visual_outcome = "BUDGET_EXCEEDED"`; proceed to Phase A.3.5 WITHOUT halting.
-5. **No commit issued.** This sub-phase performs no commit action of any kind — any edits from the post-visual fix round land uncommitted in the worktree (or are reverted per Step B above), per the Pillar 2 "never commit" invariant (`docs/decisions.md` 2026-05-18).
+       - If that round's `code-reviewer` step itself returns `CHANGES_REQUESTED`, OR the re-dispatched `visual-verifier` still returns `VISUAL_MISMATCH`: perform a **deterministic revert** — `git checkout <last code-reviewer-APPROVED commit/diff> -- <files touched by the fix attempt>` (using the same `files_changed_by_attempt` bookkeeping Phase A.2 already maintains, mirroring the oscillation-detection precedent at `plugins/relay/commands/relay-implement.md:239-250`) so the worktree returns to exactly the last APPROVED state; set `visual_outcome = "BUDGET_EXCEEDED_REVERTED"`; proceed to Phase A.3.5 (subject to the Terminal-routing rule below) WITHOUT halting.
+       - Otherwise (the fix round's `code-reviewer` returns `APPROVED` and the re-dispatched `visual-verifier` returns `VISUAL_VERIFIED` or `VISUAL_DEGRADED`): set `visual_outcome` from that re-dispatch's own verdict (`"APPROVED"` or the named degraded rung); proceed to Phase A.3.5 (subject to the Terminal-routing rule below).
+     - If `visual_review_attempts > max_visual_retries` without ever dispatching a fix round: set `visual_outcome = "BUDGET_EXCEEDED"`; proceed to Phase A.3.5 (subject to the Terminal-routing rule below) WITHOUT halting.
+
+**Terminal routing (dual-mode, new).** Step 5 above reaches "proceed to Phase A.3.5" from several distinct points — the `VISUAL_VERIFIED` bullet, the `VISUAL_DEGRADED` bullet, and (inside the `VISUAL_MISMATCH` bullet) its deterministic-revert sub-case, its budget-exhausted-without-a-fix-round sub-case, and its fix-round-succeeds sub-case, whose own re-dispatched `visual-verifier` verdict may itself be `VISUAL_VERIFIED` OR `VISUAL_DEGRADED`. Every one of those points, and the verdict-reaching mechanics that reach them (dispatch, fix-round retry, deterministic revert), are UNCHANGED; only whether reaching "proceed to Phase A.3.5" is ALLOWED is new. The rule below is written as an inverse — block unless the outcome is exactly `VISUAL_VERIFIED` — precisely so it cannot silently miss one of those points the way a branch enumeration can:
+- When `phase_scope_value != "visual"` (absent, or `"logic"`): proceed to Phase A.3.5 immediately, exactly as step 5 already says — byte-identical to today, non-visual path unchanged.
+- When `phase_scope_value == "visual"` AND `visual_approval_mode == "human"`: regardless of which point above was reached (including a genuine `VISUAL_VERIFIED` result), do NOT proceed to Phase A.3.5. Write `<artifact_root>../halt.json` with `{outcome: "AWAITING_VISUAL_APPROVAL", phase_scope: "visual", final_visual_verdict: "<VISUAL_VERIFIED|VISUAL_DEGRADED|VISUAL_MISMATCH>", fidelity_report_path, attempt_history, actionable_recommendation: "Run /relay-visual-approve (Phase 6 of PRPs/prds/figma-visual-first-track.prd.md; not yet built as of this phase) to review the captures at <fidelity_report_path> and approve or reject. Until then this phase cannot reach complete."}`. HALT the entire `/relay-implement` invocation (Phase A.3.5 and Phase A.4 are never entered — no docs-sync, no D8 mutation) with the verbatim message:
+  > AWAITING_VISUAL_APPROVAL. The visual gate reached a final verdict
+  > (`<final_visual_verdict>`) but `visual_first_approval: human`
+  > requires explicit human review before this phase can complete —
+  > never silently proceeding on a mismatch or an unreviewed pass
+  > (source PRD AC-4 of `figma-visual-first-track.prd.md`). Fidelity
+  > report at `<fidelity_report_path>`. Run `/relay-visual-approve`
+  > (Phase 6 of the same PRD; not yet built as of this phase) once
+  > available to review the captures and approve or reject. Halt state
+  > at `<artifact_root>../halt.json`. No commit has been made and no
+  > D8 mutation has occurred — the plan remains `APPROVED`, the source
+  > PRD row remains `in-progress`.
+- When `phase_scope_value == "visual"` AND `visual_approval_mode == "auto"` (or absent, defaulting to `auto`): proceed to Phase A.3.5 ONLY when the point reached is a genuine `VISUAL_VERIFIED` result — `visual_outcome = "APPROVED"`, D8 continues normally, exactly as step 5 already says — whether that is step 5's own `VISUAL_VERIFIED` bullet, or the `VISUAL_MISMATCH` bullet's fix-round-succeeds sub-case when its re-dispatched verdict is itself `VISUAL_VERIFIED`. For every OTHER point step 5's mechanics can reach — `VISUAL_DEGRADED` (step 5's own bullet, OR the fix-round-succeeds sub-case's re-dispatched verdict coming back `VISUAL_DEGRADED` instead of `VISUAL_VERIFIED` — the case a plain branch enumeration can miss), the deterministic-revert sub-case (`BUDGET_EXCEEDED_REVERTED`), or the budget-exhausted-without-a-fix-round sub-case (`BUDGET_EXCEEDED`) — do NOT proceed to Phase A.3.5. Write `<artifact_root>../halt.json` with `{outcome: "VISUAL_GATE_BLOCKED", phase_scope: "visual", final_visual_verdict: "<VISUAL_DEGRADED|VISUAL_MISMATCH>", fidelity_report_path, attempt_history, actionable_recommendation: "Fix the visual implementation or its mocks and re-run /relay-implement, or set visual_first_approval: human in docs/context/methodology.md to route through human review instead."}`. HALT with the verbatim message:
+  > VISUAL_GATE_BLOCKED. The visual-scoped blocking gate's final
+  > result was `<final_visual_verdict>`, not `VISUAL_VERIFIED`.
+  > `visual_first_approval: auto` requires a clean `VISUAL_VERIFIED`
+  > result to complete this phase — never silently proceeding on a
+  > mismatch (source PRD AC-4 of `figma-visual-first-track.prd.md`).
+  > Fidelity report at `<fidelity_report_path>`. Fix the visual
+  > implementation or its mocks and re-run `/relay-implement`, or
+  > switch `visual_first_approval` to `human` in
+  > `docs/context/methodology.md` to route through human review
+  > instead. Halt state at `<artifact_root>../halt.json`. No commit
+  > has been made and no D8 mutation has occurred.
+
+`max_visual_retries=2` is the SAME budget variable step 2 (Budget init) already initializes — this routing paragraph introduces no new budget.
+
+6. **No commit issued.** This sub-phase performs no commit action of any kind — any edits from the post-visual fix round land uncommitted in the worktree (or are reverted per Step B above), per the Pillar 2 "never commit" invariant (`docs/decisions.md` 2026-05-18).
 
 ### Phase A.3.5 — Docs-sync dispatch
 
@@ -572,7 +605,7 @@ On the success path (Phase A.3 standard-mode APPROVED + all applicable D8 mutati
 > Visual: `<visual_outcome>` (`APPROVED` / named degraded rung, e.g. `DEGRADED_STATIC_ONLY` / `BUDGET_EXCEEDED` / `BUDGET_EXCEEDED_REVERTED` / `SKIPPED (not figma-sourced)` / `SKIPPED (--no-visual)`) — **this line's very presence is gated on `figma_track_declared`** (Phase A.0): shown ONLY when `figma_track_declared == true`; when `figma_track_declared == false` the line is OMITTED ENTIRELY (no line, no `SKIPPED` marker, nothing), so a non-Figma project's output stays byte-identical to today's (PRD AC-1 of `figma-implementation-track.prd.md`).
 > Worktree ready for `/relay:relay-test PRPs/plans/completed/<basename>.plan.md`.
 
-On HALT (one of `FAILED_AFTER_N_RETRIES`, `FAILED_TIME_BUDGET_EXCEEDED`, `FAILED_OSCILLATION_DETECTED`, `FAILED_DISPUTE_CAP_EXCEEDED`, `DISPUTE_UPHELD_TEST_WRONG`, `DISPUTE_UPHELD_PRD_AMBIGUOUS`, `PARTIAL_D8_FAILURE`, or any precondition HALT), the user-facing message is the verbatim halt message defined in the relevant Phase A.* sub-section above, and the command exits without performing further mutations.
+On HALT (one of `FAILED_AFTER_N_RETRIES`, `FAILED_TIME_BUDGET_EXCEEDED`, `FAILED_OSCILLATION_DETECTED`, `FAILED_DISPUTE_CAP_EXCEEDED`, `DISPUTE_UPHELD_TEST_WRONG`, `DISPUTE_UPHELD_PRD_AMBIGUOUS`, `PARTIAL_D8_FAILURE`, `AWAITING_VISUAL_APPROVAL`, `VISUAL_GATE_BLOCKED`, or any precondition HALT), the user-facing message is the verbatim halt message defined in the relevant Phase A.* sub-section above, and the command exits without performing further mutations.
 
 In all cases, the per-attempt artifacts at `PRPs/reports/<feature>/phase-<N>/attempts/<i>/` are preserved on disk for post-mortem audit.
 
@@ -590,7 +623,7 @@ In all cases, the per-attempt artifacts at `PRPs/reports/<feature>/phase-<N>/att
 
 5. **Never overwrite an APPROVED plan.** P2 catches this at command entry. Phase A.4 Mutation a only operates on `*Status: APPROVED*` (not `*Status: IMPLEMENTED*` or any other state); subsequent re-invocations against an IMPLEMENTED plan fail at P2.
 
-6. **Never bypass D8.** In PRD mode (`is_prd_less == false`): all three mutations (a, b, c) are attempted on APPROVED rubric. In PRD-less mode (`is_prd_less == true`): mutations a and b are attempted; Mutation c is a documented no-op (`mutation_c_skipped: true` — not a failure) because no source PRD row exists to flip. On partial failure of an attempted mutation, the command writes `halt.json` and emits a structured rollback note; it does **not** silently skip a mutation or claim success.
+6. **Never bypass D8.** In PRD mode (`is_prd_less == false`): all three mutations (a, b, c) are attempted on APPROVED rubric. In PRD-less mode (`is_prd_less == true`): mutations a and b are attempted; Mutation c is a documented no-op (`mutation_c_skipped: true` — not a failure) because no source PRD row exists to flip. On partial failure of an attempted mutation, the command writes `halt.json` and emits a structured rollback note; it does **not** silently skip a mutation or claim success. The visual-scoped blocking-gate halts (`AWAITING_VISUAL_APPROVAL`, `VISUAL_GATE_BLOCKED`) occur inside Phase A.3.4, strictly before Phase A.3.5 (docs-sync) and Phase A.4 (D8) ever run — D8 is never attempted for either, mirroring every other named HALT above it in the pipeline.
 
 7. **Never skip the Decision Gate evidence block.** The command-level gate (above) is mandatory. The implementer and code-reviewer agents emit their own gates inside their dispatch payloads.
 

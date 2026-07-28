@@ -93,7 +93,7 @@
     "title": "Commands",
     "path": "reference/commands.html",
     "category": "Reference",
-    "excerpt": "Fifteen commands, no placeholder. Orchestrator /relay-execute composes /relay-plan, /relay-plan-review, /relay-worktree, /relay-write-test, /relay-test-write-review, /relay-implement, /relay-code-review, /relay-test, and /relay-test-review end to end. All Pillar 3 commands shipped: /relay-commit (v0.14.0), /relay-pr (v0.15.0), /relay-approve (v0.17.0). /relay-qa-report (v0.20.0) is the QA / Support command in the human validation gate. /relay-plan supports a description-only (PRD-less) mode in addition to the standard APPROVED-PRD mode. Full command surface by role: writers, reviewers, infra, orchestrator, QA / Support, and Pillar 3."
+    "excerpt": "Nineteen commands, no placeholder. Orchestrator /relay-execute composes /relay-plan, /relay-plan-review, /relay-worktree, /relay-write-test, /relay-test-write-review, /relay-implement, /relay-code-review, /relay-test, and /relay-test-review end to end. All Pillar 3 commands shipped: /relay-commit (v0.14.0), /relay-pr (v0.15.0), /relay-approve (v0.17.0). /relay-qa-report (v0.20.0) is the QA / Support command in the human validation gate. /relay-plan supports a description-only (PRD-less) mode in addition to the standard APPROVED-PRD mode. Full command surface by role: writers, reviewers, infra, orchestrator, QA / Support, and Pillar 3. /relay-visual-approve is the standalone, human-triggered infra command serving the Figma Visual-First Track's human-mode visual approval gate, never invoked by /relay-execute."
   },
   {
     "title": "Agents",
@@ -196,6 +196,12 @@
     "path": "reference/commands.html#relay-visual-review",
     "category": "Reference",
     "excerpt": "Standalone, single-shot, non-mutating re-check of visual fidelity for a plan whose ## Metadata carries design_source: figma. Dispatches the visual-verifier agent exactly once (attempt: 1 sentinel, mirroring /relay-code-review's dispatch shape), surfaces VISUAL_VERIFIED / VISUAL_DEGRADED / VISUAL_MISMATCH plus the fidelity-report.json path, and performs zero D8 mutations. Part of the Figma Implementation Track (Phase 7)."
+  },
+  {
+    "title": "/relay-visual-approve",
+    "path": "reference/commands.html#relay-visual-approve",
+    "category": "Reference",
+    "excerpt": "Standalone, human-triggered infra command recording the Figma Visual-First Track's human-mode visual-approval decision. Locates the single unresolved AWAITING_VISUAL_APPROVAL halt for a feature, surfaces the fidelity report plus captured/reference screenshot paths, requires explicit confirmation, and flips the phase's halt.json plus an appended visual-approval.jsonl audit line. Never invoked by /relay-execute. Part of the Figma Visual-First Track (Phase 6)."
   },
   {
     "title": "Decisions",

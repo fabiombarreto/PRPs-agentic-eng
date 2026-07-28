@@ -14,14 +14,19 @@ Modes for `context-builder`: `*init`, `*update`, `*validate`, `*domain`,
 
 ## Commands
 
-18 commands organized by role (11 Pillar 1–2 plus `/relay-commit`,
+19 commands organized by role (11 Pillar 1–2 plus `/relay-commit`,
 `/relay-pr`, and `/relay-approve` as the three Pillar 3 commands, shipped
 v0.14.0, v0.15.0, and v0.17.0, plus `/relay-qa-report` as the QA / Support
 command in the human validation gate, plus three standalone,
 `figma_track: true`-gated Figma Implementation Track commands —
 `/relay-design-map` (Phase 3), `/relay-design-spec` (Phase 4), and
 `/relay-visual-review` (Phase 7) — none of which is ever invoked by
-`/relay-execute`). All 18 commands are now implemented;
+`/relay-execute`, plus a fourth standalone command, `/relay-visual-approve`,
+belonging to the sibling Figma Visual-First Track and gated by
+`visual_first_approval: human` (itself only reachable when
+`figma_track: true` AND `visual_first: true`) rather than `figma_track`
+directly — also never invoked by `/relay-execute`. All 19 commands are now
+implemented;
 `/relay-execute` ✅ orchestrator shipped in v0.9.0 completing project Phase 3;
 `/relay-approve` ✅ shipped in v0.17.0 completing Phase 4. See
 `docs/decisions.md` for the decision record and rationale.
@@ -94,6 +99,16 @@ commands' effects appear anywhere in a project's output — see
 | `/relay-design-map [--refresh]` ✅ **implemented** (`figma_track: true` gate) | No required argument; optional `--refresh` selects an additive re-scan. Reads `docs/context/design-system.md`. | `docs/design/component-map.md` with status `APPROVED` — a versioned, human-curatable Figma-to-code component map (`## Conventions`, `## Components`, `## UNMAPPED`). All Figma MCP querying happens in this command's own session, never inside a dispatched agent (`docs/decisions.md` 2026-07-22). Dispatches the `design-map-writer`/`design-map-reviewer` pair in a bounded `max_map_review_retries=2` loop. On explicit human confirmation only, a single `Edit` flips `figma_track: true` in `docs/context/methodology.md` — the one sanctioned non-heuristic path to set that key. Figma Implementation Track Phase 3. |
 | `/relay-design-spec <figma-url> [feature-or-description]` ✅ **implemented** (`figma_track: true` gate) | A Figma design URL plus optional free text naming the feature. Reads `docs/design/component-map.md` when present (absence is a documented degraded mode). | `PRPs/designs/<feature>/design-spec.md` with status `APPROVED` only after the user's own explicit affirmative reply. Inline-adopts `design-spec-writer`/`design-spec-reviewer` directly in the main conversation (mirrors `/relay-prd`'s bundling, never `Task`-dispatched), performing all Figma MCP querying itself. Figma Implementation Track Phase 4. |
 | `/relay-visual-review <plan-path>` ✅ **implemented** (`figma_track: true` gate) | A plan whose `## Metadata` carries `design_source: figma`, ending `*Status: APPROVED*` or `*Status: IMPLEMENTED*`. Resolves the referenced APPROVED Design Spec at `PRPs/designs/<feature>/design-spec.md`. | Single-shot standalone dispatch of the `visual-verifier` agent (`attempt: 1` sentinel, mirroring `/relay-code-review`'s dispatch shape) — surfaces `VISUAL_VERIFIED` / `VISUAL_DEGRADED` / `VISUAL_MISMATCH` plus the `fidelity-report.json` path. Performs zero D8 mutations and never edits application source; structurally identical, non-mutating, single-shot standalone command, mirroring `/relay-code-review`'s shape exactly. Figma Implementation Track Phase 7. |
+
+#### Figma Visual-First Track
+
+A sibling, dependent track to the Design system (Figma track) commands
+above — reachable only once `figma_track: true` AND `visual_first: true`
+are both declared. Never invoked by `/relay-execute`.
+
+| Command | Input | Output |
+|---------|-------|--------|
+| `/relay-visual-approve <feature>` ✅ **implemented** (`visual_first_approval: human` gate) | A feature name identifying the single unresolved `AWAITING_VISUAL_APPROVAL` halt to locate. | A recorded approve/reject decision via a single `Edit` on the paused phase's `halt.json` plus an appended audit `visual-approval.jsonl` line. Three HALT codes: `FAILED_NOTHING_TO_APPROVE`, `FAILED_MULTIPLE_PENDING_APPROVALS`, `FAILED_PLAN_AMBIGUOUS`. Never invoked by `/relay-execute`. Figma Visual-First Track Phase 6. |
 
 #### Pillar 3 (commit + PR + approval cycle)
 

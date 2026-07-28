@@ -1,5 +1,5 @@
 ---
-description: 'Autonomous multi-phase orchestrator for relay pipeline. Takes an APPROVED PRD and serially drives every actionable Implementation Phases row through plan → plan-review → implement → test → test-review by adopting each downstream command protocol inline via Read (D7 dispatch model; zero logic duplication per D15). Adds exactly two orchestration-layer budgets: max_plan_review_retries=2 (re-runs /relay-plan when /relay-plan-review returns CHANGES_REQUESTED, bounded retry) and max_orchestrator_minutes=240 (session-level wall-clock; 0 forbidden). Maintains orchestrator-run.json audit artifact at PRPs/reports/<feature>/. Eight HALT outcome codes: FAILED_PLAN_REVIEW_BUDGET_EXCEEDED, FAILED_PLAN_REVIEW_STUCK (same rubric items fail across consecutive attempts — early halt before budget exhaustion), FAILED_ORCHESTRATOR_TIME_BUDGET_EXCEEDED, FAILED_TEST_REVIEW_REJECTED, plus four propagated from /relay-implement (FAILED_AFTER_N_RETRIES, FAILED_TIME_BUDGET_EXCEEDED, FAILED_OSCILLATION_DETECTED, FAILED_DISPUTE_CAP_EXCEEDED, PARTIAL_D8_FAILURE) and two from /relay-test. State machine is the source PRD Implementation Phases table (D6); re-invocation is idempotent — picks up at next pending row. TDD routing read at startup; dead code in MVP (B7/B8 unshipped).'
+description: 'Autonomous multi-phase orchestrator for relay pipeline. Takes an APPROVED PRD and serially drives every actionable Implementation Phases row through plan → plan-review → implement → test → test-review by adopting each downstream command protocol inline via Read (D7 dispatch model; zero logic duplication per D15). Adds exactly two orchestration-layer budgets: max_plan_review_retries=2 (re-runs /relay-plan when /relay-plan-review returns CHANGES_REQUESTED, bounded retry) and max_orchestrator_minutes=240 (session-level wall-clock; 0 forbidden). Maintains orchestrator-run.json audit artifact at PRPs/reports/<feature>/. Eight HALT outcome codes: FAILED_PLAN_REVIEW_BUDGET_EXCEEDED, FAILED_PLAN_REVIEW_STUCK (same rubric items fail across consecutive attempts — early halt before budget exhaustion), FAILED_ORCHESTRATOR_TIME_BUDGET_EXCEEDED, FAILED_TEST_REVIEW_REJECTED, plus four propagated from /relay-implement (FAILED_AFTER_N_RETRIES, FAILED_TIME_BUDGET_EXCEEDED, FAILED_OSCILLATION_DETECTED, FAILED_DISPUTE_CAP_EXCEEDED, PARTIAL_D8_FAILURE) and two from /relay-test. State machine is the source PRD Implementation Phases table (D6); re-invocation is idempotent — picks up at next pending row. TDD routing read at startup; dead code in MVP (B7/B8 unshipped). Phase 6 of figma-visual-first-track.prd.md adds AWAITING_VISUAL_APPROVAL, a new propagated non-failure pause (see the Phase A.1 resumable visual-approval check + the Phase A.2.5 resume short-circuit) distinct from the failure codes above.'
 argument-hint: <prd-path>
 ---
 
@@ -117,7 +117,20 @@ A row is **actionable** when:
 - Its `Status` cell equals `pending` (case-sensitive), AND
 - Its `Depends` cell is `-` (empty) OR every comma-separated phase number listed has `Status == complete`.
 
-If zero rows are actionable, apply AC-6 (idempotent re-entry):
+**Resumable visual-approval check (new, additive — runs BEFORE the zero-actionable-rows exit below; never changes the actionable-row rule above).** For every row whose `Status` cell equals `in-progress`, check whether `PRPs/reports/<feature>/phase-<row's #>/halt.json` exists and, if so, `Read` it. When a row's halt.json has `outcome == "AWAITING_VISUAL_APPROVAL"`:
+- If the halt.json carries NO `resolution` field yet (the human has not yet run `/relay-visual-approve`): do NOT apply the zero-actionable-rows exit below, even when no row is independently `pending`. Instead emit:
+
+  > Phase `<row #>` (`<Phase name>`) is awaiting human visual approval. Run
+  > `/relay-visual-approve <feature>` to review the captured evidence and
+  > approve or reject, then re-run `/relay-execute <prd_path>` to resume.
+  > No phase work has been performed this invocation.
+
+  Exit 0. Write no artifacts. This is a structured no-op distinct from AC-6's "all phases complete" message — the PRD is not fully done, it is paused on a human decision.
+- If the halt.json carries a `resolution` field (`"approved"` or `"rejected"`, written by `/relay-visual-approve`): this row IS actionable. Do NOT apply the zero-actionable-rows exit below even when no row is independently `pending`. Proceed to Phase A.0 (Phase A.1's own mirror of this check, Task 2, picks up the row and seeds `resume_mode`).
+
+This check is scoped exclusively to `outcome == "AWAITING_VISUAL_APPROVAL"` — a row `in-progress` for any other reason (a `VISUAL_GATE_BLOCKED` halt, or a genuinely fresh in-flight concurrent run with no halt.json at all) falls through unchanged to the zero-actionable-rows check below.
+
+If zero rows are actionable AND no resumable visual-approval row was found above, apply AC-6 (idempotent re-entry):
 
 > All phases complete; nothing to orchestrate.
 
@@ -202,7 +215,13 @@ A row is **actionable** when:
 - Its `Status` cell equals `pending` (case-sensitive), AND
 - Its `Depends` cell is `-` (empty) OR every comma-separated phase number listed has `Status == complete`.
 
-Pick the lowest-numbered actionable row. Record `current_phase_N` and `current_phase_slug`.
+**Resumable visual-approval check (new, additive — mirrors the P3 precondition's own check verbatim; re-run here because Phase A.1 re-reads the table fresh on every loop iteration, per its own existing "do not reuse a stale snapshot" instruction above).** Before picking the lowest-numbered actionable row below, scan for any row whose `Status` cell equals `in-progress` and whose `PRPs/reports/<feature>/phase-<row's #>/halt.json` has `outcome == "AWAITING_VISUAL_APPROVAL"`:
+- No `resolution` field yet: apply the SAME structured no-op the P3 precondition performs (emit the "awaiting human visual approval" message, exit 0, no artifacts) rather than falling through to the "no actionable row" branch below.
+- A `resolution` field is present (`"approved"` or `"rejected"`): set `current_phase_N` to that row's `#` and `current_phase_slug` to that row's kebab-cased `Phase` cell (mirroring `plan-writer.md`'s own slug derivation), set `resume_mode` to the `resolution` value, and skip the normal actionable-row pick below entirely — proceed directly to Phase A.2 (Phase A.2.5, Task 3, branches on `resume_mode`).
+
+There is at most one such row under this orchestrator's serial execution model (D6). If none is found, proceed to the normal actionable-row pick below with `resume_mode = null`.
+
+Pick the lowest-numbered actionable row. Record `current_phase_N` and `current_phase_slug`. Set `resume_mode = null` (a fresh, non-resumed phase pick).
 
 Reset `last_plan_review_failing_ids = null` at the start of each new phase iteration so stuck-loop detection does not carry state across phases.
 
@@ -256,6 +275,46 @@ HALT with verbatim message:
 > Partial state preserved on disk; source PRD table reflects whatever phases
 > reached complete. Re-invoke /relay-execute to pick up at the next pending row.
 > Halt state at PRPs/reports/<feature>/orchestrator-halt.json.
+
+### Phase A.2.5 — Resume-from-visual-approval short-circuit
+
+Runs only when `resume_mode` is non-null (set by Phase A.1's resumable visual-approval check, Task 2). When `resume_mode` is `null` — the case for every project that does not declare `visual_first: true`, and for every ordinary pending-row pick — this phase is a complete no-op: proceed directly to Phase A.3 exactly as today.
+
+`current_plan_path` is derived directly from disk rather than re-running Phase A.3's plan sub-flow: `Glob` `PRPs/plans/<feature>-phase-<current_phase_N>-*.plan.md`. Exactly one match is expected — the plan already reached `*Status: APPROVED*` in the original session that hit the `AWAITING_VISUAL_APPROVAL` halt, so Phase A.3/A.3.3 already ran for this phase before the halt occurred. If zero or more than one match is found, treat as a structural halt:
+
+> FAILED_RESUME_PLAN_AMBIGUOUS: Resuming phase `<current_phase_N>` after a
+> visual-approval decision, but `PRPs/plans/<feature>-phase-<current_phase_N>-*.plan.md`
+> matched `<count>` file(s) (expected exactly 1). Inspect `PRPs/plans/` by
+> hand, remove or rename any stray duplicate, and re-run
+> `/relay-execute <prd_path>`.
+
+`Read` the original `PRPs/reports/<feature>/phase-<current_phase_N>/halt.json` in full — it carries `final_visual_verdict`, `fidelity_report_path`, `attempt_history`, and (on rejection) `rejection_feedback`.
+
+**Re-establish `relay-implement.md`'s own `## Parse arguments` values (common to both branches below — enumerated by walking `relay-implement.md`'s own Parse arguments section end to end, since Phase A.3.5-and-later, and, on the rejected branch, Phase A.2-and-later, all depend on them):**
+- `plan_path = current_plan_path` (derived above).
+- `target_root` — this `/relay-execute` invocation's own `target_root`, already established.
+- `is_prd_less = false` — `/relay-execute` has no PRD-less mode; every phase it drives is PRD mode.
+- `feature` — this invocation's own `<feature>`, already established. `prd_path = PRPs/prds/<feature>.prd.md`.
+- `N = current_phase_N`; `slug = current_phase_slug` — both already established by Phase A.1 (Task 2).
+- `artifact_root = PRPs/reports/<feature>/phase-<N>/attempts/` — `relay-implement.md`'s own canonical-pattern formula.
+- `completed_target = PRPs/plans/completed/<basename of plan_path>.plan.md`.
+- `no_docs_flag = false`, `no_visual_flag = false` — neither flag has a forwarding mechanism from `/relay-execute`'s own `$ARGUMENTS` into an adopted `/relay-implement` protocol, resumed or not; both are always `false` in every `/relay-execute`-driven adoption.
+
+**Branch on `resume_mode`:**
+
+- **`resume_mode == "approved"`** — Append to `orchestrator_run_log`:
+  ```json
+  {"phase": <current_phase_N>, "stage": "visual_approval", "outcome": "resumed_approved"}
+  ```
+  Adopt `${CLAUDE_PLUGIN_ROOT}/commands/relay-implement.md`'s protocol inline starting at its own `Phase A.3.5 — Docs-sync dispatch` — its Phase A.0 initialisation, Phase A.1 pre-flight checks, and Phase A.2/A.3/A.3.4 dispatch are all SKIPPED entirely for this resume, because the implementer, code-reviewer, and visual-verifier already ran to completion in the session that produced the original halt, and the worktree still holds their exact uncommitted output (Phase A.3.4 performs no commit of its own, per the Pillar 2 "never commit" invariant). Beyond the common values above, seed every remaining value `Phase A.3.5` and everything after it reference: `attempt` = the last entry of the re-read halt.json's `attempt_history`; `docs_sync_enabled` = freshly read from `docs/context/methodology.md` (Phase A.0's own default-`true`-when-absent instruction — the original session's own read predates this invocation, so re-reading is required, not optional); `figma_track_declared` = freshly read from the same file (Phase A.0's own default-`false`-when-absent instruction) — needed only so the eventual Final output surface's `Visual:` line gates correctly; `line_index` = the index of the last line already appended to `PRPs/plans/<basename of plan_path>.code-review.jsonl` (written by the original session's own code-reviewer dispatch — nothing appends to it again on this resumed tail); `docs_deferred_questions = []` (fresh, populated as this adopted Phase A.3.5 run proceeds, exactly like a non-resumed run). Record `visual_outcome = "APPROVED (human-approved after <final_visual_verdict>)"` — deliberately distinct from a plain `"APPROVED"` so the eventual summary never silently implies an unreviewed clean machine pass when the underlying verdict was actually `VISUAL_DEGRADED` or `VISUAL_MISMATCH` and a human overrode it. Continue through the adopted protocol's own Phase A.3.5 (docs-sync) and Phase A.4 (D8 mutations) exactly as `relay-implement.md` already specifies. On success, proceed to Phase A.4.5 exactly as Step A.4.1 already does today. On any HALT surfaced during this adopted tail (e.g. `PARTIAL_D8_FAILURE`), route it through Step A.4.1's existing HALT handling (Task 5) unchanged.
+
+- **`resume_mode == "rejected"`** — Append to `orchestrator_run_log`:
+  ```json
+  {"phase": <current_phase_N>, "stage": "visual_approval", "outcome": "resumed_rejected"}
+  ```
+  Beyond the common values above, additionally derive `base_branch`/`base_commit` per `relay-implement.md`'s own `P5 — Base-commit derivable` priority chain (`git symbolic-ref refs/remotes/origin/HEAD` → `git remote show origin` → `main` fallback; then `git merge-base HEAD <base_branch>`) — needed by the re-entered Phase A.2's implementer dispatch, and never computed by the skipped Preconditions section otherwise. (`P1`–`P4` are not separately re-run: `P1`/`P2`/`P3` are already known-satisfied by construction — `current_plan_path` resolved above, the plan is still `*Status: APPROVED*` because D8 never ran, and the source PRD row is still `in-progress` because this whole check only fires on that state — and `P4` was already satisfied earlier in this same `/relay-execute` session's own Decision Gate.) Then adopt `${CLAUDE_PLUGIN_ROOT}/commands/relay-implement.md`'s protocol inline from its OWN `Phase A.0` — a fresh attempt budget, fresh `deadline_ts`, `attempt = 1`, exactly as every other halt-then-manual-fix-then-rerun path in this codebase already resets — a full re-run, since the human's rejection means real rework may be needed. The one deviation from `Phase A.0`'s own unconditional initialisation: set `last_reviewer_feedback = [{rubric_id: "human_visual_rejection", reason: <the re-read halt.json's rejection_feedback text>}]` instead of the empty list `Phase A.0` normally sets it to — the same `[{rubric_id, reason}]` shape the existing `DISPUTE_REJECTED` arbitration branch already populates it with, reused rather than inventing a new shape. `relay-implement.md`'s own `Phase A.2` implementer dispatch reads `prior_feedback: <last_reviewer_feedback when non-empty; null otherwise>` (Task 4 amends this condition so a non-empty `last_reviewer_feedback` is honored at `attempt == 1` too — see Task 4) — so this seeded value reaches the implementer's very first dispatch of the resumed session, satisfying AC-A2. Every other mechanic — retry budget, oscillation detection, dispute cap, Phase A.3.4's visual gate, Phase A.3.5, Phase A.4 — runs exactly as `relay-implement.md`'s own protocol already specifies from a genuinely fresh `attempt = 1`, including the possibility of hitting `AWAITING_VISUAL_APPROVAL` again if the fix round's own result is again gated by `visual_first_approval: human` — which loops back through this exact same resume mechanism on a later re-invocation.
+
+Skip Phase A.3 (plan sub-flow) and Phase A.3.3 (worktree creation) entirely for this iteration in both branches above — the plan is already `APPROVED` and the worktree already exists from the original session. Once the adopted tail above completes, proceed to Phase A.4.5 → Phase A.5 → Phase A.6 exactly as the normal per-phase flow already does.
 
 ### Phase A.3 — Per-phase plan sub-flow (plan-review retry loop)
 
@@ -561,7 +620,36 @@ Append to `orchestrator_run_log`:
 
 Proceed to Phase A.4.5 (test-after sub-flow; a no-op unless this phase deferred to test-after at Step A.3.5.0).
 
-**On any HALT from /relay-implement** (`FAILED_AFTER_N_RETRIES`, `FAILED_TIME_BUDGET_EXCEEDED`, `FAILED_OSCILLATION_DETECTED`, `FAILED_DISPUTE_CAP_EXCEEDED`, `DISPUTE_UPHELD_TEST_WRONG`, `DISPUTE_UPHELD_PRD_AMBIGUOUS`, `PARTIAL_D8_FAILURE`):
+**On `AWAITING_VISUAL_APPROVAL` from /relay-implement (new — checked BEFORE the generic "on any OTHER HALT" branch below; this is a deliberate pause, not a failure):**
+
+Append to `orchestrator_run_log`:
+```json
+{"phase": <N>, "stage": "implement", "outcome": "HALT:AWAITING_VISUAL_APPROVAL"}
+```
+
+Write `PRPs/reports/<feature>/orchestrator-halt.json`:
+
+```json
+{
+  "outcome": "AWAITING_VISUAL_APPROVAL",
+  "phase_N": <N>,
+  "halting_stage": "implement",
+  "underlying_halt_ref": "PRPs/reports/<feature>/phase-<N>/halt.json",
+  "orchestrator_run_log": <orchestrator_run_log>
+}
+```
+
+Note the `outcome` value carries NO `FAILED_` prefix — this HALT is a deliberate pause pending a human decision, not a failure. Surface `/relay-implement`'s own halt message verbatim, then HALT the orchestrator with the additional verbatim message:
+
+> This is not a failure — `visual_first_approval: human` requires an
+> explicit human decision before this phase can complete. Run
+> `/relay-visual-approve <feature>` to review the captured evidence and
+> approve or reject. Once a decision is recorded, re-running
+> `/relay-execute <prd_path>` IS the correct next step — it resumes this
+> exact phase via the resumable visual-approval check (Phase A.1) rather
+> than restarting the plan/implement loop from scratch.
+
+**On any OTHER HALT from /relay-implement** (`FAILED_AFTER_N_RETRIES`, `FAILED_TIME_BUDGET_EXCEEDED`, `FAILED_OSCILLATION_DETECTED`, `FAILED_DISPUTE_CAP_EXCEEDED`, `DISPUTE_UPHELD_TEST_WRONG`, `DISPUTE_UPHELD_PRD_AMBIGUOUS`, `PARTIAL_D8_FAILURE`, `VISUAL_GATE_BLOCKED`):
 
 Append to `orchestrator_run_log`:
 ```json
@@ -845,7 +933,7 @@ Figma-sourced under an active `figma_track_declared == true` project
 
 ### HALT paths
 
-On any HALT path (one of `FAILED_PLAN_REVIEW_BUDGET_EXCEEDED`, `FAILED_ORCHESTRATOR_TIME_BUDGET_EXCEEDED`, `FAILED_TEST_REVIEW_REJECTED`, or a propagated `/relay-implement` or `/relay-test` HALT), the verbatim HALT message is emitted by the relevant Phase A.* sub-section above and the command exits. The `orchestrator-halt.json` at `PRPs/reports/<feature>/orchestrator-halt.json` carries the structured failure state, the halting stage, the underlying halt reference (when applicable), and the partial `orchestrator_run_log` for post-mortem audit.
+On any HALT path (one of `FAILED_PLAN_REVIEW_BUDGET_EXCEEDED`, `FAILED_ORCHESTRATOR_TIME_BUDGET_EXCEEDED`, `FAILED_TEST_REVIEW_REJECTED`, or a propagated `/relay-implement` or `/relay-test` HALT), the verbatim HALT message is emitted by the relevant Phase A.* sub-section above and the command exits. The `orchestrator-halt.json` at `PRPs/reports/<feature>/orchestrator-halt.json` carries the structured failure state, the halting stage, the underlying halt reference (when applicable), and the partial `orchestrator_run_log` for post-mortem audit. One propagated code, `AWAITING_VISUAL_APPROVAL`, is a deliberate pause pending a human decision rather than a failure — see Phase A.1's resumable visual-approval check and Step A.4.1's dedicated branch above; its `orchestrator-halt.json` `outcome` field carries no `FAILED_` prefix, and re-running `/relay-execute` is the correct, sanctioned next step once `/relay-visual-approve` has recorded a decision.
 
 ---
 
@@ -859,7 +947,7 @@ On any HALT path (one of `FAILED_PLAN_REVIEW_BUDGET_EXCEEDED`, `FAILED_ORCHESTRA
 
 4. **Never prompt the user.** Past the interactivity boundary (`docs/context/architecture.md` §Interactivity boundary). HALTs are surfaced verbatim and the command exits.
 
-5. **Never re-run `/relay-implement` after a HALT.** `/relay-implement`'s internal loop already exhausted its budget. The orchestrator surfaces the halt and exits. Manual recovery is required before re-invoking.
+5. **Never re-run `/relay-implement` after a HALT.** `/relay-implement`'s internal loop already exhausted its budget. The orchestrator surfaces the halt and exits. Manual recovery is required before re-invoking. **Exception:** the `AWAITING_VISUAL_APPROVAL` pause is not a failure — Phase A.1's resumable visual-approval check and Phase A.2.5's resume short-circuit are the SANCTIONED mechanism for resuming that specific phase's adopted `/relay-implement` protocol after a human records a decision via `/relay-visual-approve`; every other HALT code is unaffected by this exception.
 
 6. **Never skip the Decision Gate evidence block.** The command-level Decision Gate (above) is the first user-facing output per AC-14.
 
@@ -888,3 +976,4 @@ On any HALT path (one of `FAILED_PLAN_REVIEW_BUDGET_EXCEEDED`, `FAILED_ORCHESTRA
 - **Re-running a `complete` phase** — refused via P3 (zero actionable rows with status `complete` are not re-picked). Manual hand-edit of the row's `Status` cell back to `pending` is the documented escape hatch.
 - **Parallel phase orchestration** — MVP is strictly serial. The `Parallel` cell is read but not acted upon.
 - **Multi-PRD orchestration** — one PRD per invocation; cross-PRD coordination is a separate orchestrator's job.
+- **Performing the human visual-approval decision itself** — that dialogue lives entirely in the separate, explicitly human-triggered `/relay-visual-approve` command; `/relay-execute` never asks the user anything, it only detects an already-recorded decision (Phase A.1) and resumes (Phase A.2.5).

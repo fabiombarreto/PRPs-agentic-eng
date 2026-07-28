@@ -153,6 +153,28 @@ visual-verification tooling itself (that is `/relay-implement`'s
 Phase A.3.4 or the standalone `/relay-visual-review` command's job;
 this command never dispatches an agent, per its Constraints below).
 
+Since the Figma Visual-First Track's own Phase 7, this section is
+additionally `phase_scope`- and human-approval-aware. For each
+discovered `phase-<N>` directory contributing frames to the section,
+also attempt to read that phase's own plan
+(`PRPs/plans/<feature>-phase-<N>-*.plan.md`, falling back to
+`PRPs/plans/completed/<feature>-phase-<N>-*.plan.md`) for a
+`phase_scope` row in its `## Metadata` table. When at least one
+discovered phase declares a `phase_scope` value, add a sixth "Scope"
+column to the per-frame table — omitted entirely, five columns
+unchanged, when no phase declares one, the same conditional-column
+rule `scripts/generate-final-report.mjs`'s own extension applies, so
+both surfaces stay consistent with each other. For every phase that
+both declares `phase_scope` AND has a
+`PRPs/reports/<feature>/phase-<N>/visual-approval.jsonl` file, append
+one line below the table per such phase summarizing the recorded
+human decision (approved/rejected, with the verbatim confirmation or
+rejection-feedback text) parsed from that file's last line. This
+extension never infers a `phase_scope` or approval decision — both
+are sourced only from real, on-disk evidence, mirroring this
+section's own "sourced entirely from already-persisted evidence on
+disk" sentence above.
+
 ---
 
 ## Phase 2 — Preconditions (HALTs)

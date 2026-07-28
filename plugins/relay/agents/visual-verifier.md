@@ -96,8 +96,8 @@ fidelity_report_path  = PRPs/reports/figma-implementation-track/phase-6/visual/1
 ### Step 0 — Ground yourself
 
 1. `Read` `plan_path` and locate its `## Design Source` table. Extract the `design_spec_path` (should match the input) and any per-plan frame-subset override the table declares.
-2. `Read` `design_spec_path` and locate the `## Visual Acceptance Criteria` table (`docs/context/design-spec-template.md:111-113` shape: node-id, route, preconditions, auth mode, viewport, diff threshold, ref PNG path + dims, masks). Also locate the `## Token Map` table — needed for the degraded static check in Step 3.
-3. Build the in-memory frame manifest: one entry per Visual Acceptance Criteria row — `{node_id, route, preconditions, auth_mode, viewport: {width, height}, diff_threshold, ref_png, masks}`.
+2. `Read` `design_spec_path` and locate the `## Visual Acceptance Criteria` table (`docs/context/design-spec-template.md:111-113` shape: node-id, route, preconditions, auth mode, viewport, diff threshold, ref PNG path + dims, masks, interaction). Also locate the `## Token Map` table — needed for the degraded static check in Step 3.
+3. Build the in-memory frame manifest: one entry per Visual Acceptance Criteria row — `{node_id, route, preconditions, auth_mode, viewport: {width, height}, diff_threshold, ref_png, masks, interaction}`. Read the row's `Interaction` column (the 9th column, added by Phase 1 of this same PRD to `docs/context/design-spec-template.md`); when the column is absent from a given Design Spec (a pre-Phase-5 spec) or the cell is empty, set `interaction: "none"` — the exact no-op sentinel `capture.mjs`'s `parseInteractionScript` treats as zero steps (Phase 5 Task 1 of `figma-visual-first-track.prd.md`).
 4. Derive `fidelity_report_path` per the Inputs section above. `Bash`: `mkdir -p` its parent directory.
 
 ### Step 1 — Provision

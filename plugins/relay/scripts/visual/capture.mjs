@@ -23,7 +23,8 @@
 //       "viewport": { "width": 1440, "height": 900 },
 //       "diff_threshold": 0.5,
 //       "ref_png": "PRPs/designs/<feature>/refs/123-456.png",
-//       "masks": []
+//       "masks": [],
+//       "interaction": "click(<selector>); wait(300)" | "none"
 //     }
 //   ]
 
@@ -49,6 +50,54 @@ function frameFilename(nodeId) {
   return `${nodeId.replace(/[:/\\]/g, '-')}.png`;
 }
 
+// Bounded interaction-step vocabulary — mirrors
+// docs/context/design-spec-template.md's `Interaction` column syntax
+// exactly: click(<selector>), fill(<selector>, <value>),
+// wait(<ms> | <selector>), semicolon-separated, executed in order
+// before capture. Absent/"none" parses to zero steps (additive,
+// zero-effect on every frame that declares no Interaction script).
+const INTERACTION_STEP_PATTERN = /^(click|fill|wait)\((.*)\)$/;
+
+export function parseInteractionScript(interaction) {
+  if (!interaction || interaction === 'none') return [];
+  return interaction.split(';').map((raw) => {
+    const step = raw.trim();
+    const match = step.match(INTERACTION_STEP_PATTERN);
+    if (!match) {
+      throw new Error(`unrecognized interaction step: "${step}"`);
+    }
+    const [, verb, argsRaw] = match;
+    if (verb === 'click') {
+      return { verb: 'click', selector: argsRaw.trim() };
+    }
+    if (verb === 'fill') {
+      const [selector, ...valueParts] = argsRaw.split(',');
+      return { verb: 'fill', selector: selector.trim(), value: valueParts.join(',').trim() };
+    }
+    const arg = argsRaw.trim();
+    if (/^\d+$/.test(arg)) {
+      return { verb: 'wait', ms: Number(arg) };
+    }
+    return { verb: 'wait', selector: arg };
+  });
+}
+
+export async function executeInteractionSteps(page, steps) {
+  for (const step of steps) {
+    // Sequential on purpose — an ordered choreography script.
+    // eslint-disable-next-line no-await-in-loop
+    if (step.verb === 'click') {
+      await page.click(step.selector);
+    } else if (step.verb === 'fill') {
+      await page.fill(step.selector, step.value);
+    } else if (step.verb === 'wait' && step.ms != null) {
+      await page.waitForTimeout(step.ms);
+    } else if (step.verb === 'wait') {
+      await page.waitForSelector(step.selector);
+    }
+  }
+}
+
 async function captureFrame(browser, frame, outputDir) {
   const storageStatePath = parseAuthMode(frame.auth_mode);
   const contextOptions = {
@@ -62,6 +111,10 @@ async function captureFrame(browser, frame, outputDir) {
   const page = await context.newPage();
   try {
     await page.goto(frame.route, { waitUntil: 'networkidle' });
+    const interactionSteps = parseInteractionScript(frame.interaction);
+    if (interactionSteps.length > 0) {
+      await executeInteractionSteps(page, interactionSteps);
+    }
     const outputPath = path.join(outputDir, frameFilename(frame.node_id));
     await page.screenshot({ path: outputPath, fullPage: false });
     return { node_id: frame.node_id, captured: true, path: outputPath };

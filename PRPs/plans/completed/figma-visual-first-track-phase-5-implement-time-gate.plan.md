@@ -468,7 +468,7 @@ import('./plugins/relay/scripts/visual/capture.mjs').then(async (m) => {
 node -e "
 const src = require('fs').readFileSync('plugins/relay/scripts/visual/capture.mjs', 'utf8');
 const gotoIdx = src.indexOf('page.goto(frame.route');
-const execIdx = src.indexOf('executeInteractionSteps(page');
+const execIdx = src.indexOf('await executeInteractionSteps(page');
 const shotIdx = src.indexOf('page.screenshot(');
 if (!(gotoIdx > -1 && execIdx > gotoIdx && shotIdx > execIdx)) {
   console.error('FAIL: executeInteractionSteps must be wired strictly between page.goto and page.screenshot in captureFrame');
@@ -1010,4 +1010,6 @@ very plan, by design.
 ---
 
 *Generated: 2026-07-26*
-*Status: DRAFT*
+*Approved: 2026-07-27*
+*Implemented: 2026-07-27*
+*Status: IMPLEMENTED*

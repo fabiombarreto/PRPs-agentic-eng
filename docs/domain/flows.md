@@ -59,7 +59,19 @@ PRD stage and only when an agent hits a problem it cannot resolve.
    returning `VISUAL_VERIFIED`, `VISUAL_DEGRADED`, or `VISUAL_MISMATCH`.
    A `VISUAL_MISMATCH` triggers at most one bounded fix round before
    either converging or deterministically reverting to the last
-   Code-Reviewer-approved state; the sub-phase never halts the run. For
+   Code-Reviewer-approved state. On a `phase_scope: logic` plan (or any
+   plan with no `phase_scope` row) the sub-phase never halts the run,
+   exactly as before. On a `phase_scope: visual` plan (Figma
+   Visual-First Track), the sub-phase instead blocks: it moves on to
+   the docs pair below only when the result is a genuine
+   `VISUAL_VERIFIED` under the project's `auto` approval setting; every
+   other outcome halts the run instead, and under the `human` approval
+   setting every outcome halts — pending explicit human review — even a
+   `VISUAL_VERIFIED` result. Once the human records a decision through
+   the separate `/relay-visual-approve` command, a later re-invocation
+   of the same `/relay-execute` run resumes exactly this paused phase:
+   approved continues on to the docs pair below; rejected returns to a
+   fresh Implementer attempt seeded with the human's own feedback. For
    non-Figma projects this step is inert — nothing changes.
 7.5. Immediately after the Code Reviewer returns `APPROVED` — and before
    the plan/PRD state advances — a docs pair (`docs-updater`/`docs-reviewer`)
@@ -74,7 +86,15 @@ PRD stage and only when an agent hits a problem it cannot resolve.
     pull request — when `figma_track: true` and at least one phase
     captured visual-verification evidence, the report and PR body also
     carry a Visual Fidelity section summarizing per-frame results
-    (Figma Implementation Track Phase 7).
+    (Figma Implementation Track Phase 7). For a `visual_first: true`
+    feature, this same section is additionally `phase_scope`-aware: it
+    renders a Scope column (`visual`/`logic` per phase, sourced from
+    each phase's own plan) and, beneath the table, one line per phase
+    surfacing any recorded `/relay-visual-approve` human decision
+    (approved/rejected). Both extensions are omitted entirely — the
+    section renders byte-identically to the base-track shape described
+    above — when no in-scope phase declares a `phase_scope` (Figma
+    Visual-First Track Phase 7).
 
 The autonomous portion only surfaces to the human when an agent exhausts
 its recovery strategies and the decision is outside its competence.
@@ -116,6 +136,9 @@ Once the PR is ready, the user triggers the approval flow.
   the human should run manually instead of opening the PR directly.
 - **Visual-verification tooling fails to provision (network-blocked /
   restricted environment) or the dev server never becomes ready** → the
-  visual-verification sub-phase degrades to a non-blocking
-  `VISUAL_DEGRADED` result (still verifies token conformance statically)
-  rather than halting `/relay-implement`.
+  visual-verification sub-phase degrades to a `VISUAL_DEGRADED` result
+  (still verifies token conformance statically) rather than halting
+  `/relay-implement` — unchanged on a `phase_scope: logic` plan (or a
+  plan with no `phase_scope` row). On a `phase_scope: visual` plan
+  under the `auto` approval setting, this same degraded result instead
+  blocks (`VISUAL_GATE_BLOCKED` — see step 7.4 above).

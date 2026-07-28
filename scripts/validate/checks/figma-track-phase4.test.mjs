@@ -121,6 +121,31 @@
  *     "design-spec" in any of them. Full justification recorded in
  *     PRPs/reports/figma-implementation-track/test-suite.diff's Lifecycle
  *     ledger.
+ *
+ *   Third lifecycle update (2026-07-27, EXISTING_TEST_UPDATED — test-after
+ *     session for figma-visual-first-track Phase 6, "Orchestrator wiring"):
+ *     the new deterministic infra command
+ *     plugins/relay/commands/relay-visual-approve.md legitimately mentions
+ *     "design-spec" once, in Constraint 4 ("Never invoked by
+ *     `/relay-execute`. This command is exclusively human-triggered,
+ *     exactly like `/relay-design-map` and `/relay-design-spec`.") — a bare
+ *     analogy naming both of relay's other two human-triggered infra
+ *     commands, not a dispatch, a path derivation, or a read of the Design
+ *     Spec artifact itself. An already-APPROVED, correct cross-reference
+ *     (figma-visual-first-track-phase-6-orchestrator-wiring plan, Task 7),
+ *     not a regression. Applying the same MINIMAL-exclusion discipline
+ *     established above (never narrowing the scan itself — only adding one
+ *     more excluded filename to the existing set): relay-visual-approve.md
+ *     is added as a fourth excluded name alongside relay-design-spec.md
+ *     (self), relay-plan.md, and relay-visual-review.md. Confirmed by
+ *     direct read of relay-visual-approve.md in full (exactly one
+ *     "design-spec" mention, at Constraint 4), and by direct read of every
+ *     other command file under plugins/relay/commands/ — including
+ *     relay-execute.md (this same phase's own orchestrator edits) and
+ *     relay-design-map.md — to confirm zero mentions of "design-spec" in
+ *     any of them. Full justification recorded in
+ *     PRPs/reports/figma-visual-first-track/test-suite.diff's Lifecycle
+ *     ledger.
  *   AC-3 / AC-A2 (Explicit human approval required) — a Design Spec that has
  *     passed design-spec-reviewer's full R-DS1-R-DS7 rubric stays DRAFT
  *     until the user's own explicit affirmative reply: the DRAFT->APPROVED
@@ -150,13 +175,16 @@ const WRITER_PATH = 'plugins/relay/agents/design-spec-writer.md';
 // (plan-integration) added a `--design-spec <value>` flag / design_spec_path
 // wiring to relay-plan.md (design_source: figma routing, conditional
 // research-design grounding dispatch; confirmed by direct read, Phase 5
-// plan, already-APPROVED), and Phase 7 (surface-integration) added
+// plan, already-APPROVED), Phase 7 (surface-integration) added
 // relay-visual-review.md, whose Mandatory Reading, path derivation, and P5
 // precondition HALT message all legitimately reference the Design Spec
 // artifact and `/relay-design-spec` (confirmed by direct read, Phase 7
-// plan Task 1, already-APPROVED). Every other file under COMMANDS_DIR
-// remains scanned.
-const LEGITIMATE_REFERENCE_FILES = ['relay-plan.md', 'relay-visual-review.md'];
+// plan Task 1, already-APPROVED), and figma-visual-first-track Phase 6
+// added relay-visual-approve.md, whose Constraint 4 names
+// `/relay-design-spec` once as a bare sibling-command analogy (confirmed by
+// direct read, figma-visual-first-track Phase 6 plan Task 7,
+// already-APPROVED). Every other file under COMMANDS_DIR remains scanned.
+const LEGITIMATE_REFERENCE_FILES = ['relay-plan.md', 'relay-visual-review.md', 'relay-visual-approve.md'];
 
 /**
  * Reads a repo-root-relative file and normalizes line endings to `\n`.
@@ -205,13 +233,14 @@ function sliceBetween(content, startNeedle, endNeedle) {
 
 // Lifecycle update (2026-07-23, EXISTING_TEST_UPDATED): minimal exclusion
 // added for relay-plan.md, then a second time same day for
-// relay-visual-review.md (Phase 7) — see this file's header comment
-// (AC-1/AC-A1 lifecycle notes) and
-// PRPs/reports/figma-implementation-track/test-suite.diff's Lifecycle
-// ledger for the full justification. scannedFiles' overall scope is
-// unchanged (every command file under COMMANDS_DIR is still enumerated);
-// only three names are excluded from the assertion loop.
-test('AC-1/AC-A1: every OTHER command file under plugins/relay/commands/ (all files except relay-design-spec.md itself and the documented "design-spec" pointers in relay-plan.md and relay-visual-review.md) never mentions "design-spec" in any form — the phase stays fully inert until a human explicitly runs /relay-design-spec', () => {
+// relay-visual-review.md (Phase 7), then a third time on 2026-07-27 for
+// figma-visual-first-track Phase 6's relay-visual-approve.md — see this
+// file's header comment (AC-1/AC-A1 lifecycle notes) and
+// PRPs/reports/figma-visual-first-track/test-suite.diff's Lifecycle ledger
+// for the full justification. scannedFiles' overall scope is unchanged
+// (every command file under COMMANDS_DIR is still enumerated); only four
+// names are excluded from the assertion loop.
+test('AC-1/AC-A1: every OTHER command file under plugins/relay/commands/ (all files except relay-design-spec.md itself and the documented "design-spec" pointers in relay-plan.md, relay-visual-review.md, and relay-visual-approve.md) never mentions "design-spec" in any form — the phase stays fully inert until a human explicitly runs /relay-design-spec', () => {
   const commandsDirPath = resolve(COMMANDS_DIR);
   const allCommandFiles = readdirSync(commandsDirPath, { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
@@ -232,7 +261,7 @@ test('AC-1/AC-A1: every OTHER command file under plugins/relay/commands/ (all fi
     const content = readRepoFile(`${COMMANDS_DIR}/${fileName}`);
     assert.ok(
       !/design-spec/i.test(content),
-      `${fileName} must not mention "design-spec" in any form — only relay-design-spec.md (itself) and the documented pointers in relay-plan.md (--design-spec flag wiring) and relay-visual-review.md (Design Spec artifact reads) may legitimately reference it`
+      `${fileName} must not mention "design-spec" in any form — only relay-design-spec.md (itself) and the documented pointers in relay-plan.md (--design-spec flag wiring), relay-visual-review.md (Design Spec artifact reads), and relay-visual-approve.md (Constraint 4 sibling-command analogy) may legitimately reference it`
     );
   }
 });

@@ -68,7 +68,7 @@ phases.
   named by `/relay-design-spec`'s Phase A (Figma Implementation Track
   Phase 4), also not independently spike-confirmed beyond `get_metadata`.
 
-## Playwright / Chromium (Figma Implementation Track Phase 6 shipped — visual-verification loop)
+## Playwright / Chromium (Figma Implementation Track Phase 6 shipped — visual-verification loop; Figma Visual-First Track Phase 5 — additive interaction-step capture + `phase_scope: visual` blocking gate)
 
 - **Purpose:** headless-browser screenshot capture and AA-tolerant pixel
   diffing so `/relay-implement`'s Phase A.3.4 can automatically verify an
@@ -79,15 +79,22 @@ phases.
 - **Used by:** the `visual-verifier` agent only, via the self-contained
   `plugins/relay/scripts/visual/` tooling package (`provision.mjs`
   Chromium provisioning with a named exit-code taxonomy, `capture.mjs`
-  dev-server readiness probe + per-frame screenshot, `compare.mjs`
+  dev-server readiness probe + per-frame screenshot — plus, since Figma
+  Visual-First Track Phase 5, an additive bounded interaction-step
+  executor (`click`/`fill`/`wait`, sourced from the Design Spec's
+  optional `Interaction` column) run immediately before the screenshot
+  when a frame declares one, a genuine no-op otherwise — `compare.mjs`
   AA-tolerant `pixelmatch` diff writing `fidelity-report.json`). Kept in
   its own `package.json` (`playwright`, `pixelmatch`, `pngjs`) separate
   from the repo root, so a non-Figma project never pays the
   Playwright/Chromium install cost. Provisioning failure or a dev-server
-  readiness timeout degrades gracefully to a non-blocking
-  `DEGRADED_PROVISION_FAILED` / `DEGRADED_STATIC_ONLY` rung rather than
-  halting `/relay-implement` — see `docs/decisions.md` [2026-07-23]
-  Visual-verification loop.
+  readiness timeout degrades gracefully to a `DEGRADED_PROVISION_FAILED`
+  / `DEGRADED_STATIC_ONLY` rung rather than halting `/relay-implement`
+  — unchanged on a `phase_scope: logic` plan (or no `phase_scope` row);
+  on a `phase_scope: visual` plan under `auto` approval, that same
+  degraded rung instead blocks (`VISUAL_GATE_BLOCKED`) — see
+  `docs/decisions.md` [2026-07-23] Visual-verification loop and
+  [2026-07-27] Implement-time visual gate.
 - **Known endpoint/tool:** `npx playwright install --with-deps chromium`
   (provisioning); `chromium.launch({ headless: true })` (capture).
 
