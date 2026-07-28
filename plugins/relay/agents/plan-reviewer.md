@@ -752,12 +752,12 @@ command.
 
 #### R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE — forbidden-reference greps are diff-scoped and prohibition-aware
 
-Guards against a distinct failure mode from R-COH-VALIDATE-ALWAYS-PASS
-immediately above: a Validation command that DOES exit non-zero on a
-match (so it is not a cosmetic gate) but is scoped to match the WRONG
-thing — content the diff never introduced, or this repo's own standard
-quoted-prohibition sentence — producing a false CHANGES_REQUESTED
-against a structurally sound implementation. Confirmed twice in
+Guards against a distinct failure mode from R-COH-VALIDATE-ALWAYS-PASS:
+a Validation command that DOES exit non-zero on a match (so it is not
+a cosmetic gate) but is scoped to match the WRONG thing — content the
+diff never introduced, or this repo's own standard quoted-prohibition
+sentence — producing a false CHANGES_REQUESTED against a structurally
+sound implementation. Confirmed twice in
 dogfood against the `figma-implementation-track` feature (see
 `PRPs/plans/completed/figma-implementation-track-phase-2-mcp-access-spike.plan.md`
 and `...-phase-3-component-map.plan.md`, both `## Notes` sections):
