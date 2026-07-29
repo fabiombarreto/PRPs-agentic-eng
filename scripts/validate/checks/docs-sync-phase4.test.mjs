@@ -7,8 +7,11 @@
  * documentation/concepts/interactivity-boundary.html,
  * documentation/roadmap/status.html, documentation/reference/commands.html,
  * documentation/reference/agents.html,
- * documentation/assets/data/search-index.json,
- * documentation/changelog.html, and plugins/relay/.claude-plugin/plugin.json.
+ * documentation/assets/data/search-index.json, and
+ * documentation/changelog.html (including its permanent historical record
+ * of plugins/relay/.claude-plugin/plugin.json's version bump — the live
+ * plugin.json file itself is not read by this suite; see the AC-A7 test's
+ * 2026-07-29 EXISTING_TEST_UPDATED lifecycle note below).
  *
  * This is a companion file to docs-sync-phase1.test.mjs,
  * docs-sync-phase2.test.mjs, and docs-sync-phase3.test.mjs, NOT an extension
@@ -34,12 +37,15 @@
  * already discriminates plugin.json-vs-changelog.html VERSION-NUMBER parity
  * (checkVersionParity, covered by its own version-parity.test.mjs). This
  * file does NOT re-test that cross-file number-matching logic. The one test
- * below that touches plugin.json/changelog.html instead asserts CONTENT
- * invariants version-parity.mjs never inspects: that plugin.json's version
- * is literally the value this feature bumped to ("0.22.0", not merely "the
- * same value the changelog happens to have"), and that the changelog's
- * 0.22.0 heading is backed by real, feature-specific release prose (not a
- * bare version heading) — the AC-7 "changelog entry ... present" invariant.
+ * below that touches changelog.html instead asserts a CONTENT invariant
+ * version-parity.mjs never inspects: that the changelog's 0.22.0 heading is
+ * backed by real, feature-specific release prose (not a bare version
+ * heading), including the dated historical sentence documenting that this
+ * feature bumped plugin.json's version from 0.21.0 to 0.22.0 — the AC-7
+ * "changelog entry ... present" invariant. It deliberately does NOT read
+ * plugin.json's LIVE version field: see the 2026-07-29 EXISTING_TEST_UPDATED
+ * lifecycle note below for why that would be a transient, release-cut-
+ * fragile assertion rather than a timeless one.
  *
  * Authored test-after (docs/context/methodology.md: tdd: false +
  * test_frameworks: ["node:test"]) against the already-implemented,
@@ -72,8 +78,8 @@
  *     with the approve-time mentions recast as the safety-net leg;
  *     documentation/assets/data/search-index.json's pillars.html/agents.html
  *     excerpts mirror the same dual-dispatch relabel; documentation/changelog.html
- *     carries a content-complete 0.22.0 release entry; plugin.json's version
- *     is bumped to the literal 0.22.0.
+ *     carries a content-complete 0.22.0 release entry that itself documents,
+ *     in permanent dated prose, that plugin.json's version was bumped to 0.22.0.
  *
  * Extension note (test-reviewer CHANGES_REQUESTED on the original 8-test
  * session, single failing item R-AC-COVERAGE — all 5 pathology + GREEN +
@@ -92,6 +98,48 @@
  * test — the lifecycle ledger tracks changes to APPROVED/pre-existing
  * tests, and none of the original 8 tests were touched (verbatim, still
  * passing).
+ *
+ * Lifecycle update (2026-07-29, EXISTING_TEST_UPDATED): the AC-A7 test below
+ * originally also asserted `pluginJson.version === '0.22.0'` against the
+ * LIVE `plugins/relay/.claude-plugin/plugin.json` file. That assertion was
+ * transient, not a timeless content invariant: plugin.json's version is
+ * whatever the MOST RECENT release cut set it to, so the literal "0.22.0"
+ * equality was true only between the 0.22.0 cut (2026-07-16) and the next
+ * one, and went red the moment v0.23.0 was cut (2026-07-29 —
+ * documentation/changelog.html gained a new `<h2 id="v0-23-0">` heading and
+ * plugin.json was bumped to 0.23.0). This is a sibling defect to the nine
+ * changelog position-assertion fixes landed in commit d83b1b8
+ * ("test(changelog): tolerate a release cut in position assertions"): same
+ * root cause (a release cut), different manifestation (a literal live-value
+ * equality here, rather than a heading-position pin there) — d83b1b8 did not
+ * touch this file. The fact the live-plugin.json assertion was trying to
+ * prove — that THIS feature genuinely bumped the version to 0.22.0 — is
+ * already fully and permanently proven by the assertion two lines above it
+ * in the same test, which reads the DATED HISTORICAL changelog prose
+ * ("Plugin manifest bumped <code>0.21.0</code> &rarr; <code>0.22.0</code>"),
+ * not the live file; that prose never changes once written, unlike
+ * plugin.json's current value. The live-version assertion was therefore
+ * both fragile AND redundant, so it was removed rather than replaced with a
+ * weaker live check (e.g. a semver-shape regex or a bare JSON.parse
+ * validity check): the only property such a check could add — that
+ * plugin.json parses as valid, well-formed JSON — is already independently
+ * and permanently guaranteed by `version-parity.mjs`'s
+ * `runVersionParityCheck()` wrapper (exercised against the real file by
+ * every `npm run validate` run), so adding it here would be pure
+ * R-DUPLICATE assertion volume with zero marginal coverage. The
+ * `PLUGIN_JSON_PATH` constant and its one remaining read/assert were
+ * removed together with the assertion; the test's name no longer promises a
+ * plugin.json literal-version check. Discriminativeness verified
+ * empirically, the same way the prior nine fixes were verified: (1) the
+ * updated test passes GREEN against this session's live tree, which already
+ * carries the v0.23.0 release cut (plugin.json at "0.23.0", changelog
+ * Unreleased renamed to a fresh 0.23.0 heading) — proving it is no longer
+ * fooled by a release cut; (2) a simulated corruption of the 0.22.0 entry's
+ * bump-prose substring (mutating "0.21.0" to "0.20.0" in the historical
+ * sentence) was confirmed to still fail the test, proving it still catches
+ * a genuinely corrupted 0.22.0 historical record, not just a live
+ * version-number drift. Full justification recorded in the lifecycle ledger
+ * of PRPs/reports/changelog-position-assertions/test-suite.diff.
  *
  * Run: node --test scripts/validate/checks/docs-sync-phase4.test.mjs
  */
@@ -114,7 +162,6 @@ const COMMANDS_HTML_PATH = 'documentation/reference/commands.html';
 const AGENTS_HTML_PATH = 'documentation/reference/agents.html';
 const SEARCH_INDEX_JSON_PATH = 'documentation/assets/data/search-index.json';
 const CHANGELOG_PATH = 'documentation/changelog.html';
-const PLUGIN_JSON_PATH = 'plugins/relay/.claude-plugin/plugin.json';
 
 /**
  * Reads a repo-root-relative file and normalizes line endings to `\n`.
@@ -688,12 +735,15 @@ test('AC-A6 (PRD AC-7): search-index.json parses as valid JSON, and its pillars.
 
 // ---------------------------------------------------------------------------
 // AC-A7 (PRD AC-7) — documentation/changelog.html carries a content-complete
-// 0.22.0 release entry; plugin.json's version is the literal 0.22.0 this
-// feature bumped to. Distinct from version-parity.mjs's cross-file
-// version-NUMBER-matching check — see the file-header R-DUPLICATE note.
+// 0.22.0 release entry, including permanent dated prose documenting the
+// plugin.json version bump this feature performed. Distinct from
+// version-parity.mjs's cross-file version-NUMBER-matching check — see the
+// file-header R-DUPLICATE note. Does NOT assert plugin.json's LIVE version
+// field (release-cut-transient) — see the file-header 2026-07-29
+// EXISTING_TEST_UPDATED lifecycle note.
 // ---------------------------------------------------------------------------
 
-test('AC-A7 (PRD AC-7): changelog.html carries a content-complete 0.22.0 release entry naming this feature\'s specific fixes, and plugin.json\'s version is literally "0.22.0" (content invariants, not the cross-file version-parity check)', () => {
+test('AC-A7 (PRD AC-7): changelog.html carries a content-complete 0.22.0 release entry naming this feature\'s specific fixes, including permanent dated prose documenting the plugin.json version bump (content invariant, not the cross-file version-parity check, and not a check on plugin.json\'s current live version)', () => {
   const changelogContent = readRepoFile(CHANGELOG_PATH);
 
   assert.ok(
@@ -716,13 +766,15 @@ test('AC-A7 (PRD AC-7): changelog.html carries a content-complete 0.22.0 release
     changelogContent.includes(
       'Plugin manifest bumped <code>0.21.0</code> &rarr; <code>0.22.0</code>'
     ),
-    'expected the Changed list to document the plugin.json version bump in prose'
-  );
-
-  const pluginJson = JSON.parse(readRepoFile(PLUGIN_JSON_PATH));
-  assert.equal(
-    pluginJson.version,
-    '0.22.0',
-    'expected plugin.json\'s version to be literally "0.22.0" (the value this feature bumped to)'
+    // This is the permanent, dated historical record of the version bump —
+    // it never changes once written. plugin.json's LIVE version is
+    // intentionally NOT read/asserted in this test: it is transient (every
+    // subsequent release cut changes it — see the 2026-07-29
+    // EXISTING_TEST_UPDATED lifecycle note in the file header) and is
+    // already independently covered by version-parity.mjs's real-file
+    // JSON-validity guarantee (npm run validate, every run). Asserting a
+    // live equality here would be release-cut-fragile AND redundant with
+    // this assertion, which already permanently proves the bump happened.
+    'expected the Changed list to document the plugin.json version bump in dated historical prose'
   );
 });
