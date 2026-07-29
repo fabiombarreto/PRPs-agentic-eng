@@ -200,6 +200,36 @@ function collapseWs(str) {
 }
 
 /**
+ * Mirrors figma-track-phase1.test.mjs's helper of the same name/shape.
+ * Locates the nearest `<h2 id="unreleased">` or `<h2 id="v...">` release
+ * heading at or before `needleIdx`, and the position where that release
+ * section ends (the next such heading, or end of file). A changelog entry
+ * recorded under `Unreleased` moves, verbatim and in the same relative order
+ * among its siblings, into a versioned heading exactly once — when a release
+ * is cut (`documentation/AGENTS.md` §7.3: `Unreleased` is renamed to the new
+ * version, and a fresh empty `Unreleased` block is created above it). This
+ * helper lets a content-invariant test confirm an entry is recorded inside a
+ * well-formed release section without pinning it to the transient
+ * pre-release `Unreleased` position, which a release cut always invalidates.
+ * @param {string} content
+ * @param {number} needleIdx
+ * @returns {{ id: string, start: number, end: number } | undefined}
+ */
+function findEnclosingReleaseSection(content, needleIdx) {
+  const h2Re = /<h2 id="(unreleased|v[0-9][^"]*)">/g;
+  let match;
+  let enclosing;
+  while ((match = h2Re.exec(content))) {
+    if (match.index > needleIdx) break;
+    enclosing = { id: match[1], start: match.index };
+  }
+  if (!enclosing) return undefined;
+  h2Re.lastIndex = enclosing.start + 1;
+  const next = h2Re.exec(content);
+  return { id: enclosing.id, start: enclosing.start, end: next ? next.index : content.length };
+}
+
+/**
  * Creates a throwaway temp root, hands it to `fn`, and always cleans up
  * afterward (even on assertion failure). Deliberately named/shaped
  * differently from figma-track-phase7.test.mjs's own `withTempReportsDir`
@@ -617,11 +647,10 @@ test('AC-A4 (PRD AC-1, real JSON.parse): documentation/assets/data/search-index.
   assert.doesNotMatch(commandsEntry.excerpt, /Fifteen commands/);
 });
 
-test('(documentation of record, AC-A1..AC-A5): documentation/changelog.html\'s Unreleased -> Added section records this phase\'s dual-mode-render + registration + dogfood-runbook entry, positioned after this same track\'s own Phase 6 entry and still under Unreleased', () => {
+test('(documentation of record, AC-A1..AC-A5): documentation/changelog.html\'s Unreleased -> Added section records this phase\'s dual-mode-render + registration + dogfood-runbook entry, positioned after this same track\'s own Phase 6 entry, inside a well-formed release section (still Unreleased, or the versioned release Unreleased was later cut into — see documentation/AGENTS.md §7.3)', () => {
   const content = readRepoFile(CHANGELOG_PATH);
 
-  const unreleasedIdx = content.indexOf('<h2 id="unreleased">Unreleased</h2>');
-  assert.notEqual(unreleasedIdx, -1, 'expected an id="unreleased" heading');
+  assert.notEqual(content.indexOf('<h2 id="unreleased">Unreleased</h2>'), -1, 'expected an id="unreleased" heading');
 
   const phase6EntryIdx = content.indexOf('New infra command <code>/relay-visual-approve &lt;feature&gt;</code> locates the paused phase');
   assert.notEqual(phase6EntryIdx, -1, "expected this track's own Phase 6 changelog entry to still be present");
@@ -650,11 +679,12 @@ test('(documentation of record, AC-A1..AC-A5): documentation/changelog.html\'s U
 
   assert.ok(phase7EntryIdx > phase6EntryIdx, "the Phase 7 entry must be positioned after this same track's own Phase 6 entry");
 
-  const nextReleaseMatch = content.slice(unreleasedIdx).match(/<h2 id="v[0-9][^"]*"/);
-  if (nextReleaseMatch) {
-    const nextReleaseIdx = unreleasedIdx + /** @type {number} */ (nextReleaseMatch.index);
-    assert.ok(phase7EntryIdx < nextReleaseIdx, 'the entry must be positioned before the first versioned release heading (still Unreleased, not yet cut)');
-  }
+  const section = findEnclosingReleaseSection(content, phase7EntryIdx);
+  assert.ok(section, 'expected the Phase 7 entry to sit within a well-formed release section (an id="unreleased" or id="v..." heading)');
+  assert.ok(
+    phase7EntryIdx < /** @type {{ end: number }} */ (section).end,
+    'expected the Phase 7 entry to sit fully within its enclosing release section, not spill past the next one'
+  );
 });
 
 // ---------------------------------------------------------------------------

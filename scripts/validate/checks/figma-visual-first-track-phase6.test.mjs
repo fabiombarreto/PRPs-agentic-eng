@@ -182,6 +182,36 @@ function sliceBetween(content, startNeedle, endNeedle) {
   return endIdx === -1 ? content.slice(startIdx) : content.slice(startIdx, endIdx);
 }
 
+/**
+ * Mirrors figma-track-phase1.test.mjs's helper of the same name/shape.
+ * Locates the nearest `<h2 id="unreleased">` or `<h2 id="v...">` release
+ * heading at or before `needleIdx`, and the position where that release
+ * section ends (the next such heading, or end of file). A changelog entry
+ * recorded under `Unreleased` moves, verbatim and in the same relative order
+ * among its siblings, into a versioned heading exactly once — when a release
+ * is cut (`documentation/AGENTS.md` §7.3: `Unreleased` is renamed to the new
+ * version, and a fresh empty `Unreleased` block is created above it). This
+ * helper lets a content-invariant test confirm an entry is recorded inside a
+ * well-formed release section without pinning it to the transient
+ * pre-release `Unreleased` position, which a release cut always invalidates.
+ * @param {string} content
+ * @param {number} needleIdx
+ * @returns {{ id: string, start: number, end: number } | undefined}
+ */
+function findEnclosingReleaseSection(content, needleIdx) {
+  const h2Re = /<h2 id="(unreleased|v[0-9][^"]*)">/g;
+  let match;
+  let enclosing;
+  while ((match = h2Re.exec(content))) {
+    if (match.index > needleIdx) break;
+    enclosing = { id: match[1], start: match.index };
+  }
+  if (!enclosing) return undefined;
+  h2Re.lastIndex = enclosing.start + 1;
+  const next = h2Re.exec(content);
+  return { id: enclosing.id, start: enclosing.start, end: next ? next.index : content.length };
+}
+
 // ---------------------------------------------------------------------------
 // AC-A1 (PRD AC-4) — P3's resumable visual-approval check: positioned
 // before the amended zero-actionable-rows exit, emitting a structured no-op
@@ -649,11 +679,10 @@ test('AC-A3 (real dogfood proof): this feature\'s own phase 6 plan\'s ## Metadat
 // feature's own Phase 5 entry, before any versioned release heading.
 // ---------------------------------------------------------------------------
 
-test('(documentation of record, AC-A1..AC-A6): changelog.html\'s Unreleased -> Added section records this phase\'s resumable visual-approval check + relay-visual-approve command entry, positioned after this feature\'s own Phase 5 entry and before any versioned release heading', () => {
+test('(documentation of record, AC-A1..AC-A6): changelog.html\'s Unreleased -> Added section records this phase\'s resumable visual-approval check + relay-visual-approve command entry, positioned after this feature\'s own Phase 5 entry, inside a well-formed release section (still Unreleased, or the versioned release Unreleased was later cut into — see documentation/AGENTS.md §7.3)', () => {
   const content = readRepoFile(CHANGELOG_PATH);
 
-  const unreleasedIdx = content.indexOf('<h2 id="unreleased">Unreleased</h2>');
-  assert.notEqual(unreleasedIdx, -1, 'expected an id="unreleased" heading');
+  assert.notEqual(content.indexOf('<h2 id="unreleased">Unreleased</h2>'), -1, 'expected an id="unreleased" heading');
 
   const phase5EntryIdx = content.indexOf(
     "<code>/relay-implement</code>'s Phase A.3.4 is dual-mode: on <code>phase_scope: visual</code> plans, the visual gate now genuinely blocks completion until <code>VISUAL_VERIFIED</code>"
@@ -674,14 +703,12 @@ test('(documentation of record, AC-A1..AC-A6): changelog.html\'s Unreleased -> A
 
   assert.ok(phase6EntryIdx > phase5EntryIdx, "the Phase 6 entry must be positioned after this feature's own Phase 5 entry");
 
-  const nextReleaseMatch = content.slice(unreleasedIdx).match(/<h2 id="v[0-9][^"]*"/);
-  if (nextReleaseMatch) {
-    const nextReleaseIdx = unreleasedIdx + /** @type {number} */ (nextReleaseMatch.index);
-    assert.ok(
-      phase6EntryIdx < nextReleaseIdx,
-      'the entry must be positioned before the first versioned release heading (still Unreleased, not yet cut)'
-    );
-  }
+  const section = findEnclosingReleaseSection(content, phase6EntryIdx);
+  assert.ok(section, 'expected the Phase 6 entry to sit within a well-formed release section (an id="unreleased" or id="v..." heading)');
+  assert.ok(
+    phase6EntryIdx < /** @type {{ end: number }} */ (section).end,
+    'expected the Phase 6 entry to sit fully within its enclosing release section, not spill past the next one'
+  );
 });
 
 // Regression-safety net (not itself one of the plan's numbered AC-A1..AC-A6,

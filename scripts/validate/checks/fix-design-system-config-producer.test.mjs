@@ -131,6 +131,61 @@ function collapseBlockquote(str) {
   return str.replace(/^[ \t]*>[ \t]?/gm, '').replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * Mirrors figma-track-phase1.test.mjs's helper of the same name/shape.
+ * Locates the nearest `<h2 id="unreleased">` or `<h2 id="v...">` release
+ * heading at or before `needleIdx`, and the position where that release
+ * section ends (the next such heading, or end of file). A changelog entry
+ * recorded under `Unreleased` moves, verbatim and in the same relative order
+ * among its siblings, into a versioned heading exactly once — when a release
+ * is cut (`documentation/AGENTS.md` §7.3: `Unreleased` is renamed to the new
+ * version, and a fresh empty `Unreleased` block is created above it). This
+ * helper lets a content-invariant test confirm an entry is recorded inside a
+ * well-formed release section without pinning it to the transient
+ * pre-release `Unreleased` position, which a release cut always invalidates.
+ * @param {string} content
+ * @param {number} needleIdx
+ * @returns {{ id: string, start: number, end: number } | undefined}
+ */
+function findEnclosingReleaseSection(content, needleIdx) {
+  const h2Re = /<h2 id="(unreleased|v[0-9][^"]*)">/g;
+  let match;
+  let enclosing;
+  while ((match = h2Re.exec(content))) {
+    if (match.index > needleIdx) break;
+    enclosing = { id: match[1], start: match.index };
+  }
+  if (!enclosing) return undefined;
+  h2Re.lastIndex = enclosing.start + 1;
+  const next = h2Re.exec(content);
+  return { id: enclosing.id, start: enclosing.start, end: next ? next.index : content.length };
+}
+
+/**
+ * Locates the nearest Keep-a-Changelog `<h3 id="...">Added|Changed|
+ * Deprecated|Removed|Fixed|Security</h3>` subsection heading
+ * (`documentation/AGENTS.md` §7.2) at or before `needleIdx`, regardless of
+ * its `id` attribute's prefix — `unreleased-*` before a release cut,
+ * `v<X>-<Y>-<Z>-*` after one (ids are renumbered along with the heading text
+ * on every cut; see findEnclosingReleaseSection's own doc comment for the
+ * h2-level analog). Returns the subsection's plain-text label (e.g.
+ * `"Fixed"`), not the id, precisely so a caller does not need to know which
+ * form the id currently takes.
+ * @param {string} content
+ * @param {number} needleIdx
+ * @returns {{ label: string, start: number } | undefined}
+ */
+function findEnclosingSubsection(content, needleIdx) {
+  const h3Re = /<h3 id="[^"]*">(Added|Changed|Deprecated|Removed|Fixed|Security)<\/h3>/g;
+  let match;
+  let enclosing;
+  while ((match = h3Re.exec(content))) {
+    if (match.index > needleIdx) break;
+    enclosing = { label: match[1], start: match.index };
+  }
+  return enclosing;
+}
+
 // ---------------------------------------------------------------------------
 // AC-A1 — scaffold-then-HALT producer: on absence, WRITE a skeleton file
 // with the five required frontmatter keys, marking non-inferable fields
@@ -333,25 +388,40 @@ test('AC-A6: plugins/relay/scripts/visual/ demonstrably exists on disk with all 
 // EXISTING_TEST_COVERS via figma-track-phase1.test.mjs's AC-1/AC-A3 test.)
 // ---------------------------------------------------------------------------
 
-test('AC-A7: changelog.html gains a new Unreleased/Fixed entry naming the scaffold-then-HALT fix, positioned after Added and before the next versioned release heading', () => {
+test('AC-A7: changelog.html records a Fixed entry naming the scaffold-then-HALT fix, positioned after the enclosing release\'s Added subsection, inside a well-formed release section (still Unreleased, or the versioned release Unreleased was later cut into — see documentation/AGENTS.md §7.3)', () => {
   const content = readRepoFile(CHANGELOG_PATH);
 
-  const addedIdx = content.indexOf('<h3 id="unreleased-added">Added</h3>');
-  const fixedIdx = content.indexOf('<h3 id="unreleased-fixed">Fixed</h3>');
-  const nextReleaseMatch = content.match(/<h2 id="v[0-9][^"]*"/);
+  const entryMatch = content.match(/scaffold-then-HALT/);
+  assert.ok(entryMatch, 'expected the literal, deterministically checkable phrase "scaffold-then-HALT" somewhere in the changelog');
+  const entryIdx = /** @type {number} */ (/** @type {RegExpMatchArray} */ (entryMatch).index);
 
-  assert.notEqual(addedIdx, -1, 'expected the pre-existing id="unreleased-added" heading');
-  assert.notEqual(fixedIdx, -1, 'expected a new id="unreleased-fixed" heading under Unreleased');
-  assert.ok(fixedIdx > addedIdx, 'the new Fixed block must be positioned after the Added block');
-  assert.ok(nextReleaseMatch, 'expected at least one versioned release heading');
-  const nextReleaseIdx = /** @type {number} */ (nextReleaseMatch).index;
-  assert.ok(fixedIdx < /** @type {number} */ (nextReleaseIdx), 'the new Fixed block must be positioned before the first versioned release heading (still Unreleased, not yet cut)');
+  const releaseSection = findEnclosingReleaseSection(content, entryIdx);
+  assert.ok(
+    releaseSection,
+    'expected the scaffold-then-HALT entry to sit within a well-formed release section (an id="unreleased" or id="v..." heading)'
+  );
+  assert.ok(
+    entryIdx < /** @type {{ end: number }} */ (releaseSection).end,
+    'expected the scaffold-then-HALT entry to sit fully within its enclosing release section, not spill past the next one'
+  );
 
-  const fixedBlock = sliceBetween(content, '<h3 id="unreleased-fixed">Fixed</h3>', '<h2 id="v0-22-0">');
-  assert.ok(fixedBlock, 'expected an extractable Fixed block body');
-  assert.match(
-    /** @type {string} */ (fixedBlock),
-    /scaffold-then-HALT/,
-    'the new Fixed entry must include the literal, deterministically checkable phrase "scaffold-then-HALT"'
+  const fixedSubsection = findEnclosingSubsection(content, entryIdx);
+  assert.ok(fixedSubsection, 'expected the scaffold-then-HALT entry to sit under some Keep-a-Changelog h3 subsection heading');
+  assert.equal(
+    /** @type {{ label: string }} */ (fixedSubsection).label,
+    'Fixed',
+    'expected the scaffold-then-HALT entry to be recorded under a Fixed subsection, not Added/Changed/etc'
+  );
+
+  const addedSubsection = findEnclosingSubsection(content, /** @type {{ start: number }} */ (fixedSubsection).start - 1);
+  assert.ok(addedSubsection, 'expected an Added subsection to precede the Fixed subsection within the same release');
+  assert.equal(
+    /** @type {{ label: string }} */ (addedSubsection).label,
+    'Added',
+    'expected the subsection immediately preceding Fixed within the same release to be Added, matching this changelog\'s established Added-then-Fixed ordering'
+  );
+  assert.ok(
+    /** @type {{ start: number }} */ (addedSubsection).start >= /** @type {{ start: number }} */ (releaseSection).start,
+    'expected the preceding Added subsection to belong to the SAME enclosing release, not an earlier one'
   );
 });
