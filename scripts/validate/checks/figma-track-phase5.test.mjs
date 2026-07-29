@@ -217,6 +217,36 @@
  * PRPs/reports/add-an-8th-fixed-deterministic-check-r-coh-validate-search/test-suite.diff's
  * Lifecycle ledger.
  *
+ * Lifecycle update (2026-07-28, EXISTING_TEST_UPDATED, performed by the
+ * rubric-reconciliation test-writer session, test-after per
+ * docs/context/methodology.md): the standalone
+ * "reconcile-three-independently-authored-extensions-to-plugin" description-
+ * mode plan (no source PRD;
+ * PRPs/plans/completed/reconcile-three-independently-authored-extensions-to-plugin.plan.md)
+ * merged origin/development into feature/figma-implementation-track,
+ * bringing in a 9th FIXED deterministic check
+ * (R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE) alongside the two this branch had
+ * already shipped, and rewrote the SAME rubric[]-length-range paragraph this
+ * file's own AC-4/AC-A1 "states the rubric[] length range stays the exact
+ * ...-row baseline..." test (below) reads, shifting the baseline numeral
+ * from `16 to 21 rows` to `17 to 22 rows` (the maximal case also shifts,
+ * from 16 to 24 to 17 to 25, but that numeral is not exercised by this
+ * file's own regex). Confirmed broken by directly reading the post-merge
+ * plan-reviewer.md content: the paragraph now reads "8 (R1-R8) + 9
+ * (deterministic R-COH-*) + up to 5 (K=5 pass) = 17 to 22 rows" and "the
+ * baseline 17-22 range is exact ... and the 17-24 range from the prior".
+ * The underlying property this test verifies (the baseline is exact for
+ * non-Figma projects; the four conditional rows remain each independently
+ * zero-emission) is still fully true — only the numeral moved; the "four
+ * conditional rows" wording itself is UNCHANGED by this shipment (the new
+ * check is FIXED, not a fifth conditional row). Anti-weakening check: the
+ * fix below *replaces* the one now-stale regex literal (plus the test
+ * title's own numerals, matching this file's own established convention of
+ * updating the title alongside the assertions) with the new one matching
+ * the current wording of the SAME claim; no assertion is dropped, no scope
+ * is narrowed. Full justification recorded in
+ * PRPs/reports/rubric-reconciliation/test-suite.diff's Lifecycle ledger.
+ *
  * Run: node --test scripts/validate/checks/figma-track-phase5.test.mjs
  */
 
@@ -396,7 +426,7 @@ test('AC-4/AC-A1: plan-reviewer.md R-COH-DESIGN-GROUNDED is a zero-emission no-o
   );
 });
 
-test('AC-4/AC-A1: plan-reviewer.md states the rubric[] length range stays the exact 16-21-row baseline for every non-Figma project — each of the four conditional rows is independently zero-emission and widens the range only when its own gating condition is met', () => {
+test('AC-4/AC-A1: plan-reviewer.md states the rubric[] length range stays the exact 17-22-row baseline for every non-Figma project — each of the four conditional rows is independently zero-emission and widens the range only when its own gating condition is met', () => {
   const content = readRepoFile(PLAN_REVIEWER_PATH);
   const block = sliceBetween(
     content,
@@ -412,7 +442,7 @@ test('AC-4/AC-A1: plan-reviewer.md states the rubric[] length range stays the ex
   );
   assert.match(
     collapsed,
-    /Each of the four conditional rows is independently zero-emission \(contributes nothing\) when its own gating condition is not met, so the baseline 16–21 range is exact for every non-Figma project/
+    /Each of the four conditional rows is independently zero-emission \(contributes nothing\) when its own gating condition is not met, so the baseline 17–22 range is exact for every non-Figma project/
   );
 });
 

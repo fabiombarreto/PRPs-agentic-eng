@@ -90,6 +90,57 @@
  *     matching the shape already used by its `R-COH-VISUAL-SCOPE-PURITY` /
  *     `R-COH-SENTINEL-RESOLUTION-MISSING` siblings.
  *
+ * Lifecycle update (2026-07-28, EXISTING_TEST_UPDATED, performed by the
+ * rubric-reconciliation test-writer session, test-after per
+ * docs/context/methodology.md): the standalone
+ * "reconcile-three-independently-authored-extensions-to-plugin" description-
+ * mode plan (no source PRD;
+ * PRPs/plans/completed/reconcile-three-independently-authored-extensions-to-plugin.plan.md)
+ * merged origin/development into feature/figma-implementation-track,
+ * bringing in origin's own R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE check as a
+ * 9th deterministic check overall, landed by the merge AFTER the four
+ * figma_track/phase_scope conditional checks rather than immediately after
+ * this file's own R-COH-VALIDATE-SEARCH-AMBIGUOUS — so "fixed checks
+ * first, conditional checks after" no longer holds file-wide for this 9th
+ * check specifically, only for the original 8. Two of this file's own
+ * tests went stale:
+ *
+ *   - AC-A4 (heading count/order): the merge raises the total from 12 to
+ *     13 `#### R-COH-*` headings, and the merged-in 9th fixed check landed
+ *     AFTER the 4 conditional ones (not before them), so the test's own
+ *     "first 8 fixed, remaining 4 conditional" two-slice structure no
+ *     longer describes the file. Confirmed by directly reading the
+ *     post-merge plan-reviewer.md content and counting its `#### R-COH-*`
+ *     headings (13, in the exact order: the original 8 fixed, then the 4
+ *     conditional, then R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE). Anti-weakening
+ *     check: the fix below *strengthens* the assertion from a two-slice
+ *     partial-order check to a single exact-order check over all 13
+ *     headings — strictly more discriminative than the original, not less;
+ *     no coverage is dropped, only a false "fixed checks first file-wide"
+ *     framing is corrected to match the real, code-reviewed merged
+ *     structure.
+ *   - AC-A5 (rubric[] arithmetic): shifts every numeral the same way this
+ *     session shifted them in figma-track-phase5.test.mjs and
+ *     figma-visual-first-track-phase3.test.mjs (see those files' own
+ *     Lifecycle-update paragraphs): `8 (deterministic` becomes
+ *     `9 (deterministic`, `16 to 21 rows` becomes `17 to 22 rows`,
+ *     `16 to 24 rows` becomes `17 to 25 rows`, and `25th row` becomes
+ *     `26th row`. The "four conditional rows" wording is UNCHANGED (the
+ *     merged-in check is FIXED, not a fifth conditional row).
+ *     Anti-weakening check: the fix below *replaces* the four now-stale
+ *     numeral literals (plus the test title's own numerals, matching this
+ *     file's own established convention) with the new ones matching the
+ *     current wording of the SAME claim; no assertion is dropped, no scope
+ *     is narrowed.
+ *
+ * The stale "AC-A4 (full order/count)" section comment above the AC-A4
+ * test (which still read "11 total... 7 fixed" from before even the
+ * 2026-07-28 R-COH-VALIDATE-SEARCH-AMBIGUOUS shipment) is also corrected
+ * in place — a pre-existing hygiene defect, not itself a behavioral
+ * regression, fixed opportunistically while this exact block was already
+ * being touched. Full justification for both fixes recorded in
+ * PRPs/reports/rubric-reconciliation/test-suite.diff's Lifecycle ledger.
+ *
  * Run: node --test scripts/validate/checks/plan-reviewer-action-validate-contradiction-check.test.mjs
  */
 
@@ -301,24 +352,28 @@ test('AC-A7: plan-reviewer.md\'s ## review.jsonl format example JSON block inclu
 });
 
 // ---------------------------------------------------------------------------
-// AC-A4 (full order/count) — the file carries exactly 11 total
-// #### R-COH-* deterministic-check headings: the 7 fixed (unconditional)
-// checks first, then the 4 figma_track/phase_scope-gated conditional
-// checks — "fixed checks first, conditional checks after" per
-// docs/decisions.md's [2026-07-26] entry.
+// AC-A4 (full order/count) — the file carries exactly 13 total
+// #### R-COH-* deterministic-check headings: the original 8 fixed
+// (unconditional) checks, then the 4 figma_track/phase_scope-gated
+// conditional checks, then a 9th fixed check
+// (R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE) merged in from origin/development
+// at the tail by the rubric-reconciliation plan — "fixed checks first,
+// conditional checks after" (per docs/decisions.md's [2026-07-26] entry)
+// still holds for the original 8, but no longer holds file-wide once the
+// 9th, merged-in fixed check is counted.
 // ---------------------------------------------------------------------------
 
-test('AC-A4: plan-reviewer.md carries exactly 12 total #### R-COH-* deterministic-check headings — the 8 fixed checks (ending with the new R-COH-VALIDATE-SEARCH-AMBIGUOUS) in order, followed by the 4 conditional checks in their existing order — preserving "fixed checks first, conditional checks after"', () => {
+test('AC-A4: plan-reviewer.md carries exactly 13 total #### R-COH-* deterministic-check headings in this exact merged order — the original 8 fixed checks, then the 4 conditional checks, then the 9th fixed check R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE merged in from origin/development at the tail', () => {
   const content = readRepoFile(PLAN_REVIEWER_PATH);
   const headingMatches = [...content.matchAll(/^#### (R-COH-[A-Z-]+)/gm)].map((m) => m[1]);
 
   assert.equal(
     headingMatches.length,
-    12,
-    `expected exactly 12 total #### R-COH-* headings (8 fixed + 4 conditional), found ${headingMatches.length}: ${headingMatches.join(', ')}`
+    13,
+    `expected exactly 13 total #### R-COH-* headings (9 fixed + 4 conditional), found ${headingMatches.length}: ${headingMatches.join(', ')}`
   );
 
-  const expectedFixed = [
+  const expectedOrder = [
     'R-COH-TASK-AC-MISSING',
     'R-COH-FILES-UNTOUCHED',
     'R-COH-VALIDATE-FRAMEWORK-MISMATCH',
@@ -327,18 +382,17 @@ test('AC-A4: plan-reviewer.md carries exactly 12 total #### R-COH-* deterministi
     'R-COH-VALIDATE-ALWAYS-PASS',
     'R-COH-ACTION-VALIDATE-CONTRADICTION',
     'R-COH-VALIDATE-SEARCH-AMBIGUOUS',
+    'R-COH-DESIGN-SOURCE-MISSING',
+    'R-COH-DESIGN-GROUNDED',
+    'R-COH-VISUAL-SCOPE-PURITY',
+    'R-COH-SENTINEL-RESOLUTION-MISSING',
+    'R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE',
   ];
-  const expectedConditional = ['R-COH-DESIGN-SOURCE-MISSING', 'R-COH-DESIGN-GROUNDED', 'R-COH-VISUAL-SCOPE-PURITY', 'R-COH-SENTINEL-RESOLUTION-MISSING'];
 
   assert.deepEqual(
-    headingMatches.slice(0, 8),
-    expectedFixed,
-    'expected the 8 fixed deterministic checks first, in this exact order, ending with the new R-COH-VALIDATE-SEARCH-AMBIGUOUS check'
-  );
-  assert.deepEqual(
-    headingMatches.slice(8),
-    expectedConditional,
-    'expected the 4 conditional checks after the 8 fixed ones, in their existing relative order'
+    headingMatches,
+    expectedOrder,
+    'expected exactly these 13 headings in this exact order — the merge appended R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE after the 4 conditional checks, not before them, so file-wide "fixed checks first" no longer holds for this 9th check specifically (it still holds for the original 8)'
   );
 });
 
@@ -360,21 +414,21 @@ test('AC-A6 (regression guard): the forbidden literal "14 to 23" is absent from 
 // (both fixed this same session; see this file's header comment).
 // ---------------------------------------------------------------------------
 
-test('AC-A5: plan-reviewer.md\'s ### Logging discipline paragraph reads 8 fixed deterministic checks, a 16-to-21-row baseline, a 16-to-24-row maximal case, "25th row", and preserves the "Each of the four conditional rows is independently zero-emission" wording verbatim (the new check is FIXED, not a fifth conditional row)', () => {
+test('AC-A5: plan-reviewer.md\'s ### Logging discipline paragraph reads 9 fixed deterministic checks, a 17-to-22-row baseline, a 17-to-25-row maximal case, "26th row", and preserves the "Each of the four conditional rows is independently zero-emission" wording verbatim (the merged-in check is FIXED, not a fifth conditional row)', () => {
   const content = readRepoFile(PLAN_REVIEWER_PATH);
   const block = sliceBetween(content, 'The total `rubric[]` length per run is', 'When the K=5 pass emits N findings');
   assert.ok(block, 'expected an extractable rubric[] length-range paragraph');
   const collapsed = collapseWs(/** @type {string} */ (block));
 
   assert.ok(
-    collapsed.includes('8 (R1–R8) + 8 (deterministic R-COH-*) + ≤5 (K=5 pass) = 16 to 21 rows'),
-    'expected the updated baseline arithmetic (8 fixed checks, 16 to 21 rows)'
+    collapsed.includes('8 (R1–R8) + 9 (deterministic R-COH-*) + ≤5 (K=5 pass) = 17 to 22 rows'),
+    'expected the updated baseline arithmetic (9 fixed checks, 17 to 22 rows)'
   );
-  assert.ok(collapsed.includes('16 to 24 rows'), 'expected the updated 16-to-24-row maximal case');
-  assert.ok(collapsed.includes('25th row'), 'expected the "25th row" never-extends-to wording');
+  assert.ok(collapsed.includes('17 to 25 rows'), 'expected the updated 17-to-25-row maximal case');
+  assert.ok(collapsed.includes('26th row'), 'expected the "26th row" never-extends-to wording');
   assert.ok(
     collapsed.includes('Each of the four conditional rows is independently zero-emission'),
-    'expected the preserved "four conditional rows" wording — unchanged, since the new check is FIXED, not a fifth conditional row'
+    'expected the preserved "four conditional rows" wording — unchanged, since the 9th check is FIXED, not a fifth conditional row'
   );
 });
 

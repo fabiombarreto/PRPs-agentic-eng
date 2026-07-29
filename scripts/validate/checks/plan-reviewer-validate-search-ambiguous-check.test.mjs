@@ -158,6 +158,32 @@
  *     `PRPs/reports/add-an-8th-fixed-deterministic-check-r-coh-validate-search/test-suite.diff`
  *     manifest.
  *
+ * Lifecycle update (2026-07-28, EXISTING_TEST_UPDATED, performed by the
+ * rubric-reconciliation test-writer session, test-after per
+ * docs/context/methodology.md): the standalone
+ * "reconcile-three-independently-authored-extensions-to-plugin" description-
+ * mode plan (no source PRD;
+ * PRPs/plans/completed/reconcile-three-independently-authored-extensions-to-plugin.plan.md)
+ * merged origin/development into feature/figma-implementation-track,
+ * bringing in origin's own R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE check as a
+ * 9th deterministic check, unioned into the SAME `## review.jsonl format`
+ * worked-example `rubric[]` array this file's own AC-A8 test (below) reads,
+ * positioned immediately after this file's own R-COH-VALIDATE-SEARCH-AMBIGUOUS
+ * row rather than before it (the merge appended origin's row at the point
+ * its own conflict hunk landed). Confirmed broken by directly reading the
+ * post-merge plan-reviewer.md content: the worked example's `rubric[]` array
+ * now contains 9 `R-COH-*` ids, not 8, and the LAST one is
+ * `R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE`, not `R-COH-VALIDATE-SEARCH-AMBIGUOUS`.
+ * The underlying property this test verifies (every fixed deterministic
+ * check has a matching worked-example row, in file order) is still fully
+ * true — only the row count and the identity of the LAST row changed.
+ * Anti-weakening check: the fix below *adds* two new assertions (the new
+ * row's presence and its adjacency to R-COH-VALIDATE-SEARCH-AMBIGUOUS) and
+ * *updates* the count/last-id assertions to match the current wording of the
+ * SAME claim; no assertion is dropped, no scope is narrowed. Full
+ * justification recorded in
+ * PRPs/reports/rubric-reconciliation/test-suite.diff's Lifecycle ledger.
+ *
  * Run: node --test scripts/validate/checks/plan-reviewer-validate-search-ambiguous-check.test.mjs
  */
 
@@ -453,7 +479,7 @@ test('AC-A7 (regression guard — the missing-property delta over EXISTING_TEST_
 // AC-A8 — the ## review.jsonl format worked example gains a matching row.
 // ---------------------------------------------------------------------------
 
-test('AC-A8: plan-reviewer.md\'s ## review.jsonl format example JSON block includes a new R-COH-VALIDATE-SEARCH-AMBIGUOUS passed:true row immediately after the existing R-COH-ACTION-VALIDATE-CONTRADICTION row, so all 8 fixed deterministic checks each have an example row', () => {
+test('AC-A8: plan-reviewer.md\'s ## review.jsonl format example JSON block includes a new R-COH-VALIDATE-SEARCH-AMBIGUOUS passed:true row immediately after the existing R-COH-ACTION-VALIDATE-CONTRADICTION row, and the merged-in R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE row now closes out all 9 fixed deterministic checks with an example row', () => {
   const content = readRepoFile(PLAN_REVIEWER_PATH);
 
   assert.ok(content.includes('{ "id": "R-COH-VALIDATE-SEARCH-AMBIGUOUS", "passed": true }'), 'expected the new JSONL example row');
@@ -463,19 +489,29 @@ test('AC-A8: plan-reviewer.md\'s ## review.jsonl format example JSON block inclu
     ),
     'expected the new row positioned immediately after the existing R-COH-ACTION-VALIDATE-CONTRADICTION row, with no other row between them'
   );
+  assert.ok(
+    content.includes('{ "id": "R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE", "passed": true }'),
+    'expected the merged-in R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE JSONL example row'
+  );
+  assert.ok(
+    content.includes(
+      '{ "id": "R-COH-VALIDATE-SEARCH-AMBIGUOUS", "passed": true },\n    { "id": "R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE", "passed": true }'
+    ),
+    'expected the merged-in row positioned immediately after the R-COH-VALIDATE-SEARCH-AMBIGUOUS row, with no other row between them'
+  );
 
   const jsonlBlock = sliceBetween(content, '"rubric": [', '"action": "final_flip"');
   assert.ok(jsonlBlock, 'expected an extractable worked-example rubric[] JSON block');
   const fixedRowIds = [...(/** @type {string} */ (jsonlBlock)).matchAll(/"id": "(R-COH-[A-Z-]+)"/g)].map((m) => m[1]);
   assert.equal(
     fixedRowIds.length,
-    8,
-    `expected exactly 8 R-COH-* example rows (one per fixed deterministic check), found ${fixedRowIds.length}: ${fixedRowIds.join(', ')}`
+    9,
+    `expected exactly 9 R-COH-* example rows (one per fixed deterministic check; the four conditional Figma-track checks are zero-emission in this non-Figma worked example), found ${fixedRowIds.length}: ${fixedRowIds.join(', ')}`
   );
   assert.equal(
     fixedRowIds[fixedRowIds.length - 1],
-    'R-COH-VALIDATE-SEARCH-AMBIGUOUS',
-    'expected the new check to be the LAST R-COH-* row in the worked example, matching its position as the last of the 8 fixed checks'
+    'R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE',
+    'expected the merged-in R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE row to be the LAST R-COH-* row in the worked example, matching its position as the 9th and final fixed deterministic check'
   );
 });
 

@@ -175,6 +175,38 @@
  * PRPs/reports/add-an-8th-fixed-deterministic-check-r-coh-validate-search/test-suite.diff's
  * Lifecycle ledger.
  *
+ * Lifecycle update (2026-07-28, EXISTING_TEST_UPDATED, performed by the
+ * rubric-reconciliation test-writer session, test-after per
+ * docs/context/methodology.md): the standalone
+ * "reconcile-three-independently-authored-extensions-to-plugin" description-
+ * mode plan (no source PRD;
+ * PRPs/plans/completed/reconcile-three-independently-authored-extensions-to-plugin.plan.md)
+ * merged origin/development into feature/figma-implementation-track,
+ * adding a 9th FIXED deterministic check (R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE)
+ * to the two this branch had already shipped, and rewrote the SAME
+ * rubric[]-length-range paragraph this file's own AC-A2 "widens the
+ * rubric[] length-range prose to ... rows..." test (below) reads, shifting
+ * every numeral: baseline `16 to 21 rows` becomes `17 to 22 rows`, maximal
+ * `16 to 24 rows` becomes `17 to 25 rows`, "25th row" becomes "26th row",
+ * and the preserved range shifts from 16–23 to 17–24. Confirmed broken by
+ * directly reading the post-merge plan-reviewer.md content: the paragraph
+ * now reads "8 (R1-R8) + 9 (deterministic R-COH-*) + up to 5 (K=5 pass) =
+ * 17 to 22 rows" and "widen the range to `17 to 25 rows` ... the range
+ * never extends to a 26th row" and "the baseline 17-22 range is exact ...
+ * and the 17-24 range from the prior". The underlying properties this test
+ * verifies (the maximal range never reaches the next-forbidden row; the
+ * baseline is exact for non-Figma projects; the four conditional rows
+ * remain each independently zero-emission) are still fully true — only the
+ * numerals moved; the "four conditional rows" wording itself is UNCHANGED
+ * by this shipment, since the merged-in check is FIXED, not a fifth
+ * conditional row. Anti-weakening check: the fix below *replaces* the four
+ * now-stale numeral literals (plus the test title's own numerals, matching
+ * this file's own established convention of updating the title alongside
+ * the assertions) with the new ones matching the current wording of the
+ * SAME claim; no assertion is dropped, no scope is narrowed. Full
+ * justification recorded in
+ * PRPs/reports/rubric-reconciliation/test-suite.diff's Lifecycle ledger.
+ *
  * Authored test-after (docs/context/methodology.md: tdd: false +
  * test_frameworks: ["node:test"]) against the already-implemented,
  * code-reviewed, IMPLEMENTED phase 3 plan (Status: IMPLEMENTED, archived to
@@ -524,7 +556,7 @@ test('AC-A2 (PRD AC-3): plan-reviewer.md\'s R-COH-VISUAL-SCOPE-PURITY returns pa
   );
 });
 
-test('AC-A2 (PRD AC-3), superseded wording confirmed current by the Phase 4 and 2026-07-28 R-COH-VALIDATE-SEARCH-AMBIGUOUS lifecycle updates above: plan-reviewer.md widens the rubric[] length-range prose to 16-24 rows for the maximal case (both design rows present, plus exactly one of the two mutually-exclusive phase_scope rows, never both), each conditional row class independently zero-emission, preserving the exact 16-21 baseline for non-Figma projects and the 16-23 range for a figma_track: true project with no phase_scope row at all', () => {
+test('AC-A2 (PRD AC-3), superseded wording confirmed current by the Phase 4, 2026-07-28 R-COH-VALIDATE-SEARCH-AMBIGUOUS, and rubric-reconciliation-merge lifecycle updates above: plan-reviewer.md widens the rubric[] length-range prose to 17-25 rows for the maximal case (both design rows present, plus exactly one of the two mutually-exclusive phase_scope rows, never both), each conditional row class independently zero-emission, preserving the exact 17-22 baseline for non-Figma projects and the 17-24 range for a figma_track: true project with no phase_scope row at all', () => {
   const content = readRepoFile(PLAN_REVIEWER_PATH);
   const block = sliceBetween(content, 'The total `rubric[]` length per run is', 'When the K=5 pass emits N findings');
   assert.ok(block, 'expected an extractable rubric[] length-range paragraph');
@@ -532,15 +564,15 @@ test('AC-A2 (PRD AC-3), superseded wording confirmed current by the Phase 4 and 
 
   assert.ok(
     collapsed.includes(
-      'exactly one of two mutually-exclusive 3rd conditional deterministic rows may also appear: `R-COH-VISUAL-SCOPE-PURITY` (on `phase_scope: visual`) or `R-COH-SENTINEL-RESOLUTION-MISSING` (on `phase_scope: logic`), since a single plan\'s `phase_scope` cell carries exactly one value and can never be both at once. Together these widen the range to `16 to 24 rows` in the maximal case (both design rows present, plus exactly one of the two mutually-exclusive phase_scope rows, plus the full 5-row K=5 pass) — the range never extends to a 25th row, because `R-COH-VISUAL-SCOPE-PURITY` and `R-COH-SENTINEL-RESOLUTION-MISSING` can never both fire on the same plan.'
+      'exactly one of two mutually-exclusive 3rd conditional deterministic rows may also appear: `R-COH-VISUAL-SCOPE-PURITY` (on `phase_scope: visual`) or `R-COH-SENTINEL-RESOLUTION-MISSING` (on `phase_scope: logic`), since a single plan\'s `phase_scope` cell carries exactly one value and can never be both at once. Together these widen the range to `17 to 25 rows` in the maximal case (both design rows present, plus exactly one of the two mutually-exclusive phase_scope rows, plus the full 5-row K=5 pass) — the range never extends to a 26th row, because `R-COH-VISUAL-SCOPE-PURITY` and `R-COH-SENTINEL-RESOLUTION-MISSING` can never both fire on the same plan.'
     ),
-    'expected the mutually-exclusive-3rd-row widening statement, capping at 16-24 (never 16-25)'
+    'expected the mutually-exclusive-3rd-row widening statement, capping at 17-25 (never 17-26)'
   );
   assert.ok(
     collapsed.includes(
-      'Each of the four conditional rows is independently zero-emission (contributes nothing) when its own gating condition is not met, so the baseline 16–21 range is exact for every non-Figma project, and the 16–23 range from the prior `design_source` shipment remains exact for a `figma_track: true` project whose plan has no `phase_scope` row at all (neither `visual` nor `logic` — `visual_first: false`, or the PRD predates the visual-first track).'
+      'Each of the four conditional rows is independently zero-emission (contributes nothing) when its own gating condition is not met, so the baseline 17–22 range is exact for every non-Figma project, and the 17–24 range from the prior `design_source` shipment remains exact for a `figma_track: true` project whose plan has no `phase_scope` row at all (neither `visual` nor `logic` — `visual_first: false`, or the PRD predates the visual-first track).'
     ),
-    'expected the preserved-baseline-and-preserved-16-23-range statement'
+    'expected the preserved-baseline-and-preserved-17-24-range statement'
   );
 });
 
