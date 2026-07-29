@@ -27,7 +27,16 @@
  * CLI assertions spawn the real script so the arg-parse + exit-code contract in
  * the acceptance criteria is exercised end-to-end.
  *
- * Run: node --test scripts/normalize-test-output.test.mjs
+ * Relocated 2026-07-29 from scripts/normalize-test-output.test.mjs to
+ * plugins/relay/scripts/normalize-test-output.test.mjs, alongside its
+ * subject module's own move into the plugin tree (so
+ * `${CLAUDE_PLUGIN_ROOT}/scripts/normalize-test-output.mjs` resolves in a
+ * real packaged install) — this file's relative import of its subject
+ * (`./normalize-test-output.mjs`) would otherwise dangle. Content is
+ * otherwise byte-identical to the pre-move file; only this comment and the
+ * `Run:` line below changed.
+ *
+ * Run: node --test plugins/relay/scripts/normalize-test-output.test.mjs
  */
 
 import { test } from 'node:test';

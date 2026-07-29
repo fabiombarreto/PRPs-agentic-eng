@@ -90,9 +90,14 @@
 
       <pre><code class="language-bash">npm install                 # one-time, installs the suite's dev dependencies
 npm run validate            # run all eight static checks
-node --test scripts/validate/checks/*.test.mjs scripts/eval.test.mjs   # the unit tests for the checks
+node --test scripts/validate/checks/*.test.mjs scripts/eval.test.mjs plugins/relay/scripts/*.test.mjs   # the unit tests for the checks and Test Runner scripts
 npm run eval                # behavioral evals of the reviewer agents (needs ANTHROPIC_API_KEY)
 npm run setup-hooks         # one-time: install the pre-commit gate</code></pre>
+
+      <div class="callout callout--warn">
+        <div class="callout__title"><code>node --test</code> silently drops a non-matching path segment</div>
+        <p>If any of the three glob segments above stops matching a file, <code>node --test</code> exits <code>0</code> and simply runs fewer tests — it does not fail or print a warning. Re-check the printed test count after moving or renaming a test file, especially across the <code>scripts/</code> / <code>plugins/relay/scripts/</code> boundary; there is no shell-level safety net for this.</p>
+      </div>
 
       <p><code>npm run validate</code> prints one line per check and a summary, and exits non-zero if any check found a violation:</p>
 

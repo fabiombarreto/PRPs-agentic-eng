@@ -134,7 +134,7 @@ BOTH conditions hold: (1) the target project's
 at least one `phase-*/visual/*/fidelity-report.json` artifact is
 found under the resolved `<feature>`'s `PRPs/reports/<feature>/`
 directory (the same glob-equivalent discovery walk
-`scripts/generate-final-report.mjs`'s `findFidelityReportPaths` uses
+`plugins/relay/scripts/generate-final-report.mjs`'s `findFidelityReportPaths` uses
 over `phase-*/visual/*/fidelity-report.json`). Absent entirely — no
 heading, no "N/A" placeholder — for a non-Figma project or when no
 fidelity artifact exists yet, reproducing the identical
@@ -163,7 +163,7 @@ also attempt to read that phase's own plan
 discovered phase declares a `phase_scope` value, add a sixth "Scope"
 column to the per-frame table — omitted entirely, five columns
 unchanged, when no phase declares one, the same conditional-column
-rule `scripts/generate-final-report.mjs`'s own extension applies, so
+rule `plugins/relay/scripts/generate-final-report.mjs`'s own extension applies, so
 both surfaces stay consistent with each other. For every phase that
 both declares `phase_scope` AND has a
 `PRPs/reports/<feature>/phase-<N>/visual-approval.jsonl` file, append

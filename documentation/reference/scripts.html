@@ -36,7 +36,7 @@
       <h2 id="normalize-test-output">normalize-test-output.mjs <span class="badge badge--done">shipped</span></h2>
 
       <div class="kv">
-        <dt>Path</dt><dd><code>scripts/normalize-test-output.mjs</code></dd>
+        <dt>Path</dt><dd><code>plugins/relay/scripts/normalize-test-output.mjs</code></dd>
         <dt>Purpose</dt><dd>Normalize JUnit XML output from pytest / Playwright / Vitest into the relay canonical <a href="test-output-schema.html">test-output schema v1</a>.</dd>
         <dt>Invoked by</dt><dd><code>test-runner</code> agent, once per attempt. Also invocable directly for debugging.</dd>
         <dt>Runtime</dt><dd>Node.js ≥ 18.</dd>
@@ -77,7 +77,7 @@
 
       <h3 id="normalize-example">Example</h3>
 
-      <pre><code class="language-bash">node scripts/normalize-test-output.mjs \
+      <pre><code class="language-bash">node plugins/relay/scripts/normalize-test-output.mjs \
     --framework pytest \
     --junit reports/results.xml \
     --tier e2e \
@@ -113,7 +113,7 @@
       <h2 id="generate-final-report">generate-final-report.mjs <span class="badge badge--done">shipped</span></h2>
 
       <div class="kv">
-        <dt>Path</dt><dd><code>scripts/generate-final-report.mjs</code></dd>
+        <dt>Path</dt><dd><code>plugins/relay/scripts/generate-final-report.mjs</code></dd>
         <dt>Purpose</dt><dd>Assemble the AC-10 compliant <code>final-report.md</code> for a Test Runner session from all its persisted artifacts.</dd>
         <dt>Invoked by</dt><dd><code>/relay-pr</code> command (future) as the last step before opening the PR. Also manually for audit.</dd>
         <dt>Runtime</dt><dd>Node.js ≥ 18.</dd>
@@ -174,7 +174,7 @@
       <p>If a future stage needs a new helper script (e.g., a coverage-differ, a mutation-tester wrapper), it should follow the same pattern:</p>
 
       <ol>
-        <li>Node.js <code>.mjs</code> file in <code>scripts/</code>.</li>
+        <li>Node.js <code>.mjs</code> file in <code>plugins/relay/scripts/</code>.</li>
         <li>Zero npm dependencies — Node built-ins only.</li>
         <li>CLI-style argv parsing with <code>--flag value</code>.</li>
         <li>Structured JSON or Markdown on stdout.</li>

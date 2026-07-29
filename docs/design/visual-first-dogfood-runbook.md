@@ -36,7 +36,7 @@ ever executed against this track's mechanics. What this phase's own
 plan *does* prove directly, self-hosted, inside this repository's own
 validation, is narrower and different in kind: a synthetic-fixture
 Level 3 dry run that exercises the new dual-mode rendering logic in
-`scripts/generate-final-report.mjs` against two constructed
+`plugins/relay/scripts/generate-final-report.mjs` against two constructed
 fixtures (a base-track shape with no `phase_scope` evidence, and a
 dual-mode shape with a `phase_scope: visual` plan plus a recorded
 `visual-approval.jsonl` decision) — see
@@ -189,7 +189,7 @@ this repository has no dogfood-tracking artifact of its own to
 update, since `relay` itself never declares `figma_track: true` or
 `visual_first: true`. Until this checklist is run against a real
 project, treat the dual-mode surfaces this same phase ships
-(`scripts/generate-final-report.mjs`'s Scope column and approval
+(`plugins/relay/scripts/generate-final-report.mjs`'s Scope column and approval
 lines) as verified only at the synthetic-fixture level described
 above under "Why this file exists" — correct given constructed
 evidence, not yet exercised against a genuine end-to-end run.

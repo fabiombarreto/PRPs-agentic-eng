@@ -100,7 +100,12 @@ import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-const GENERATE_FINAL_REPORT = fileURLToPath(new URL('../../generate-final-report.mjs', import.meta.url));
+// Retargeted 2026-07-29: generate-final-report.mjs moved from scripts/ into
+// plugins/relay/scripts/ ("move relay's three helper scripts into the
+// plugin" plan) so ${CLAUDE_PLUGIN_ROOT}/scripts/... resolves in a real
+// packaged install. The relative specifier below now points at the script's
+// new home; the CLI-invocation contract this file exercises is unchanged.
+const GENERATE_FINAL_REPORT = fileURLToPath(new URL('../../../plugins/relay/scripts/generate-final-report.mjs', import.meta.url));
 
 /**
  * Creates a throwaway temp root, hands it to `fn`, and always cleans up

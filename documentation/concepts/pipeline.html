@@ -113,7 +113,7 @@
       <div class="kv">
         <dt>Input</dt><dd>Worktree with green tests and all reviews <code>APPROVED</code>.</dd>
         <dt>Output</dt><dd>PR opened on GitHub with <code>PRPs/reports/&lt;feature&gt;/final-report.md</code> as the description.</dd>
-        <dt>Generator</dt><dd><code>scripts/generate-final-report.mjs</code> — reads <code>run.json</code>, <code>test-review.json</code>, and every <code>attempts/&lt;N&gt;/record.json</code>, produces AC-10 compliant Markdown.</dd>
+        <dt>Generator</dt><dd><code>plugins/relay/scripts/generate-final-report.mjs</code> — reads <code>run.json</code>, <code>test-review.json</code>, and every <code>attempts/&lt;N&gt;/record.json</code>, produces AC-10 compliant Markdown.</dd>
         <dt>PR command</dt><dd><code>gh pr create</code> with the report embedded and appropriate labels.</dd>
         <dt>Failure mode</dt><dd>If <code>gh</code> is unavailable or auth is broken, the report is still written to disk; the user gets an instruction to open the PR manually.</dd>
       </div>

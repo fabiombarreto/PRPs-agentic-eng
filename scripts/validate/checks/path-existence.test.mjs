@@ -81,6 +81,30 @@ test('checkPathExistence: fails naming the dangling reference (raw token + resol
 // scan-root-lock.mjs). withScanRootLock serializes the write→scan→cleanup
 // critical section against those other tests instead of leaving the race in
 // place.
+// 2026-07-29: the "real, already-existing sibling" literal below was
+// retargeted from a bare `scripts/normalize-test-output.mjs` reference —
+// stale after "move relay's three helper scripts into the plugin" relocated
+// that file to `plugins/relay/scripts/normalize-test-output.mjs` — to
+// `${CLAUDE_PLUGIN_ROOT}/scripts/normalize-test-output.mjs`, which now
+// resolves through this check's newly-extended `scripts/` prefix
+// (CLAUDE_PLUGIN_ROOT_ALLOWED_PREFIXES) to that same real file.
+// 2026-07-29 (test-reviewer CHANGES_REQUESTED, addressed same session): that
+// first retarget was CIRCULAR, not merely retargeted — the assertion
+// "no finding mentions normalize-test-output.mjs" passes vacuously whether
+// the `scripts/` prefix class exists or not, because "token never extracted"
+// and "token extracted and resolved to a real file" both produce zero
+// findings. Verified empirically (temporarily removing `'scripts/'` from
+// CLAUDE_PLUGIN_ROOT_ALLOWED_PREFIXES): the assertion alone still passed.
+// Fixed by adding a negative control below in the SAME
+// `${CLAUDE_PLUGIN_ROOT}/scripts/...` class that names a file that does NOT
+// exist and therefore MUST dangle — a regression that silently drops
+// `scripts/` from the prefix array stops that reference from being
+// extracted at all, so the negative-control assertion fails exactly when it
+// should. Re-verified empirically after adding it: fails when `'scripts/'`
+// is removed, passes when restored. Together the two assertions prove the
+// test's original intent for real: a real sibling in this class is never
+// false-positived, AND a nonexistent one in the same class is never
+// false-negatived (i.e. the class is genuinely being checked).
 test('runPathExistenceCheck: catches the PRD AC-5 worked example — a dangling .py reference is flagged while the real .mjs sibling is not (hole #3 shape; wrapper-level regex extraction + real existsSync classification)', async () => {
   const fixtureRelPath = 'docs/.tmp-path-existence-ac5-fixture.md';
   const fixtureAbsPath = resolve(fixtureRelPath);
@@ -92,12 +116,21 @@ test('runPathExistenceCheck: catches the PRD AC-5 worked example — a dangling 
     'output before classification. This is the PRD AC-5 worked example: the',
     'real file on disk is `.mjs`, not `.py`, so this reference must dangle.',
     '',
-    'For contrast, the runner script `scripts/normalize-test-output.mjs`',
+    'For contrast, the runner script `${CLAUDE_PLUGIN_ROOT}/scripts/normalize-test-output.mjs`',
     'normalizes raw test output before classification — this is the real,',
     'already-existing sibling file and must never be flagged as dangling.',
     '',
+    'A negative control in that SAME plugin-root scripts/ class,',
+    '`${CLAUDE_PLUGIN_ROOT}/scripts/does-not-exist-negative-control.mjs`,',
+    'names a file that does not exist and must still dangle — proving the',
+    'class is actively extracted and existsSync-checked, not silently',
+    'skipped (the one property a regression dropping scripts/ from',
+    'CLAUDE_PLUGIN_ROOT_ALLOWED_PREFIXES would break without this line).',
+    '',
   ].join('\n');
   const danglingLineNumber = fixtureContent.split('\n').findIndex((l) => l.includes('normalize-test-output.py')) + 1;
+  const negativeControlLineNumber =
+    fixtureContent.split('\n').findIndex((l) => l.includes('does-not-exist-negative-control.mjs')) + 1;
 
   await withScanRootLock(async () => {
     writeFileSync(fixtureAbsPath, fixtureContent, 'utf-8');
@@ -119,6 +152,21 @@ test('runPathExistenceCheck: catches the PRD AC-5 worked example — a dangling 
         undefined,
         `the real, already-existing .mjs sibling must never be flagged as dangling, got: ${JSON.stringify(mjsFalsePositive)}`
       );
+
+      // Negative control — see the 2026-07-29 comment above the test. Proves
+      // the `scripts/` class is actively extracted+resolved, not merely
+      // absent-of-finding: a regression that silently drops `scripts/` from
+      // CLAUDE_PLUGIN_ROOT_ALLOWED_PREFIXES makes this reference stop being
+      // extracted at all, so this assertion fails exactly when it should
+      // (verified empirically — see the comment above the test).
+      const negativeControlFinding = result.findings.find(
+        (f) => f.file === fixtureRelPath && f.message.includes('does-not-exist-negative-control.mjs')
+      );
+      assert.ok(
+        negativeControlFinding,
+        `expected a dangling-reference finding for the plugin-root scripts/ negative control (proves the class is genuinely checked, not just quietly absent-of-finding); got findings: ${JSON.stringify(result.findings)}`
+      );
+      assert.equal(negativeControlFinding.line, negativeControlLineNumber);
     } finally {
       rmSync(fixtureAbsPath, { force: true });
     }

@@ -151,7 +151,12 @@ const SEARCH_INDEX_PATH = 'documentation/assets/data/search-index.json';
 const CHANGELOG_PATH = 'documentation/changelog.html';
 const DOGFOOD_RUNBOOK_PATH = 'docs/design/visual-first-dogfood-runbook.md';
 
-const GENERATE_FINAL_REPORT = fileURLToPath(new URL('../../generate-final-report.mjs', import.meta.url));
+// Retargeted 2026-07-29: generate-final-report.mjs moved from scripts/ into
+// plugins/relay/scripts/ ("move relay's three helper scripts into the
+// plugin" plan) so ${CLAUDE_PLUGIN_ROOT}/scripts/... resolves in a real
+// packaged install. The relative specifier below now points at the script's
+// new home; the CLI-invocation contract this file exercises is unchanged.
+const GENERATE_FINAL_REPORT = fileURLToPath(new URL('../../../plugins/relay/scripts/generate-final-report.mjs', import.meta.url));
 
 /**
  * Reads a repo-root-relative file and normalizes line endings to `\n`.
@@ -379,7 +384,7 @@ test('AC-A1, AC-A2 (PRD AC-1, AC-6): relay-qa-report.md\'s "## Visual Fidelity s
   );
   assert.ok(
     collapsed.includes(
-      'When at least one discovered phase declares a `phase_scope` value, add a sixth "Scope" column to the per-frame table — omitted entirely, five columns unchanged, when no phase declares one, the same conditional-column rule `scripts/generate-final-report.mjs`\'s own extension applies, so both surfaces stay consistent with each other.'
+      'When at least one discovered phase declares a `phase_scope` value, add a sixth "Scope" column to the per-frame table — omitted entirely, five columns unchanged, when no phase declares one, the same conditional-column rule `plugins/relay/scripts/generate-final-report.mjs`\'s own extension applies, so both surfaces stay consistent with each other.'
     ),
     'expected the conditional Scope-column rule, cross-referenced to generate-final-report.mjs'
   );

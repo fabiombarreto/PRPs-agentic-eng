@@ -37,7 +37,7 @@ not runtime unit tests of application code). After `npm install`:
 
 ```
 npm run validate     # 8 static checks over the plugin; exits non-zero + names file:line on any violation
-node --test scripts/validate/checks/*.test.mjs scripts/eval.test.mjs scripts/normalize-test-output.test.mjs   # node:test unit tests (checks + scripts)
+node --test scripts/validate/checks/*.test.mjs scripts/eval.test.mjs plugins/relay/scripts/*.test.mjs   # node:test unit tests (checks + scripts); node --test silently drops any segment that stops matching (exit 0), so re-check the printed test count whenever a test file moves
 npm run eval         # on-demand behavioral evals (promptfoo) of the reviewer agents; needs ANTHROPIC_API_KEY
 npm run setup-hooks  # one-time: activate the pre-commit gate (runs npm run validate on every commit)
 ```
