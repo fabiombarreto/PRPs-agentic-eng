@@ -59,6 +59,35 @@ From `docs/planning/planejamento_fase_2.docx` §12:
   defaults are not surfaced to target projects — visibility question
   deferred on purpose (see `docs/anti-patterns.md`).
 
+Accepted as technical debt on 2026-07-30, during the `targeted-retry` plan
+review (`PRPs/plans/targeted-retry-writers-consume-reviewer-feedback-in-relay.review.jsonl`,
+attempt 2). Recorded rather than fixed, by explicit human decision:
+
+- **Plan-level verification gaps carried into the `targeted-retry` plan.** Two
+  `R-COH-*` findings were accepted rather than resolved: (a)
+  `R-COH-AC-UNVERIFIABLE` — AC-A6 (the `plan-writer.md` "Re-grounding without
+  cause" anti-pattern amendment) has no verification path in any task VALIDATE
+  or Level block; (b) `R-COH-OTHER-INTERNAL-CONTRADICTION` — Task 3's VALIDATE
+  is weaker than its own ACTION (bare `grep -q` for a "BOTH input groups" claim
+  that Task 1 guards with a `>=2` count, and only 2 of the 4 grounding-dependent
+  rubric IDs AC-A5 names). Exposure: a half-completed Task 3 would leave
+  description-mode retries blind — half the feature — without failing any gate.
+  Mitigated for this execution by manual verification at implement time; the
+  weak gates themselves remain as debt for any future re-run of the plan.
+
+- **Reviewer non-determinism across attempts.** `plan-reviewer` surfaced two
+  disjoint defect classes on two consecutive runs of the same rubric against the
+  same plan (attempt 1: task↔AC linkage; attempt 2: verification coverage),
+  neither run being wrong. Because each pass explores the K=5 judgment space
+  differently, a plan can be rejected repeatedly on progressively finer points —
+  the mechanism behind the 4-attempt plans visible in `PRPs/plans/*.review.jsonl`.
+  This is a fourth efficiency problem, distinct from the three the
+  `targeted-retry` plan addresses (blind retries, writers unaware of the rubric,
+  no complexity routing): those target the WRITER, this one is a REVIEWER
+  property. Not yet scoped — likely candidates are a deterministic checklist
+  ordering for the K=5 pass, or carrying prior-attempt findings into the next
+  run so the reviewer cannot silently change what it looks for.
+
 (The TDD-declaration convention — originally an open question from §12 —
 was resolved on 2026-04-19 and is recorded in `docs/decisions.md`. Format:
 `docs/context/methodology.md` with YAML frontmatter.)

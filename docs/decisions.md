@@ -1177,6 +1177,80 @@ numerals now the canonical rubric[]-length reference, superseding the
 
 ---
 
+## [2026-07-30] Writers consume prior_feedback: a retry is a targeted revision, and plan-writer's grounding is one-shot per DRAFT
+
+**Context:** Aggregating this repo's own review audit logs
+(`PRPs/plans/*.jsonl`, 270 recorded runs on 2026-07-30) showed the
+pipeline is effective but slow, and that the cost is concentrated in
+rework: `plan-review` averages **1.66 runs per artifact** (77 artifacts
+/ 128 runs; 49% fail on the first attempt), `code-review` **1.49**
+(67/100; 34%), `test-write-review` **3.50** (12/42). The cause was a
+severed feedback pipe: `prior_feedback` was computed and passed by
+`commands/relay-execute.md` (8 references) and
+`commands/relay-implement.md` (5 references), but consumed by ZERO
+writer agents — `plan-writer.md`, `implementer.md`, `test-writer.md`
+each had none — and `commands/relay-plan.md` /
+`commands/relay-write-test.md` never forwarded it at all.
+`relay-execute.md`'s own instruction to "re-adopt `/relay-plan` role
+passing `prior_feedback`" therefore handed the value to a command that
+did not declare it. Every retry regenerated its artifact from scratch,
+blind to what had failed — and for `plan-writer` that included
+re-dispatching the research subagents whose findings were already
+written into the DRAFT. The HALT code `FAILED_PLAN_REVIEW_STUCK` ("same
+rubric items fail across consecutive attempts") exists because this
+blind loop was observed repeating identical failures.
+
+**Decision:** Close the pipe for the three writer pairs with measured
+churn. (1) `plan-writer`, `implementer`, and `test-writer` each declare
+an optional `prior_feedback` input (canonical
+`list<{rubric_id, reason}>` shape, matching `relay-implement.md`'s
+existing dispatch) and carry a uniform `## Targeted revision mode`
+section: when it is non-empty, correct only the cited rubric items and
+leave the rest of the artifact byte-identical, instead of re-running the
+full protocol. (2) `/relay-plan` (both its PRD-mode and description-mode
+execution-context lists) and `/relay-write-test` declare and forward the
+input. (3) `plan-writer`'s Phase 2 GROUNDING short-circuits on a retry,
+reusing the DRAFT's own `## Patterns to Mirror` and `## Mandatory
+Reading` — with a carve-out that re-runs the full dispatch when a cited
+id is `R-COH-PATTERN-TASK-DRIFT`, `R-COH-PATTERN-SOURCE-MISSING`,
+`R-COH-MANDATORY-READING-MISSING`, or
+`R-COH-MANDATORY-READING-IRRELEVANT`, since there the grounding is
+itself what was rejected. Two candidates were deliberately EXCLUDED:
+**reviewer-side delta review** (re-validating only previously-failed
+items) conflicts with the [2026-04-28] entries' no-short-circuit
+invariant, which requires all rubric items to be *evaluated*, not merely
+recorded — the invariant is preserved untouched and no reviewer file is
+modified by this change; and **`docs-updater`**, whose pair shows zero
+measured churn (a single `docs-review.jsonl`, 0 runs) and whose
+`docs_prior_feedback` was deliberately removed from
+`relay-implement.md`'s dispatch payload — reversing that without
+evidence was declined.
+
+**Reason:** The defect was a plumbing gap, not a rubric weakness, so the
+fix belongs entirely on the writer side. Closing it reduces both the
+number of retries (a writer that knows what failed can fix it) and the
+cost of each (a targeted edit instead of a regeneration plus fresh
+research), while every rubric item, budget, HALT code, and audit-logging
+behavior stays byte-identical. Excluding delta review keeps the change
+strictly additive to the audit guarantees rather than trading them for
+speed. Excluding `docs-updater` keeps the change evidence-led: the two
+included behaviors are the ones the logs actually justify.
+
+**Areas affected:** `plugins/relay/agents/plan-writer.md`,
+`plugins/relay/agents/implementer.md`,
+`plugins/relay/agents/test-writer.md`,
+`plugins/relay/commands/relay-plan.md`,
+`plugins/relay/commands/relay-write-test.md`;
+`/relay-execute` and `/relay-implement` as upstream callers (unmodified
+— they already send the value); explicitly NOT
+`plugins/relay/agents/plan-reviewer.md`, `code-reviewer.md`, or
+`test-reviewer.md`. Two accepted verification gaps in the source plan,
+plus a separate reviewer-non-determinism finding surfaced during its
+review, are recorded as technical debt in
+`docs/context/constraints.md` under "Known TODOs / open planning items".
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision

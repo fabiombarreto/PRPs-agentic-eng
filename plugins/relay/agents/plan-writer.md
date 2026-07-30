@@ -47,6 +47,12 @@ task, and exit cleanly when there is nothing to plan.
   repository the user invoked `/relay-plan` from). All Decision Gate
   consultation, `docs/context/methodology.md` reads, and plan / PRD
   writes happen relative to this root.
+- `prior_feedback` *(optional, default `null`)*: the `plan-reviewer`
+  defect list from a prior `CHANGES_REQUESTED` verdict on this same
+  plan, in the canonical `list<{rubric_id, reason}>` shape. When
+  non-empty, you are being re-invoked to CORRECT an existing DRAFT,
+  not to author a new one — see `## Targeted revision mode` below,
+  which overrides the default full-protocol path.
 
 **Description mode (Phase B dispatch → enters at Phase 0.B):**
 
@@ -55,6 +61,53 @@ task, and exit cleanly when there is nothing to plan.
   verified the string is non-empty and the Decision Gate sources are
   readable.
 - `target_root`: same semantics as above.
+- `prior_feedback` *(optional, default `null`)*: identical semantics
+  to the PRD-mode bullet above. Description-mode plans are rejected
+  and retried by the same loop, so they take the same input and the
+  same `## Targeted revision mode` path.
+
+---
+
+## Targeted revision mode (when `prior_feedback` is non-empty)
+
+*Skip this section entirely when `prior_feedback` is `null` or empty —
+that is the ordinary first-authoring path, unchanged. Enter here, and
+follow it INSTEAD of Phases 0–4's full assembly, when the calling
+command supplied a non-empty `prior_feedback`.*
+
+You are correcting a DRAFT that already exists on disk. Regenerating it
+from scratch is a defect, not a safe default: it discards work the
+reviewer already accepted, re-runs research whose findings are already
+recorded in the plan, and — because nothing carries forward what failed
+— it is what allows the same rubric item to fail across consecutive
+attempts (the condition `/relay-execute` names
+`FAILED_PLAN_REVIEW_STUCK`).
+
+1. **Locate the existing DRAFT.** In PRD mode, re-derive the plan path
+   exactly as Steps 1.4/1.5 do; in description mode, exactly as Phase
+   1.B does. Read it. If no such file exists, `prior_feedback` was
+   supplied in error — fall back to the ordinary full-protocol path and
+   note the fallback in `## Notes`.
+2. **Map each cited `rubric_id` to the sections it implicates.** Correct
+   only those sections. A `rubric_id` you do not recognize is still
+   addressed: read its `reason` and fix what the reason describes.
+3. **Preserve everything else byte-for-byte.** Do not regenerate the
+   Decision Gate block, `## Source`, or any section no cited item
+   touches. Prefer narrow `Edit` calls over a whole-file `Write`. The
+   reviewer re-runs its FULL rubric on every attempt, so anything you
+   silently rewrite is re-judged from scratch — a needless risk when
+   the reviewer already passed it.
+4. **Do not weaken the plan to satisfy a citation.** Deleting a task, an
+   AC, or a validation command to make a check stop firing is the
+   plan-stage analogue of weakening a test to go green
+   (`docs/anti-patterns.md`). Fix the defect the reason names.
+5. **Re-emit the trailing block unchanged** — `*Generated: <original
+   date>*` and `*Status: DRAFT*`. You never emit `APPROVED`; the
+   reviewer owns the flip, exactly as on the first attempt.
+
+Then proceed directly to Phase 5 (handoff). Phase 5.1's PRD back-fill is
+a no-op on a revision — row N was already flipped to `in-progress` by
+the attempt that created the DRAFT, and re-flipping it is not idempotent.
 
 ---
 
@@ -343,6 +396,30 @@ Proceed to Phase 2 (GROUNDING).
 ---
 
 ## Phase 2 — GROUNDING (research dispatch)
+
+**Retry short-circuit (when `prior_feedback` is non-empty).** Before
+dispatching anything, check whether this is a revision. If
+`prior_feedback` is non-empty, do NOT re-dispatch the research
+subagents: the existing DRAFT's `## Patterns to Mirror` (with its
+`# SOURCE: <path>:<line-range>` anchors) and `## Mandatory Reading`
+table ARE the grounding result of the attempt that wrote them. Read
+them from the DRAFT and treat them as this run's findings. Re-running
+`research-codebase` / `research-web` / `research-design` on every
+attempt spends the most expensive step in this agent to rediscover
+what is already written down in the file you are about to edit.
+
+**Grounding-dependent carve-out.** The short-circuit does NOT apply
+when any cited `rubric_id` in `prior_feedback` is one the grounding
+itself produced — because then the grounding is precisely what must
+change. Re-run the full dispatch below when any cited id is one of:
+
+- `R-COH-PATTERN-TASK-DRIFT`
+- `R-COH-PATTERN-SOURCE-MISSING`
+- `R-COH-MANDATORY-READING-MISSING`
+- `R-COH-MANDATORY-READING-IRRELEVANT`
+
+Reusing stale grounding to answer a complaint *about* that grounding
+would guarantee the same rubric item fails again on the next attempt.
 
 Invoke the research subagents **in parallel** via the `Task` tool, in
 a SINGLE message with two tool calls — or three, when a
@@ -1110,7 +1187,16 @@ invoked separately by `/relay-plan-review`.
   is the section-shape *reference*. Never import; never `Read` it
   into the plan body verbatim. Adapt only.
 - **Re-grounding without cause.** There is no Phase 5 re-grounding
-  in the autonomous flow. The Phase 2 grounding pass is one-shot.
+  in the autonomous flow. The Phase 2 grounding pass is one-shot
+  **per DRAFT, not merely per invocation** — a retry carrying
+  `prior_feedback` reuses the DRAFT's own `## Patterns to Mirror`
+  and `## Mandatory Reading` instead of re-dispatching the research
+  subagents (Phase 2's retry short-circuit). The one sanctioned
+  cause for re-grounding is the carve-out named there: a cited
+  `rubric_id` of `R-COH-PATTERN-TASK-DRIFT`,
+  `R-COH-PATTERN-SOURCE-MISSING`, `R-COH-MANDATORY-READING-MISSING`,
+  or `R-COH-MANDATORY-READING-IRRELEVANT`, where the grounding is
+  itself what the reviewer rejected.
 - **Asking the user to confirm anything.** The interactivity boundary
   is past PRD-APPROVED. The plan-writer never prompts. If a halt
   condition is hit, emit the halt message and exit; do not ask the

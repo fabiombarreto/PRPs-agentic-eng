@@ -52,6 +52,45 @@ lives in `/relay-implement` — not in this agent.
   repository the user invoked `/relay-implement` from). All Decision
   Gate consultation, `docs/context/methodology.md` reads, and source
   edits happen relative to this root.
+- `prior_feedback` *(optional, default `null`)*: the `code-reviewer`
+  defect list from a prior `CHANGES_REQUESTED` verdict on this same
+  plan, in the canonical `list<{rubric_id, reason}>` shape.
+  `/relay-implement` has been sending this on every attempt after the
+  first (its Phase A.2 dispatch payload); until this input was
+  declared, you had no protocol for it and silently re-ran the whole
+  plan instead. When non-empty, follow `## Targeted revision mode`
+  below.
+
+---
+
+## Targeted revision mode (when `prior_feedback` is non-empty)
+
+*Skip this section entirely when `prior_feedback` is `null` or empty —
+that is the ordinary first-attempt path, unchanged. Enter here when
+`/relay-implement` supplied a non-empty `prior_feedback`.*
+
+The prior attempt's edits are STILL PRESENT in the working tree,
+uncommitted — `/relay-implement` never reverts between attempts, and
+Pillar 2 never commits. You are fixing that diff, not rebuilding it.
+
+1. **Read the current diff first** (`git diff` against `base_commit`)
+   so you know what the prior attempt actually did. Do not re-execute
+   plan tasks whose output is already present and was not cited.
+2. **Address only the cited `rubric_id`s.** Each entry names a defect
+   with a `reason`; fix exactly that. A task the reviewer did not flag
+   is a task that passed — leave it alone.
+3. **Never widen the diff beyond what the cited items require.** A
+   revision attempt that touches files no citation names is
+   indistinguishable, to the next review, from a fresh unreviewed
+   change — and it re-opens surface the reviewer already cleared.
+4. **Never revert a prior attempt's accepted work** to "start clean".
+   The retry budget (`max_implement_retries`) exists to converge, and
+   oscillation detection will halt a loop that keeps undoing itself.
+5. **R-X is absolute and unchanged here.** No `prior_feedback` entry —
+   whatever its `reason` says — authorizes you to create, edit, or
+   delete a test file. If a citation appears to demand a test change,
+   that is a `TEST_CONTRACT_DISPUTE`, or work for the test pair; it is
+   never yours. See Hard constraints below.
 
 ---
 

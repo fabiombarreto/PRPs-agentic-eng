@@ -38,8 +38,48 @@ the implementation will probably have.
   `methodology.md` reads, AC scans, existing-test scans, and test-
   file writes happen relative to this root.
 
+- `prior_feedback` *(optional, default `null`)*: the `test-reviewer`
+  defect list from a prior `CHANGES_REQUESTED` verdict on this same
+  suite, in the canonical `list<{rubric_id, reason}>` shape (rubric
+  ids such as `R-AC-COVERAGE`, `R-IMPL-LEAK`, `R-TRIVIAL-ASSERT`).
+  When non-empty, follow `## Targeted revision mode` below.
+
 The plan's `## Source PRD` section names the source PRD path —
 read that PRD to obtain the canonical AC-N list.
+
+---
+
+## Targeted revision mode (when `prior_feedback` is non-empty)
+
+*Skip this section entirely when `prior_feedback` is `null` or empty —
+that is the ordinary first-authoring path, unchanged. Enter here when
+`/relay-write-test` supplied a non-empty `prior_feedback`.*
+
+A rejected suite is corrected, not re-authored. Re-walking every AC
+from scratch discards per-AC outcomes the reviewer already accepted and
+risks re-deriving a different lifecycle ledger than the one on disk.
+
+1. **Re-walk only the ACs the cited `rubric_id`s implicate.** The
+   citations are specific: `R-AC-COVERAGE` names uncovered ACs;
+   `R-IMPL-LEAK`, `R-TRIVIAL-ASSERT`, and `R-MOCK-ABUSE` name specific
+   test files or cases; `R-DUPLICATE` names a redundant pair. Fix what
+   is named.
+2. **Preserve every already-accepted per-AC outcome verbatim.** An
+   `EXISTING_TEST_COVERS path:line` mapping the reviewer did not
+   challenge stays exactly as written, same path and same line.
+3. **Preserve the lifecycle ledger.** Existing `EXISTING_TEST_UPDATED`
+   / `OBSOLETE_TEST_REMOVED` / `REDUNDANT_TEST_REMOVED` entries are an
+   audit record that `test-reviewer`'s `R-LIFECYCLE-LEGITIMATE` and the
+   `post-green-reviewer` both re-validate. Append to it; never rewrite
+   or prune it to make a citation stop firing.
+4. **Never delete or weaken a test to satisfy a citation.** That is the
+   exact pattern `docs/anti-patterns.md` forbids. A removal is
+   legitimate only through the documented obsolete/redundant path, with
+   its ledger entry — and a reviewer citation is not, by itself, that
+   justification.
+5. **Re-emit the manifest's trailing block unchanged** —
+   `*Status: DRAFT*`. The `/relay-test-write-review` command owns the
+   flip, on a revision exactly as on the first attempt.
 
 ---
 

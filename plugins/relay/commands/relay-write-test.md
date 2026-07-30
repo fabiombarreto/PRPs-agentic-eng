@@ -193,6 +193,16 @@ Execution context to pass into the Writer's Phase 0 setup:
 
 - `plan_path`: the resolved absolute path verified by P1–P4.
 - `target_root`: the cwd.
+- `prior_feedback`: the reviewer defect list from a prior
+  `CHANGES_REQUESTED` verdict, in the canonical
+  `list<{rubric_id, reason}>` shape (the same shape
+  `relay-implement.md` already threads into the implementer).
+  Forward it verbatim when the caller supplies one; `null`
+  otherwise. `/relay-execute` populates this from the captured
+  `test-reviewer` defect list when it re-adopts `/relay-write-test`
+  inside its `max_tdd_review_retries` budget — before this input
+  existed the value was computed upstream and silently dropped
+  here, so a rejected suite was re-authored blind.
 
 Run Phases 0 through 3 as specified by `test-writer.md`. The
 Writer reads the plan + the source PRD, classifies each AC, and
@@ -275,7 +285,11 @@ NOT invoked in any halt or self-skip case.
   `/relay-test-write-review`.** That is the orchestrator's call
   (`/relay-execute`'s `max_tdd_review_retries=2` budget). A
   single `/relay-write-test` invocation produces zero or one DRAFT suite;
-  it never loops.
+  it never loops. This is unchanged by the `prior_feedback` input
+  above: forwarding a caller-supplied defect list into a single
+  Writer adoption is not looping. The command still never decides
+  to retry — it only stops discarding the feedback when the
+  orchestrator has already decided to.
 - **Never activate by heuristic.** The only signal is `tdd: true`
   in `methodology.md`. Existence of test folders, CI jobs, high
   coverage, etc., MUST NOT activate this command.

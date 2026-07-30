@@ -257,6 +257,16 @@ Execution context to pass into the Writer's Phase 0 setup:
 - `design_spec_path`: the resolved path from Step 0.0's
   `--design-spec` override or PRD-mode auto-derivation, when set
   (absent/null otherwise).
+- `prior_feedback`: the reviewer defect list from a prior
+  `CHANGES_REQUESTED` verdict, in the canonical
+  `list<{rubric_id, reason}>` shape (the same shape
+  `relay-implement.md` already threads into the implementer).
+  Forward it verbatim when the caller supplies one; `null`
+  otherwise. `/relay-execute` populates this when it re-adopts
+  `/relay-plan` after a `plan-reviewer` rejection — before this
+  input existed the value was computed upstream and silently
+  dropped here, which is why a rejected plan was regenerated
+  blind rather than corrected.
 
 Run Phases 0 through 5 as specified by `plan-writer.md`. At Phase
 2 GROUNDING, the Writer invokes the research subagents in a single
@@ -295,6 +305,13 @@ Execution context to pass into the Writer's Phase 0.B setup:
   `--design-spec` override, when set (absent/null otherwise; no
   PRD-mode auto-derivation applies in description mode — there is no
   source PRD).
+- `prior_feedback`: the reviewer defect list from a prior
+  `CHANGES_REQUESTED` verdict, in the canonical
+  `list<{rubric_id, reason}>` shape. Forward it verbatim when the
+  caller supplies one; `null` otherwise. Identical semantics to
+  Phase A's own `prior_feedback` bullet — description-mode plans
+  are rejected and retried by the same loop, so they need the same
+  input.
 
 Run Phase 0.B then Phase 1.B (flat filename + collision check),
 then Phases 2–4 (grounding, Decision Gate, plan body), then
@@ -416,7 +433,11 @@ and the command exits without writing any plan file. The
 - **Never re-run the Writer on CHANGES_REQUESTED.** That is the
   orchestrator's call (`/relay-execute`), not this command's. A
   single `/relay-plan` invocation produces zero or one DRAFT plan;
-  it never loops.
+  it never loops. This is unchanged by the `prior_feedback` input
+  above: forwarding a caller-supplied defect list into a single
+  Writer adoption is not looping. The command still never decides
+  to retry — it only stops discarding the feedback when the
+  orchestrator has already decided to.
 
 ---
 
