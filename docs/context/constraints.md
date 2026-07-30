@@ -63,17 +63,22 @@ Accepted as technical debt on 2026-07-30, during the `targeted-retry` plan
 review (`PRPs/plans/targeted-retry-writers-consume-reviewer-feedback-in-relay.review.jsonl`,
 attempt 2). Recorded rather than fixed, by explicit human decision:
 
-- **Plan-level verification gaps carried into the `targeted-retry` plan.** Two
+- ~~**Plan-level verification gaps carried into the `targeted-retry` plan.** Two
   `R-COH-*` findings were accepted rather than resolved: (a)
   `R-COH-AC-UNVERIFIABLE` — AC-A6 (the `plan-writer.md` "Re-grounding without
   cause" anti-pattern amendment) has no verification path in any task VALIDATE
   or Level block; (b) `R-COH-OTHER-INTERNAL-CONTRADICTION` — Task 3's VALIDATE
   is weaker than its own ACTION (bare `grep -q` for a "BOTH input groups" claim
   that Task 1 guards with a `>=2` count, and only 2 of the 4 grounding-dependent
-  rubric IDs AC-A5 names). Exposure: a half-completed Task 3 would leave
-  description-mode retries blind — half the feature — without failing any gate.
-  Mitigated for this execution by manual verification at implement time; the
-  weak gates themselves remain as debt for any future re-run of the plan.
+  rubric IDs AC-A5 names).~~
+  **Discharged 2026-07-30:** the new `feedback-chain` check in
+  `scripts/validate/checks/` converts all three claims into deterministic gates
+  (`input-declared-in-both-mode-groups`,
+  `grounding-carve-out-names-all-four-ids`,
+  `regrounding-anti-pattern-consistent-with-phase-2`), so the one-time manual
+  verification done at implement time is now a permanent regression gate. Each
+  assertion class was mutation-tested — a deliberately broken fixture per class
+  makes the check fail — rather than merely observed passing on a green tree.
 
 - **Reviewer non-determinism across attempts.** `plan-reviewer` surfaced two
   disjoint defect classes on two consecutive runs of the same rubric against the
@@ -87,6 +92,22 @@ attempt 2). Recorded rather than fixed, by explicit human decision:
   property. Not yet scoped — likely candidates are a deterministic checklist
   ordering for the K=5 pass, or carrying prior-attempt findings into the next
   run so the reviewer cannot silently change what it looks for.
+
+- **`reference/validation-checks.html` is two checks behind.** That page's
+  contract is a full per-check section (functionality guarded, a passing
+  example, a failing example with the verbatim finding text, and the unit
+  tests covering it). It documents eight checks and its own totals line still
+  says eight; `gating-structure` (shipped v0.23.0) and `feedback-chain`
+  (shipped 2026-07-30) both lack sections. The guide page
+  (`guide/validation-suite.html`) and `CLAUDE.md` were corrected to ten on
+  2026-07-30, but the reference page was deliberately not back-filled in the
+  same change: `feedback-chain` has no `node:test` unit tests yet, so a
+  section written now would either be incomplete or would claim coverage that
+  does not exist. Those unit tests are test-pair work — under R-X strict with
+  `tdd: false` the Implementer authors zero test files, so
+  `feedback-chain.test.mjs` must come from `test-writer`/`test-reviewer`
+  (`docs/decisions.md` [2026-05-06]). Write the tests first, then both
+  reference sections.
 
 (The TDD-declaration convention — originally an open question from §12 —
 was resolved on 2026-04-19 and is recorded in `docs/decisions.md`. Format:
