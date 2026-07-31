@@ -398,17 +398,24 @@ At least one AC produced `NEW_TEST_REQUIRED`,
 `EXISTING_TEST_UPDATED`, `OBSOLETE_TEST_REMOVED`, or
 `REDUNDANT_TEST_REMOVED`, and zero ACs produced `AMBIGUOUS`.
 
-Before proceeding to Step 3.1, run the **lifecycle-ledger
-completeness self-check**: confirm every UPDATE and every DELETE
+Before Step 3.1, run the **pre-emission self-check**. Either
+failure is a self-detected defect: fix it first, then write the
+manifest.
+
+1. **Ledger completeness** — confirm every UPDATE and every DELETE
 performed this session (across all outcomes above) has a matching
 lifecycle-ledger entry — classification + justification — that
 Step 3.1 will record. If any UPDATE/DELETE is missing its ledger
 entry, treat this as a self-detected defect: do NOT write a
 manifest with an incomplete ledger; add the missing entry first.
+2. **Coverage completeness** — every in-scope AC has an explicit
+recorded outcome: a test you wrote, a documented mapping to a test
+that already covers it, or a lifecycle entry retiring it. No AC may
+be left silently unaddressed.
 (This mirrors AC-9 of the source PRD; `test-reviewer`'s
-`R-LIFECYCLE-LEGITIMATE` independently re-verifies the same
-completeness property — this self-check does not replace that
-independent validation, it front-runs it.)
+`R-LIFECYCLE-LEGITIMATE` and `R-AC-COVERAGE` independently
+re-verify these same properties — this self-check does not replace
+that independent validation, it front-runs it.)
 
 Proceed to Step 3.1.
 

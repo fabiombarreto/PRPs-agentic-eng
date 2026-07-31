@@ -24,9 +24,18 @@
  *   runFeedbackChainCheck() — thin wrapper that reads the registered files
  *     and delegates.
  *
+ * It also guards the pre-emission self-checks each writer gained after the
+ * first-attempt failure rates were measured (50% of plans, 34% of
+ * implementations): the block exists, it frames itself as front-running the
+ * reviewer rather than replacing it, its item lines state artifact properties
+ * instead of quoting rubric ids, `plan-writer`'s sits before the write step,
+ * and `implementer`'s stayed a labelled block rather than becoming a third
+ * `### Phase 4.` heading (a corpus test pins that count at two).
+ *
  * Extensible by design: add a `{ command, agent }` entry to PAIRS when a new
- * writer/reviewer pair gains the input, mirroring `gating-structure.mjs`'s
- * SITES registry precedent rather than creating a new check module.
+ * writer/reviewer pair gains the input, or a SELF_CHECKS entry when a writer
+ * gains a self-check, mirroring `gating-structure.mjs`'s SITES registry
+ * precedent rather than creating a new check module.
  *
  * Runtime: Node.js >= 18. No npm dependencies.
  */
@@ -141,8 +150,52 @@ const PLAN_WRITER_INVARIANTS = [
   },
 ];
 
+/**
+ * Each writer's pre-emission self-check: the marker that opens the block and
+ * the pattern that closes it. The block must exist, its ITEM lines must state
+ * artifact properties rather than quote the reviewer's rubric, and it must
+ * frame itself as front-running the reviewer rather than replacing it.
+ *
+ * The item-vs-prose split is load-bearing: `test-writer`'s closing
+ * parenthetical is REQUIRED to name `R-LIFECYCLE-LEGITIMATE` and
+ * `R-AC-COVERAGE` (that is the front-running framing), so a whole-block
+ * prohibition on rubric tokens would contradict the very design it guards.
+ * Only item lines — those opening with `1.`-style numbering or a dash — are
+ * held to the no-rubric-token rule.
+ *
+ * @type {Array<{ agent: string, id: string, start: RegExp, end: RegExp }>}
+ */
+const SELF_CHECKS = [
+  {
+    agent: PLAN_WRITER,
+    id: 'plan-writer',
+    start: /^### Step 4\.4\.ter — Pre-emission self-check/,
+    end: /^### /,
+  },
+  {
+    agent: 'plugins/relay/agents/implementer.md',
+    id: 'implementer',
+    start: /^\*\*Pre-emission self-check\*\*/,
+    end: /^Emit exactly one verdict/,
+  },
+  {
+    agent: 'plugins/relay/agents/test-writer.md',
+    id: 'test-writer',
+    start: /^Before Step 3\.1, run the \*\*pre-emission self-check\*\*/,
+    end: /^Proceed to Step 3\.1/,
+  },
+];
+
+/** A rubric identifier such as `R-COH-TASK-AC-MISSING` or `R-SEM`. */
+const RUBRIC_TOKEN = /R-[A-Z][A-Z-]+/;
+
+/** An item line inside a self-check block: numbered, or a dash bullet. */
+const ITEM_LINE = /^\s*(?:\d+\.|-)\s/;
+
 /** Every file this check reads. */
-export const WATCHED_FILES = [...new Set(PAIRS.flatMap((p) => [p.command, p.agent]))];
+export const WATCHED_FILES = [
+  ...new Set([...PAIRS.flatMap((p) => [p.command, p.agent]), ...SELF_CHECKS.map((s) => s.agent)]),
+];
 
 /**
  * Pure check function — no file I/O of its own.
@@ -181,6 +234,54 @@ export function checkFeedbackChain({ files }) {
       const err = inv.check(planWriter);
       if (err) add(`${inv.id}: ${err}`, PLAN_WRITER);
     }
+  }
+
+  for (const sc of SELF_CHECKS) {
+    const content = files[sc.agent];
+    if (!content) continue; // already reported by the PAIRS loop or the wrapper
+
+    const block = slice(content, sc.start, sc.end);
+    if (block === null) {
+      add(`self-check missing: no pre-emission self-check block found, so nothing runs before this writer emits`, sc.agent);
+      continue;
+    }
+    // The block must front-run the reviewer, not present itself as the gate.
+    if (!/front-run/.test(block)) {
+      add('self-check does not state that it front-runs (rather than replaces) the reviewer\'s independent rubric', sc.agent);
+    }
+    // AC-A2: items state artifact properties; rubric tokens belong only in the
+    // surrounding front-running prose, never in an item.
+    for (const line of block.split('\n')) {
+      if (ITEM_LINE.test(line) && RUBRIC_TOKEN.test(line)) {
+        add(`self-check item quotes a rubric id instead of stating the property: "${line.trim().slice(0, 80)}"`, sc.agent);
+      }
+    }
+  }
+
+  // plan-writer's self-check must precede the write, or it is not pre-emission.
+  if (planWriter) {
+    const lines = planWriter.split('\n');
+    const check = lines.findIndex((l) => /^### Step 4\.4\.ter — Pre-emission self-check/.test(l));
+    const write = lines.findIndex((l) => /^### Step 4\.5 — Write the file/.test(l));
+    if (check !== -1 && write !== -1 && check > write) {
+      add(`self-check sits at line ${check + 1}, after the write step at line ${write + 1} — it cannot be pre-emission`, PLAN_WRITER);
+    }
+  }
+
+  // implementer's check must be a labelled block, not a third Phase 4 heading:
+  // figma-track-ac2-reuse-enforcement.test.mjs asserts the count is exactly 2.
+  const implementer = files['plugins/relay/agents/implementer.md'];
+  if (implementer) {
+    const n = implementer.split('\n').filter((l) => /^### Phase 4\./.test(l)).length;
+    if (n !== 2) {
+      add(`expected exactly 2 '### Phase 4.' headings, found ${n} — a corpus test pins this count`, 'plugins/relay/agents/implementer.md');
+    }
+  }
+
+  // test-writer's original ledger sentence must survive the extension verbatim.
+  const testWriter = files['plugins/relay/agents/test-writer.md'];
+  if (testWriter && !testWriter.includes('confirm every UPDATE and every DELETE')) {
+    add('the original lifecycle-ledger sentence was lost when the self-check was extended', 'plugins/relay/agents/test-writer.md');
   }
 
   return { name: CHECK_NAME, ok: findings.length === 0, findings };

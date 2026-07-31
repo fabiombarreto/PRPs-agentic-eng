@@ -1251,6 +1251,70 @@ review, are recorded as technical debt in
 
 ---
 
+## [2026-07-30] Writer pre-emission self-checks: authoring rules, never rubric restatement
+
+**Context:** After v0.23.1 closed the `prior_feedback` pipe, the audit logs
+still showed a 50% first-attempt failure rate on plans (39/78) and 34% on
+implementations (23/67). v0.23.1 cannot move those numbers by construction —
+`prior_feedback` is null on attempt 1, so it only reduces the cost of later
+attempts. The first-attempt rate had a separate cause: every writer was graded
+against rubric items its own protocol never mentioned. Of the six checks
+causing 73% of the 97 recorded plan-review failures, `plan-writer.md` named
+one; of the three causing 80% of the 44 code-review failures, `implementer.md`
+named none (`R-SEM` appeared 24 times in `code-reviewer.md`, zero times in
+`implementer.md`). The distribution being concentrated rather than diffuse is
+what made a short targeted check plausible where a generic "review your work"
+instruction would not be.
+
+**Decision:** Each of `plan-writer`, `implementer`, and `test-writer` carries a
+named pre-emission self-check covering only its own concentrated defect
+classes, placed at the point where its authoring path and its
+`## Targeted revision mode` revision path converge on the terminal write —
+`plan-writer`'s new Step 4.4.ter before Step 4.5, `implementer`'s labelled
+block at the top of Phase 4, `test-writer`'s existing lifecycle-ledger check
+extended in place to two items. Three rules bind the design. (1) **Items state
+artifact properties, never the reviewer's rubric wording** — showing a model
+the criteria it is graded on measurably increases literal compliance that
+satisfies the check while failing the goal, so an item says "every task names
+an acceptance criterion it satisfies", not the id of the check that tests it.
+Rubric ids are permitted only in the surrounding front-running prose. (2) **Each
+check front-runs, never replaces** — the reviewer re-runs its full rubric
+independently on every attempt, unchanged. (3) **`implementer`'s check is a
+labelled block, not a `### Phase 4.` heading**, because a corpus test pins that
+count at exactly two. All three rules are enforced mechanically by the
+`feedback-chain` check, each assertion mutation-tested rather than merely
+observed passing.
+
+**Reason:** The measured cause was informational, not a rubric weakness, so the
+fix belongs entirely on the writer side and no reviewer file is touched. The
+phrasing prohibition is the mitigation the specification-gaming research
+specifically recommends — state the underlying property and its intent rather
+than the grader's wording — and it is why this is not simply "paste the rubric
+into the writer", which would both invite gaming and inflate prompts whose
+length already dilutes the instructions that matter. The line budget was
+deliberately relaxed from "no growth" to "at most 2% growth" mid-implementation:
+hitting zero would have required deleting the one worked exit-code example in
+`plan-writer.md`, the concrete anchor that the same research says protects
+against the gaming risk this entry exists to bound. Trading it for a
+self-imposed number would have been metric-gaming of exactly the kind the
+decision is meant to prevent.
+
+**Areas affected:** `plugins/relay/agents/plan-writer.md` (new Step 4.4.ter;
+`Cosmetic validation gates` anti-pattern collapsed to a cross-reference),
+`plugins/relay/agents/implementer.md` (Phase 4 labelled block),
+`plugins/relay/agents/test-writer.md` (lifecycle self-check extended to
+ledger + coverage), `scripts/validate/checks/feedback-chain.mjs` (SELF_CHECKS
+registry and its five assertions). Explicitly NOT
+`plugins/relay/agents/plan-reviewer.md`, `code-reviewer.md`,
+`code-reviewer-semantic.md`, or `test-reviewer.md` — no rubric item is added,
+removed, reworded, or reweighted. The decisive follow-up is the first-attempt
+failure rate itself: if it does not fall below about 35% after roughly ten new
+artifacts, the self-refinement research that predicts marginal gains is the
+better explanation than the concentration hypothesis, and the honest response
+is to revert rather than add more checklist items.
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision

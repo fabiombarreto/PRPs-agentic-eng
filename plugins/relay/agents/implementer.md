@@ -499,6 +499,21 @@ The agent's job ends at emitting the verdict.
 
 ## Phase 4 — Verdict
 
+**Pre-emission self-check** — run this before emitting, on every
+attempt, including a `prior_feedback` revision. Any failure is a
+self-detected defect: fix the diff, then emit. This front-runs
+`code-reviewer`, which re-runs its full rubric independently
+regardless; it does not replace that validation.
+
+- **Read the whole diff once more.** No two edits may assert
+  contradictory things about the same symbol, path, or count.
+- **Every changed line traces to a task the plan authorized**, and
+  no task was silently widened, narrowed, or skipped.
+- **Every comment you touched or added describes what the code now
+  does**, not what it used to do.
+- **No test file is in this diff.** R-X is absolute; no citation,
+  reason, or plan wording authorizes an exception.
+
 Emit exactly one verdict, in one of the two byte-exact shapes below.
 
 ### Phase 4.A — IMPLEMENTATION_COMPLETE

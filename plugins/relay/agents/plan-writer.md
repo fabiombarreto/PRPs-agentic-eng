@@ -1078,6 +1078,27 @@ If you need to update these strings, do so at
 `plugins/relay/agents/prd-writer.md` Step 7.4 — that is the single
 source of truth — and not here.
 
+### Step 4.4.ter — Pre-emission self-check
+
+Before Step 4.5 writes, run the **pre-emission self-check** on the
+assembled body. It runs on every emission — first authoring and
+`prior_feedback` revision alike, since `## Targeted revision mode`
+also exits through here. Any failure is a self-detected defect: fix
+the body, then write. This front-runs `plan-reviewer`, which re-runs
+its full rubric independently regardless; it does not replace it.
+
+1. **Tasks and acceptance criteria cover each other both ways** —
+   no task satisfying nothing, no criterion nothing delivers.
+2. **No two sections contradict** — `## Summary`, `## Metadata` and
+   `## Files to Change` must agree with the task list on the file
+   set, the counts, and the approach.
+3. **Every `**MIRROR**` cites a `# SOURCE:` anchor present in this
+   plan's `## Patterns to Mirror`** — add the snippet if it is
+   missing; never name an anchor then say it does not apply.
+4. **Every `## Mandatory Reading` row is a file this phase's
+   implementer must open**, and each cited line range matches what
+   is actually there.
+
 ### Step 4.5 — Write the file
 
 Use `Write` to create the plan at the path computed in Step 1.5,
@@ -1206,11 +1227,8 @@ invoked separately by `/relay-plan-review`.
 - **Inventing `file:line` references.** Every code snippet in
   Patterns to Mirror carries a `source` field from a real research
   finding, or is replaced by `TBD - needs validation`.
-- **Cosmetic validation gates.** A Level-1/2/3 or `**VALIDATE**`
-  command of the form `<check> && echo "PASS" || echo "FAIL"`
-  always exits 0 and can never fail the `code-reviewer` R-L gate.
-  Emit `if …; then echo "FAIL: …"; exit 1; fi` — or let the tool's
-  own non-zero status propagate — instead. See Step 4.4 item 11.
+- **Cosmetic validation gates.** A Level or `**VALIDATE**` command
+  that cannot exit non-zero is not a gate. See Step 4.4 item 11.
 - **Authoring a side-effecting task inside a `phase_scope: visual`
   plan.** A task naming a real network call, persistence write, or
   business mutation (or a displayed-datum/interactive-action task
