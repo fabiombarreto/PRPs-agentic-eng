@@ -21,19 +21,30 @@
  *
  * Splitting rule: an artifact belongs to the AFTER set when its FIRST recorded
  * verdict is later than the marker. That measures newly-authored artifacts
- * rather than mixing in retries of work that predates the change.
+ * rather than mixing in retries of work that predates the change. An artifact
+ * with ANY entry carrying `timestamp_degraded: true` is excluded from BOTH the
+ * before and after sets before this split runs at all — the producer already
+ * declared that stamp a placeholder, so which side of the marker it belongs on
+ * cannot be established. The exclusion is reported through its own named
+ * warning rather than silently affecting either count. This is exclusion, not
+ * classify-with-a-warning: it reuses the existing `undated` idiom below rather
+ * than keeping a known-wrong number in the headline (see `docs/decisions.md`).
  *
  * Honesty guard: some historical entries carry a date-only midnight timestamp,
  * so a purely time-based split can misclassify same-day artifacts. `compare`
  * therefore recomputes the BEFORE set and diffs it against the numbers the
  * snapshot recorded; any mismatch is printed as a warning rather than being
- * silently folded into the result.
+ * silently folded into the result. This guard is orthogonal to the
+ * `timestamp_degraded` exclusion above: an unflagged historic midnight stamp
+ * stays classified (and can still drift into this warning), while a flagged
+ * one is excluded from the split entirely and never reaches this guard.
  *
  * Runtime: Node.js >= 18. No npm dependencies.
  */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const PLANS_DIR = 'PRPs/plans';
 const SNAP_DIR = 'PRPs/reports/efficiency';
@@ -49,9 +60,9 @@ const PASSING = new Set(['APPROVED', 'RUBRIC_PASSED']);
 
 /**
  * Read every verdict in the corpus, grouped per artifact.
- * @returns {Array<{stage: string, file: string, entries: Array<{timestamp: string, verdict: string, action: string, fails: string[]}>}>}
+ * @returns {Array<{stage: string, file: string, entries: Array<{timestamp: string, verdict: string, action: string, fails: string[], degraded: boolean}>}>}
  */
-function readCorpus() {
+export function readCorpus() {
   if (!existsSync(PLANS_DIR)) return [];
   const artifacts = [];
   for (const name of readdirSync(PLANS_DIR)) {
@@ -71,6 +82,10 @@ function readCorpus() {
         verdict: j.verdict ?? '',
         action: j.action ?? '',
         fails: (j.rubric ?? []).filter((r) => r.passed === false).map((r) => r.id),
+        // Parsed off the JSON object, never by substring: one file in the
+        // corpus mentions this literal token inside a reviewer's prose
+        // `reason` string with no such field, which a grep would wrongly match.
+        degraded: j.timestamp_degraded === true,
       });
     }
     if (entries.length) artifacts.push({ stage: STAGES[suffix], file: name, entries });
@@ -82,7 +97,7 @@ function readCorpus() {
  * Aggregate a set of artifacts into the headline metrics.
  * @param {ReturnType<typeof readCorpus>} artifacts
  */
-function aggregate(artifacts) {
+export function aggregate(artifacts) {
   /** @type {Record<string, any>} */
   const out = {};
   for (const stage of Object.values(STAGES)) {
@@ -113,7 +128,28 @@ function aggregate(artifacts) {
 }
 
 /** First recorded timestamp for an artifact, or '' when unknown. */
-const firstSeen = (a) => a.entries.map((e) => e.timestamp).filter(Boolean).sort()[0] ?? '';
+export const firstSeen = (a) => a.entries.map((e) => e.timestamp).filter(Boolean).sort()[0] ?? '';
+
+/** Whether any entry in the artifact was flagged by its producer as an unreliable timestamp. */
+export const hasDegradedTimestamp = (a) => a.entries.some((e) => e.degraded);
+
+/**
+ * Pure classification: partitions artifacts into degraded / before / after /
+ * undated sets against a release marker, with no I/O. Degraded artifacts are
+ * pre-filtered out before the before/after/undated split runs, so they land
+ * in neither aggregate — see the module docblock's Splitting rule.
+ * @param {ReturnType<typeof readCorpus>} artifacts
+ * @param {string} markerUtc
+ * @returns {{before: ReturnType<typeof readCorpus>, after: ReturnType<typeof readCorpus>, undated: ReturnType<typeof readCorpus>, degraded: ReturnType<typeof readCorpus>}}
+ */
+export function classifyArtifacts(artifacts, markerUtc) {
+  const degraded = artifacts.filter((a) => hasDegradedTimestamp(a));
+  const rest = artifacts.filter((a) => !hasDegradedTimestamp(a));
+  const before = rest.filter((a) => firstSeen(a) && firstSeen(a) <= markerUtc);
+  const after = rest.filter((a) => firstSeen(a) > markerUtc);
+  const undated = rest.filter((a) => !firstSeen(a));
+  return { before, after, undated, degraded };
+}
 
 function arg(flag, fallback = null) {
   const i = process.argv.indexOf(flag);
@@ -173,9 +209,7 @@ function doCompare() {
   }
 
   const artifacts = readCorpus();
-  const before = artifacts.filter((a) => firstSeen(a) && firstSeen(a) <= snap.markerUtc);
-  const after = artifacts.filter((a) => firstSeen(a) > snap.markerUtc);
-  const undated = artifacts.filter((a) => !firstSeen(a));
+  const { before, after, undated, degraded } = classifyArtifacts(artifacts, snap.markerUtc);
 
   const beforeNow = aggregate(before);
   const afterNow = aggregate(after);
@@ -200,6 +234,14 @@ function doCompare() {
   }
   if (undated.length) {
     process.stdout.write(`  WARNING - ${undated.length} artifact(s) have no usable timestamp and are excluded from both sides.\n\n`);
+  }
+  if (degraded.length) {
+    process.stdout.write(
+      `  WARNING - ${degraded.length} artifact(s) carry a producer-flagged unreliable timestamp\n` +
+        `  (timestamp_degraded) and are excluded from both sides:\n`,
+    );
+    for (const a of degraded) process.stdout.write(`    ${a.file}\n`);
+    process.stdout.write('\n');
   }
 
   const totalAfter = Object.values(STAGES).reduce((n, s) => n + afterNow[s].artifacts, 0);
@@ -236,14 +278,20 @@ function doCompare() {
   }
 }
 
-const mode = process.argv[2];
-if (mode === 'snapshot') doSnapshot();
-else if (mode === 'compare') doCompare();
-else {
-  process.stderr.write(
-    'Usage:\n' +
-      '  node scripts/efficiency.mjs snapshot --label <version> [--note "..."]\n' +
-      '  node scripts/efficiency.mjs compare [--since <version>]\n',
-  );
-  process.exit(2);
+// Guarded so the module can be imported (e.g. for unit testing the pure
+// classifier above) with no side effects — only a direct CLI invocation
+// dispatches. Mirrors the only other import.meta.url CLI-entry guard in this
+// repo, plugins/relay/scripts/normalize-test-output.mjs:334.
+if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
+  const mode = process.argv[2];
+  if (mode === 'snapshot') doSnapshot();
+  else if (mode === 'compare') doCompare();
+  else {
+    process.stderr.write(
+      'Usage:\n' +
+        '  node scripts/efficiency.mjs snapshot --label <version> [--note "..."]\n' +
+        '  node scripts/efficiency.mjs compare [--since <version>]\n',
+    );
+    process.exit(2);
+  }
 }

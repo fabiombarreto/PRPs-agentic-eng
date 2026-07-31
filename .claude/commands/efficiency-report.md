@@ -52,6 +52,13 @@ Two headline metrics per stage:
    - *"WARNING - the before-set does not reproduce the snapshot exactly"* —
      some historical entries carry a date-only timestamp, so same-day
      artifacts can land on either side of the marker. Small deltas are noise.
+   - *"WARNING - N artifact(s) carry a producer-flagged unreliable timestamp
+     (timestamp_degraded) and are excluded from both sides"* — the producer
+     itself declared these stamps placeholders, so `compare` excludes the
+     named artifacts from both the before and after sets rather than
+     guessing which side they belong on. Distinct from the snapshot-drift
+     warning above: this one names files, not a count-vs-count mismatch.
+     Report the excluded files if you cite either total.
 
 3. **Report the delta per stage**, and state which direction is good: lower is
    better for both metrics.

@@ -1389,6 +1389,59 @@ mechanism.
 
 ---
 
+## [2026-07-31] A `timestamp_degraded` entry excludes its artifact from before/after classification — rejects classify-with-a-warning
+
+**Context:** The `timestamp_degraded` flag (recorded above) declares a
+verdict entry's stamp a placeholder, but nothing consumed it:
+`scripts/efficiency.mjs compare` classified every artifact by its first
+verdict's raw timestamp regardless of the flag, so a flagged midnight
+stamp still silently sorted a post-marker artifact into the BEFORE set —
+the exact miscount the flag exists to make visible, now merely labelled
+rather than fixed. Reproduced concretely: the one genuinely degraded
+corpus entry (`add-an-11th-static-check-to-scriptsvalidate-that.review.jsonl`)
+was reviewed after the `v0.25.0` marker but counted as pre-change,
+producing the drift `plan-review: snapshot recorded 81 artifacts,
+recomputed 82`.
+
+**Decision:** An artifact with ANY entry carrying `timestamp_degraded:
+true` is UNCLASSIFIABLE and is excluded from both the before and after
+sets, mirroring the existing `undated` bucket exactly — the same idiom
+for "no usable timestamp, excluded from both sides, count reported" is
+reused rather than inventing a second doubt-signalling mechanism. A new
+`WARNING -` line, distinct from the `undated` warning, names every
+excluded artifact file so the exclusion is visible rather than merely
+absent from the totals. `timestamp-contract.mjs` additionally gained a
+`CONSUMERS` registry asserting that `scripts/efficiency.mjs` references
+`timestamp_degraded` in executable code (comments stripped), gating the
+consumer end of the contract the same way the existing `REVIEWERS`/
+`COMMANDS` registries gate the producer end.
+
+**Reason:** The rejected alternative was classify-with-a-warning — keep
+the artifact in its time-based bucket and merely print a caution next to
+it. That was rejected because it keeps a known-wrong number in the
+headline metric and relies on the reader to discount it every time,
+which is exactly what this tool's existing small-sample and drift
+cautions already exist to avoid; exclusion instead makes the number
+itself correct and pushes the caveat into a named, unmissable warning.
+Over-exclusion is the safe direction here — a shrinking sample is
+visible and directional, while a silently-wrong classification is not.
+No partially-sound refinement (e.g. "classify as BEFORE when some real
+entry predates the marker") was adopted either: it would only sharpen
+the already-approximate BEFORE side, never the scarce AFTER side, and
+was judged not worth the added complexity.
+
+**Areas affected:** `scripts/efficiency.mjs` (`readCorpus`,
+`classifyArtifacts`, `doCompare`); `scripts/validate/checks/timestamp-contract.mjs`
+(`CONSUMERS` registry); `docs/context/constraints.md` (the 2026-07-31
+degenerate-timestamp entry's stale "silently counted as pre-change"
+consequence, now corrected); `.claude/commands/efficiency-report.md`
+(step 2's warning enumeration). The 128 historic, unflagged
+`T00:00:00Z` entries are unaffected — they carry no flag and remain
+classified, subject only to the pre-existing day-apart-boundaries
+caveat.
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision

@@ -72,6 +72,57 @@
           &mdash; new <code>timestamp-contract</code> per-check section and
           summary-table row, and every ten-to-eleven count reference
           corrected (133 <code>node:test</code> unit tests across 11 checks).</li>
+        <li><strong>Closing the consumer half of the v0.25.0
+          <code>review_started_at</code> timestamp contract.</strong>
+          <code>scripts/validate/checks/timestamp-contract.mjs</code> gained a
+          <code>CONSUMERS</code> registry, currently listing
+          <code>scripts/efficiency.mjs</code>, asserting that a registered
+          consumer references <code>timestamp_degraded</code> in executable
+          code (comments stripped first) rather than merely documenting it
+          &mdash; gating the consumer end of the contract the same way the
+          existing <code>REVIEWERS</code>/<code>COMMANDS</code> registries
+          gate the producer end. <code>scripts/efficiency.mjs</code>'s
+          <code>compare</code> mode now honors the flag it previously
+          ignored: any artifact carrying a <code>timestamp_degraded</code>
+          entry is excluded from both the before and after sets, mirroring
+          the existing <code>undated</code> bucket, and reported through a
+          new, distinct <code>WARNING -</code> line naming the affected
+          files. To make the exclusion rule unit-testable, the module's
+          classification logic moved into a pure exported
+          <code>classifyArtifacts</code> function and its top-level CLI
+          dispatch gained an <code>import.meta.url</code> guard (mirroring
+          <code>plugins/relay/scripts/normalize-test-output.mjs</code>) so the
+          module can be imported without side effects.
+          <code>scripts/efficiency.test.mjs</code> (new suite) and
+          <code>scripts/validate/checks/timestamp-contract.test.mjs</code>
+          (extended) are test-pair work, authored after the Implementer
+          per R-X strict.</li>
+      </ul>
+
+      <h3 id="unreleased-changed">Changed</h3>
+      <ul>
+        <li><strong><code>docs/decisions.md</code></strong> &mdash; new dated
+          entry recording the exclusion-over-classification decision for
+          <code>timestamp_degraded</code> artifacts and the rejected
+          classify-with-a-warning alternative.</li>
+        <li><strong><code>docs/context/constraints.md</code></strong> &mdash;
+          the 2026-07-31 degenerate-timestamp entry's stale "silently counted
+          as pre-change" consequence corrected to describe the new exclusion
+          policy; the 128 historic, unflagged entries are stated explicitly
+          to remain classified (not excluded), so the two populations are not
+          confused.</li>
+        <li><strong><code>.claude/commands/efficiency-report.md</code></strong>
+          &mdash; step 2's warning enumeration extended with the new
+          degraded-exclusion <code>WARNING -</code> line so the skill does
+          not walk past it.</li>
+        <li><strong><code>documentation/reference/validation-checks.html</code></strong>
+          &mdash; <code>timestamp-contract</code> section prose extended to
+          describe the <code>CONSUMERS</code> registry and its
+          comment-stripping executable-reference assertion; new
+          <code>efficiency-metrics</code> section and summary-table row for
+          <code>scripts/efficiency.test.mjs</code>. Per-row and total counts
+          are placeholders pending the test-writer/test-reviewer pair's
+          authorship of both suites (<code>tdd: false</code>, test-after).</li>
       </ul>
 
       <h2 id="v0-25-0">0.25.0 &#8212; 2026-07-31</h2>

@@ -135,13 +135,22 @@ by a `review_started_at` input every dispatching command now captures
 with `date -u +%Y-%m-%dT%H:%M:%SZ` and passes into its reviewer, which
 writes it verbatim into `timestamp`. Historic entries were deliberately
 NOT repaired — the real instant was never observed and cannot be
-reconstructed. Consequence: `scripts/efficiency.mjs compare` sorts
-artifacts by first verdict timestamp against a recorded release marker,
-so a same-day artifact stamped at midnight sorts before a mid-day marker
-and is silently counted as pre-change — this already corrupted the
-v0.24.0 comparison. Any `compare` run whose boundaries span a marker
-must therefore use boundaries at least a full day apart until the
-corpus refills with post-fix entries.
+reconstructed. Consequence, updated: `scripts/efficiency.mjs compare`
+now treats any artifact any of whose entries carries
+`timestamp_degraded: true` as unclassifiable — it is
+excluded from both the before and after sets, exactly like the
+existing `undated` bucket, because the producer already declared that
+stamp a placeholder so its side of the marker cannot be established —
+and names every excluded file through a dedicated `WARNING -` line,
+distinct from the pre-existing `undated` warning. The 128 historic
+entries described above carry no flag (the fallback did not exist yet
+when they were recorded), so they remain classified, not excluded, and
+the day-apart-boundaries caveat below continues to apply to that
+population specifically — the two populations (flagged/excluded vs.
+unflagged/still-classified-but-noisy) must not be confused. Any
+`compare` run whose boundaries span a marker must therefore use
+boundaries at least a full day apart until the corpus refills with
+post-fix entries.
 
 **Enforcement gap closed (2026-07-31).** The `review_started_at` fix
 above shipped as prose across 15 files with nothing mechanical holding

@@ -40,6 +40,25 @@
  *     timestamp_degraded fails; pre-marker is exempt; absent/unparseable
  *     marker skips with a visible note). Covered by class F below.
  *
+ * EXISTING_TEST_UPDATED (source plan, description mode — no source PRD):
+ *   PRPs/plans/close-the-consumer-half-of-the-v0250-reviewstartedat.plan.md
+ * That plan's own AC-A7/AC-A8/AC-A9 (distinct numbering from the AC-A1..AC-A6
+ * cited above, which trace to the earlier plan that created this check) add
+ * the CONSUMERS registry asserting a registered consumer references
+ * `timestamp_degraded` in EXECUTABLE code, not merely in a comment:
+ *   AC-A7 — WATCHED_FILES includes the registered consumer
+ *     scripts/efficiency.mjs. Covered by extending the existing WATCHED_FILES
+ *     inclusion test below (not a new test) plus class J's baseline test.
+ *   AC-A8 — the consumer assertion fails a comment-only reference (both `//`
+ *     and `/* *\/` forms) and passes an executable-code reference. Covered by
+ *     class J below.
+ *   AC-A9 — registry omissions are carried as a comment (scripts/eval.mjs and
+ *     .claude/commands/efficiency-report.md), never a silent gap. Covered by
+ *     a dedicated test below: both paths are asserted absent from
+ *     WATCHED_FILES AND asserted present in the module's own source text
+ *     (the CONSUMERS docblock), so removing either the exclusion or its
+ *     documented justification fails this test.
+ *
  * Run: node --test scripts/validate/checks/timestamp-contract.test.mjs
  */
 
@@ -142,6 +161,29 @@ Dispatch ${agentDesc} with \`review_started_at\` set to the instant captured imm
 `;
 }
 
+// ---------------------------------------------------------------------------
+// CONSUMERS registry fixture (class J below). Registered separately from
+// BASELINE_FILES above -- the CONSUMERS loop in checkTimestampContract is
+// independent of the REVIEWERS/COMMANDS loops, so isolating it in its own
+// `files: { [EFFICIENCY_MJS]: ... }` map mirrors class F's isolation
+// pattern for the jsonl-output assertion. Deliberately NOT copied verbatim
+// from the real scripts/efficiency.mjs -- this fixture exercises the
+// comment-stripping assertion itself, independent of the real file's exact
+// wording (the real file's own compliance is exercised end to end by
+// scripts/efficiency.test.mjs, not here).
+// ---------------------------------------------------------------------------
+const EFFICIENCY_MJS = 'scripts/efficiency.mjs';
+
+// Compliant baseline: references timestamp_degraded in executable code that
+// survives comment-stripping. Every class J test below is a mutation of
+// this SAME string, never an independently-authored fixture.
+const EFFICIENCY_MJS_CONTENT = `// synthetic stand-in for scripts/efficiency.mjs, isolated to exercise only
+// the CONSUMERS assertion (Assertion 6) in checkTimestampContract, below.
+export function hasDegradedTimestamp(entry) {
+  return entry.timestamp_degraded === true;
+}
+`;
+
 const BASELINE_FILES = {
   [CODE_REVIEWER]: bashReviewerContent('code-reviewer'),
   [DOCS_REVIEWER]: bashReviewerContent('docs-reviewer'),
@@ -185,6 +227,9 @@ test('WATCHED_FILES exports every registered reviewer and dispatching command pa
   for (const path of Object.keys(BASELINE_FILES)) {
     assert.ok(WATCHED_FILES.includes(path), `expected WATCHED_FILES to include ${path}`);
   }
+  // AC-A7 (close-the-consumer-half... plan) -- the CONSUMERS registry
+  // addition. Extends this existing shape test rather than duplicating it.
+  assert.ok(WATCHED_FILES.includes(EFFICIENCY_MJS), `expected WATCHED_FILES to include ${EFFICIENCY_MJS}`);
   assert.equal(new Set(WATCHED_FILES).size, WATCHED_FILES.length, 'WATCHED_FILES must not carry duplicates');
 });
 
@@ -196,6 +241,30 @@ test('WATCHED_FILES does not include the three deliberately excluded agents/comm
   ];
   for (const path of excluded) {
     assert.ok(!WATCHED_FILES.includes(path), `expected WATCHED_FILES to NOT include the deliberately excluded ${path}`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// AC-A9 (close-the-consumer-half... plan) -- CONSUMERS registry omissions
+// are carried as an explanatory comment, never a silent gap. Mirrors the
+// WATCHED_FILES-exclusion test immediately above, extended with a second
+// assertion that the module's own source text documents WHY each path is
+// excluded, so deleting the justification (while leaving the exclusion
+// itself intact) is caught too.
+// ---------------------------------------------------------------------------
+
+test('WATCHED_FILES does not include the two deliberately excluded CONSUMERS-scope files (scripts/eval.mjs, .claude/commands/efficiency-report.md), and the module source documents why', () => {
+  const excludedConsumers = ['scripts/eval.mjs', '.claude/commands/efficiency-report.md'];
+  for (const path of excludedConsumers) {
+    assert.ok(!WATCHED_FILES.includes(path), `expected WATCHED_FILES to NOT include the deliberately excluded consumer ${path}`);
+  }
+
+  const moduleSource = readFileSync(resolve('scripts/validate/checks/timestamp-contract.mjs'), 'utf-8');
+  for (const path of excludedConsumers) {
+    assert.ok(
+      moduleSource.includes(path),
+      `expected the module's CONSUMERS docblock to name ${path} as a deliberate, reasoned exclusion, not a silent gap`,
+    );
   }
 });
 
@@ -392,6 +461,60 @@ test('checkTimestampContract: reports a dispatching command missing its review_s
   assert.equal(result.findings.length, 1);
   assert.match(result.findings[0].message, /does not pass review_started_at through to the dispatched reviewer/);
   assert.equal(result.findings[0].file, RELAY_APPROVE_CMD);
+});
+
+// ---------------------------------------------------------------------------
+// Class J (AC-A7, AC-A8, close-the-consumer-half... plan) — the CONSUMERS
+// registry's executable-reference assertion (Assertion 6 in
+// checkTimestampContract, which sits between the COMMANDS loop and the
+// jsonl-output assertion in the source module). `files: { [EFFICIENCY_MJS]:
+// ... }` isolates these tests to exactly this property, the same isolation
+// pattern class F uses below for the jsonl assertion.
+// ---------------------------------------------------------------------------
+
+test('checkTimestampContract: J -- a registered consumer that references timestamp_degraded in executable code passes (baseline fixture)', () => {
+  const result = checkTimestampContract({ files: { [EFFICIENCY_MJS]: EFFICIENCY_MJS_CONTENT }, jsonlEntries: [], marker: null });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.findings, []);
+});
+
+test('checkTimestampContract: J -- a registered consumer that mentions timestamp_degraded only inside a `//` line comment fails', () => {
+  const mutated = EFFICIENCY_MJS_CONTENT.replace(
+    'export function hasDegradedTimestamp(entry) {\n  return entry.timestamp_degraded === true;\n}\n',
+    '// TODO: honor timestamp_degraded inside hasDegradedTimestamp below\nexport function hasDegradedTimestamp(entry) {\n  return false;\n}\n',
+  );
+  assert.notEqual(mutated, EFFICIENCY_MJS_CONTENT, 'fixture precondition: the executable reference line must exist verbatim in the baseline');
+  assert.ok(
+    !/timestamp_degraded/.test(mutated.replace(/\/\/.*$/gm, '')),
+    'fixture precondition: after stripping // comments, no executable reference to timestamp_degraded should remain',
+  );
+
+  const result = checkTimestampContract({ files: { [EFFICIENCY_MJS]: mutated }, jsonlEntries: [], marker: null });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.findings.length, 1);
+  assert.match(result.findings[0].message, /registered consumer does not reference timestamp_degraded in executable code \(comment-only or absent\)/);
+  assert.equal(result.findings[0].file, EFFICIENCY_MJS);
+});
+
+test('checkTimestampContract: J -- a registered consumer that mentions timestamp_degraded only inside a `/* *\\/` block comment fails', () => {
+  const mutated = EFFICIENCY_MJS_CONTENT.replace(
+    'export function hasDegradedTimestamp(entry) {\n  return entry.timestamp_degraded === true;\n}\n',
+    '/* TODO: honor timestamp_degraded inside hasDegradedTimestamp below */\nexport function hasDegradedTimestamp(entry) {\n  return false;\n}\n',
+  );
+  assert.notEqual(mutated, EFFICIENCY_MJS_CONTENT, 'fixture precondition: the executable reference line must exist verbatim in the baseline');
+  assert.ok(
+    !/timestamp_degraded/.test(mutated.replace(/\/\*[\s\S]*?\*\//g, '')),
+    'fixture precondition: after stripping /* */ comments, no executable reference to timestamp_degraded should remain',
+  );
+
+  const result = checkTimestampContract({ files: { [EFFICIENCY_MJS]: mutated }, jsonlEntries: [], marker: null });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.findings.length, 1);
+  assert.match(result.findings[0].message, /registered consumer does not reference timestamp_degraded in executable code \(comment-only or absent\)/);
+  assert.equal(result.findings[0].file, EFFICIENCY_MJS);
 });
 
 // ---------------------------------------------------------------------------

@@ -48,6 +48,17 @@
  *     inherits that command's `review_started_at` capture; requiring its
  *     own `date -u` capture would assert a contract that does not exist.
  *
+ * The check gates both ends of the contract: the REVIEWERS/COMMANDS loops
+ * above assert the PRODUCER half (reviewers emit `timestamp_degraded`
+ * correctly); the CONSUMERS registry below asserts the CONSUMER half (a
+ * registered file actually reads and honors the flag in executable code,
+ * not merely documents it in a comment) — mirroring `feedback-chain.mjs`'s
+ * PAIRS registry, the in-repo precedent for gating both ends of a contract
+ * rather than only one. This addition closes the exact gap that shipped the
+ * `timestamp_degraded` flag with a producer-only gate: `scripts/efficiency.mjs`
+ * carried no consumer-side code at all in the same session that built this
+ * check (see `docs/decisions.md`, dated entry recording the exclusion policy).
+ *
  * Runtime: Node.js >= 18. No npm dependencies.
  */
 
@@ -92,8 +103,31 @@ const COMMANDS = [
   'plugins/relay/commands/relay-design-spec.md',
 ];
 
+/**
+ * Every file that CONSUMES the `timestamp_degraded` flag — i.e. classifies
+ * or otherwise acts on jsonl artifacts by timestamp and must therefore
+ * honor the producer's placeholder-stamp declaration rather than trusting
+ * it. Registered consumers are asserted to reference `timestamp_degraded`
+ * in EXECUTABLE code (comments stripped first), not merely to document it.
+ *
+ * Deliberate exclusions, carried as a comment rather than a silent gap
+ * (mirroring `feedback-chain.mjs`'s `docs-updater` precedent above):
+ *
+ *   - `scripts/eval.mjs` — runs promptfoo evals against golden fixtures; it
+ *     never reads or classifies jsonl verdict entries by timestamp at all,
+ *     so there is no timestamp behavior for this contract to gate.
+ *   - `.claude/commands/efficiency-report.md` — a prose skill that shells
+ *     out to `scripts/efficiency.mjs`; the classification logic itself
+ *     lives entirely in the registered consumer below, so requiring the
+ *     skill file to also reference the flag in "executable code" would
+ *     assert a contract that does not exist for a Markdown prompt file.
+ *
+ * @type {string[]}
+ */
+const CONSUMERS = ['scripts/efficiency.mjs'];
+
 /** Every file this check reads. @type {string[]} */
-export const WATCHED_FILES = [...new Set([...REVIEWERS, ...COMMANDS])];
+export const WATCHED_FILES = [...new Set([...REVIEWERS, ...COMMANDS, ...CONSUMERS])];
 
 /** Slice `content` from the first line matching `startRe` up to the next line matching `endRe`. */
 function slice(content, startRe, endRe) {
@@ -136,6 +170,19 @@ function classifyDegradedMentions(section) {
   }
 
   return { setCount: total - negatedIndices.size, negatedCount: negatedIndices.size };
+}
+
+/**
+ * Strip `//` line comments and `/* *\/` block comments from source text, so
+ * the CONSUMERS assertion below cannot be satisfied by documentation alone —
+ * only a reference that survives comment-stripping counts as consuming the
+ * flag in executable code.
+ *
+ * @param {string} content
+ * @returns {string}
+ */
+function stripComments(content) {
+  return content.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
 }
 
 /**
@@ -216,6 +263,19 @@ export function checkTimestampContract({ files, jsonlEntries, marker }) {
     }
     if (!content.includes('review_started_at')) {
       add('does not pass review_started_at through to the dispatched reviewer', path);
+    }
+  }
+
+  // Assertion 6: consumer-side executable-reference check. A registered
+  // consumer must reference timestamp_degraded in code that survives
+  // comment-stripping — documenting the flag in a comment without
+  // consuming it fails, which is exactly the gap this registry gates.
+  for (const path of CONSUMERS) {
+    const content = files[path];
+    if (!content) continue; // already reported by the wrapper (missing/unreadable)
+
+    if (!stripComments(content).includes('timestamp_degraded')) {
+      add('registered consumer does not reference timestamp_degraded in executable code (comment-only or absent)', path);
     }
   }
 
