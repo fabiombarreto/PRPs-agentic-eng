@@ -125,6 +125,27 @@
           authorship of both suites (<code>tdd: false</code>, test-after).</li>
       </ul>
 
+      <h3 id="unreleased-fixed">Fixed</h3>
+      <ul>
+        <li><strong><code>documentation/guide/validation-suite.html</code></strong>
+          &mdash; stale check-count claims corrected from ten to eleven: the
+          "The ten static checks" section heading, the ten-row checks table
+          (which gains the missing <code>timestamp-contract</code> row, placed
+          last to match the runner's registration order), the
+          <code>npm run validate</code> code-block comment, and the
+          illustrative runner-output total. The page went stale at commit
+          <code>5302839</code>, which registered the 11th check but
+          deliberately scoped its documentation update to the
+          <a href="reference/validation-checks.html">Validation checks</a>
+          reference &mdash; a deferral ruled correctly-scoped at code review
+          and discharged here.</li>
+        <li><strong><code>documentation/assets/data/search-index.json</code></strong>
+          &mdash; the Validation suite guide's search excerpt said "eight
+          static consistency checks", two counts behind and stale since
+          v0.23.0, independently of the guide page's own drift; corrected to
+          eleven.</li>
+      </ul>
+
       <h2 id="v0-25-0">0.25.0 &#8212; 2026-07-31</h2>
       <p>Folds two pieces of work into one release cut. First, closes the last piece of documentation debt left open by 0.23.0 and 0.24.0: the validation-checks reference had fallen two checks behind the runner &mdash; <code>scripts/validate/index.mjs</code> registers ten and <code>npm run validate</code> reports ten PASS, but the page documented eight in its intro, summary table, totals line, and search excerpt, deliberately not back-filled at the time because that page's per-check contract requires naming the unit tests covering each check and <code>feedback-chain</code> had none. The tests came first; the page now cites real, verifiable counts. Second, fixes degenerate <code>T00:00:00Z</code> timestamps in relay reviewer jsonl audit logs: four reviewer agents (<code>plan-reviewer</code>, <code>prd-reviewer</code>, <code>design-map-reviewer</code>, <code>design-spec-reviewer</code>) have no <code>Bash</code> in their <code>tools:</code> allowlist, so a date-only stamp was the honest output of an agent asked for an instant it structurally could not observe; the three Bash-capable reviewers (<code>code-reviewer</code>, <code>test-reviewer</code>, <code>docs-reviewer</code>) carried a residual wording gap despite having a clock. A new <code>review_started_at</code> input, captured by each of the eight dispatching commands with <code>date -u +%Y-%m-%dT%H:%M:%SZ</code> immediately before dispatch, closes both: the reviewer writes it verbatim into <code>timestamp</code>, and a reviewer that receives no input never fabricates one &mdash; Bash-capable reviewers self-serve <code>date -u</code>, clockless ones append the verdict with <code>timestamp_degraded: true</code> so the gap stays visible rather than silent. Historic jsonl entries are deliberately NOT repaired. Plugin manifest bumped <code>0.24.0</code> &rarr; <code>0.25.0</code> per <a href="AGENTS.md">AGENTS.md</a> &sect;7.5.</p>
 
