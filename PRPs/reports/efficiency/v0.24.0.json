@@ -1,0 +1,116 @@
+{
+  "label": "v0.24.0",
+  "markerUtc": "2026-07-31T14:19:41.519Z",
+  "note": "Wave 2: writer pre-emission self-checks on plan-writer/implementer/test-writer. Wave 1 (prior_feedback targeted revision) shipped in v0.23.1 and cannot move the first-attempt failure rate by construction, so any change in THAT metric after this marker is attributable to wave 2. Runs-per-artifact may reflect either wave. Revert threshold: if the plan first-attempt rate has not fallen below ~35% after ~10 new artifacts, the self-refinement research in docs/decisions.md [2026-07-30] is the better explanation.",
+  "metrics": {
+    "plan-review": {
+      "artifacts": 79,
+      "runs": 134,
+      "runsPerArtifact": 1.7,
+      "firstAttemptFailures": 40,
+      "firstAttemptFailureRate": 50.6,
+      "topFailures": [
+        {
+          "id": "R-COH-TASK-AC-MISSING",
+          "n": 24
+        },
+        {
+          "id": "R-COH-OTHER-INTERNAL-CONTRADICTION",
+          "n": 13
+        },
+        {
+          "id": "R-COH-AC-TASK-DECOUPLED",
+          "n": 12
+        },
+        {
+          "id": "R-COH-PATTERN-TASK-DRIFT",
+          "n": 10
+        },
+        {
+          "id": "R-COH-MANDATORY-READING-IRRELEVANT",
+          "n": 7
+        },
+        {
+          "id": "R8",
+          "n": 6
+        },
+        {
+          "id": "R-COH-VALIDATE-FRAMEWORK-MISMATCH",
+          "n": 5
+        },
+        {
+          "id": "R-COH-VALIDATE-ALWAYS-PASS",
+          "n": 5
+        }
+      ]
+    },
+    "code-review": {
+      "artifacts": 67,
+      "runs": 100,
+      "runsPerArtifact": 1.49,
+      "firstAttemptFailures": 23,
+      "firstAttemptFailureRate": 34.3,
+      "topFailures": [
+        {
+          "id": "R-COH-OTHER-INTERNAL-CONTRADICTION",
+          "n": 17
+        },
+        {
+          "id": "R-SEM",
+          "n": 10
+        },
+        {
+          "id": "R-COH-COMMENT-MISMATCH",
+          "n": 8
+        },
+        {
+          "id": "R-L3",
+          "n": 3
+        },
+        {
+          "id": "R-COH-REGISTRY-MISSING",
+          "n": 2
+        },
+        {
+          "id": "R-L2",
+          "n": 2
+        },
+        {
+          "id": "R-COH-TASK-CONTRADICTION",
+          "n": 2
+        }
+      ]
+    },
+    "test-write-review": {
+      "artifacts": 12,
+      "runs": 42,
+      "runsPerArtifact": 3.5,
+      "firstAttemptFailures": 4,
+      "firstAttemptFailureRate": 33.3,
+      "topFailures": [
+        {
+          "id": "R-AC-COVERAGE",
+          "n": 5
+        },
+        {
+          "id": "R-GREEN-LEGITIMATE",
+          "n": 2
+        },
+        {
+          "id": "R-LIFECYCLE-LEGITIMATE",
+          "n": 1
+        },
+        {
+          "id": "R-TRIVIAL-ASSERT",
+          "n": 1
+        },
+        {
+          "id": "R-DUPLICATE",
+          "n": 1
+        }
+      ]
+    }
+  },
+  "corpusFiles": 158,
+  "corpusRuns": 276
+}
