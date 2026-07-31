@@ -173,6 +173,9 @@ Single-shot. No internal loop. No retries. No D8 mutations.
 
 ### A.1 — Dispatch the code-reviewer agent in standard mode
 
+Capture the dispatch instant immediately before invoking the agent:
+`date -u +%Y-%m-%dT%H:%M:%SZ`.
+
 Invoke `code-reviewer` exactly once via `Task`:
 
 ```
@@ -183,6 +186,7 @@ Task(subagent_type="code-reviewer",
        mode: "standard",
        attempt: 1,
        diff_target: <base_commit>,
+       review_started_at: <the instant captured immediately above>,
      })
 ```
 

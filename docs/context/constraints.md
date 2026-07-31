@@ -123,6 +123,26 @@ attempt 2). Recorded rather than fixed, by explicit human decision:
   sections, so the next undocumented check fails validation instead of drifting
   silently.
 
+**Degenerate `T00:00:00Z` reviewer timestamps — historic entries are
+unrecoverable (2026-07-31).** 128 of 284 verdict entries (45.1%) across
+`PRPs/plans/*.jsonl` carry a date-only `T00:00:00Z` stamp instead of a
+real UTC instant — the honest output of four clockless reviewer agents
+(`plan-reviewer`, `prd-reviewer`, `design-map-reviewer`,
+`design-spec-reviewer`) asked for an instant they had no way to observe,
+plus a residual wording gap in the three Bash-capable reviewers
+(`code-reviewer`, `test-reviewer`, `docs-reviewer`). Fixed going forward
+by a `review_started_at` input every dispatching command now captures
+with `date -u +%Y-%m-%dT%H:%M:%SZ` and passes into its reviewer, which
+writes it verbatim into `timestamp`. Historic entries were deliberately
+NOT repaired — the real instant was never observed and cannot be
+reconstructed. Consequence: `scripts/efficiency.mjs compare` sorts
+artifacts by first verdict timestamp against a recorded release marker,
+so a same-day artifact stamped at midnight sorts before a mid-day marker
+and is silently counted as pre-change — this already corrupted the
+v0.24.0 comparison. Any `compare` run whose boundaries span a marker
+must therefore use boundaries at least a full day apart until the
+corpus refills with post-fix entries.
+
 (The TDD-declaration convention — originally an open question from §12 —
 was resolved on 2026-04-19 and is recorded in `docs/decisions.md`. Format:
 `docs/context/methodology.md` with YAML frontmatter.)

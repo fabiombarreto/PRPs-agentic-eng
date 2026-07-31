@@ -142,6 +142,9 @@ the reviewer's ordering mode, not whether it runs).
 
 ### A.1 — Dispatch the test-reviewer agent
 
+Capture the dispatch instant immediately before invoking the agent:
+`date -u +%Y-%m-%dT%H:%M:%SZ`.
+
 Invoke the Reviewer via `Task`:
 
 ```
@@ -149,7 +152,8 @@ Task(
   subagent_type="test-reviewer",
   prompt={
     "suite_path": <resolved absolute suite_path>,
-    "target_root": <cwd>
+    "target_root": <cwd>,
+    "review_started_at": <the instant captured immediately above>
   }
 )
 ```

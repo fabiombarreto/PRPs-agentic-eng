@@ -136,6 +136,9 @@ contract for surface uniformity.
 
 ## Phase A — Adopt the Reviewer role
 
+Capture the dispatch instant immediately before adopting the
+Reviewer role: `date -u +%Y-%m-%dT%H:%M:%SZ`.
+
 Follow the protocol in
 `${CLAUDE_PLUGIN_ROOT}/agents/plan-reviewer.md`.
 
@@ -147,6 +150,7 @@ Execution context to pass into the Reviewer's Step 1:
   the plan path. This is not a typo.)
 - `target_root`: the cwd. Used for R5 (read methodology.md) and
   R8 (resolve source PRD path).
+- `review_started_at`: the instant captured immediately above.
 
 Run the Reviewer protocol: load → run rubric (all 8, no
 short-circuit) → branch on result.

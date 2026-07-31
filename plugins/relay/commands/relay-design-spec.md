@@ -191,6 +191,9 @@ proceed to Phase B.
 
 ## Phase B — Adopt the Reviewer role
 
+Capture the dispatch instant immediately before adopting the
+Reviewer role: `date -u +%Y-%m-%dT%H:%M:%SZ`.
+
 Follow the protocol in
 `${CLAUDE_PLUGIN_ROOT}/agents/design-spec-reviewer.md`.
 
@@ -201,6 +204,7 @@ Execution context:
 - `component_map_path`: the same value passed into Phase A.
 - `raw_dir`: `PRPs/designs/<feature>/raw/` (populated by the Writer's
   Phase 2).
+- `review_started_at`: the instant captured immediately above.
 - `invocation_context: main`. You adopt the Reviewer protocol *inside
   this command's main conversation*, so the user's messages reach the
   Reviewer directly. The two-condition approval gate (rubric pass AND

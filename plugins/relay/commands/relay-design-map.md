@@ -261,12 +261,16 @@ Mirrors `/relay-implement`'s Phase A.3.5 bounded-retry-loop shape.
 
 3. **Step B — dispatch `design-map-reviewer` (reviewer) via `Task`:**
 
+   Capture the dispatch instant immediately before invoking the
+   agent: `date -u +%Y-%m-%dT%H:%M:%SZ`.
+
    ```
    Task(subagent_type="design-map-reviewer",
         prompt={
           map_path: "docs/design/component-map.md",
           target_root: <target_root>,
           evidence_dir: "PRPs/reports/design-map/evidence/",
+          review_started_at: <the instant captured immediately above>,
         })
    ```
 

@@ -71,6 +71,9 @@ canonical divergences from the closest sibling reviewer
   `HEAD~1`) the agent diffs against to identify changed files.
   When omitted, the agent uses `git diff --name-only HEAD~1..HEAD`
   to enumerate changed files.
+- `review_started_at`: the full UTC instant (`YYYY-MM-DDTHH:MM:SSZ`)
+  the calling command captured immediately before this dispatch.
+  Write it verbatim into the verdict's `timestamp` field.
 
 ---
 
@@ -786,8 +789,23 @@ Use the schema codified in D10 of the source PRD:
   - `dispute_evidence` is the full `dispute_payload` object
     received from the COMMAND.
 
-The `timestamp` is captured at the moment of jsonl write, in UTC
-ISO-8601 (e.g. `2026-04-28T17:42:00Z`). The `attempt` is verbatim
+### Timestamp discipline (mandatory)
+
+The `timestamp` field in the jsonl verdict above MUST be
+`review_started_at` written through verbatim, in the exact format
+`YYYY-MM-DDTHH:MM:SSZ` — a full UTC instant, never a date-only value
+and never midnight. `2026-07-31T00:00:00Z` is an explicit example of
+an unacceptable value: a `T00:00:00Z` component means the instant
+was fabricated from a date rather than observed, and
+`scripts/efficiency.mjs compare` then sorts the entry before any
+same-day release marker, corrupting before/after classification.
+
+If `review_started_at` was not supplied by the calling command,
+obtain the instant directly with `date -u +%Y-%m-%dT%H:%M:%SZ`
+before appending — this agent never emits a fabricated stamp and
+never sets `timestamp_degraded`.
+
+The `attempt` is verbatim
 from the COMMAND's input — the agent does not increment, decrement,
 or fabricate this value.
 

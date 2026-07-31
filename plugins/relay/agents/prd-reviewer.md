@@ -58,6 +58,12 @@ any status flip.
   return `RUBRIC_PASSED` and delegate the flip). **Absent or
   unrecognized ⇒ treat as `subagent`** (fail-safe default: never
   auto-flip unless an invoker explicitly asserts `main`).
+- `review_started_at`: the full UTC instant (`YYYY-MM-DDTHH:MM:SSZ`)
+  the calling command captured immediately before this dispatch.
+  Write it verbatim into the verdict's `timestamp` field. This
+  requirement is identical in both `invocation_context` modes —
+  `main` and subagent — the mode branching above governs flip
+  ownership only, never timestamp behavior.
 
 ---
 
@@ -620,6 +626,24 @@ for anything that would require touching 3+ sections.
 ## review.jsonl format
 
 Path: `<target_root>/PRPs/prds/<basename>.review.jsonl`
+
+### Timestamp discipline (mandatory)
+
+The `timestamp` field in the jsonl verdict below MUST be
+`review_started_at` written through verbatim, in the exact format
+`YYYY-MM-DDTHH:MM:SSZ` — a full UTC instant, never a date-only value
+and never midnight. `2026-07-31T00:00:00Z` is an explicit example of
+an unacceptable value: a `T00:00:00Z` component means the instant
+was fabricated from a date rather than observed, and
+`scripts/efficiency.mjs compare` then sorts the entry before any
+same-day release marker, corrupting before/after classification.
+This requirement is identical in both `invocation_context` modes —
+`main` and subagent.
+
+If `review_started_at` was not supplied by the calling command,
+append the verdict anyway — never drop an audit line — and add
+`"timestamp_degraded": true` to that same JSON object so the gap is
+visible in the corpus rather than silent.
 
 One JSON object per line, appended (never truncated). Shape:
 

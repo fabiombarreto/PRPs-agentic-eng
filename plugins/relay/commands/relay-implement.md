@@ -306,6 +306,11 @@ The implementer is single-attempt; the loop, diff.patch capture, and D8 mutation
 
 #### Standard mode (after IMPLEMENTATION_COMPLETE)
 
+Capture the dispatch instant immediately before invoking the agent:
+`date -u +%Y-%m-%dT%H:%M:%SZ`. Capture fresh per attempt — each
+retry gets its own instant so retries are distinguishable in the
+audit trail.
+
 Invoke the code-reviewer agent via `Task`:
 
 ```
@@ -316,6 +321,7 @@ Task(subagent_type="code-reviewer",
        mode: "standard",
        attempt: <attempt>,
        diff_target: "<artifact_root><attempt>/diff.patch",
+       review_started_at: <the instant captured immediately above>,
      })
 ```
 
@@ -328,6 +334,9 @@ Read the just-appended jsonl line. Parse `verdict`:
 
 #### Arbitration mode (after TEST_CONTRACT_DISPUTE)
 
+Capture the dispatch instant immediately before invoking the agent:
+`date -u +%Y-%m-%dT%H:%M:%SZ`. Capture fresh per attempt.
+
 Invoke the code-reviewer agent via `Task`:
 
 ```
@@ -339,6 +348,7 @@ Task(subagent_type="code-reviewer",
        attempt: <attempt>,
        dispute_payload: <implementer's structured TEST_CONTRACT_DISPUTE evidence>,
        diff_target: "<artifact_root><attempt>/diff.patch",
+       review_started_at: <the instant captured immediately above>,
      })
 ```
 
@@ -450,6 +460,9 @@ Triggered exactly once when Phase A.3 standard-mode returns APPROVED — never o
 
 4. **Step B — dispatch `docs-reviewer` (reviewer) via `Task`:**
 
+   Capture the dispatch instant immediately before invoking the
+   agent: `date -u +%Y-%m-%dT%H:%M:%SZ`.
+
    ```
    Task(subagent_type="docs-reviewer",
         prompt={
@@ -457,6 +470,7 @@ Triggered exactly once when Phase A.3 standard-mode returns APPROVED — never o
           feature: <feature>,
           prd_path: "PRPs/prds/<feature>.prd.md",   # PRD mode only (is_prd_less == false); key omitted entirely in PRD-less mode
           non_interactive: true,
+          review_started_at: <the instant captured immediately above>,
         })
    ```
 

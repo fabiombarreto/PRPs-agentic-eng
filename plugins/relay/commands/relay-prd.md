@@ -153,6 +153,9 @@ protocol):
 
 ## Phase B — Adopt the Reviewer role
 
+Capture the dispatch instant immediately before adopting the
+Reviewer role: `date -u +%Y-%m-%dT%H:%M:%SZ`.
+
 Follow the protocol in
 `${CLAUDE_PLUGIN_ROOT}/agents/prd-reviewer.md`.
 
@@ -160,6 +163,7 @@ Execution context:
 
 - `draft_path`: the path returned by the Writer.
 - `target_root`: the cwd.
+- `review_started_at`: the instant captured immediately above.
 - `invocation_context: main`. You adopt the Reviewer protocol *inside
   this command's main conversation*, so the user's messages reach the
   Reviewer directly. The two-condition approval gate (rubric pass AND

@@ -46,6 +46,9 @@ Three canonical divergences from that sibling:
   repository the user invoked `/relay-plan-review` from). Used to
   read `docs/context/methodology.md` for R5 and to resolve the
   source PRD path for R8.
+- `review_started_at`: the full UTC instant (`YYYY-MM-DDTHH:MM:SSZ`)
+  the calling command captured immediately before this dispatch.
+  Write it verbatim into the verdict's `timestamp` field.
 
 ---
 
@@ -1184,6 +1187,22 @@ Worked example:
   It splits the append-only audit trail across two files depending
   on which strip the model picks — the exact defect this convention
   eliminates.
+
+### Timestamp discipline (mandatory)
+
+The `timestamp` field in the jsonl verdict below MUST be
+`review_started_at` written through verbatim, in the exact format
+`YYYY-MM-DDTHH:MM:SSZ` — a full UTC instant, never a date-only value
+and never midnight. `2026-07-31T00:00:00Z` is an explicit example of
+an unacceptable value: a `T00:00:00Z` component means the instant
+was fabricated from a date rather than observed, and
+`scripts/efficiency.mjs compare` then sorts the entry before any
+same-day release marker, corrupting before/after classification.
+
+If `review_started_at` was not supplied by the calling command,
+append the verdict anyway — never drop an audit line — and add
+`"timestamp_degraded": true` to that same JSON object so the gap is
+visible in the corpus rather than silent.
 
 One JSON object per line, appended (never truncated). Shape:
 

@@ -29,9 +29,12 @@
       </div>
 
       <h2 id="unreleased">Unreleased</h2>
-      <p>Closes the last piece of documentation debt left open by 0.23.0 and 0.24.0. The validation-checks reference had fallen two checks behind the runner: <code>scripts/validate/index.mjs</code> registers ten and <code>npm run validate</code> reports ten PASS, but the page documented eight and said so in its intro, its summary table, its totals line, and its search excerpt. It was deliberately not back-filled at the time, for a stated reason &mdash; that page's per-check contract requires naming the unit tests covering each check, and <code>feedback-chain</code> had none, so a section written then would have claimed coverage that did not exist. The tests came first; the page now cites real, verifiable counts.</p>
+      <p>Nothing queued yet.</p>
 
-      <h3 id="unreleased-added">Added</h3>
+      <h2 id="v0-25-0">0.25.0 &#8212; 2026-07-31</h2>
+      <p>Folds two pieces of work into one release cut. First, closes the last piece of documentation debt left open by 0.23.0 and 0.24.0: the validation-checks reference had fallen two checks behind the runner &mdash; <code>scripts/validate/index.mjs</code> registers ten and <code>npm run validate</code> reports ten PASS, but the page documented eight in its intro, summary table, totals line, and search excerpt, deliberately not back-filled at the time because that page's per-check contract requires naming the unit tests covering each check and <code>feedback-chain</code> had none. The tests came first; the page now cites real, verifiable counts. Second, fixes degenerate <code>T00:00:00Z</code> timestamps in relay reviewer jsonl audit logs: four reviewer agents (<code>plan-reviewer</code>, <code>prd-reviewer</code>, <code>design-map-reviewer</code>, <code>design-spec-reviewer</code>) have no <code>Bash</code> in their <code>tools:</code> allowlist, so a date-only stamp was the honest output of an agent asked for an instant it structurally could not observe; the three Bash-capable reviewers (<code>code-reviewer</code>, <code>test-reviewer</code>, <code>docs-reviewer</code>) carried a residual wording gap despite having a clock. A new <code>review_started_at</code> input, captured by each of the eight dispatching commands with <code>date -u +%Y-%m-%dT%H:%M:%SZ</code> immediately before dispatch, closes both: the reviewer writes it verbatim into <code>timestamp</code>, and a reviewer that receives no input never fabricates one &mdash; Bash-capable reviewers self-serve <code>date -u</code>, clockless ones append the verdict with <code>timestamp_degraded: true</code> so the gap stays visible rather than silent. Historic jsonl entries are deliberately NOT repaired. Plugin manifest bumped <code>0.24.0</code> &rarr; <code>0.25.0</code> per <a href="AGENTS.md">AGENTS.md</a> &sect;7.5.</p>
+
+      <h3 id="v0-25-0-added">Added</h3>
       <ul>
         <li><strong><code>scripts/validate/checks/feedback-chain.test.mjs</code></strong>
           &mdash; 23 <code>node:test</code> unit tests for the <code>feedback-chain</code>
@@ -58,9 +61,29 @@
           scoped to item lines only, since <code>test-writer</code>'s closing
           parenthetical is required to name two rubric ids &mdash; a whole-block
           ban would contradict the design the check exists to guard.</li>
+        <li><strong><code>review_started_at</code> input</strong>
+          &mdash; all seven jsonl-appending reviewer agents (<code>plan-reviewer</code>,
+          <code>prd-reviewer</code>, <code>design-map-reviewer</code>,
+          <code>design-spec-reviewer</code>, <code>code-reviewer</code>,
+          <code>test-reviewer</code>, <code>docs-reviewer</code>) now declare a
+          <code>review_started_at</code> input and a
+          <code>### Timestamp discipline (mandatory)</code> block requiring the
+          <code>timestamp</code> field to be that value written verbatim, in the
+          exact <code>YYYY-MM-DDTHH:MM:SSZ</code> format, never a date-only value
+          and never midnight. Each of the eight dispatching commands
+          (<code>relay-plan-review</code>, <code>relay-prd</code>,
+          <code>relay-code-review</code>, <code>relay-implement</code>,
+          <code>relay-test-write-review</code>, <code>relay-approve</code>,
+          <code>relay-design-map</code>, <code>relay-design-spec</code>) captures
+          the instant with <code>date -u +%Y-%m-%dT%H:%M:%SZ</code> immediately
+          before each reviewer dispatch and passes it in, with
+          <code>relay-implement</code> capturing separately at each of its three
+          reviewer dispatch sites so retries stay distinguishable in the audit
+          trail. No reviewer's <code>tools:</code> allowlist changes &mdash; the
+          clock is supplied by the invoker instead of granted to the agent.</li>
       </ul>
 
-      <h3 id="unreleased-fixed">Fixed</h3>
+      <h3 id="v0-25-0-fixed">Fixed</h3>
       <ul>
         <li><strong><code>documentation/reference/validation-checks.html</code></strong>
           &mdash; every eight-to-ten reference corrected: the intro callout now says
@@ -79,13 +102,28 @@
           with a dated discharge note, matching the form used for the item
           discharged above it on 2026-07-30. The adjacent reviewer-non-determinism
           item stays open and untouched.</li>
+        <li><strong><code>docs/context/constraints.md</code></strong>
+          &mdash; a new dated entry records that 128 of 284 recorded verdict
+          entries (45.1%) across <code>PRPs/plans/*.jsonl</code> carry a
+          degenerate <code>T00:00:00Z</code> stamp, that historic entries are
+          deliberately NOT repaired (the real instant was never observed and
+          cannot be reconstructed), and that any <code>scripts/efficiency.mjs
+          compare</code> run whose boundaries span a release marker must use
+          boundaries at least a full day apart until the corpus refills with
+          post-fix entries &mdash; otherwise a same-day artifact stamped at
+          midnight silently sorts before a mid-day marker and is miscounted as
+          pre-change, as already happened to the <code>v0.24.0</code>
+          comparison.</li>
       </ul>
 
-      <p>No plugin asset is touched by this change, so
-      <code>plugins/relay/.claude-plugin/plugin.json</code> stays at
-      <code>0.24.0</code> &mdash; <a href="AGENTS.md">AGENTS.md</a> &sect;7.5
-      requires a bump only on a minor or major release cut, or on a patch shipping
-      something under <code>plugins/relay/</code>, and this is neither.</p>
+      <h3 id="v0-25-0-changed">Changed</h3>
+      <ul>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.24.0</code> &rarr; <code>0.25.0</code> to
+          match this release; users running <code>/plugin</code> after pulling
+          this version will get a fresh <code>relay/0.25.0/</code> cache directory
+          with all newly-shipped commands and agents registered.</li>
+      </ul>
 
       <h2 id="v0-24-0">0.24.0 &#8212; 2026-07-31</h2>
       <p>Shifts the rubric left. Each of <code>plan-writer</code>, <code>implementer</code>, and <code>test-writer</code> now runs a named pre-emission self-check covering only the defect classes that measurably reject it, placed where its first-authoring path and its <code>prior_feedback</code> revision path converge on the terminal write. The motivating measurement: after 0.23.1 closed the feedback pipe, 50 percent of plans and 34 percent of implementations still failed their FIRST review, and 0.23.1 cannot move those numbers by construction &mdash; <code>prior_feedback</code> is null on attempt 1. The cause was informational: of the six checks causing 73 percent of the 97 recorded plan-review failures, <code>plan-writer.md</code> named one; of the three causing 80 percent of the 44 code-review failures, <code>implementer.md</code> named none. Three rules bind the design, all enforced mechanically: items state artifact properties and never the reviewer's rubric wording (visible grader text measurably invites literal compliance over real quality); each check front-runs rather than replaces the reviewer, whose full rubric still runs independently every attempt; and <code>implementer</code>'s check is a labelled block rather than a third <code>### Phase 4.</code> heading, because a corpus test pins that count at two. No reviewer file, rubric item, rubric-array arithmetic, or budget is touched. This release also ships the measurement apparatus for judging whether any of it worked. Plugin manifest bumped <code>0.23.1</code> &rarr; <code>0.24.0</code> per <a href="AGENTS.md">AGENTS.md</a> &sect;7.5.</p>

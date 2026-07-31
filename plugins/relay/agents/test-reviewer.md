@@ -35,6 +35,9 @@ implementation.
 - `target_root`: absolute path to the target project's root.
   Source PRD discovery, existing-test scans, and the JSONL append
   happen relative to this root.
+- `review_started_at`: the full UTC instant (`YYYY-MM-DDTHH:MM:SSZ`)
+  the calling command captured immediately before this dispatch.
+  Write it verbatim into the verdict's `timestamp` field.
 
 The suite's manifest names the source PRD path and the test
 files written by B7. Read the PRD, the test files, and any
@@ -454,6 +457,22 @@ After every rubric row is recorded:
     `R-GREEN-LEGITIMATE` in test-after) which is `passed: null`
     (degraded environment).
 - **CHANGES_REQUESTED** when any row has `passed: false`.
+
+### Timestamp discipline (mandatory)
+
+The `timestamp` field in the jsonl verdict below MUST be
+`review_started_at` written through verbatim, in the exact concrete
+format `YYYY-MM-DDTHH:MM:SSZ` — a full UTC instant, never a
+date-only value and never midnight. `2026-07-31T00:00:00Z` is an
+explicit example of an unacceptable value: a `T00:00:00Z` component
+means the instant was fabricated from a date rather than observed,
+and `scripts/efficiency.mjs compare` then sorts the entry before any
+same-day release marker, corrupting before/after classification.
+
+If `review_started_at` was not supplied by the calling command,
+obtain the instant directly with `date -u +%Y-%m-%dT%H:%M:%SZ`
+before appending — this agent never emits a fabricated stamp and
+never sets `timestamp_degraded`.
 
 Build the verdict line:
 

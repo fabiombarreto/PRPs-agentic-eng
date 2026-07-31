@@ -1315,6 +1315,80 @@ is to revert rather than add more checklist items.
 
 ---
 
+## [2026-07-31] Reviewer jsonl timestamps are invoker-supplied (`review_started_at`), never agent-derived — rejects widening the clockless reviewers' `tools:` allowlist
+
+**Context:** 128 of 284 recorded verdict entries (45.1%) across
+`PRPs/plans/*.jsonl` carried a date-only `T00:00:00Z` timestamp instead of a
+real UTC instant. Grounding traced this to clock availability, not wording:
+four of the seven jsonl-appending reviewers — `plan-reviewer`, `prd-reviewer`,
+`design-map-reviewer`, `design-spec-reviewer` — carry a `tools:` allowlist of
+`Read, Edit, Write` (plus `Task` for `prd-reviewer`) with no way to observe
+the current time, so `T00:00:00Z` was the honest output of an agent asked for
+an instant it structurally could not obtain. `scripts/efficiency.mjs compare`
+sorts artifacts by first verdict timestamp against a recorded release marker,
+so a same-day artifact stamped at midnight sorts before a mid-day marker and
+is silently miscounted as pre-change — this had already corrupted the
+`v0.24.0` comparison. Two mechanisms were available to supply the missing
+clock: grant `Bash` to the four clockless reviewers, or have each dispatching
+command capture the instant and pass it in. Per D11 (`2026-04-29`, this file),
+a reviewer's `tools:` line is a recorded capability contract, not an
+incidental detail — widening it is itself a decision this file must record,
+not a side effect of a bug fix.
+
+**Decision:** The invoker-supplied mechanism was chosen over widening any
+`tools:` allowlist. A new agent input, `review_started_at` — a full UTC
+instant in `YYYY-MM-DDTHH:MM:SSZ` — is captured by each of the eight
+dispatching commands (`relay-plan-review`, `relay-prd`, `relay-code-review`,
+`relay-implement`, `relay-test-write-review`, `relay-approve`,
+`relay-design-map`, `relay-design-spec`) via `date -u +%Y-%m-%dT%H:%M:%SZ`
+immediately before each reviewer invocation, and passed into the reviewer's
+execution context. The reviewer writes this value through verbatim into its
+verdict's `timestamp` field — mirroring the `attempt`-is-verbatim-from-the-
+COMMAND precedent already shipped in `code-reviewer.md`. `relay-implement.md`
+captures a fresh instant at each of its three reviewer dispatch sites so
+retries stay distinguishable. No reviewer's `tools:` allowlist changes as
+part of this fix. When `review_started_at` is absent, the three Bash-capable
+reviewers (`code-reviewer`, `test-reviewer`, `docs-reviewer`) self-serve
+`date -u +%Y-%m-%dT%H:%M:%SZ` rather than fabricate a stamp; the four
+clockless reviewers append the verdict anyway (never dropping the audit line)
+with `"timestamp_degraded": true` added to that JSON object, so the gap stays
+visible in the corpus rather than silent. Historic degenerate entries are
+deliberately NOT repaired — the real instant was never observed and cannot be
+reconstructed; the resulting analysis caveat is recorded in
+`docs/context/constraints.md` (dated `2026-07-31` entry).
+
+**Reason:** Granting `Bash` to four reviewers whose entire design rests on a
+narrow, auditable, non-executing tool surface would have been a materially
+larger and riskier change than the defect warranted, and it would have
+silently expanded a capability contract this project has already decided
+(D11) must be recorded and justified on its own terms — not incurred as a
+side effect of a timestamp bug fix. Supplying the clock from the invoker
+costs nothing in capability surface: the command process already has to run
+before dispatching the reviewer, already has a shell, and already passes
+other fields (e.g. `attempt`) through the same execution-context channel.
+The self-serve fallback for the three Bash-capable reviewers exists because
+prose alone had already failed for `code-reviewer` — it carried timestamp
+prose since 2026-04-29 and still emitted degenerate stamps through
+2026-07-29 — so compliance for those three no longer depends on the model
+choosing to observe the clock. The `timestamp_degraded` fallback is
+"no silent failure" applied to a data-quality gap: an invoker bug that drops
+`review_started_at` becomes visible in the corpus instead of manifesting as
+another undetectable `T00:00:00Z` stamp.
+
+**Areas affected:** all seven jsonl-appending reviewer agents (`plan-reviewer`,
+`prd-reviewer`, `code-reviewer`, `test-reviewer`, `docs-reviewer`,
+`design-map-reviewer`, `design-spec-reviewer` — `post-green-reviewer` appends
+no jsonl and is unaffected); all eight dispatching commands
+(`relay-plan-review`, `relay-prd`, `relay-code-review`, `relay-implement`,
+`relay-test-write-review`, `relay-approve`, `relay-design-map`,
+`relay-design-spec`); `scripts/efficiency.mjs`'s consumer-side classification
+(unblocked going forward, not retroactively); any future reviewer agent that
+appends a jsonl verdict line, which must adopt the identical
+`review_started_at` contract rather than inventing its own timestamp
+mechanism.
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision

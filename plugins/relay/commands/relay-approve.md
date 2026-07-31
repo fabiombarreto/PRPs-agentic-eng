@@ -308,9 +308,13 @@ Wait for the docs-updater to complete.
 
 ### Step 3.2 — Dispatch docs-reviewer (reviewer)
 
+Capture the dispatch instant immediately before invoking the agent:
+`date -u +%Y-%m-%dT%H:%M:%SZ`.
+
 Use `Task` to dispatch the `docs-reviewer` agent, passing:
 - `pr`: the `<pr>` argument
 - `target_root`: the absolute path to the repository root
+- `review_started_at`: the instant captured immediately above
 
 The docs-reviewer will:
 1. Read the manifest at `PRPs/reports/<feature>/docs-update.md`.

@@ -49,6 +49,7 @@ The `/relay-design-map` command passes:
 | `map_path` | absolute path | `docs/design/component-map.md` — the DRAFT map to validate |
 | `target_root` | absolute path | The root of the target project repository |
 | `evidence_dir` | absolute path | `PRPs/reports/design-map/evidence/` — the persisted Figma evidence bundle the writer consumed |
+| `review_started_at` | UTC instant (`YYYY-MM-DDTHH:MM:SSZ`) | Captured by the calling command immediately before this dispatch. Write it verbatim into the verdict's `timestamp` field. |
 
 ---
 
@@ -290,6 +291,22 @@ retry within the same invocation.
 ## component-map-review.jsonl format
 
 Path: `<target_root>/docs/design/component-map-review.jsonl`
+
+### Timestamp discipline (mandatory)
+
+The `timestamp` field in the jsonl verdict below MUST be
+`review_started_at` written through verbatim, in the exact format
+`YYYY-MM-DDTHH:MM:SSZ` — a full UTC instant, never a date-only value
+and never midnight. `2026-07-31T00:00:00Z` is an explicit example of
+an unacceptable value: a `T00:00:00Z` component means the instant
+was fabricated from a date rather than observed, and
+`scripts/efficiency.mjs compare` then sorts the entry before any
+same-day release marker, corrupting before/after classification.
+
+If `review_started_at` was not supplied by the calling command,
+append the verdict anyway — never drop an audit line — and add
+`"timestamp_degraded": true` to that same JSON object so the gap is
+visible in the corpus rather than silent.
 
 One JSON object per line, appended (never truncated). Shape:
 

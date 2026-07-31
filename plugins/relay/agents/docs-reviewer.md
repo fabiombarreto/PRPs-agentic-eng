@@ -58,6 +58,10 @@ The `/relay-approve` command passes:
   Constraint 9 below. Omitting `non_interactive` reproduces today's
   `/relay-approve` behavior exactly, mirroring the Docs Updater's
   matching input.
+- **`review_started_at`**: the full UTC instant
+  (`YYYY-MM-DDTHH:MM:SSZ`) the calling command captured immediately
+  before this dispatch. Write it verbatim into the verdict's
+  `timestamp` field.
 
 ### Deriving `feature` and `prd_path`
 
@@ -410,6 +414,22 @@ NOT retry within the same invocation.
 ## docs-review.jsonl format
 
 Path: `<target_root>/PRPs/reports/<feature>/docs-review.jsonl`
+
+### Timestamp discipline (mandatory)
+
+The `timestamp` field in the jsonl verdict below MUST be
+`review_started_at` written through verbatim, in the exact format
+`YYYY-MM-DDTHH:MM:SSZ` — a full UTC instant, never a date-only value
+and never midnight. `2026-07-31T00:00:00Z` is an explicit example of
+an unacceptable value: a `T00:00:00Z` component means the instant
+was fabricated from a date rather than observed, and
+`scripts/efficiency.mjs compare` then sorts the entry before any
+same-day release marker, corrupting before/after classification.
+
+If `review_started_at` was not supplied by the calling command,
+obtain the instant directly with `date -u +%Y-%m-%dT%H:%M:%SZ`
+before appending — this agent never emits a fabricated stamp and
+never sets `timestamp_degraded`.
 
 One JSON object per line, appended (never truncated). Shape:
 
