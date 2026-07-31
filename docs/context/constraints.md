@@ -93,7 +93,7 @@ attempt 2). Recorded rather than fixed, by explicit human decision:
   ordering for the K=5 pass, or carrying prior-attempt findings into the next
   run so the reviewer cannot silently change what it looks for.
 
-- **`reference/validation-checks.html` is two checks behind.** That page's
+- ~~**`reference/validation-checks.html` is two checks behind.** That page's
   contract is a full per-check section (functionality guarded, a passing
   example, a failing example with the verbatim finding text, and the unit
   tests covering it). It documents eight checks and its own totals line still
@@ -107,7 +107,21 @@ attempt 2). Recorded rather than fixed, by explicit human decision:
   `tdd: false` the Implementer authors zero test files, so
   `feedback-chain.test.mjs` must come from `test-writer`/`test-reviewer`
   (`docs/decisions.md` [2026-05-06]). Write the tests first, then both
-  reference sections.
+  reference sections.~~
+  **Discharged 2026-07-31:** the tests came first, exactly as this item
+  prescribed. `scripts/validate/checks/feedback-chain.test.mjs` was authored by
+  the `test-writer`/`test-reviewer` pair (23 `node:test` tests, R-X strict
+  preserved — the Implementer authored zero test files), covering every
+  assertion class the module has, each pinned by a mutation of a passing
+  baseline rather than merely observed green; four separate guards were
+  neutralized in the production module and each was confirmed caught. Both
+  reference sections then landed citing real counts, and every eight-to-ten
+  reference on the page, plus the `search-index.json` excerpt, was corrected
+  (totals now 111 unit tests across 10 checks). The page's own coverage is now
+  self-policing: its Level 3 validation reconciles the number of checks
+  registered in `scripts/validate/index.mjs` against the number of per-check
+  sections, so the next undocumented check fails validation instead of drifting
+  silently.
 
 (The TDD-declaration convention — originally an open question from §12 —
 was resolved on 2026-04-19 and is recorded in `docs/decisions.md`. Format:
