@@ -71,7 +71,9 @@
           <strong><code>CLAUDE.md</code></strong>
           &mdash; new <code>timestamp-contract</code> per-check section and
           summary-table row, and every ten-to-eleven count reference
-          corrected (133 <code>node:test</code> unit tests across 11 checks).</li>
+          corrected (149 <code>node:test</code> unit tests across the check,
+          efficiency-metrics, and eval-layer suites; <code>npm run
+          validate</code> reports 11 checks).</li>
         <li><strong>Closing the consumer half of the v0.25.0
           <code>review_started_at</code> timestamp contract.</strong>
           <code>scripts/validate/checks/timestamp-contract.mjs</code> gained a
@@ -120,9 +122,11 @@
           describe the <code>CONSUMERS</code> registry and its
           comment-stripping executable-reference assertion; new
           <code>efficiency-metrics</code> section and summary-table row for
-          <code>scripts/efficiency.test.mjs</code>. Per-row and total counts
-          are placeholders pending the test-writer/test-reviewer pair's
-          authorship of both suites (<code>tdd: false</code>, test-after).</li>
+          <code>scripts/efficiency.test.mjs</code>. Per-row and total counts,
+          placeholders when this entry was first drafted, are now the real
+          figures &mdash; the pair has since authored both suites
+          (test-after), and the page's 26-test and 12-test rows and its
+          149-test totals line match the live corpus.</li>
       </ul>
 
       <h3 id="unreleased-fixed">Fixed</h3>
@@ -144,6 +148,16 @@
           static consistency checks", two counts behind and stale since
           v0.23.0, independently of the guide page's own drift; corrected to
           eleven.</li>
+        <li><strong><code>documentation/assets/data/search-index.json</code></strong>
+          &mdash; the Validation checks reference's search excerpt said
+          "(133 total)" covering unit tests against the page's own
+          authoritative totals line of 149, verified against the live corpus
+          (every summary-table row matches its actual suite). The 133 dated
+          from <code>5302839</code>'s snapshot (timestamp-contract at 22
+          tests, no efficiency-metrics suite) and was superseded by
+          <code>cca5707</code>; corrected to "(149 total)", with the two
+          Unreleased entries above brought in line with the shipped figures
+          in the same commit.</li>
       </ul>
 
       <h2 id="v0-25-0">0.25.0 &#8212; 2026-07-31</h2>
