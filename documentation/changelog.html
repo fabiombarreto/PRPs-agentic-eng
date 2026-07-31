@@ -29,7 +29,50 @@
       </div>
 
       <h2 id="unreleased">Unreleased</h2>
-      <p>Nothing queued yet.</p>
+
+      <h3 id="unreleased-added">Added</h3>
+      <ul>
+        <li><strong><code>scripts/validate/checks/timestamp-contract.mjs</code></strong>
+          &mdash; the 11th registered static check, mechanically enforcing the
+          <code>review_started_at</code> contract shipped in v0.25.0
+          (<code>e0a0c17</code>). That contract previously had no gate at all
+          &mdash; it was prose spread across 15 files (7 reviewer agents, 8
+          dispatching commands) with nothing failing if a new reviewer shipped
+          without the section, a command dropped its <code>date -u</code>
+          capture, or a reviewer's fallback branch didn't match its own
+          capability. Registry-driven, mirroring
+          <code>feedback-chain.mjs</code>: per reviewer it asserts a declared
+          <code>review_started_at</code> input, a "### Timestamp discipline
+          (mandatory)" section naming <code>T00:00:00</code> as unacceptable,
+          and a fallback branch derived at runtime from that reviewer's own
+          <code>tools:</code> frontmatter line rather than hardcoded; per
+          command it asserts the <code>date -u +%Y-%m-%dT%H:%M:%SZ</code>
+          capture and the <code>review_started_at</code> pass-through. It also
+          scans <code>PRPs/plans/*.jsonl</code> for post-marker verdict
+          entries carrying a <code>T00:00:00</code> stamp with no accompanying
+          <code>timestamp_degraded</code> flag, exempting historic pre-marker
+          entries by construction. Three deliberate registry exclusions
+          (<code>post-green-reviewer</code>, <code>code-reviewer-semantic</code>,
+          <code>relay-execute</code>) are carried as commented reasons rather
+          than silent omissions.</li>
+        <li><strong><code>scripts/validate/checks/timestamp-contract.test.mjs</code></strong>
+          &mdash; 22 <code>node:test</code> unit tests for the
+          <code>timestamp-contract</code> check, authored by the
+          test-writer/test-reviewer pair rather than the Implementer, per R-X
+          strict (<code>docs/decisions.md</code> <code>[2026-07-12]</code>).
+          Includes a fixture proving the degraded-flag assertion is
+          non-vacuous against the negation trap: the literal token
+          <code>timestamp_degraded</code> appears inside "never sets
+          <code>timestamp_degraded</code>" in every Bash-capable reviewer, so
+          a naive substring test would report every one of them as
+          instructing the degraded branch.</li>
+        <li><strong><code>documentation/reference/validation-checks.html</code></strong>,
+          <strong><code>documentation/assets/data/search-index.json</code></strong>,
+          <strong><code>CLAUDE.md</code></strong>
+          &mdash; new <code>timestamp-contract</code> per-check section and
+          summary-table row, and every ten-to-eleven count reference
+          corrected (133 <code>node:test</code> unit tests across 11 checks).</li>
+      </ul>
 
       <h2 id="v0-25-0">0.25.0 &#8212; 2026-07-31</h2>
       <p>Folds two pieces of work into one release cut. First, closes the last piece of documentation debt left open by 0.23.0 and 0.24.0: the validation-checks reference had fallen two checks behind the runner &mdash; <code>scripts/validate/index.mjs</code> registers ten and <code>npm run validate</code> reports ten PASS, but the page documented eight in its intro, summary table, totals line, and search excerpt, deliberately not back-filled at the time because that page's per-check contract requires naming the unit tests covering each check and <code>feedback-chain</code> had none. The tests came first; the page now cites real, verifiable counts. Second, fixes degenerate <code>T00:00:00Z</code> timestamps in relay reviewer jsonl audit logs: four reviewer agents (<code>plan-reviewer</code>, <code>prd-reviewer</code>, <code>design-map-reviewer</code>, <code>design-spec-reviewer</code>) have no <code>Bash</code> in their <code>tools:</code> allowlist, so a date-only stamp was the honest output of an agent asked for an instant it structurally could not observe; the three Bash-capable reviewers (<code>code-reviewer</code>, <code>test-reviewer</code>, <code>docs-reviewer</code>) carried a residual wording gap despite having a clock. A new <code>review_started_at</code> input, captured by each of the eight dispatching commands with <code>date -u +%Y-%m-%dT%H:%M:%SZ</code> immediately before dispatch, closes both: the reviewer writes it verbatim into <code>timestamp</code>, and a reviewer that receives no input never fabricates one &mdash; Bash-capable reviewers self-serve <code>date -u</code>, clockless ones append the verdict with <code>timestamp_degraded: true</code> so the gap stays visible rather than silent. Historic jsonl entries are deliberately NOT repaired. Plugin manifest bumped <code>0.24.0</code> &rarr; <code>0.25.0</code> per <a href="AGENTS.md">AGENTS.md</a> &sect;7.5.</p>

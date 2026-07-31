@@ -117,7 +117,7 @@
     "title": "Validation checks",
     "path": "reference/validation-checks.html",
     "category": "Reference",
-    "excerpt": "Complete per-check catalog of the validation suite: for each of the ten static checks and the eval layer, the functionality guarded, a passing example, a failing example with the verbatim finding text, and the covering unit tests (111 total)."
+    "excerpt": "Complete per-check catalog of the validation suite: for each of the eleven static checks and the eval layer, the functionality guarded, a passing example, a failing example with the verbatim finding text, and the covering unit tests (133 total)."
   },
   {
     "title": "Test output schema",

@@ -26,6 +26,7 @@ import { runArtifactNamingCheck } from './checks/artifact-naming.mjs';
 import { runBootstrapParityCheck } from './checks/bootstrap-parity.mjs';
 import { runGatingStructureCheck } from './checks/gating-structure.mjs';
 import { runFeedbackChainCheck } from './checks/feedback-chain.mjs';
+import { runTimestampContractCheck } from './checks/timestamp-contract.mjs';
 
 function die(code, msg) {
   process.stderr.write(msg + '\n');
@@ -46,6 +47,7 @@ const CHECKS = [
   runBootstrapParityCheck,
   runGatingStructureCheck,
   runFeedbackChainCheck,
+  runTimestampContractCheck,
 ];
 
 function runChecks(checks) {

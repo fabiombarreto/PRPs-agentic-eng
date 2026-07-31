@@ -143,6 +143,23 @@ v0.24.0 comparison. Any `compare` run whose boundaries span a marker
 must therefore use boundaries at least a full day apart until the
 corpus refills with post-fix entries.
 
+**Enforcement gap closed (2026-07-31).** The `review_started_at` fix
+above shipped as prose across 15 files with nothing mechanical holding
+it together — the exact shape of the `prior_feedback` gap that
+`feedback-chain.mjs` was created to close. `timestamp-contract`, the
+11th check in `scripts/validate/index.mjs`, now gates it on every
+commit: it asserts, per reviewer, the `review_started_at` declaration,
+the `### Timestamp discipline (mandatory)` section, the `T00:00:00`
+unacceptability sentence, and a fallback branch derived at runtime
+from that reviewer's own `tools:` frontmatter line rather than
+hardcoded; per command, the `date -u +%Y-%m-%dT%H:%M:%SZ` capture and
+the `review_started_at` pass-through; and, over real output, that no
+post-marker `PRPs/plans/*.jsonl` verdict entry carries a `T00:00:00`
+stamp without an accompanying `timestamp_degraded` flag, with
+pre-marker entries exempt by construction. A later edit that drops the
+section, the capture, or the capability-matched fallback now fails
+`npm run validate` instead of silently re-severing the contract.
+
 (The TDD-declaration convention — originally an open question from §12 —
 was resolved on 2026-04-19 and is recorded in `docs/decisions.md`. Format:
 `docs/context/methodology.md` with YAML frontmatter.)
