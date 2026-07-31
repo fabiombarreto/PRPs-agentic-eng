@@ -20,6 +20,17 @@ wheels/
 node_modules/
 
 # Claude Code — per-user local overrides (project-wide settings.json stays committed)
-.claude/settings.local.json
-.claude/
-PRPs/reports/
+# Note the `/*` form on both roots below: git never descends into an excluded
+# DIRECTORY, so a `!` re-include under `.claude/` or `PRPs/reports/` would
+# silently do nothing. Excluding the contents instead is what makes the
+# exceptions take effect.
+.claude/*
+# ...except project-level slash commands, which are shared team config and must
+# survive a fresh clone the same way plugins/relay/commands/ does.
+!.claude/commands/
+
+PRPs/reports/*
+# ...except efficiency markers. A marker is a historical fact the before/after
+# comparison depends on; an ignored one is useless the moment the tree is
+# re-cloned. Per-feature run reports under PRPs/reports/<feature>/ stay ignored.
+!PRPs/reports/efficiency/
