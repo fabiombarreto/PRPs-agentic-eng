@@ -1,0 +1,124 @@
+{
+  "label": "v0.25.0",
+  "markerUtc": "2026-07-31T18:02:16.966Z",
+  "note": "v0.25.0 (commit e0a0c17) gave the four clockless reviewers a real UTC instant via a command-supplied review_started_at input. THIS IS THE FIRST TRUSTWORTHY MEASUREMENT BOUNDARY: every verdict appended after this marker carries a real instant, so same-day before/after splitting finally works. Everything BEFORE it is contaminated - 128 of 284 entries (45%) are stamped T00:00:00Z and are unrecoverable, so the before-set below misclassifies an unknown number of same-day artifacts and its absolute values should be treated as approximate. Judge wave 2 (writer pre-emission self-checks, v0.24.0) ONLY on artifacts recorded after this marker; the v0.24.0 marker never accumulated a usable sample. Wave 1 still cannot move the first-attempt rate by construction (prior_feedback is null on attempt 1), so a change there remains attributable to wave 2. Unchanged revert threshold: if the plan first-attempt failure rate has not fallen below ~35% after ~10 new artifacts, the self-refinement research in docs/decisions.md [2026-07-30] is the better explanation. Also note the sample must come from work driven through the real agents - the close-the-validation-docs-debt run did not exercise wave 2's implementer self-check, because those edits were made directly rather than via /relay-implement.",
+  "metrics": {
+    "plan-review": {
+      "artifacts": 81,
+      "runs": 138,
+      "runsPerArtifact": 1.7,
+      "firstAttemptFailures": 42,
+      "firstAttemptFailureRate": 51.9,
+      "topFailures": [
+        {
+          "id": "R-COH-TASK-AC-MISSING",
+          "n": 26
+        },
+        {
+          "id": "R-COH-OTHER-INTERNAL-CONTRADICTION",
+          "n": 13
+        },
+        {
+          "id": "R-COH-AC-TASK-DECOUPLED",
+          "n": 12
+        },
+        {
+          "id": "R-COH-PATTERN-TASK-DRIFT",
+          "n": 10
+        },
+        {
+          "id": "R-COH-MANDATORY-READING-IRRELEVANT",
+          "n": 8
+        },
+        {
+          "id": "R-COH-VALIDATE-FRAMEWORK-MISMATCH",
+          "n": 6
+        },
+        {
+          "id": "R8",
+          "n": 6
+        },
+        {
+          "id": "R-COH-VALIDATE-ALWAYS-PASS",
+          "n": 5
+        }
+      ]
+    },
+    "code-review": {
+      "artifacts": 69,
+      "runs": 105,
+      "runsPerArtifact": 1.52,
+      "firstAttemptFailures": 24,
+      "firstAttemptFailureRate": 34.8,
+      "topFailures": [
+        {
+          "id": "R-COH-OTHER-INTERNAL-CONTRADICTION",
+          "n": 21
+        },
+        {
+          "id": "R-SEM",
+          "n": 13
+        },
+        {
+          "id": "R-COH-COMMENT-MISMATCH",
+          "n": 9
+        },
+        {
+          "id": "R-L3",
+          "n": 3
+        },
+        {
+          "id": "R-COH-REGISTRY-MISSING",
+          "n": 2
+        },
+        {
+          "id": "R-L2",
+          "n": 2
+        },
+        {
+          "id": "R-COH-TASK-CONTRADICTION",
+          "n": 2
+        },
+        {
+          "id": "R-S3",
+          "n": 1
+        }
+      ]
+    },
+    "test-write-review": {
+      "artifacts": 13,
+      "runs": 44,
+      "runsPerArtifact": 3.38,
+      "firstAttemptFailures": 5,
+      "firstAttemptFailureRate": 38.5,
+      "topFailures": [
+        {
+          "id": "R-AC-COVERAGE",
+          "n": 5
+        },
+        {
+          "id": "R-DUPLICATE",
+          "n": 2
+        },
+        {
+          "id": "R-GREEN-LEGITIMATE",
+          "n": 2
+        },
+        {
+          "id": "R-IMPL-LEAK",
+          "n": 1
+        },
+        {
+          "id": "R-LIFECYCLE-LEGITIMATE",
+          "n": 1
+        },
+        {
+          "id": "R-TRIVIAL-ASSERT",
+          "n": 1
+        }
+      ]
+    }
+  },
+  "corpusFiles": 163,
+  "corpusRuns": 287
+}
