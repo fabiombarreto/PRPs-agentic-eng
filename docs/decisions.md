@@ -1442,6 +1442,62 @@ caveat.
 
 ---
 
+## [2026-08-03] `R-COH-VALIDATE-FRAMEWORK-MISMATCH` gains a condition-based test-pair-deferral exemption — rejects widening the `phase_type` list to `refactor`
+
+**Context:** `/relay-execute` on `PRPs/prds/figma-quota-resilience.prd.md`
+Phase 1 (Resource packaging) failed `R-COH-VALIDATE-FRAMEWORK-MISMATCH`
+on two consecutive `plan-reviewer` runs while R1–R8 passed 8/8 both
+times. The phase `git mv`s 8 plugin-owned resources out of
+`docs/context/`, which invalidates 55 hardcoded path constants across 8
+`*.test.mjs` files. Those constants cannot be repaired in the same diff:
+`code-reviewer`'s R-X is a blanket straight-fail on any test glob in the
+Implementer's diff ([2026-05-06], [2026-07-10]). The plan correctly
+routed them to the `test-writer`/`test-reviewer` pair in test-after
+mode, documented the temporary-red window in its Risks table, and
+therefore correctly kept `node --test` out of its own Level 1–3 gates —
+which is exactly what the check flagged. The reviewer named the item
+"not resolvable by `plan-writer`" both times, and the two existing
+exemption branches did not cover it: `test_frameworks` is non-empty
+(so the silent-degradation branch does not fire) and `phase_type` is
+`refactor` (so the `{scaffold, docs, foundation}` branch does not fire).
+The loop was structurally guaranteed to exhaust its budget.
+
+**Decision:** A third exemption branch was added to
+`R-COH-VALIDATE-FRAMEWORK-MISMATCH`, keyed on a **condition** rather
+than on `phase_type`. The check emits `passed: true` when BOTH hold:
+(1) the plan documents in `## Notes` or `## NOT Building` that its
+test-file updates are routed through the test pair's lifecycle ledger
+rather than authored by the Implementer, AND (2) no task in
+`## Step-by-Step Tasks` actually touches a test file. Both conditions
+are mandatory — the documented deferral alone is never sufficient,
+because a plan that claims deferral while also editing a test file is
+making a false claim and must still face the framework requirement.
+Condition 2 is what makes the claim verifiable rather than
+self-asserted.
+
+**Reason:** Adding `refactor` to the `phase_type` list was considered
+and rejected: the operative fact is "this phase's tests belong to a
+later stage", not "this phase is a refactor", and a blanket `refactor`
+exemption would also excuse refactors that genuinely should run the
+framework — widening the hole well past the case that motivated it.
+Relabelling the phase's `phase_type` to `scaffold`/`docs`/`foundation`
+to satisfy the existing list was rejected outright as a false
+declaration in an artifact downstream stages trust. Accepting the plan
+under a one-off documented waiver was rejected because the same PRD's
+Phase 4 has the identical shape (it rewrites rubric-count assertions
+through the test pair), so the false positive would recur immediately.
+The deeper principle this records: when R-X forces a phase's test
+updates into a later stage, requiring a test-framework VALIDATE in that
+phase forces the plan to assert a red state as if it were green — a
+worse defect than the one the check exists to catch.
+
+**Areas affected:** `plugins/relay/agents/plan-reviewer.md`
+(`R-COH-VALIDATE-FRAMEWORK-MISMATCH` third exemption branch). The
+check's `rubric[]` arithmetic is unchanged — it still emits exactly one
+row per run, so no count assertion moves.
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision

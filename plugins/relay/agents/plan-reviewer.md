@@ -384,6 +384,41 @@ Two execution stages, in order:
   phases that consume the seam (the TDD track skips test-first for
   `foundation` per `/relay-write-test` P5). Requiring a test-framework
   invocation here would produce only performative tests.
+- **Test-pair-deferral exemption branch:** if BOTH of the following
+  hold, emit a single `passed: true` row with `reason: "test-file
+  updates deferred to the test pair per R-X strict; a test-framework
+  VALIDATE would assert against constants this phase deliberately
+  leaves stale — framework-mismatch check skipped"` and continue. Do
+  NOT fail in this case.
+  1. The plan documents, in `## Notes` or `## NOT Building`, that this
+     phase's test-file updates are routed through the
+     `test-writer`/`test-reviewer` pair's lifecycle ledger rather than
+     authored by the Implementer.
+  2. No task in `## Step-by-Step Tasks` actually touches a test file —
+     no `## Files to Change` row and no task ACTION targeting a test
+     glob.
+
+  **Both conditions are required.** The documented deferral alone is
+  never sufficient: a plan that claims deferral while also editing a
+  test file is making a false claim, and must still be held to the
+  framework requirement. Condition 2 is what makes the claim
+  verifiable rather than self-asserted.
+
+  Rationale: R-X is a blanket straight-fail on any test glob in the
+  Implementer's diff (`docs/anti-patterns.md` "Weakening or deleting
+  tests to make the auto-correction loop turn green";
+  `docs/decisions.md` [2026-05-06], [2026-07-10]), so a phase whose
+  own changes invalidate existing test constants CANNOT repair them in
+  the same diff. Its gates must therefore exclude the framework runner,
+  and the corpus is confirmed green one stage later by
+  `/relay-write-test` → `/relay-test-write-review` → `/relay-test`.
+  Requiring a test-framework invocation here would force the plan to
+  assert a red state as if it were green — a worse defect than the one
+  the check exists to catch. This branch is condition-based rather than
+  `phase_type`-based deliberately: the operative fact is "this phase's
+  tests belong to a later stage", not "this phase is a refactor", and
+  exempting by `phase_type: refactor` would wrongly also exempt
+  refactors that genuinely should run the framework.
 - Otherwise, parse every `**VALIDATE**:` command in
   `## Step-by-Step Tasks`. The first token of each VALIDATE command
   (the executable / runner) must match (or be a recognized invocation
