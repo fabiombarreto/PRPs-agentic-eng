@@ -310,16 +310,22 @@ plan).
 
 1. **`node` present.** Check `node --version` resolves. Note pass/fail.
 2. **Visual-tooling dependency install (best-effort).**
-   `plugins/relay/scripts/visual/` ships as of Phase 6 of the Figma
-   Implementation Track and is expected to be present
+   `${CLAUDE_PLUGIN_ROOT}/scripts/visual/` ships as of Phase 6 of the
+   Figma Implementation Track and is expected to be present
    (`provision.mjs`, `capture.mjs`, `compare.mjs`, `package.json`).
-   Attempt a dry-run `npm install --prefix plugins/relay/scripts/visual/`.
-   In the rare case the directory is missing — e.g. a partial or
-   incomplete checkout — record a documented note:
-   "plugins/relay/scripts/visual/ not present — this directory ships
-   as of Phase 6 of the Figma Implementation Track; its absence here
-   suggests an incomplete checkout, not an error in this command."
-   Never HALT on this absence.
+   Attempt `npm install --prefix ${CLAUDE_PLUGIN_ROOT}/scripts/visual/`.
+   This directory ships inside the installed plugin, so its `node_modules`
+   is NOT present in a fresh install (the cache is versioned per directory,
+   so a version bump discards any previous install). Verify that
+   `playwright`, `pixelmatch` and `pngjs` actually resolve — `provision.mjs`
+   only checks for the Chromium binary, not these packages, so a missing
+   one surfaces later as `ERR_MODULE_NOT_FOUND` inside `capture.mjs` /
+   `compare.mjs` rather than here.
+   In the rare case the directory itself is missing, record a documented
+   note: "${CLAUDE_PLUGIN_ROOT}/scripts/visual/ not present — this
+   directory ships as of Phase 6 of the Figma Implementation Track; its
+   absence indicates a broken plugin install, not an error in this
+   command." Never HALT on this absence.
 3. **Dev script exists.** Check that `design_system_config`'s
    `dev_server` block names a start command that resolves in the
    target project's package manifest (e.g. an `npm run <script>`
@@ -429,9 +435,9 @@ path. Exit non-zero.
    silent pass-through to Phase D.
 6. **Preflight failures never HALT.** Phase D's four checks are
    best-effort notes surfaced to the human in the Phase E summary,
-   including graceful degradation for the rare case of an incomplete
-   checkout missing the plugins/relay/scripts/visual/ tooling (shipped
-   as of Phase 6).
+   including graceful degradation for the rare case of a broken plugin
+   install missing the `${CLAUDE_PLUGIN_ROOT}/scripts/visual/` tooling
+   (shipped as of Phase 6).
 7. **Never invoked by `/relay-execute`.** This is a standalone,
    human-triggered setup command outside the autonomous Pillar 2
    orchestration.
@@ -446,9 +452,9 @@ path. Exit non-zero.
 - **Flip `figma_track` by heuristic, inference, or default.** The
   Phase E confirmation is mandatory and must be an explicit,
   affirmative, quoted human reply.
-- **Install or configure plugins/relay/scripts/visual/ tooling.** That
-  is Phase 6's deliverable; this command's preflight only checks for
-  its future presence gracefully.
+- **Configure or vendor the `${CLAUDE_PLUGIN_ROOT}/scripts/visual/`
+  tooling.** That is Phase 6's deliverable; this command's preflight
+  only attempts its dependency install and reports the outcome.
 - **Write Code Connect entries back to Figma.** Code Connect
   write-back is a recorded Could-item in the source PRD; this command
   only reads Code Connect data opportunistically.
