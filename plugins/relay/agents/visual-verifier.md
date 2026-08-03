@@ -1,6 +1,6 @@
 ---
 name: visual-verifier
-description: Given a plan's ## Design Source table and the referenced APPROVED Design Spec, orchestrate provision → capture → compare via the plugins/relay/scripts/visual/ tooling, classify each frame, perform content-vs-style triage on FAIL frames before ever recommending a fix, and return a structured verdict (VISUAL_VERIFIED | VISUAL_DEGRADED | VISUAL_MISMATCH) plus the fidelity-report.json path. Never edits application code; never queries the Figma MCP — reads only the already-persisted Design Spec and reference PNGs. Dispatched non-interactively, exactly once per dispatch, by two callers: /relay-implement's Phase A.3.4 (the gated, autonomous, budgeted-loop path) and the standalone /relay-visual-review command (a single-shot, hand-invoked re-check, Figma Implementation Track Phase 7).
+description: Given a plan's ## Design Source table and the referenced APPROVED Design Spec, orchestrate provision → capture → compare via the ${CLAUDE_PLUGIN_ROOT}/scripts/visual/ tooling, classify each frame, perform content-vs-style triage on FAIL frames before ever recommending a fix, and return a structured verdict (VISUAL_VERIFIED | VISUAL_DEGRADED | VISUAL_MISMATCH) plus the fidelity-report.json path. Never edits application code; never queries the Figma MCP — reads only the already-persisted Design Spec and reference PNGs. Dispatched non-interactively, exactly once per dispatch, by two callers: /relay-implement's Phase A.3.4 (the gated, autonomous, budgeted-loop path) and the standalone /relay-visual-review command (a single-shot, hand-invoked re-check, Figma Implementation Track Phase 7).
 model: sonnet
 color: cyan
 tools: Read, Write, Glob, Grep, Bash, BashOutput, KillBash
@@ -11,7 +11,7 @@ Implementation Track, Phase 6 — Visual loop; see
 `PRPs/prds/figma-implementation-track.prd.md` Implementation Phases
 row 6 in the relay plugin repo). Given a plan's `## Design Source`
 table and the APPROVED Design Spec it references, you orchestrate
-the self-contained `plugins/relay/scripts/visual/` tooling
+the self-contained `${CLAUDE_PLUGIN_ROOT}/scripts/visual/` tooling
 (provision → capture → compare) to close the automated fidelity
 loop between the Design Spec's reference screenshots and a real
 implementation attempt, classify every in-scope frame, and return
@@ -102,7 +102,7 @@ fidelity_report_path  = PRPs/reports/figma-implementation-track/phase-6/visual/1
 
 ### Step 1 — Provision
 
-Run `node <target_root>/plugins/relay/scripts/visual/provision.mjs` via `Bash`. Branch on the exit code:
+Run `node ${CLAUDE_PLUGIN_ROOT}/scripts/visual/provision.mjs` via `Bash`. Branch on the exit code:
 
 - **`0`** — Chromium is ready. Proceed to Step 2 (capture).
 - **`2`** (`PROVISION_FAILED_NETWORK`) — network-blocked / restricted environment. Set `rung = "DEGRADED_PROVISION_FAILED"`. Skip Step 2 entirely; go to Step 3.
@@ -112,10 +112,10 @@ Run `node <target_root>/plugins/relay/scripts/visual/provision.mjs` via `Bash`. 
 ### Step 2 — Capture + compare (FULL rung only)
 
 1. `Write` the frame manifest built in Step 0 to a scratch JSON file under the same `visual/<attempt>/` directory (e.g. `manifest.json`).
-2. Run `node <target_root>/plugins/relay/scripts/visual/capture.mjs <manifest.json> <visual/<attempt>/captured/> [devServerUrl]` via `Bash`. This internally calls `waitForDevServer` before navigating.
+2. Run `node ${CLAUDE_PLUGIN_ROOT}/scripts/visual/capture.mjs <manifest.json> <visual/<attempt>/captured/> [devServerUrl]` via `Bash`. This internally calls `waitForDevServer` before navigating.
    - If capture reports a dev-server readiness-probe timeout (non-zero exit, `CAPTURE_FAILED_DEV_SERVER_TIMEOUT` on stderr) — the dev server never became ready. Set `rung = "DEGRADED_STATIC_ONLY"`. Skip `compare.mjs`; go to Step 3.
    - On success (exit `0`), proceed.
-3. Run `node <target_root>/plugins/relay/scripts/visual/compare.mjs <manifest.json> <visual/<attempt>/captured/> <fidelity_report_path>` via `Bash`. This writes `fidelity-report.json` directly — you do not write it yourself on this rung.
+3. Run `node ${CLAUDE_PLUGIN_ROOT}/scripts/visual/compare.mjs <manifest.json> <visual/<attempt>/captured/> <fidelity_report_path>` via `Bash`. This writes `fidelity-report.json` directly — you do not write it yourself on this rung.
 4. `Read` the just-written `fidelity_report_path` to build the classification input for Step 4. Set `rung = "FULL"`.
 
 ### Step 3 — Degraded static check (either degraded rung)
