@@ -188,7 +188,7 @@ Record `base_branch`. Then compute `base_commit = git merge-base HEAD <base_bran
 > Cannot derive base-commit: `git merge-base HEAD <base_branch>`
 > exited non-zero. /relay-implement needs a base-commit against
 > which to compute per-attempt diffs. Set up a worktree against
-> the base branch (`/relay-worktree <feature>` when shipped) or
+> the base branch (`/relay-worktree <feature>`) or
 > run /relay-implement from a branch with a clean ancestry to
 > `<base_branch>`. No code has been changed.
 
@@ -416,7 +416,7 @@ Triggered exactly once when Phase A.3 standard-mode returns APPROVED — never o
   > never silently proceeding on a mismatch or an unreviewed pass
   > (source PRD AC-4 of `figma-visual-first-track.prd.md`). Fidelity
   > report at `<fidelity_report_path>`. Run `/relay-visual-approve`
-  > (Phase 6 of the same PRD) once available to review the captures
+  > (Phase 6 of the same PRD) to review the captures
   > and approve or reject. Halt state
   > at `<artifact_root>../halt.json`. No commit has been made and no
   > D8 mutation has occurred — the plan remains `APPROVED`, the source

@@ -648,18 +648,17 @@ in CONTRIBUTING.md / README.md. None of these activate TDD on their own.]
   inferred from Figma-related file names, `.fig` references, or
   design-tool content; always emitted deterministically on every `*init`
   run. Flips to `true` only via a human edit to this file or the explicit
-  confirmation step of the future `/relay-design-map` command (Phase 3 of
+  confirmation step of the `/relay-design-map` command (Phase 3 of
   the Figma implementation track) — never by heuristic detection.
 - Always emit `visual_first_approval: auto` — the per-project default
   approval mode for the Figma Visual-First Track's visual-first
   blocking gate defaults to `auto`, mirroring the `figma_track`
   default-emission precedent verbatim. Never heuristically inferred;
   always emitted deterministically on every `*init` run. Flips to
-  `human` only via a human edit to this file or the explicit
-  confirmation step of the future `/relay-visual-approve` command
-  (Phase 6 of `figma-visual-first-track.prd.md`, in the relay plugin
-  repo, not packaged) — never by heuristic detection. Only meaningful
-  when `figma_track: true`.
+  `human` only via a human edit to this file — no command flips it
+  (`/relay-visual-approve` records a per-phase approval decision on
+  that phase's `halt.json`; it never edits this file) — and never by
+  heuristic detection. Only meaningful when `figma_track: true`.
 
 **Update behavior:**
 
@@ -687,7 +686,7 @@ in CONTRIBUTING.md / README.md. None of these activate TDD on their own.]
     `*update` adds this key; never remove or flip an existing value.
     Heuristics (Figma file names, `.fig` references, design-tool
     mentions in commit history or docs) MUST NOT flip this value —
-    only a human edit or the future `/relay-design-map` confirmation
+    only a human edit or the `/relay-design-map` confirmation
     step can.
   - **`visual_first_approval` preservation**: if `visual_first_approval`
     is already present in the frontmatter, preserve its value
@@ -696,8 +695,8 @@ in CONTRIBUTING.md / README.md. None of these activate TDD on their own.]
     initialized before this key existed), backfill
     `visual_first_approval: auto` — this is the ONLY case where
     `*update` adds this key; never remove or flip an existing value.
-    Heuristics MUST NOT flip this value — only a human edit or the
-    future `/relay-visual-approve` confirmation step can.
+    Heuristics MUST NOT flip this value — only a human edit can
+    (no command flips it).
 - If the file is missing: run Init behavior.
 
 **Reporting (both modes):**

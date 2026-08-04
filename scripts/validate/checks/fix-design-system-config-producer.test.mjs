@@ -58,8 +58,11 @@
  *     Phase 6" preflight framing.
  *   AC-A6 (Phase-6-shipped correction, both sites + directory confirmation)
  *     — neither the Phase D preflight text nor the Constraints hard-rule-6
- *     text claims `plugins/relay/scripts/visual/` is unshipped, and the
- *     directory demonstrably exists with its four Phase 6 deliverables.
+ *     text claims the visual tooling is unshipped, and the directory
+ *     demonstrably exists with its four Phase 6 deliverables. (Both text
+ *     sites cite it as `${CLAUDE_PLUGIN_ROOT}/scripts/visual/` since
+ *     9857be0 / v0.25.1; the on-disk existence check below still resolves
+ *     the real repo path `plugins/relay/scripts/visual`.)
  *   AC-A7 delta (new changelog Fixed entry) — a new `Unreleased`/`Fixed`
  *     block exists, positioned between `Added` and the next versioned
  *     release heading, and names the fix with the literal, deterministically
@@ -339,8 +342,8 @@ test('AC-A5: commands.html mirrors relay-design-map.md\'s chosen FAILED_DESIGN_S
 });
 
 // ---------------------------------------------------------------------------
-// AC-A6 — relay-design-map.md no longer claims plugins/relay/scripts/visual/
-// is unshipped, at EITHER site that made the claim, and the directory
+// AC-A6 — relay-design-map.md no longer claims the visual tooling is
+// unshipped, at EITHER site that made the claim, and the directory
 // demonstrably exists with its Phase 6 deliverables.
 // ---------------------------------------------------------------------------
 
@@ -352,23 +355,36 @@ test('AC-A6: relay-design-map.md contains no "not shipped"/"not-yet-shipped" cla
   );
 });
 
-test('AC-A6: relay-design-map.md Phase D preflight step 2 describes plugins/relay/scripts/visual/ as shipped-and-expected-present, reframing absence as the rare/incomplete-checkout case', () => {
+// NOTE on the expected path literal: these two assertions originally pinned
+// the monorepo-relative `plugins/relay/scripts/visual/`. Commit 9857be0
+// ("fix(visual): resolve visual-tooling paths via CLAUDE_PLUGIN_ROOT",
+// shipped v0.25.1) deliberately rewrote both sites to
+// `${CLAUDE_PLUGIN_ROOT}/scripts/visual/` — the monorepo-relative form
+// resolves to nothing in an installed plugin, which is the H0-class defect
+// `plugin-root-resolvable.mjs` (check L, R2) now actively forbids. The
+// expected literal below tracks that correction; do NOT "fix" it back, or
+// `npm run validate` and this file will assert contradictory things.
+// The same commit reframed the degradation case from "incomplete checkout"
+// to "broken plugin install" — accurate, since an installed plugin is not
+// a checkout.
+
+test('AC-A6: relay-design-map.md Phase D preflight step 2 describes the ${CLAUDE_PLUGIN_ROOT}-resolved visual tooling as shipped-and-expected-present, reframing absence as the rare/broken-plugin-install case', () => {
   const content = readRepoFile(COMMAND_PATH);
   const collapsed = collapseWs(content);
 
   assert.match(
     collapsed,
-    /`plugins\/relay\/scripts\/visual\/` ships as of Phase 6 of the Figma Implementation Track and is expected to be present/
+    /`\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/visual\/` ships as of Phase 6 of the Figma Implementation Track and is expected to be present/
   );
 });
 
-test('AC-A6: relay-design-map.md Constraints hard rule 6 reframes the plugins/relay/scripts/visual/ graceful-degradation clause around an incomplete checkout, not an unshipped directory', () => {
+test('AC-A6: relay-design-map.md Constraints hard rule 6 reframes the ${CLAUDE_PLUGIN_ROOT}-resolved visual-tooling graceful-degradation clause around a broken plugin install, not an unshipped directory', () => {
   const content = readRepoFile(COMMAND_PATH);
   const collapsed = collapseWs(content);
 
   assert.match(
     collapsed,
-    /graceful degradation for the rare case of an incomplete checkout missing the plugins\/relay\/scripts\/visual\/ tooling \(shipped as of Phase 6\)\./
+    /graceful degradation for the rare case of a broken plugin install missing the `\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/visual\/` tooling \(shipped as of Phase 6\)\./
   );
 });
 

@@ -429,7 +429,7 @@ The plan ends with a trailing two-line block:
    full pass, append every verdict to
    `PRPs/plans/<basename>.review.jsonl`.
 
-3. **Implementer** (downstream, future `/relay-implement`) —
+3. **Implementer** (downstream, `/relay-implement`) —
    consumes the APPROVED plan, executes the Step-by-Step Tasks in
    order, runs the Validation Commands at Levels 1–3.
 
