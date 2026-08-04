@@ -1498,6 +1498,142 @@ row per run, so no count assertion moves.
 
 ---
 
+## [2026-08-04] `R-COH-VALIDATE-PATTERN-UNGROUNDED`: a 10th fixed deterministic plan-reviewer check catching match patterns that cannot match their target; rubric[] arithmetic shifts to 18–23/18–26
+
+**Context:** `/relay-execute` on
+`PRPs/prds/figma-quota-resilience.prd.md` Phase 2 produced an APPROVED
+plan carrying two validation-command defects of a single class. Both
+survived plan-review; both were caught only after implementation — one
+by the Implementer, one by `code-reviewer` (the `R-L2` and `R-L3` rows
+of
+`PRPs/plans/completed/figma-quota-resilience-phase-2-scoped-scan-metadata-budget.code-review.jsonl`
+— that artifact lands on this branch when `feature/figma-quota-resilience`
+merges; it was read from that worktree while writing this entry).
+
+The Level 3 regression gate parsed the `node:test` corpus with
+`grep -oE '# fail [0-9]+'`. That pattern matches nothing on this
+toolchain: Node v24's default (spec) reporter emits `ℹ fail 2`, and
+`# fail 2` appears only under an explicitly selected
+`--test-reporter=tap` — a reporter the command never asked for. Under
+a bare shell `FAIL_COUNT` then silently defaults to `0` and the gate
+prints PASS regardless of the true corpus state; under
+`set -euo pipefail` the failed pipe aborts the script at the
+assignment, so it fails closed instead. Either way the gate carries
+zero signal. The Level 2 gate had the opposite polarity: `grep -q
+'recall-oriented'` and `grep -q 'no classification authority'`, both
+case-sensitive, run against prose the SAME plan specified be authored
+as the bold bullet labels `**Recall-oriented.**` and `**No
+classification authority.**`. The content was correct and only the
+casing diverged, so a fully compliant implementation would have been
+blocked.
+
+Both commands exited non-zero on failure, so both passed
+`R-COH-VALIDATE-ALWAYS-PASS`; neither was a forbidden-reference grep,
+so `R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE` never applied. `code-reviewer`
+recorded both and still emitted APPROVED, on the reasoning that a
+broken gate inside an already-approved plan is plan debt rather than a
+defect in the implementation diff. That reasoning is correct, and it
+is precisely why the catch has to move upstream: no downstream stage
+owns it.
+
+**Decision:** Add a 10th fixed deterministic check,
+`R-COH-VALIDATE-PATTERN-UNGROUNDED`, to `plan-reviewer.md`'s R-COH-*
+layer. It scans every `## Validation Commands` (Levels 1–3) command
+and per-task `**VALIDATE**:` command, and fails on either condition:
+
+- **(a) Ungrounded runner-output scrape** — a value extracted from a
+  tool's STDOUT (piped into `grep`/`rg`/`sed`/`awk`, or the same
+  inside `$(…)`) decides the command's exit code, while the plan
+  neither pins a machine-readable output format, nor quotes a verbatim
+  sample of that tool's real output adjacent to the command, nor
+  simply asserts on the tool's own exit code.
+- **(b) Form mismatch against the plan's own authored literal** — a
+  case-sensitive fixed-string presence grep whose pattern is not a
+  byte-exact substring of the literal the same plan's `**ACTION**:`
+  prose instructs be written into that same file.
+
+The documented `rubric[]` arithmetic moves with the new row: baseline
+`17–22` → `18–23`, maximal `17–25` → `18–26`, the never-extends-to
+ceiling `26th` → `27th`, and the `figma_track: true`-without-
+`phase_scope` range `17–24` → `18–25`. The authoring-time guidance is
+mirrored into `plan-writer.md` (Hard constraint #11 pointer, Step 4.4
+item 11 wrong→right examples, a new anti-pattern bullet) and
+`docs/context/plan-template.md` (new mandatory extension 7, plus the
+item-12 Level-command note) — the same three-site enforcement pattern
+the [2026-07-09] `R-COH-VALIDATE-ALWAYS-PASS` and [2026-07-23]
+`R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE` decisions established.
+
+**Reason:** Two cheaper alternatives were considered and rejected as
+insufficient on their own.
+
+Extending `R-COH-VALIDATE-ALWAYS-PASS` was rejected because that
+check's contract is "can this command exit non-zero at all" — a
+shell-shape property that both defects already satisfied. The
+[2026-07-23] decision drew this exact boundary in prose:
+`R-COH-VALIDATE-ALWAYS-PASS` "verifies a command CAN fail, not that it
+fails for the RIGHT reason". Widening it now would relitigate a
+boundary this repo deliberately set, and would force an always-FAIL
+defect to live under an always-PASS name.
+
+Documenting the correct `node:test` summary-parsing idiom in
+`docs/context/conventions.md` and stopping there was rejected as
+structurally unable to close the class: this repo's
+`docs/context/conventions.md` is relay's OWN Tier 3 context, while
+every target project receives its own `context-builder`-generated
+copy — so a convention written here never reaches the plans relay
+authors elsewhere. It also addresses only the `node:test` instance
+rather than the general shape (any runner, any guessed format), and
+nothing at all of the casing half. It ships anyway, as a complement:
+this repo self-hosts the corpus, its plans keep re-deriving the parse
+wrong, and the `## Test patterns` section it lands in was still
+claiming "no test suite yet" — stale since [2026-07-12].
+
+The deeper principle this records: `R-COH-VALIDATE-ALWAYS-PASS` asks
+whether a gate CAN fail, `R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE` whether
+an absence grep matches too much, `R-COH-VALIDATE-SEARCH-AMBIGUOUS`
+whether a literal matches in too many places. None of them asks the
+prior question — whether the pattern matches its target at all — and a
+pattern that matches nothing yields a gate that is simultaneously
+well-formed and worthless.
+
+**Areas affected:** `plugins/relay/agents/plan-reviewer.md` (new
+`R-COH-VALIDATE-PATTERN-UNGROUNDED` deterministic check; `### Logging
+discipline` arithmetic 18–23/18–26; a 10th row in the `##
+review.jsonl format` worked example); `plugins/relay/agents/plan-writer.md`
+(Hard constraint #11 pointer, Step 4.4 item 11 pattern-grounding
+wrong→right examples, new anti-pattern bullet);
+`docs/context/plan-template.md` (mandatory extension 7; item 12
+note); `docs/context/conventions.md` (`## Test patterns` rewritten
+from its stale "no test suite yet" claim to the quoted-glob and
+exit-code-first invocation conventions); every future generated plan
+whose Validation Commands or per-task `**VALIDATE**:` lines let a
+match pattern decide the exit code.
+
+The count assertions cost far less than the historical ~20-site
+estimate, because `scripts/validate/checks/plan-reviewer-rubric-arithmetic-derived.test.mjs`
+now DERIVES the expected numerals from the live `#### R-COH-*` heading
+count — it confirmed 10 deterministic / 18–23 / 18–26 / 27th with no
+edit of its own. Only snapshot-style assertions needed updating:
+`figma-track-phase5.test.mjs`, `figma-visual-first-track-phase3.test.mjs`,
+`plan-reviewer-action-validate-contradiction-check.test.mjs` (numerals
+plus the exact 13→14 heading order/count list), and
+`plan-reviewer-validate-search-ambiguous-check.test.mjs` (worked-example
+row count 9→10 and its last-row identity). NOT
+`scripts/validate/checks/rubric-reconciliation.test.mjs`, which asserts
+the [2026-07-28] entry's own historical numerals against
+`docs/decisions.md` — a past-tense record that stays accurate — and
+whose entry-position assertions are order-only.
+
+Not updated: `documentation/reference/agents.html`, whose R-COH-*
+catalog already omits `R-COH-VALIDATE-ALWAYS-PASS`,
+`R-COH-ACTION-VALIDATE-CONTRADICTION`, `R-COH-VALIDATE-SEARCH-AMBIGUOUS`,
+and `R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE`, and still claims "4
+deterministic"/"5 deterministic". That drift predates this change by
+four rubric additions and is tracked as separate doc-site debt rather
+than partially patched here.
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision
