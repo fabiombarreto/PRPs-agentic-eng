@@ -1,5 +1,5 @@
 ---
-description: 'Give every Figma-enabled project a versioned, human-curatable map from Figma library components to real code components. Queries the target project''s Figma library in the main session (search_design_system + node-scoped get_metadata, budget max_library_search_calls=40; get_code_connect_map read opportunistically), persists evidence bundles to PRPs/reports/design-map/evidence/, dispatches the design-map-writer/design-map-reviewer pair in a bounded max_map_review_retries=2 loop to produce an APPROVED docs/design/component-map.md, runs a preflight report (visual-tooling dependency check, dev-server config check), then asks for the user''s own explicit, quoted confirmation before performing the ONLY sanctioned Edit that flips figma_track: true in the target project''s docs/context/methodology.md. Never invoked by /relay-execute — a per-project, one-time (or --refresh) human-triggered setup command.'
+description: 'Give every Figma-enabled project a versioned, human-curatable map from Figma library components to real code components. Queries the target project''s Figma library in the main session (search_design_system, budget max_library_search_calls=40; a local Glob/Grep pre-match against the design-system clone narrows enrichment to candidates only; node-scoped get_metadata for pre-matched candidates, budget max_metadata_calls=150, non-fatal on exhaustion; get_code_connect_map read opportunistically), persists evidence bundles to PRPs/reports/design-map/evidence/, dispatches the design-map-writer/design-map-reviewer pair in a bounded max_map_review_retries=2 loop to produce an APPROVED docs/design/component-map.md, runs a preflight report (visual-tooling dependency check, dev-server config check), then asks for the user''s own explicit, quoted confirmation before performing the ONLY sanctioned Edit that flips figma_track: true in the target project''s docs/context/methodology.md. Never invoked by /relay-execute — a per-project, one-time (or --refresh) human-triggered setup command.'
 argument-hint: [--refresh]
 ---
 
@@ -35,11 +35,11 @@ per-project, one-time (or explicitly re-run) human-gated action, never
 inferred, never automatic.
 
 See:
-- `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/figma-implementation-track.prd.md` — source PRD, Implementation Phases row 3.
+- the source PRD `figma-implementation-track.prd.md`, in the relay plugin repo (not packaged) — Implementation Phases row 3.
 - `${CLAUDE_PLUGIN_ROOT}/commands/relay-worktree.md` — HALT-code + preflight structure this command mirrors.
 - `${CLAUDE_PLUGIN_ROOT}/commands/relay-implement.md` Phase A.3.5 — the bounded writer/reviewer retry-loop shape this command's Phase C mirrors.
 - `${CLAUDE_PLUGIN_ROOT}/agents/design-map-writer.md` and `${CLAUDE_PLUGIN_ROOT}/agents/design-map-reviewer.md` — the dispatched agent pair.
-- `${CLAUDE_PLUGIN_ROOT}/docs/context/component-map-template.md` — the canonical map shape both agents reference.
+- `${CLAUDE_PLUGIN_ROOT}/resources/component-map-template.md` — the canonical map shape both agents reference.
 - `docs/anti-patterns.md` (target project) — "Flipping `figma_track` (or any future opt-in gating key) by heuristic" entry; this command's Phase E is the one sanctioned non-heuristic flip path.
 
 ---
@@ -219,26 +219,58 @@ inside a dispatched agent (Decision Gate result above).
    stop issuing further search calls once this budget is reached and
    record the scan as truncated (this feeds the map's
    `inventory_truncated` marker via the evidence bundle).
-2. **Node-scoped metadata.** For each component (or component set)
-   discovered, call node-scoped `get_metadata` to retrieve its
-   variant/property structure.
-3. **Code Connect (opportunistic).** Call `get_code_connect_map` for
+2. **Pre-match candidates (local, Figma-call-free).** Against
+   `design_system_config.local_clone_path`, compare each
+   component/component-set name (and slug) enumerated in step 1 to
+   file names and exported symbol names in the local design-system
+   clone via `Glob`/`Grep`, producing a candidate set for enrichment.
+   This step issues zero Figma MCP calls. Three properties hold by
+   design:
+   - **Recall-oriented.** The pre-match over-includes and never
+     under-includes — any plausible partial match, pluralization
+     difference, or ambiguous multi-candidate name is always
+     included, never excluded.
+   - **No classification authority.** The pre-match never decides
+     `CONFIRMED` vs. `INFERRED` vs. `UNMAPPED` — that remains
+     exclusively `design-map-writer` Step 2's job against the full
+     evidence bundle, and the writer may map any component present in
+     the evidence bundle regardless of membership in this candidate
+     set.
+   - **A duplicated, drifting heuristic.** This step necessarily
+     duplicates part of `design-map-writer.md` Step 2's own
+     name/prop matching heuristic; the two are expected to drift over
+     time, and neither is authoritative over the other — this
+     pre-match only scopes *which components get enriched in step 3*.
+3. **Node-scoped metadata (candidates only).** For each component (or
+   component set) in the step 2 candidate set — never the full step 1
+   enumeration — call node-scoped `get_metadata` to retrieve its
+   variant/property structure. Budget: `max_metadata_calls = 150` —
+   stop issuing further `get_metadata` calls once this budget is
+   reached. Exhaustion is never fatal: record
+   `enrichment_truncated: true` with a reason (e.g.
+   `"max_metadata_calls exhausted at 150/<candidate count>"`) and
+   continue to the next step.
+4. **Code Connect (opportunistic).** Call `get_code_connect_map` for
    the library. This call is opportunistic — any error (missing Code
    Connect configuration, permission error, timeout) is recorded as
    `code_connect: unavailable(<error class>)` in the evidence bundle's
    header and the run CONTINUES. A Code Connect failure is never
    fatal to this command.
-4. **Persist evidence.** Write every raw result from steps 1–3 to
+5. **Persist evidence.** Write every raw result from steps 1–4 to
    `PRPs/reports/design-map/evidence/` (create the directory if
    absent) as one or more evidence files — at minimum a
    `library-search.json` (step 1 results plus the
    `max_library_search_calls` budget consumption and a
-   `truncated: true|false` flag), a `metadata/<component-key>.json`
-   per component (step 2), and a `code-connect.json` (step 3 result or
-   the `unavailable(<error class>)` marker). This is the exact and
-   only evidence surface `design-map-writer` and
-   `design-map-reviewer` are permitted to read for Figma facts — they
-   never call the Figma MCP themselves.
+   `truncated: true|false` flag; `candidates_prematched`, the size of
+   the step 2 candidate set; `metadata_calls_made`, the count of step
+   3 `get_metadata` calls actually issued this run; and
+   `enrichment_truncated: true|false` with its reason when
+   applicable), a `metadata/<component-key>.json` per enriched
+   candidate (step 3), and a `code-connect.json` (step 4 result or the
+   `unavailable(<error class>)` marker). This is the exact and only
+   evidence surface `design-map-writer` and `design-map-reviewer` are
+   permitted to read for Figma facts — they never call the Figma MCP
+   themselves.
 
 ---
 
@@ -425,7 +457,7 @@ path. Exit non-zero.
    either agent.
 3. **Never write pipeline artifacts under `.claude/`.** Evidence
    bundles go under `PRPs/reports/design-map/evidence/`; the map goes
-   under `docs/design/`. See `docs/anti-patterns.md` lines 60–66.
+   under `docs/design/`. See `docs/anti-patterns.md` ("Writing pipeline artifacts under .claude/").
 4. **Never flip `figma_track` without explicit, quoted human
    confirmation.** No heuristic, no inferred consent, no default-yes
    on silence. This is the one command in the entire pipeline

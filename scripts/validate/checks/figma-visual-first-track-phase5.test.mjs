@@ -514,13 +514,13 @@ test('AC-A4, AC-A5: visual-verifier.md\'s Step 0 reads the Design Spec\'s 9th In
   // (updated this session) "Step 0 builds the in-memory frame manifest" test.
   assert.ok(
     collapsed.includes(
-      '`docs/context/design-spec-template.md:111-113` shape: node-id, route, preconditions, auth mode, viewport, diff threshold, ref PNG path + dims, masks, interaction)'
+      '`${CLAUDE_PLUGIN_ROOT}/resources/design-spec-template.md:111-113` shape: node-id, route, preconditions, auth mode, viewport, diff threshold, ref PNG path + dims, masks, interaction)'
     ),
     'expected the sub-step-2 prose enumeration to list all 9 fields, ending in "masks, interaction)"'
   );
   assert.ok(
     collapsed.includes(
-      "Read the row's `Interaction` column (the 9th column, added by Phase 1 of this same PRD to `docs/context/design-spec-template.md`)"
+      "Read the row's `Interaction` column (the 9th column, added by Phase 1 of this same PRD to `${CLAUDE_PLUGIN_ROOT}/resources/design-spec-template.md`)"
     ),
     'expected the 9th-column cross-reference to Phase 1'
   );
@@ -613,7 +613,7 @@ test('AC-A6 (PRD AC-4, human-mode specifically): a genuine VISUAL_VERIFIED resul
   );
   assert.ok(
     /** @type {string} */ (block).includes(
-      'Write `<artifact_root>../halt.json` with `{outcome: "AWAITING_VISUAL_APPROVAL", phase_scope: "visual", final_visual_verdict: "<VISUAL_VERIFIED|VISUAL_DEGRADED|VISUAL_MISMATCH>", fidelity_report_path, attempt_history, actionable_recommendation: "Run /relay-visual-approve (Phase 6 of PRPs/prds/figma-visual-first-track.prd.md; not yet built as of this phase) to review the captures at <fidelity_report_path> and approve or reject. Until then this phase cannot reach complete."}`.'
+      'Write `<artifact_root>../halt.json` with `{outcome: "AWAITING_VISUAL_APPROVAL", phase_scope: "visual", final_visual_verdict: "<VISUAL_VERIFIED|VISUAL_DEGRADED|VISUAL_MISMATCH>", fidelity_report_path, attempt_history, actionable_recommendation: "Run /relay-visual-approve (Phase 6 of PRPs/prds/figma-visual-first-track.prd.md) to review the captures at <fidelity_report_path> and approve or reject. Until then this phase cannot reach complete."}`.'
     ),
     'expected the AWAITING_VISUAL_APPROVAL halt.json shape, whose final_visual_verdict field explicitly allows the VISUAL_VERIFIED value'
   );

@@ -264,7 +264,7 @@ import { resolve } from 'node:path';
 import { runPathExistenceCheck } from './path-existence.mjs';
 import { withScanRootLock } from './scan-root-lock.mjs';
 
-const PLAN_TEMPLATE_PATH = 'docs/context/plan-template.md';
+const PLAN_TEMPLATE_PATH = 'plugins/relay/resources/plan-template.md';
 const PLAN_WRITER_PATH = 'plugins/relay/agents/plan-writer.md';
 const PLAN_REVIEWER_PATH = 'plugins/relay/agents/plan-reviewer.md';
 const CHANGELOG_PATH = 'documentation/changelog.html';
@@ -380,7 +380,7 @@ test('AC-A1: plan-writer.md registers Hard Constraint #12 (phase_scope: visual t
   );
   assert.ok(
     collapsed.includes(
-      "every task that displays a datum or wires an interactive handler MUST name the `[RELAY-MOCK-DATA]` or `[RELAY-MOCK-BEHAVIOR]` sentinel (type-matched: data → `RELAY-MOCK-DATA`, interactive action → `RELAY-MOCK-BEHAVIOR`) it will emit, per `docs/context/mock-sentinels.md`."
+      "every task that displays a datum or wires an interactive handler MUST name the `[RELAY-MOCK-DATA]` or `[RELAY-MOCK-BEHAVIOR]` sentinel (type-matched: data → `RELAY-MOCK-DATA`, interactive action → `RELAY-MOCK-BEHAVIOR`) it will emit, per `${CLAUDE_PLUGIN_ROOT}/resources/mock-sentinels.md`."
     ),
     'expected the type-matched sentinel naming requirement'
   );
@@ -392,7 +392,7 @@ test('AC-A1: plan-writer.md registers Hard Constraint #12 (phase_scope: visual t
   );
 });
 
-test('AC-A1: docs/context/plan-template.md registers a new "What phase_scope: visual implies for the plan body" paragraph — UI-and-mocks task restriction + type-matched sentinel naming, cross-referencing mock-sentinels.md and plan-reviewer\'s R-COH-VISUAL-SCOPE-PURITY check', () => {
+test('AC-A1: plugins/relay/resources/plan-template.md registers a new "What phase_scope: visual implies for the plan body" paragraph — UI-and-mocks task restriction + type-matched sentinel naming, cross-referencing mock-sentinels.md and plan-reviewer\'s R-COH-VISUAL-SCOPE-PURITY check', () => {
   const content = readRepoFile(PLAN_TEMPLATE_PATH);
   const block = sliceBetween(
     content,
@@ -410,7 +410,7 @@ test('AC-A1: docs/context/plan-template.md registers a new "What phase_scope: vi
   );
   assert.ok(
     collapsed.includes(
-      "see `docs/context/mock-sentinels.md` for the sentinel convention and `plugins/relay/agents/plan-reviewer.md`'s `R-COH-VISUAL-SCOPE-PURITY` check, which structurally enforces the same rule."
+      "see `${CLAUDE_PLUGIN_ROOT}/resources/mock-sentinels.md` for the sentinel convention and `plugins/relay/agents/plan-reviewer.md`'s `R-COH-VISUAL-SCOPE-PURITY` check, which structurally enforces the same rule."
     ),
     'expected the cross-reference to mock-sentinels.md and R-COH-VISUAL-SCOPE-PURITY'
   );
@@ -1089,7 +1089,7 @@ test(
 // mock-sentinels.md as a P0 entry for a phase_scope: visual plan.
 // ---------------------------------------------------------------------------
 
-test('AC-A5 (PRD AC-3): plan-writer.md Step 4.4 item 6 always includes docs/context/mock-sentinels.md as a P0 Mandatory Reading row when phase_scope: visual, naming the sentinel convention and zero-side-effects/zero-remaining rules the Implementer must satisfy', () => {
+test('AC-A5 (PRD AC-3): plan-writer.md Step 4.4 item 6 always includes plugins/relay/resources/mock-sentinels.md as a P0 Mandatory Reading row when phase_scope: visual, naming the sentinel convention and zero-side-effects/zero-remaining rules the Implementer must satisfy', () => {
   const content = readRepoFile(PLAN_WRITER_PATH);
   const block = sliceBetween(content, '6. `## Mandatory Reading`', '7. `## Patterns to Mirror`');
   assert.ok(block, 'expected an extractable item 6 Mandatory Reading block');
@@ -1097,7 +1097,7 @@ test('AC-A5 (PRD AC-3): plan-writer.md Step 4.4 item 6 always includes docs/cont
 
   assert.ok(
     collapsed.includes(
-      "When `phase_scope: visual` (from item 5 above), always include `docs/context/mock-sentinels.md` as a P0 `## Mandatory Reading` row — the sentinel convention and zero-side-effects/zero-remaining rules every task in this plan must satisfy, and the exact reference the Implementer needs when executing the plan's tasks."
+      "When `phase_scope: visual` (from item 5 above), always include `${CLAUDE_PLUGIN_ROOT}/resources/mock-sentinels.md` (installed relay plugin file) as a P0 `## Mandatory Reading` row — the sentinel convention and zero-side-effects/zero-remaining rules every task in this plan must satisfy, and the exact reference the Implementer needs when executing the plan's tasks."
     ),
     'expected the mock-sentinels.md mandatory-reading rule'
   );

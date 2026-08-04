@@ -195,8 +195,8 @@ Note for planning: several ACs here (AC-13 above all) land squarely on existing 
 
 | # | Phase | Description | Status | Parallel | Depends | PRP Plan |
 |---|-------|-------------|--------|----------|---------|----------|
-| 1 | Resource packaging | Move the 8 plugin-owned resources into `plugins/relay/resources/`, rewrite every reference, add the `plugin-root-resolvable` check, publish and verify against the installed cache | in-progress | - | - | PRPs/plans/figma-quota-resilience-phase-1-resource-packaging.plan.md |
-| 2 | Scoped scan + metadata budget | Invert Phase B to enumerate → pre-match → enrich candidates; introduce `max_metadata_calls` | pending | - | 1 | - |
+| 1 | Resource packaging | Move the 8 plugin-owned resources into `plugins/relay/resources/`, rewrite every reference, add the `plugin-root-resolvable` check, publish and verify against the installed cache | complete | - | - | PRPs/plans/completed/figma-quota-resilience-phase-1-resource-packaging.plan.md |
+| 2 | Scoped scan + metadata budget | Invert Phase B to enumerate → pre-match → enrich candidates; introduce `max_metadata_calls` | complete | - | 1 | PRPs/plans/completed/figma-quota-resilience-phase-2-scoped-scan-metadata-budget.plan.md |
 | 3 | Quota preflight + named failure | `whoami` cost declaration with explicit confirmation; corrected P1 message; `FAILED_FIGMA_QUOTA_EXHAUSTED` | pending | - | 2 | - |
 | 4 | Evidence contract + rungs + R-DM7 | Additive cumulative bundle, relocated checkpoint, disk-derived split flags, persisted rungs, surgical downgrade, `R-DM7`, DERIVED rubric-count tests | pending | - | 1, 3 | - |
 | 5 | Checkpoint / resume | Resume semantics so an interrupted run and `--refresh` cost only the delta | pending | - | 4 | - |

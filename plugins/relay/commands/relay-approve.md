@@ -16,7 +16,7 @@ Accept the `<pr>` argument (PR number or URL; plus optional `--strategy merge|sq
 The command carries no LLM judgment — all docs interpretation is delegated to the **docs-updater** (writer) and **docs-reviewer** (reviewer) agent pair, which may reopen dialogue with the operator if needed. The command itself is purely deterministic: gh/git/file operations plus a bounded loop.
 
 See:
-- `PRPs/prds/relay-approve-command.prd.md` — source PRD; AC-1 through AC-12; Decisions Log; Architecture Notes
+- the source PRD `relay-approve-command.prd.md`, in the relay plugin repo (not packaged) — AC-1 through AC-12; Decisions Log; Architecture Notes
 - `plugins/relay/commands/relay-pr.md` — structural sibling; Phase 0 precondition shape; named HALT format; `git -C` discipline; Phase 4 output + next-step pattern
 - `plugins/relay/agents/docs-updater.md` — the writer this command dispatches; inputs `pr` + `target_root`; writes `PRPs/reports/<feature>/docs-update.md` ending `*Status: DRAFT*`
 - `plugins/relay/agents/docs-reviewer.md` — the reviewer this command dispatches; owns the DRAFT→APPROVED flip; CHANGES_REQUESTED verdict shape; budget-exhaustion handoff
@@ -441,7 +441,7 @@ Write the file back. If the read/write fails for any reason, skip silently (the 
 4. **Never pass `--no-verify` to any git command.** Pre-commit and pre-push hooks are project quality gates and must run.
 5. **Never write under `.claude/`.** All pipeline artifacts (`orchestrator-run.json`, `approve-halt.json`, `docs-update.md`, `docs-review.jsonl`) live under `PRPs/reports/<feature>/`. The docs KB writes are delegated to the docs-updater, whose own contract also forbids `.claude/` writes.
 6. **Never prompt the user mid-run.** HALTs emit a verbatim message and the command exits. The docs-updater and docs-reviewer agents may reopen dialogue with the operator — that interactivity is a conscious, recorded extension of the boundary (see `docs/decisions.md` 2026-05-18) — but the command itself never prompts.
-7. **Allowlist note.** The four new allow patterns (`gh pr merge *`, `git worktree remove *`, `git branch -d *`, `git push origin --delete feature/*`) are added to `docs/context/settings-allowlist.md` in Phase 3 of this PRD. Without them the autonomous run stalls on permission prompts.
+7. **Allowlist note.** The four new allow patterns (`gh pr merge *`, `git worktree remove *`, `git branch -d *`, `git push origin --delete feature/*`) are added to `${CLAUDE_PLUGIN_ROOT}/resources/settings-allowlist.md` in Phase 3 of this PRD. Without them the autonomous run stalls on permission prompts.
 8. **Partial-failure is captured, never swallowed.** If any cleanup step fails, the state is written to `approve-halt.json` with `{steps_attempted, steps_succeeded, step_failed, error, manual_recovery_steps}` and an actionable message is emitted. No step is silently skipped.
 9. **Idempotent re-run.** Each destructive step is guarded by a state check. A fully-cleaned PR exits 0 immediately. A partially-cleaned PR skips the steps that already succeeded and retries the failed ones.
 10. **Merge state detection via `gh pr view`, not exit code.** The `gh pr merge` exit code on an already-merged PR is undocumented (cli/cli #13345). State is always detected via `gh pr view --json state,mergedAt` first.

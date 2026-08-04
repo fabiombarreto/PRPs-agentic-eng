@@ -27,6 +27,7 @@ import { runBootstrapParityCheck } from './checks/bootstrap-parity.mjs';
 import { runGatingStructureCheck } from './checks/gating-structure.mjs';
 import { runFeedbackChainCheck } from './checks/feedback-chain.mjs';
 import { runTimestampContractCheck } from './checks/timestamp-contract.mjs';
+import { runPluginRootResolvableCheck } from './checks/plugin-root-resolvable.mjs';
 
 function die(code, msg) {
   process.stderr.write(msg + '\n');
@@ -48,6 +49,7 @@ const CHECKS = [
   runGatingStructureCheck,
   runFeedbackChainCheck,
   runTimestampContractCheck,
+  runPluginRootResolvableCheck,
 ];
 
 function runChecks(checks) {

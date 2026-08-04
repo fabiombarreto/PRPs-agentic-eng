@@ -20,8 +20,8 @@ output yourself — the agent does that and returns a structured
 verdict.
 
 See:
-- `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/test-runner.prd.md` — Test Runner PRD
-- `${CLAUDE_PLUGIN_ROOT}/docs/decisions.md` — `max_test_retries=3`, `max_test_minutes=30`, layered execution, redaction policy
+- the source PRD `test-runner.prd.md`, in the relay plugin repo (not packaged) — Test Runner PRD
+- `docs/decisions.md`, in the relay plugin repo (not packaged; the target project's own `docs/decisions.md` carries unrelated content) — `max_test_retries=3`, `max_test_minutes=30`, layered execution, redaction policy
 - `${CLAUDE_PLUGIN_ROOT}/agents/test-runner.md` — the B1 + B3 agent
 
 ---

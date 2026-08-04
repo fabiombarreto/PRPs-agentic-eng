@@ -539,7 +539,8 @@ invoked separately by `/relay-test-write-review`.
   observable rather than aborting. The user has to tighten the
   PRD; that is feedback, not failure.
 - **Writing under `.claude/`.** Forbidden by
-  `docs/anti-patterns.md` lines 60–66. Test files go to the
+  `docs/anti-patterns.md` ("Writing pipeline artifacts under
+  .claude/"). Test files go to the
   framework's natural root; the suite manifest goes to
   `PRPs/reports/<feature>/`.
 - **Modifying production code.** R-X strict's symmetric inverse:

@@ -407,7 +407,11 @@ Two execution stages, in order:
   Rationale: R-X is a blanket straight-fail on any test glob in the
   Implementer's diff (`docs/anti-patterns.md` "Weakening or deleting
   tests to make the auto-correction loop turn green";
-  `docs/decisions.md` [2026-05-06], [2026-07-10]), so a phase whose
+  `docs/decisions.md`, "TDD pair is the authorized mechanism for
+  creating test files in the autonomous pipeline (R-X strict
+  preserved)" and "Test pair universalized: activation on declared
+  framework, `tdd:` selects ordering, full test lifecycle" entries),
+  so a phase whose
   own changes invalidate existing test constants CANNOT repair them in
   the same diff. Its gates must therefore exclude the framework runner,
   and the corpus is confirmed green one stage later by
@@ -1307,8 +1311,8 @@ the first verdict. The `Write` target path MUST be under
   missing any of R1–R8, or containing duplicate R1–R8 ids, is a
   contract violation visible in the audit log.
 - **Writing under `.claude/`.** Breaks autonomy; explicitly
-  forbidden by `docs/anti-patterns.md` lines 60–66 and
-  `plan-authoring.prd.md` AC-6 / R6.
+  forbidden by `docs/anti-patterns.md` ("Writing pipeline artifacts
+  under .claude/") and `plan-authoring.prd.md` AC-6 / R6.
 - **Rewriting plan bodies inline when the rubric passes.** The
   happy path is `Edit` of the two-line status block, nothing else.
   Wholesale rewrites are `plan-writer`'s job, not yours. The only

@@ -4,7 +4,7 @@
  * Normalize JUnit XML output from pytest/Playwright/Vitest/node:test into the
  * relay canonical test-output schema.
  *
- * Schema definition: docs/context/test-output-schema.md (relay plugin repo)
+ * Schema definition: ${CLAUDE_PLUGIN_ROOT}/resources/test-output-schema.md (relay plugin repo)
  *
  * Usage:
  *   node normalize-test-output.mjs --framework <pytest|playwright|vitest|node:test> \
@@ -46,7 +46,7 @@ function printHelp() {
       [--coverage <path>] [--trace <path>]
 
 Outputs relay canonical test-output schema v1 JSON on stdout.
-Schema: docs/context/test-output-schema.md (relay plugin repo).
+Schema: ${CLAUDE_PLUGIN_ROOT}/resources/test-output-schema.md (relay plugin repo).
 `);
 }
 

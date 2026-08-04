@@ -108,7 +108,7 @@ If the header line is not found, HALT with:
 
 > Implementation Phases table header not found in `<prd_path>`.
 > Expected: `| # | Phase | Description | Status | Parallel | Depends | PRP Plan |`.
-> The PRD must conform to docs/context/prd-template.md before
+> The PRD must conform to ${CLAUDE_PLUGIN_ROOT}/resources/prd-template.md before
 > /relay-execute can run.
 
 Parse the data rows that follow (skip the GFM separator row consisting only of dashes and pipes). Apply the actionable-row selection rule (plan-writer Step 1.3 verbatim):

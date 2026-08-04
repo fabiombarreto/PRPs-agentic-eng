@@ -19,8 +19,8 @@ delegated to the `research-web` and `research-codebase` subagents via
 the `Task` tool during Phase 3 (and conditionally Phase 5).
 
 See:
-- `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/prd-authoring.prd.md` — this
-  feature's PRD; scope, AC-1 through AC-16, rationale.
+- the source PRD `prd-authoring.prd.md`, in the relay plugin repo
+  (not packaged) — this feature's PRD; scope, AC-1 through AC-16, rationale.
 - `${CLAUDE_PLUGIN_ROOT}/agents/prd-writer.md` — the
   Writer protocol you adopt in Phases 1–7.
 - `${CLAUDE_PLUGIN_ROOT}/agents/prd-reviewer.md` — the
@@ -28,7 +28,7 @@ See:
 - `${CLAUDE_PLUGIN_ROOT}/agents/research-web.md` and
   `research-codebase.md` — subagents invoked via `Task` during
   grounding.
-- `${CLAUDE_PLUGIN_ROOT}/docs/context/prd-template.md` — canonical
+- `${CLAUDE_PLUGIN_ROOT}/resources/prd-template.md` — canonical
   PRD shape; the Writer assembles the DRAFT against this template.
 
 ---
@@ -179,7 +179,7 @@ Execution context:
 > `RUBRIC_PASSED` and the *dispatcher* — after obtaining the user's own
 > approval in the main conversation — owns the flip. See the Reviewer's
 > "## Invocation context and flip ownership" and the `docs/decisions.md`
-> [2026-07-09] entry.
+> "PRD `DRAFT → APPROVED` flip ownership is invocation-context-scoped" entry.
 
 Run the Reviewer protocol: load, rubric, branch on result. The
 Reviewer either:

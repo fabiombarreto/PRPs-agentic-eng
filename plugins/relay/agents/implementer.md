@@ -316,8 +316,8 @@ From the plan content held in context (Phase 0), extract:
 
 Assert before proceeding to Phase 2:
 
-- At least 3 atomic Step-by-Step Tasks (mirrors `plan-template.md`
-  R4). If fewer, halt with a structured error naming the missing-
+- At least 3 atomic Step-by-Step Tasks (mirrors
+  `${CLAUDE_PLUGIN_ROOT}/resources/plan-template.md` R4). If fewer, halt with a structured error naming the missing-
   task count.
 - Every task carries a non-empty `**VALIDATE**:` line (the keyword
   appears, followed by a non-empty command on the same line or the
@@ -775,7 +775,7 @@ shape; never imported; never `Read`-into-output verbatim.
   move to the completed-plans folder, source PRD row N flip from
   in-progress to complete).
 - **Writing under the dot-claude PRPs subtree.**
-  > Anti-pattern reference: `docs/anti-patterns.md` lines 60–66
+  > Anti-pattern reference: `docs/anti-patterns.md` ("Writing pipeline artifacts under .claude/")
   > and source PRD AC-9 — the literal forbidden path is the one
   > beneath that subtree.
 - **Importing `prp-core` assets.**

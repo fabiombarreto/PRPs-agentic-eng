@@ -174,7 +174,7 @@ was resolved on 2026-04-19 and is recorded in `docs/decisions.md`. Format:
 `docs/context/methodology.md` with YAML frontmatter.)
 
 (The PRD template and artifact path convention — also originally implicit
-in §12 — were resolved on 2026-04-19: template at `docs/context/prd-template.md`
+in §12 — were resolved on 2026-04-19: template at `plugins/relay/resources/prd-template.md`
 is a fork of `prp-core/commands/prp-prd.md` with three mandatory extensions;
 artifacts live under `PRPs/` at the repo root, never under `.claude/`. See
 `docs/decisions.md`.)

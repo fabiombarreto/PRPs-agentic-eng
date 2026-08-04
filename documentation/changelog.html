@@ -31,6 +31,103 @@
       <h2 id="unreleased">Unreleased</h2>
       <p>Nothing queued yet.</p>
 
+      <h2 id="v0-26-0">0.26.0 &#8212; 2026-08-03</h2>
+      <p>Resource packaging &mdash; Phase 1 of the <code>figma-quota-resilience</code> PRD, absorbing <code>PRPs/reports/plugin-root-audit/fix-plan.md</code>'s F2&ndash;F6 as its authoritative scope (F0/F1 already shipped in <code>9857be0</code> / v0.25.1). The eight plugin-owned resource templates under <code>docs/context/</code> were unreachable from every installed instance of the plugin, because <code>${CLAUDE_PLUGIN_ROOT}</code> resolves to <code>plugins/relay/</code> only and <code>docs/</code> was never packaged. This release moves them to a new <code>plugins/relay/resources/</code> directory &mdash; a name deliberately distinct from <code>docs/</code>, so the packaged/target-scoped distinction becomes mechanically checkable &mdash; and rewrites roughly 140 references across some 25 agent/command/skill/doc files.</p>
+
+      <h3 id="v0-26-0-added">Added</h3>
+      <ul>
+        <li><strong><code>plugins/relay/resources/</code></strong>
+          &mdash; new packaged directory holding the eight plugin-owned
+          templates (<code>prd-template.md</code>, <code>plan-template.md</code>,
+          <code>design-spec-template.md</code>,
+          <code>component-map-template.md</code>,
+          <code>redaction-policy.md</code>, <code>settings-allowlist.md</code>,
+          <code>test-output-schema.md</code>, <code>mock-sentinels.md</code>),
+          moved via <code>git mv</code> from <code>docs/context/</code> with
+          no stubs left behind.</li>
+        <li><strong><code>scripts/validate/checks/plugin-root-resolvable.mjs</code></strong>
+          &mdash; the 12th registered static check. Flags any of the eight
+          resource basenames appearing anywhere under <code>plugins/relay/</code>
+          without the <code>${CLAUDE_PLUGIN_ROOT}/resources/</code> prefix, and
+          any literal <code>plugins/relay/&hellip;</code> substring leaking
+          into the packaged tree itself &mdash; the two blind spots
+          <code>path-existence.mjs</code> structurally cannot cover. Registered
+          in <code>scripts/validate/index.mjs</code>, taking the suite from 11
+          to 12 checks.</li>
+        <li><strong><code>FAILED_TEMPLATE_UNREADABLE</code></strong>
+          &mdash; a named halt added to <code>design-map-writer.md</code>'s and
+          <code>design-spec-writer.md</code>'s Hard Constraint 1, for when the
+          mandatory template <code>Read</code> itself fails (missing, unreadable,
+          or empty) &mdash; distinct from the pre-existing "missing section is a
+          bug" rule, which only covered a successfully-read-but-incomplete
+          template.</li>
+        <li><strong><code>docs/context/conventions.md</code></strong>
+          &mdash; new "Plugin-owned resource references" section documenting
+          the four reference classes (packaged, target-scoped,
+          source-only-prose, cite-by-title) every agent/command/skill file
+          must follow.</li>
+      </ul>
+
+      <h3 id="v0-26-0-changed">Changed</h3>
+      <ul>
+        <li>Roughly 140 references across <code>plugins/relay/</code> rewritten
+          in five severity-driven classes: 18
+          <code>${CLAUDE_PLUGIN_ROOT}/docs/context/&hellip;</code> references
+          repointed to <code>${CLAUDE_PLUGIN_ROOT}/resources/&hellip;</code>;
+          51 bare <code>docs/context/&lt;resource&gt;.md</code> references
+          repointed the same way; roughly 25
+          <code>${CLAUDE_PLUGIN_ROOT}/PRPs/&hellip;</code> and bare
+          <code>PRPs/prds/*.prd.md</code> provenance mentions converted to
+          prose with no resolvable token-path form; roughly 10 out-of-root
+          references (<code>plugins/prp-core/&hellip;</code>,
+          <code>documentation/&hellip;</code> cited from inside an agent, a
+          stale <code>plugin.json</code> path) deleted or inlined; roughly 30
+          line-pinned or date-pinned citations of the target-owned governance
+          docs (<code>docs/decisions.md</code>, <code>docs/anti-patterns.md</code>,
+          <code>docs/context/architecture.md</code>) repointed to cite by
+          section title instead, since a target project's own copy of those
+          files carries unrelated content at the same line/date.</li>
+        <li><strong><code>scripts/validate/checks/path-existence.mjs</code></strong>
+          &mdash; gains <code>'resources/'</code> in
+          <code>CLAUDE_PLUGIN_ROOT_ALLOWED_PREFIXES</code>; the stale "KNOWN
+          DEFERRED GAP" paragraph documenting the deferred
+          <code>${CLAUDE_PLUGIN_ROOT}/docs/&hellip;</code> /
+          <code>/PRPs/&hellip;</code> exclusion is removed.</li>
+        <li><code>docs/KNOWLEDGE_BASE.md</code>, <code>docs/domain/glossary.md</code>,
+          <code>docs/context/architecture.md</code>,
+          <code>docs/context/constraints.md</code>, <code>docs/api-reference.md</code>,
+          <code>README.md</code> &mdash; repo-root doc surfaces repointed to
+          the new <code>plugins/relay/resources/&lt;name&gt;.md</code> path
+          form.</li>
+        <li><code>documentation/README.md</code>,
+          <code>documentation/reference/commands.html</code>,
+          <code>documentation/reference/agents.html</code>,
+          <code>documentation/reference/skills.html</code>,
+          <code>documentation/reference/scripts.html</code>,
+          <code>documentation/guide/troubleshooting.html</code>,
+          <code>documentation/concepts/interactivity-boundary.html</code>
+          &mdash; site-surface references repointed to the new resource
+          location.</li>
+        <li><code>CLAUDE.md</code> and
+          <code>documentation/guide/validation-suite.html</code> &mdash;
+          "11 static consistency checks" corrected to "12" throughout.</li>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.25.1</code> &rarr; <code>0.26.0</code> to
+          match this release; users running <code>/plugin</code> after pulling
+          this version will get a fresh <code>relay/0.26.0/</code> cache directory
+          with all newly-shipped commands and agents registered.</li>
+      </ul>
+
+      <h3 id="v0-26-0-fixed">Fixed</h3>
+      <ul>
+        <li>The eight plugin-owned resource templates were unreachable from
+          every installed copy of the plugin &mdash; every agent whose Hard
+          Constraint 1 says "load the template first" either halted or
+          improvised silently when that <code>Read</code> failed. They now
+          physically live inside <code>plugins/relay/</code>, so the read
+          resolves on the very first run of a freshly installed plugin.</li>
+      </ul>
+
       <h2 id="v0-25-1">0.25.1 &#8212; 2026-08-03</h2>
       <p>Ships the first correction from the 2026-08-03 plugin-root path audit, plus the validation and documentation work accumulated since 0.25.0. The audit found that <code>${CLAUDE_PLUGIN_ROOT}</code> resolves to the installed plugin directory, whose contents are exactly those of <code>plugins/relay/</code> &mdash; so a reference written as a bare <code>plugins/relay/&hellip;</code> path, or as <code>&lt;target_root&gt;/plugins/relay/&hellip;</code>, resolves nowhere for an installed user: that segment exists neither in the target project nor inside the versioned cache directory. The visual-fidelity tooling was the severe case, because <code>visual-verifier</code> maps any unrecognized <code>provision.mjs</code> exit code to <code>DEGRADED_PROVISION_FAILED</code> per its own Hard constraint 4 &mdash; so <code>MODULE_NOT_FOUND</code> surfaced not as a broken install but as a well-formed <code>VISUAL_DEGRADED</code> verdict, indistinguishable from a network-restricted environment. The remaining audit classes &mdash; chiefly the eight plugin-owned templates under <code>docs/context/</code>, which are unreachable from every install because <code>docs/</code> was never packaged &mdash; are documented but deliberately not fixed here; they require moving files and rewriting roughly 72 references. Plugin manifest bumped <code>0.25.0</code> &rarr; <code>0.25.1</code> per <a href="AGENTS.md">AGENTS.md</a> &sect;7.5.</p>
 

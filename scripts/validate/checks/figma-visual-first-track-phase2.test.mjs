@@ -132,7 +132,7 @@ import { resolve } from 'node:path';
 import { runPathExistenceCheck } from './path-existence.mjs';
 import { withScanRootLock } from './scan-root-lock.mjs';
 
-const PRD_TEMPLATE_PATH = 'docs/context/prd-template.md';
+const PRD_TEMPLATE_PATH = 'plugins/relay/resources/prd-template.md';
 const PRD_WRITER_PATH = 'plugins/relay/agents/prd-writer.md';
 const PRD_REVIEWER_PATH = 'plugins/relay/agents/prd-reviewer.md';
 const CHANGELOG_PATH = 'documentation/changelog.html';
@@ -298,7 +298,7 @@ test('AC-A1: prd-writer.md\'s Step 7.4 item 15 branches on Item 6.5\'s recorded 
 
   assert.ok(
     collapsed.includes(
-      "when Item 6.5 recorded `visual_first: true`, assemble the table applying the `[VISUAL]`/`[LOGIC]` phase-name tag + strict 1:1 `Depends` pairing described in `docs/context/prd-template.md`'s `## Visual-First Mode` section"
+      "when Item 6.5 recorded `visual_first: true`, assemble the table applying the `[VISUAL]`/`[LOGIC]` phase-name tag + strict 1:1 `Depends` pairing described in `${CLAUDE_PLUGIN_ROOT}/resources/prd-template.md`'s `## Visual-First Mode` section"
     ),
     'expected item 15\'s true-branch: tag + pairing sourced from Item 6.5\'s answer'
   );

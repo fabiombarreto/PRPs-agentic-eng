@@ -14,12 +14,12 @@ argument-hint: '[prd-path | plan-path | description] (blank = uncommitted diff)'
 Generate an honest, structured QA report at `PRPs/reports/<feature>/qa-report.md` for the human validation gate between `/relay-execute` and Pillar 3. You are a single-role, LLM-judgment command — there is no writer/reviewer pair, no reviewer agent, and you never dispatch any pipeline agent. The human performing manual QA is the validator. You are read-only over the repository except for the one report you write; you never run, author, or modify a test.
 
 See:
-- `PRPs/prds/relay-qa-report-command.prd.md` — source PRD; AC-1 through AC-10; Decisions Log; Architecture Notes.
+- the source PRD `relay-qa-report-command.prd.md`, in the relay plugin repo (not packaged) — AC-1 through AC-10; Decisions Log; Architecture Notes.
 - `plugins/relay/commands/relay-plan.md` — Phase 0 suffix-based mode detection (two-way; this command extends the same shape to four-way).
 - `plugins/relay/commands/relay-commit.md` — current-branch diff-review fallback (`git status --porcelain` then `git diff`), mirrored for the blank→diff-mode branch.
 - `plugins/relay/commands/relay-pr.md` — the `FAILED_<REASON>:` named-HALT blockquote idiom, mirrored for `FAILED_NOTHING_TO_REPORT`.
 - `plugins/relay/commands/relay-prd.md` — the read-existing-file-and-HALT-rather-than-clobber anti-overwrite precedent, mirrored for the existing-`qa-report.md` guard.
-- `docs/context/test-output-schema.md` — the Test Runner `record.json` schema v1, the grounding source for the automated-coverage column.
+- `${CLAUDE_PLUGIN_ROOT}/resources/test-output-schema.md` — the Test Runner `record.json` schema v1, the grounding source for the automated-coverage column.
 
 ---
 
@@ -106,7 +106,7 @@ Any case covered by **neither** an automated **nor** a manual test appears in th
 
 Before inferring automated coverage from repo test files, check whether `PRPs/reports/<feature>/record.json` (or, when a Test Runner session produced multiple attempts, the latest `PRPs/reports/<feature>/attempts/<N>/record.json`) exists:
 
-- **If it exists**: read it (schema v1 — `docs/context/test-output-schema.md`) and ground the **coverage** and **automated test path** fields in its `failures[]` entries and `counts` — a test named in `record.json` is confirmed automated coverage; cite its `file`/`line` fields directly rather than re-deriving.
+- **If it exists**: read it (schema v1 — `${CLAUDE_PLUGIN_ROOT}/resources/test-output-schema.md`) and ground the **coverage** and **automated test path** fields in its `failures[]` entries and `counts` — a test named in `record.json` is confirmed automated coverage; cite its `file`/`line` fields directly rather than re-deriving.
 - **If it is absent**: infer automated coverage by searching the repo's test files (matching the project's test glob) for tests whose names/descriptions plausibly cover the case. Be explicit about what could not be confirmed — mark such entries `unverified` rather than asserting confident coverage. Absence of `record.json` is expected and not an error (e.g. `test_frameworks: []` in `docs/context/methodology.md`, or a manual-only implementation).
 
 ### n:1 mapping

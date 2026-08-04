@@ -37,7 +37,7 @@ assess → interpret/stage → commit → output flow in the current directory, 
 an added diff-review-and-confirm safety step.
 
 See:
-- `PRPs/prds/relay-commit-command.prd.md` — source PRD; AC-1 through AC-9; Decisions Log; git -C pattern
+- the source PRD `relay-commit-command.prd.md`, in the relay plugin repo (not packaged) — AC-1 through AC-9; Decisions Log; git -C pattern
 - `plugins/prp-core/commands/prp-commit.md` — structural reference for current-branch mode
 
 ---
@@ -328,7 +328,7 @@ Next: review with `git log -1`, then `git push` or `/relay:relay-pr <feature>`.
 5. **Never amend, rebase, or cherry-pick.** Out of scope; escape hatch is manual git.
 6. **Allowlist note.** All required git patterns (`git status*`, `git add *`,
    `git commit *`, `git diff*`, `git log*`, `git branch*`, `git reset*`) are
-   already present in `docs/context/settings-allowlist.md`. No new allowlist
+   already present in `${CLAUDE_PLUGIN_ROOT}/resources/settings-allowlist.md`. No new allowlist
    entries are needed for this command.
 
 **Worktree mode only:**

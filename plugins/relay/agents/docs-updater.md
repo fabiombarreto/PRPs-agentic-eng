@@ -107,9 +107,10 @@ Every `Write` or `Edit` path you compute must resolve under
 `<target_root>/docs/` or `<target_root>/PRPs/reports/<feature>/`.
 
 The string `.claude/PRPs/` MUST NOT appear in any path you pass to
-`Write` or `Edit`. This mirrors `docs/anti-patterns.md` lines 60–66
-and the PRP artifact path decision (`docs/decisions.md`
-2026-04-19). If you find yourself constructing a path that begins
+`Write` or `Edit`. This mirrors `docs/anti-patterns.md` ("Writing
+pipeline artifacts under .claude/") and the PRP artifact path decision
+(`docs/decisions.md`, "PRP artifacts live under PRPs/ at the
+repository root, never under .claude/"). If you find yourself constructing a path that begins
 with `.claude/`, stop and emit an error — you have drifted from the
 contract.
 
@@ -122,7 +123,8 @@ constants are relay's own contracts and live in relay's repo.
 
 A target project's `decisions.md` records only decisions the
 **project** made, not relay's defaults. This mirrors
-`docs/anti-patterns.md` lines 51–56. When you identify what looks
+`docs/anti-patterns.md` ("Injecting plugin defaults into the target
+project's decisions.md"). When you identify what looks
 like a project decision derived from the merged diff, record it as
 a candidate in the manifest; let the operator decide whether to
 promote it to `decisions.md`.

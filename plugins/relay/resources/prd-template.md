@@ -228,7 +228,7 @@ phase-pairing mechanism below.
    leading bracket tag — `[VISUAL] {Phase Name}` (scope-pure visual
    phase: UI + mocked data only) or `[LOGIC] {Phase Name}` (scope-pure
    logic phase: real business rules on an already-locked visual) —
-   mirroring `docs/context/mock-sentinels.md`'s
+   mirroring `${CLAUDE_PLUGIN_ROOT}/resources/mock-sentinels.md`'s
    `[RELAY-MOCK-DATA]`/`[RELAY-MOCK-BEHAVIOR]` bracket-tag convention.
 2. Every phase row carries exactly one of the two tags, never both,
    never neither.

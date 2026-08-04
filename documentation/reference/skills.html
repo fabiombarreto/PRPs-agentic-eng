@@ -90,7 +90,7 @@
 
       <h3 id="phase-1-5">Phase 1.5 — Generate <code>.claude/settings.json</code></h3>
 
-      <p>Reads the canonical allow/deny catalog (<code>docs/context/settings-allowlist.md</code> in the relay plugin repo via <code>${CLAUDE_PLUGIN_ROOT}</code>), emits narrow allow patterns matched to Phase 1's stack signals, plus the invariant denylist. Refuses to emit broad patterns (<code>Bash(*)</code>, <code>Bash(git *)</code>, etc.).</p>
+      <p>Reads the canonical allow/deny catalog (<code>${CLAUDE_PLUGIN_ROOT}/resources/settings-allowlist.md</code>), emits narrow allow patterns matched to Phase 1's stack signals, plus the invariant denylist. Refuses to emit broad patterns (<code>Bash(*)</code>, <code>Bash(git *)</code>, etc.).</p>
 
       <h3 id="phase-1-75">Phase 1.75 — Create <code>PRPs/redaction-extensions.txt</code></h3>
 

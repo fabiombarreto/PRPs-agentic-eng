@@ -138,7 +138,7 @@ deferred item, regardless of the reason.
 
 ## Cross-references
 
-- `docs/context/plan-template.md` — the `phase_scope` Metadata field
+- `${CLAUDE_PLUGIN_ROOT}/resources/plan-template.md` — the `phase_scope` Metadata field
   (`visual | logic`) that gates which discipline (zero-side-effects
   emission, or sentinel-ledger resolution) applies to a given plan.
 - `PRPs/prds/figma-visual-first-track.prd.md` — the source PRD this

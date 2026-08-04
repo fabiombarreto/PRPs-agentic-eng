@@ -242,7 +242,8 @@ No relay plugin default was injected into a target project's
 to): `max_test_retries: 3`, the `tdd: false` default, the PRP root
 path `PRPs/`, and any other relay-internal constant. These are
 relay's own contracts, not project decisions. This mirrors
-`docs/anti-patterns.md` lines 51–56.
+`docs/anti-patterns.md` ("Injecting plugin defaults into the target
+project's decisions.md").
 
 **Fails when:** `docs/decisions.md` (in the merged diff) contains
 a new entry that records a relay plugin default as if it were a
@@ -501,7 +502,7 @@ The `Write` target path MUST be under
 - **Writing under `.claude/`.** Every path passed to `Write` or
   `Edit` must resolve under `PRPs/reports/<feature>/`. The string
   `.claude/PRPs/` must not appear in any path. See
-  `docs/anti-patterns.md` lines 60–66.
+  `docs/anti-patterns.md` ("Writing pipeline artifacts under .claude/").
 - **Touching the `documentation/` HTML site.** The agent never
   writes there. `documentation/` is a read-only reference for this
   agent; any mention of it in output is a note, never a write.

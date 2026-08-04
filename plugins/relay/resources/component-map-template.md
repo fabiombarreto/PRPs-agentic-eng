@@ -4,7 +4,8 @@ Canonical shape of `docs/design/component-map.md` — the versioned,
 human-curatable map from a target project's Figma library components
 to its real code components. Both `design-map-writer` and
 `design-map-reviewer` reference this file as the single authoritative
-source for the map's shape, mirroring how `plan-template.md` anchors
+source for the map's shape, mirroring how
+`${CLAUDE_PLUGIN_ROOT}/resources/plan-template.md` anchors
 `plan-writer`/`plan-reviewer`.
 
 **Provenance:** authored fresh for the Figma Implementation Track
@@ -67,8 +68,8 @@ One map per target project (not per feature, not per phase) — the
 map is a durable, cross-feature artifact that accumulates rows over
 successive `/relay-design-map --refresh` re-scans. Directory is
 created if it doesn't exist. NEVER write under `.claude/` — see
-`docs/anti-patterns.md` lines 60–66 and `docs/decisions.md` on the PRP
-artifact path convention (the map itself lives under `docs/design/`,
+`docs/anti-patterns.md` ("Writing pipeline artifacts under .claude/") and
+`docs/decisions.md` on the PRP artifact path convention (the map itself lives under `docs/design/`,
 not `PRPs/`, because it is a durable knowledge-base artifact rather
 than a per-run pipeline artifact — but the same `.claude/`
 never-write rule applies).

@@ -20,7 +20,7 @@ This is the **read-only standalone reviewer surface**. The hand-invoked counterp
 The closest external precedent is **Cloudflare's AI code review architecture** (sub-reviewers emit findings; a separate coordinator alone mutates GitLab state) and **GitHub's `Comment` PR review type** (verdict without approval signal). The closest relay sibling is `plugins/relay/commands/relay-test-review.md` (the only existing relay command where the reviewer operates on a worktree diff and surfaces a verdict without mutating any plan/PRD status).
 
 See:
-- `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/implementation-authoring.prd.md` — source PRD with D1+D5+D8+D11 decisions and AC-10+AC-12+AC-14, especially the User Flow §"Standalone /relay-code-review flow" (lines 197–203).
+- the source PRD `implementation-authoring.prd.md`, in the relay plugin repo (not packaged) — D1+D5+D8+D11 decisions and AC-10+AC-12+AC-14, especially the User Flow §"Standalone /relay-code-review flow" (lines 197–203).
 - `${CLAUDE_PLUGIN_ROOT}/agents/code-reviewer.md` — the code-reviewer agent's input/output contract for `mode: 'standard'`; hard constraint that the agent never performs D8 mutations (lines 131–137).
 - `${CLAUDE_PLUGIN_ROOT}/commands/relay-plan-review.md` — canonical single-shot reviewer command shape; key divergence: relay-plan-review DOES auto-flip plan status, this command does NOT.
 - `${CLAUDE_PLUGIN_ROOT}/commands/relay-implement.md` — sibling writer command with the canonical base-commit derivation chain (Precondition P5); the mutation-triggering counterpart to this command.

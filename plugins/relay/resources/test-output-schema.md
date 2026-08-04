@@ -207,7 +207,7 @@ PRPs/reports/<feature>/
 └── attempts/
     ├── 1/
     │   ├── record.json      # B2 normalized output (this schema) + B3 categories filled in
-    │   ├── stdout.log       # redacted execution log (secrets replaced per docs/context/redaction-policy.md)
+    │   ├── stdout.log       # redacted execution log (secrets replaced per ${CLAUDE_PLUGIN_ROOT}/resources/redaction-policy.md)
     │   └── diff.patch       # git diff applied by the Implementer for this attempt; empty on attempt 1
     └── 2/
         └── ...

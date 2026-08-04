@@ -531,7 +531,7 @@ Otherwise (`figma_track: true` and `design_source: figma`):
 - `Read` `design_spec_path` and parse its `## Component Mapping`
   table for `Verdict == REUSE` rows, extracting `{node_id, cm_id,
   import_path}` from each row's Evidence cell (`CM-<n>` ({resolved
-  import path}) shape per `docs/context/design-spec-template.md`).
+  import path}) shape per `${CLAUDE_PLUGIN_ROOT}/resources/design-spec-template.md`).
 - **Silent-degradation branch:** when the Design Spec can't be
   resolved/read (including description-mode plans where the path
   isn't derivable), when the spec has zero REUSE rows, or when no
@@ -1079,7 +1079,7 @@ combined D11+AC-10 evolution entry).
   COMMAND call. The writer↔reviewer retry loop is the COMMAND's
   responsibility.
 - **Writing under the dot-claude PRPs subtree.**
-  > Anti-pattern reference: `docs/anti-patterns.md` lines 60–66
+  > Anti-pattern reference: `docs/anti-patterns.md` ("Writing pipeline artifacts under .claude/")
   > and source PRD AC-9 — the literal forbidden path is the one
   > beneath that subtree.
 - **Importing `prp-core` assets.**

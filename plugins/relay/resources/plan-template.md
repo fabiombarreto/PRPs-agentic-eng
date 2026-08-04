@@ -94,8 +94,8 @@ Where:
   Example: `plan-writer agent` → `plan-writer-agent`.
 
 Directory is created if it doesn't exist. NEVER write under
-`.claude/` — see `docs/anti-patterns.md` lines 60–66 and
-`docs/decisions.md` on the PRP artifact path convention.
+`.claude/` — see `docs/anti-patterns.md` ("Writing pipeline artifacts
+under .claude/") and `docs/decisions.md` on the PRP artifact path convention.
 plan-reviewer R6 enforces both the path and any `.claude/PRPs/`
 references inside the plan body.
 
@@ -241,7 +241,7 @@ mandatory fields.
    real business-logic mutation, and every data-display or
    interactive-action task must name the type-matched
    `[RELAY-MOCK-DATA]` or `[RELAY-MOCK-BEHAVIOR]` sentinel it will
-   emit — see `docs/context/mock-sentinels.md` for the sentinel
+   emit — see `${CLAUDE_PLUGIN_ROOT}/resources/mock-sentinels.md` for the sentinel
    convention and `plugins/relay/agents/plan-reviewer.md`'s
    `R-COH-VISUAL-SCOPE-PURITY` check, which structurally enforces the
    same rule. Unlike `design_source`, `phase_scope` has no companion
@@ -251,14 +251,14 @@ mandatory fields.
    `phase_scope: logic` plan MUST author at least one task under
    `## Step-by-Step Tasks` that resolves every `[RELAY-MOCK-DATA]` and
    `[RELAY-MOCK-BEHAVIOR]` sentinel left behind by the paired visual
-   phase, per `docs/context/mock-sentinels.md`'s Swap semantics:
+   phase, per `${CLAUDE_PLUGIN_ROOT}/resources/mock-sentinels.md`'s Swap semantics:
    replacing each `[RELAY-MOCK-DATA]` literal with its real data source
    at the exact sentinel site, and filling each `[RELAY-MOCK-BEHAVIOR]`
    handler with real business logic inside the already-approved
    choreography. The task (or tasks) MUST be backed by at least one
    VALIDATE command that greps the paired visual phase's touched files
    for both sentinel tokens and fails (non-zero exit) if either remains
-   — per `docs/context/mock-sentinels.md`'s "Zero remaining sentinels —
+   — per `${CLAUDE_PLUGIN_ROOT}/resources/mock-sentinels.md`'s "Zero remaining sentinels —
    no deferral path" rule, this VALIDATE accepts no count threshold and
    no recorded-justification exception. See
    `plugins/relay/agents/plan-writer.md` Step 4.4 item 10 for the full
