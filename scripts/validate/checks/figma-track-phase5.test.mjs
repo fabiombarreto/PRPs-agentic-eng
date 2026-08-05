@@ -259,8 +259,8 @@ const PLAN_WRITER_PATH = 'plugins/relay/agents/plan-writer.md';
 const PLAN_REVIEWER_PATH = 'plugins/relay/agents/plan-reviewer.md';
 const PRD_WRITER_PATH = 'plugins/relay/agents/prd-writer.md';
 const PRD_REVIEWER_PATH = 'plugins/relay/agents/prd-reviewer.md';
-const PLAN_TEMPLATE_PATH = 'docs/context/plan-template.md';
-const PRD_TEMPLATE_PATH = 'docs/context/prd-template.md';
+const PLAN_TEMPLATE_PATH = 'plugins/relay/resources/plan-template.md';
+const PRD_TEMPLATE_PATH = 'plugins/relay/resources/prd-template.md';
 const RELAY_PLAN_PATH = 'plugins/relay/commands/relay-plan.md';
 
 /**

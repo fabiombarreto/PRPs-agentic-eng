@@ -17,7 +17,7 @@ yourself — the agent does. You run preconditions, invoke the agent,
 and surface its verdict.
 
 See:
-- `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/test-runner.prd.md` — B5 scope + AC-6
+- the source PRD `test-runner.prd.md`, in the relay plugin repo (not packaged) — B5 scope + AC-6
 - `${CLAUDE_PLUGIN_ROOT}/agents/post-green-reviewer.md` — the agent
 
 ---

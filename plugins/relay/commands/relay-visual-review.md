@@ -15,14 +15,14 @@ Validate the plan path argument, run the preconditions check, then dispatch the 
 
 You are autonomous. You do not prompt the user. You do not loop the visual-verifier across invocations — the bounded retry budget, the post-visual fix round, and the deterministic revert are `/relay-implement`'s Phase A.3.4 internal-loop responsibilities, not this command's job. **You do NOT auto-flip plan status. You do NOT perform any D8 mutation.** The plan file at `<plan_path>` is byte-identical before and after the command runs. The source PRD's Implementation Phases table (when the plan is PRD-mode) is byte-identical. The only on-disk writes are the captured `diff.patch` and the `visual-verifier`-written `fidelity-report.json` (and, on a degraded rung, its manifest scratch file) under `PRPs/reports/<feature-or-slug>/.../visual-review/`.
 
-This is the **read-only standalone visual-review surface** — a Should-item of the Figma Implementation Track (Phase 7, `PRPs/prds/figma-implementation-track.prd.md`). The hand-invoked counterpart to `/relay-implement`'s internal Phase A.3.4 `visual-verifier` dispatch (which runs automatically, once, immediately after code-review `APPROVED`, when the plan is Figma-sourced). When a developer wants an ad-hoc re-check of visual fidelity — after a manual hand-edit to styling, after refreshing reference screenshots, or simply to re-confirm a merged feature's visual state — without re-running the full `/relay-implement` writer/reviewer loop, they invoke `/relay-visual-review`. The architectural rationale mirrors `/relay-code-review`'s: mutation-triggering visual verification goes through `/relay-implement`'s Phase A.3.4; advisory/read-only re-verification goes through this command.
+This is the **read-only standalone visual-review surface** — a Should-item of the Figma Implementation Track (Phase 7, `figma-implementation-track.prd.md`, in the relay plugin repo, not packaged). The hand-invoked counterpart to `/relay-implement`'s internal Phase A.3.4 `visual-verifier` dispatch (which runs automatically, once, immediately after code-review `APPROVED`, when the plan is Figma-sourced). When a developer wants an ad-hoc re-check of visual fidelity — after a manual hand-edit to styling, after refreshing reference screenshots, or simply to re-confirm a merged feature's visual state — without re-running the full `/relay-implement` writer/reviewer loop, they invoke `/relay-visual-review`. The architectural rationale mirrors `/relay-code-review`'s: mutation-triggering visual verification goes through `/relay-implement`'s Phase A.3.4; advisory/read-only re-verification goes through this command.
 
 See:
-- `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/figma-implementation-track.prd.md` — source PRD, Implementation Phases row 7 ("Surface integration + self-improvement"); this command is the Should-item standalone re-check surface.
+- the source PRD `figma-implementation-track.prd.md`, in the relay plugin repo (not packaged) — Implementation Phases row 7 ("Surface integration + self-improvement"); this command is the Should-item standalone re-check surface.
 - `${CLAUDE_PLUGIN_ROOT}/commands/relay-code-review.md` — canonical single-shot, non-mutating standalone command shape this command mirrors structurally (Decision Gate / Preconditions / single Task dispatch / Final output surface).
 - `${CLAUDE_PLUGIN_ROOT}/commands/relay-implement.md` — Phase A.3.4 ("Visual-verification dispatch"), the internal-loop counterpart this command's single dispatch payload reuses verbatim.
 - `${CLAUDE_PLUGIN_ROOT}/agents/visual-verifier.md` — the visual-verifier agent's inputs contract, `fidelity_report_path` derivation, and the three verdict shapes.
-- `docs/context/design-spec-template.md` (in the target project) — canonical Design Spec shape; the `## Visual Acceptance Criteria` table `visual-verifier` reads.
+- `${CLAUDE_PLUGIN_ROOT}/resources/design-spec-template.md` — canonical Design Spec shape; the `## Visual Acceptance Criteria` table `visual-verifier` reads.
 
 ---
 
@@ -290,9 +290,9 @@ Each precondition HALT (P1–P7) produces the verbatim message defined in its su
 
 5. **Never re-run `visual-verifier` in a loop.** Single `Task` dispatch per command invocation. The bounded retry budget (`max_visual_retries`), the post-visual fix round, and the deterministic revert all live in `/relay-implement`'s Phase A.3.4, not here.
 
-6. **Never flip `figma_track` or `design_source`.** This command only READS both declarations (P3, P4). Flipping either by heuristic is forbidden per `docs/anti-patterns.md:89-95`.
+6. **Never flip `figma_track` or `design_source`.** This command only READS both declarations (P3, P4). Flipping either by heuristic is forbidden per `docs/anti-patterns.md` ("Flipping `figma_track` (or any future opt-in gating key) by heuristic").
 
-7. **Never query the Figma MCP.** Neither this command nor `visual-verifier` has a Figma-MCP tool or mechanism; both read only already-persisted Design Spec + reference PNG evidence already on disk (`docs/anti-patterns.md:98-104`).
+7. **Never query the Figma MCP.** Neither this command nor `visual-verifier` has a Figma-MCP tool or mechanism; both read only already-persisted Design Spec + reference PNG evidence already on disk (`docs/anti-patterns.md`, "Querying the Figma MCP from a dispatched writer/reviewer agent").
 
 8. **Never prompt the user.** Past the interactivity boundary. HALTs are surfaced verbatim and the command exits.
 

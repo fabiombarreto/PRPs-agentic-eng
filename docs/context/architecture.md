@@ -176,7 +176,8 @@ All pipeline artifacts live under `PRPs/` at the repository root:
 | `PRPs/plans/completed/<basename>.plan.md` | Archived implementation plans after `/relay-implement` reaches APPROVED rubric and performs D8 Mutation b. Archive path codified in `docs/decisions.md` 2026-04-30; relay equivalent of prp-core's `.claude/PRPs/plans/completed/` (the upstream path violates the no-`.claude/`-writes rule). |
 | `PRPs/reports/<feature>/` | Test Runner execution reports, attempts log, per-attempt diffs, final report; when TDD is active, also `tdd-initial-suite.diff` and `tdd-reviews.md`; per-attempt diffs from `/relay-implement` at `phase-<N>/attempts/<i>/diff.patch` plus `record.json` (recorded in `docs/decisions.md` 2026-04-30). |
 | `PRPs/reports/design-map/evidence/` | Persisted Figma evidence bundle (library search results, node-scoped metadata, opportunistic Code Connect map) written by `/relay-design-map` before dispatching `design-map-writer`/`design-map-reviewer` — the sole Figma-fact source either agent is permitted to read (Figma Implementation Track Phase 3; MCP-access-point decision, `docs/decisions.md` 2026-07-22). The durable map itself lives outside `PRPs/`, at `docs/design/component-map.md` — see `docs/decisions.md` 2026-07-23. |
-| `PRPs/designs/<feature>/design-spec.md` | Per-feature Design Spec (written DRAFT by `design-spec-writer`, flipped to `APPROVED` by `design-spec-reviewer` only after the user's own explicit affirmative reply) — a business-grounded, evidence-backed contract turning one feature's Figma design into an artifact the rest of the autonomous pipeline trusts blindly. Sibling paths under the same feature directory: `raw/` (persisted Figma traversal evidence), `refs/` (reference screenshots), `design-spec-review.jsonl` (reviewer's append-only verdict log). Canonical shape: `docs/context/design-spec-template.md`. Figma Implementation Track Phase 4; standalone via `/relay-design-spec`, never invoked by `/relay-execute` — see `docs/decisions.md` [2026-07-23]. |
+| `PRPs/reports/design-map/.state/checkpoint.json` | `/relay-design-map` run checkpoint — a cumulative Figma MCP `call_log` (tool name, UTC timestamp, outcome) plus a monotonically incrementing scan-generation counter, appended on every run (including a run that halts on `FAILED_FIGMA_QUOTA_EXHAUSTED`). Deliberately placed outside `evidence_dir` so neither `design-map-writer`'s nor `design-map-reviewer`'s "read every file under `evidence_dir`" instruction ever reaches it. Its cumulative `call_log` is projected into `library-search.json`'s own header on every evidence write. figma-quota-resilience Phase 4. |
+| `PRPs/designs/<feature>/design-spec.md` | Per-feature Design Spec (written DRAFT by `design-spec-writer`, flipped to `APPROVED` by `design-spec-reviewer` only after the user's own explicit affirmative reply) — a business-grounded, evidence-backed contract turning one feature's Figma design into an artifact the rest of the autonomous pipeline trusts blindly. Sibling paths under the same feature directory: `raw/` (persisted Figma traversal evidence), `refs/` (reference screenshots), `design-spec-review.jsonl` (reviewer's append-only verdict log). Canonical shape: `plugins/relay/resources/design-spec-template.md`. Figma Implementation Track Phase 4; standalone via `/relay-design-spec`, never invoked by `/relay-execute` — see `docs/decisions.md` [2026-07-23]. |
 | `PRPs/reports/<feature>/phase-<N>/visual/<attempt>/fidelity-report.json` | Per-attempt visual-verification artifact — one entry per in-scope frame (`node_id`, `route`, `diff_percent`, `threshold`, `status`) — written by `compare.mjs` on the FULL rung, or directly by the `visual-verifier` agent on either degraded rung. Sibling artifact root to the same attempt's `diff.patch`. Figma Implementation Track Phase 6; dispatched by `/relay-implement`'s Phase A.3.4 — see `docs/decisions.md` [2026-07-23] Visual-verification loop. |
 | `.worktrees/<feature>/` | Per-feature isolated git worktrees created by `/relay-worktree`. Each worktree checks out branch `feature/<feature>` from the base ref (default `origin/main` → `origin/master` → `HEAD` fallback chain). Idempotent: silently reused when the worktree exists on the expected branch; HALT loud on branch divergence. Worktrees persist until Pillar 3 (`/relay-approve`) removes them post-merge. Path sidesteps the `.claude/` permission gate — documented in `docs/decisions.md` 2026-05-11 D1. |
 
@@ -185,7 +186,7 @@ hardcoded permission prompts on writes to that folder; those prompts
 would interrupt the autonomous loop on every file write. See
 `docs/anti-patterns.md` and `docs/decisions.md`.
 
-The canonical PRD shape is defined in `docs/context/prd-template.md`.
+The canonical PRD shape is defined in `plugins/relay/resources/prd-template.md`.
 
 ## Command surface
 
@@ -217,7 +218,13 @@ table and contracts in `docs/api-reference.md`; rationale in
   `design-map-reviewer` pair; it is invoked once per project (or
   re-run with `--refresh`), is never called by `/relay-execute`, and
   gates the one sanctioned `figma_track: true` flip behind an
-  explicit, quoted human confirmation.
+  explicit, quoted human confirmation. Since figma-quota-resilience
+  Phase 5, a plain re-invocation (no `--refresh`) resumes at no extra
+  Figma cost — library search, node-scoped metadata enrichment, and
+  Code Connect each skip work already recorded in the prior evidence
+  bundle, so a fully-cached re-run issues zero Figma calls — while
+  `--refresh` deliberately re-runs library search and Code Connect in
+  full and still limits metadata enrichment to the delta.
 - **A second standalone, human-triggered command inline-adopts a
   writer/reviewer pair and extends the interactivity boundary.**
   `/relay-design-spec` (Figma Implementation Track, Phase 4) inline-adopts

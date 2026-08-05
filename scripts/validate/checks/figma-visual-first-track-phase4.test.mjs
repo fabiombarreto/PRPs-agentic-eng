@@ -135,7 +135,7 @@ import { resolve } from 'node:path';
 import { runPathExistenceCheck } from './path-existence.mjs';
 import { withScanRootLock } from './scan-root-lock.mjs';
 
-const PLAN_TEMPLATE_PATH = 'docs/context/plan-template.md';
+const PLAN_TEMPLATE_PATH = 'plugins/relay/resources/plan-template.md';
 const PLAN_WRITER_PATH = 'plugins/relay/agents/plan-writer.md';
 const PLAN_REVIEWER_PATH = 'plugins/relay/agents/plan-reviewer.md';
 const CHANGELOG_PATH = 'documentation/changelog.html';
@@ -251,7 +251,7 @@ test('AC-A1: plan-writer.md registers Hard Constraint #13 (phase_scope: logic se
   );
 });
 
-test('AC-A1: docs/context/plan-template.md registers a new "What phase_scope: logic implies for the plan body" paragraph — mandatory sentinel-resolution task per mock-sentinels.md Swap semantics, backed by a zero-remaining VALIDATE, cross-referencing plan-writer Step 4.4 item 10 and R-COH-SENTINEL-RESOLUTION-MISSING', () => {
+test('AC-A1: plugins/relay/resources/plan-template.md registers a new "What phase_scope: logic implies for the plan body" paragraph — mandatory sentinel-resolution task per mock-sentinels.md Swap semantics, backed by a zero-remaining VALIDATE, cross-referencing plan-writer Step 4.4 item 10 and R-COH-SENTINEL-RESOLUTION-MISSING', () => {
   const content = readRepoFile(PLAN_TEMPLATE_PATH);
   const block = sliceBetween(
     content,
@@ -263,7 +263,7 @@ test('AC-A1: docs/context/plan-template.md registers a new "What phase_scope: lo
 
   assert.ok(
     collapsed.includes(
-      "Every `phase_scope: logic` plan MUST author at least one task under `## Step-by-Step Tasks` that resolves every `[RELAY-MOCK-DATA]` and `[RELAY-MOCK-BEHAVIOR]` sentinel left behind by the paired visual phase, per `docs/context/mock-sentinels.md`'s Swap semantics: replacing each `[RELAY-MOCK-DATA]` literal with its real data source at the exact sentinel site, and filling each `[RELAY-MOCK-BEHAVIOR]` handler with real business logic inside the already-approved choreography."
+      "Every `phase_scope: logic` plan MUST author at least one task under `## Step-by-Step Tasks` that resolves every `[RELAY-MOCK-DATA]` and `[RELAY-MOCK-BEHAVIOR]` sentinel left behind by the paired visual phase, per `${CLAUDE_PLUGIN_ROOT}/resources/mock-sentinels.md`'s Swap semantics: replacing each `[RELAY-MOCK-DATA]` literal with its real data source at the exact sentinel site, and filling each `[RELAY-MOCK-BEHAVIOR]` handler with real business logic inside the already-approved choreography."
     ),
     'expected the swap-semantics task-authoring summary'
   );
@@ -315,7 +315,7 @@ test('AC-A1: plan-writer.md Phase 2 GROUNDING dispatch gains a phase_scope: logi
   );
 });
 
-test('AC-A1: plan-writer.md Step 4.4 item 6 symmetrically mandates docs/context/mock-sentinels.md AND the paired visual phase\'s plan file as P0 Mandatory Reading rows when phase_scope: logic, naming the swap-semantics section and the concrete Files to Change / Design Source ledger sources', () => {
+test('AC-A1: plan-writer.md Step 4.4 item 6 symmetrically mandates plugins/relay/resources/mock-sentinels.md AND the paired visual phase\'s plan file as P0 Mandatory Reading rows when phase_scope: logic, naming the swap-semantics section and the concrete Files to Change / Design Source ledger sources', () => {
   const content = readRepoFile(PLAN_WRITER_PATH);
   const block = sliceBetween(content, '6. `## Mandatory Reading`', '7. `## Patterns to Mirror`');
   assert.ok(block, 'expected an extractable item 6 Mandatory Reading block');
@@ -323,7 +323,7 @@ test('AC-A1: plan-writer.md Step 4.4 item 6 symmetrically mandates docs/context/
 
   assert.ok(
     collapsed.includes(
-      'Symmetrically, when `phase_scope: logic` (from item 5 above), always include `docs/context/mock-sentinels.md` as a P0 `## Mandatory Reading` row (the swap-semantics section'
+      'Symmetrically, when `phase_scope: logic` (from item 5 above), always include `${CLAUDE_PLUGIN_ROOT}/resources/mock-sentinels.md` (installed relay plugin file) as a P0 `## Mandatory Reading` row (the swap-semantics section'
     ),
     'expected the symmetric mock-sentinels.md mandate for phase_scope: logic'
   );
@@ -618,7 +618,7 @@ test('AC-A4 (PRD AC-2): plan-writer.md Step 4.3.5 gains a phase_scope: logic fra
   );
 });
 
-test('AC-A4 (PRD AC-2): docs/context/plan-template.md\'s Conditional ## Design Source section paragraph gains the phase_scope: logic exception sentence, naming the paired visual phase\'s Depends-cell row number as the filter key and cross-referencing plan-writer Step 4.3.5', () => {
+test('AC-A4 (PRD AC-2): plugins/relay/resources/plan-template.md\'s Conditional ## Design Source section paragraph gains the phase_scope: logic exception sentence, naming the paired visual phase\'s Depends-cell row number as the filter key and cross-referencing plan-writer Step 4.3.5', () => {
   const content = readRepoFile(PLAN_TEMPLATE_PATH);
   const block = sliceBetween(content, '**Conditional `## Design Source` section (only when', '7. `## Mandatory Reading`');
   assert.ok(block, 'expected an extractable Conditional Design Source section block');

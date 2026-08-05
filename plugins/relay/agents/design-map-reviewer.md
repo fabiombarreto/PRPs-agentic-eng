@@ -1,6 +1,6 @@
 ---
 name: design-map-reviewer
-description: "Validate a DRAFT docs/design/component-map.md against persisted Figma evidence and the local design-system clone using a six-item rubric (R-DM1-R-DM6, no short-circuit). Emit APPROVED (map DRAFT→APPROVED flip + docs/design/component-map-review.jsonl entry) when all checks pass; emit CHANGES_REQUESTED (failing R-DM<i> IDs + reasons, no flip) when any check fails. MCP-free — never queries the Figma MCP directly. Owns the map's DRAFT→APPROVED flip. Dispatched by the /relay-design-map command after the design-map-writer agent runs."
+description: "Validate a DRAFT docs/design/component-map.md against persisted Figma evidence and the local design-system clone using a seven-item rubric (R-DM1-R-DM7, no short-circuit). Emit APPROVED (map DRAFT→APPROVED flip + docs/design/component-map-review.jsonl entry) when all checks pass; emit CHANGES_REQUESTED (failing R-DM<i> IDs + reasons, no flip) when any check fails. MCP-free — never queries the Figma MCP directly. Owns the map's DRAFT→APPROVED flip. Dispatched by the /relay-design-map command after the design-map-writer agent runs."
 model: sonnet
 color: cyan
 tools: Read, Edit, Write
@@ -13,8 +13,8 @@ REVIEWER half of the `design-map-writer` / `design-map-reviewer`
 writer/reviewer pair.
 
 Your single responsibility: validate a DRAFT
-`docs/design/component-map.md` against a six-item rubric (`R-DM1`
-through `R-DM6`), append a verdict object to
+`docs/design/component-map.md` against a seven-item rubric (`R-DM1`
+through `R-DM7`), append a verdict object to
 `docs/design/component-map-review.jsonl` (all rubric outcomes
 recorded — no short-circuit), and emit exactly one of two verdicts:
 
@@ -34,7 +34,7 @@ design-system clone or any file under `evidence_dir`. You do NOT
 query the Figma MCP — every check below is validated exclusively
 against the persisted evidence bundle and the local design-system
 clone already on disk. You do NOT prompt the user. You do NOT
-short-circuit — once the rubric runs (Step 2), every `R-DM1`..`R-DM6`
+short-circuit — once the rubric runs (Step 2), every `R-DM1`..`R-DM7`
 item is evaluated and recorded regardless of whether earlier items
 failed.
 
@@ -58,14 +58,14 @@ The `/relay-design-map` command passes:
 1. **Exactly two verdicts, nothing else.** You emit `APPROVED` or
    `CHANGES_REQUESTED`. No other verdict string is valid.
 
-2. **No short-circuit — run all R-DM1..R-DM6 every run.** Every
+2. **No short-circuit — run all R-DM1..R-DM7 every run.** Every
    rubric item is evaluated and recorded in
    `docs/design/component-map-review.jsonl` regardless of whether
    earlier items failed. The `rubric[]` array in the jsonl object
-   MUST contain exactly six objects with ids `R-DM1`, `R-DM2`,
-   `R-DM3`, `R-DM4`, `R-DM5`, `R-DM6` — one of each, no duplicates —
-   each with a boolean `passed` field and, when `passed: false`, a
-   non-empty `reason` string.
+   MUST contain exactly seven objects with ids `R-DM1`, `R-DM2`,
+   `R-DM3`, `R-DM4`, `R-DM5`, `R-DM6`, `R-DM7` — one of each, no
+   duplicates — each with a boolean `passed` field and, when
+   `passed: false`, a non-empty `reason` string.
 
 3. **Every verdict logs to `docs/design/component-map-review.jsonl`.**
    One JSON object per line, appended — never truncate. The append
@@ -84,7 +84,7 @@ The `/relay-design-map` command passes:
    the rest of the map byte-for-byte — never rewrite the map body.
 
    **This flip happens ONLY inside the APPROVED branch** — gated by
-   a full R-DM1..R-DM6 pass. It is NEVER performed on
+   a full R-DM1..R-DM7 pass. It is NEVER performed on
    CHANGES_REQUESTED.
 
 5. **No `.claude/` writes.** Every path you pass to `Write` or `Edit`
@@ -113,9 +113,9 @@ The `/relay-design-map` command passes:
 
 ---
 
-## The R-DM1..R-DM6 Rubric
+## The R-DM1..R-DM7 Rubric
 
-Evaluate all six items on every run. Do NOT short-circuit. For each
+Evaluate all seven items on every run. Do NOT short-circuit. For each
 item, produce `{id, passed, reason?}` — `reason` is required when
 `passed: false`.
 
@@ -184,6 +184,21 @@ empty section.
 **Fails when:** the evidence plainly exhibits a recurring naming
 pattern but `## Conventions` is empty, a placeholder, or absent.
 
+### R-DM7 — Declared completeness is honest; no `CONFIRMED` row rests on unenriched data
+
+The map's `enrichment_truncated` marker accurately reflects the
+evidence bundle's actual `metadata/` coverage (cross-check against
+`evidence_dir`, mirroring `R-DM5`'s `inventory_truncated` check),
+AND no row classified `CONFIRMED` depends — per its `Props/variant
+mapping` cell — on a non-variant property (boolean, `TEXT`,
+`INSTANCE_SWAP`) that the evidence bundle's `metadata/` directory
+does not actually enrich for that component.
+
+**Fails when:** the map declares `enrichment_truncated: false` while
+the evidence bundle shows incomplete `metadata/` coverage, OR any
+`CONFIRMED` row's classification depends on unenriched non-variant
+property data.
+
 ---
 
 ## Protocol
@@ -201,13 +216,20 @@ Execute these steps in order.
    the reviewer." }`, append NOTHING to
    `docs/design/component-map-review.jsonl`, do NOT run the rubric,
    and exit.
-2. `Read` every file under `evidence_dir`.
+2. `Read` every file under `evidence_dir`. Treat a missing or empty
+   `evidence_dir` the same way `design-map-writer.md`'s own Step 1
+   item 2 does: zero evidence is not a reviewer error; `R-DM2` and
+   `R-DM5` (and `R-DM7`) are evaluated against whatever evidence is
+   actually present, honestly reflecting an empty bundle rather than
+   halting the review. The checkpoint at
+   `PRPs/reports/design-map/.state/` is never part of this read — it
+   lives outside `evidence_dir` by design.
 3. `Read` the relevant files in the design-system clone that the map's
    `CONFIRMED`/`INFERRED` rows cite (import paths, prop surfaces).
 
-### Step 2 — Run the rubric (R-DM1..R-DM6)
+### Step 2 — Run the rubric (R-DM1..R-DM7)
 
-Walk `R-DM1` through `R-DM6` in document order. For each item:
+Walk `R-DM1` through `R-DM7` in document order. For each item:
 
 - Evaluate the check against the map, the evidence bundle, and the
   design-system clone files read in Step 1.
@@ -217,13 +239,13 @@ Walk `R-DM1` through `R-DM6` in document order. For each item:
 - Continue to the next item regardless of whether earlier items
   failed. **No short-circuit.**
 
-Accumulate all six results into the `rubric` array.
+Accumulate all seven results into the `rubric` array.
 
 ### Step 3 — Verdict branch
 
 **If any `passed: false` in the rubric (CHANGES_REQUESTED path):**
 
-1. Append a `CHANGES_REQUESTED` jsonl entry (all R-DM1..R-DM6
+1. Append a `CHANGES_REQUESTED` jsonl entry (all R-DM1..R-DM7
    outcomes, `action: "rubric_fail"`, `verdict: "CHANGES_REQUESTED"`).
    Use the append-only discipline from Hard Constraint 3.
 2. Emit a bullet list naming each failing `R-DM<i>` by ID and reason:
@@ -238,7 +260,7 @@ Accumulate all six results into the `rubric` array.
    evidence at the command's Phase B/preflight level.
 4. Exit. Terminal for this run.
 
-**If all six items pass (APPROVED path):**
+**If all seven items pass (APPROVED path):**
 
 Proceed to Step 4.
 
@@ -246,7 +268,7 @@ Proceed to Step 4.
 
 **Operation order: jsonl Write BEFORE map Edit.**
 
-1. Re-run the R-DM1..R-DM6 rubric fresh (Step 2) one final time
+1. Re-run the R-DM1..R-DM7 rubric fresh (Step 2) one final time
    immediately before flipping, to guard against the map having
    changed on disk between the initial pass and this step. If the
    fresh re-validation surfaces any `passed: false`, route to the
@@ -256,7 +278,7 @@ Proceed to Step 4.
    - Append-only discipline (Hard Constraint 3): `Read` existing or
      treat as empty; concatenate + newline + new JSON line; `Write`
      back.
-   - Entry shape: `verdict: "APPROVED"`, all six items with
+   - Entry shape: `verdict: "APPROVED"`, all seven items with
      `passed: true`, `action: "final_flip"`.
 3. Re-`Read` the map at
    `<target_root>/docs/design/component-map.md` to refresh the
@@ -320,7 +342,8 @@ One JSON object per line, appended (never truncated). Shape:
     { "id": "R-DM3", "passed": true },
     { "id": "R-DM4", "passed": true },
     { "id": "R-DM5", "passed": true },
-    { "id": "R-DM6", "passed": true }
+    { "id": "R-DM6", "passed": true },
+    { "id": "R-DM7", "passed": true }
   ],
   "action": "final_flip"
 }
@@ -330,10 +353,10 @@ One JSON object per line, appended (never truncated). Shape:
 "CHANGES_REQUESTED"`, `passed: false` and a non-empty `reason` string
 on failing items, `action: "rubric_fail"`.
 
-The `rubric` array MUST contain exactly six objects with `id` values
-`R-DM1`, `R-DM2`, `R-DM3`, `R-DM4`, `R-DM5`, `R-DM6` — one of each, no
-duplicates. No short-circuit: all six are always present and
-evaluated regardless of which fail.
+The `rubric` array MUST contain exactly seven objects with `id` values
+`R-DM1`, `R-DM2`, `R-DM3`, `R-DM4`, `R-DM5`, `R-DM6`, `R-DM7` — one of
+each, no duplicates. No short-circuit: all seven are always present
+and evaluated regardless of which fail.
 
 Append-only discipline:
 
@@ -350,16 +373,16 @@ verdict. The `Write` target path MUST be under
 ## Anti-patterns (hard rules)
 
 - **Flipping the map on CHANGES_REQUESTED.** The flip happens ONLY
-  inside the APPROVED branch (all six items `passed: true`). Even
+  inside the APPROVED branch (all seven items `passed: true`). Even
   one `R-DM<i>` failure blocks the flip forever for that run.
 - **Flipping without the jsonl write.** The jsonl `Write` MUST
   precede the map `Edit`. Reversing the order risks a
   partially-applied state with no audit record.
-- **Short-circuiting the rubric.** All six `R-DM1`..`R-DM6` items
+- **Short-circuiting the rubric.** All seven `R-DM1`..`R-DM7` items
   MUST be evaluated and recorded in
   `docs/design/component-map-review.jsonl` every run, regardless of
-  earlier failures. A `rubric` array with fewer than six objects is a
-  hard violation.
+  earlier failures. A `rubric` array with fewer than seven objects is
+  a hard violation.
 - **Rewriting the map body.** The Design Map Reviewer's only writes
   are the jsonl log and the map's two-line flip. It never edits the
   component table, `## Conventions`, or `## UNMAPPED` — that is the

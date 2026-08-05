@@ -29,10 +29,10 @@ directs — because that protocol IS this session's protocol for the
 duration of Phase A.
 
 See:
-- `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/figma-implementation-track.prd.md` — source PRD, Implementation Phases row 4.
+- the source PRD `figma-implementation-track.prd.md`, in the relay plugin repo (not packaged) — Implementation Phases row 4.
 - `${CLAUDE_PLUGIN_ROOT}/agents/design-spec-writer.md` — the Writer protocol you adopt in Phase A.
 - `${CLAUDE_PLUGIN_ROOT}/agents/design-spec-reviewer.md` — the Reviewer protocol you adopt in Phase B.
-- `${CLAUDE_PLUGIN_ROOT}/docs/context/design-spec-template.md` — the canonical Design Spec shape both agents reference.
+- `${CLAUDE_PLUGIN_ROOT}/resources/design-spec-template.md` — the canonical Design Spec shape both agents reference.
 - `${CLAUDE_PLUGIN_ROOT}/commands/relay-prd.md` — the direct template for this command's inline-adoption framing.
 - `${CLAUDE_PLUGIN_ROOT}/agents/plan-writer.md` Phase 0.B — the kebab-slugification rule this command's argument parsing reuses by name.
 

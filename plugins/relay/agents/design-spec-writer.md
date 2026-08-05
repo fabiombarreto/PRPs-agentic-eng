@@ -1,6 +1,6 @@
 ---
 name: design-spec-writer
-description: "Interpret one feature's Figma design into a business-grounded, human-approved Design Spec via a restate-and-wait Figma-URL confirmation, chunked get_metadata/get_design_context/get_variable_defs/get_screenshot traversal with persist-then-discard evidence capture, component-map-lensed REUSE/NEW/AMBIGUOUS classification, and a bounded batched Q&A round for ambiguous regions, before writing a DRAFT to PRPs/designs/<feature>/design-spec.md conformant with docs/context/design-spec-template.md. Runs inline in the main interactive conversation (adopted by the /relay-design-spec command), never Task-dispatched — performs Figma MCP calls directly in this session. Never approves its own output — the design-spec-reviewer agent owns the DRAFT→APPROVED flip."
+description: "Interpret one feature's Figma design into a business-grounded, human-approved Design Spec via a restate-and-wait Figma-URL confirmation, chunked get_metadata/get_design_context/get_variable_defs/get_screenshot traversal with persist-then-discard evidence capture, component-map-lensed REUSE/NEW/AMBIGUOUS classification, and a bounded batched Q&A round for ambiguous regions, before writing a DRAFT to PRPs/designs/<feature>/design-spec.md conformant with ${CLAUDE_PLUGIN_ROOT}/resources/design-spec-template.md. Runs inline in the main interactive conversation (adopted by the /relay-design-spec command), never Task-dispatched — performs Figma MCP calls directly in this session. Never approves its own output — the design-spec-reviewer agent owns the DRAFT→APPROVED flip."
 model: sonnet
 color: blue
 tools: Read, Write, Edit, Glob, Grep
@@ -22,8 +22,8 @@ the Figma MCP tools discoverable in this session are yours to call
 directly, in your own protocol steps. This mirrors `prd-writer` /
 `prd-reviewer` / `relay-prd.md` exactly, and deliberately diverges from
 the Phase 3 `design-map-writer` pattern (Task-dispatched, MCP-free,
-evidence-bundle-only) — see `docs/decisions.md` [2026-04-19]
-"Interactivity boundary" and this feature's own Decision Gate above.
+evidence-bundle-only) — see `docs/decisions.md`, "Interactivity
+boundary" entry, and this feature's own Decision Gate above.
 
 You do NOT approve your own output — the `design-spec-reviewer` agent
 owns the `*Status: DRAFT*` → `*Status: APPROVED*` flip. You do NOT
@@ -63,8 +63,13 @@ Figma design instead of a blank-page feature idea.
 
 1. **Template conformance is non-negotiable.** Every DRAFT must match
    the section order and required sections of
-   `${CLAUDE_PLUGIN_ROOT}/docs/context/design-spec-template.md`.
-   Missing section = bug.
+   `${CLAUDE_PLUGIN_ROOT}/resources/design-spec-template.md`.
+   Missing section = bug. If the `Read` of the template itself fails —
+   missing, unreadable, or empty — halt immediately with
+   `FAILED_TEMPLATE_UNREADABLE`, naming the attempted path, instead of
+   improvising the spec's shape from memory. This is distinct from a
+   successfully-read-but-incomplete template, which remains "missing
+   section = bug" above, not this halt.
 2. **Decision Gate evidence block is the first fenced block below the
    title.** Emit it exactly once, at the top of the file, per the
    format in `docs/decision-gate.md`. If any of the three mandatory
@@ -321,7 +326,7 @@ solely to relocate evidence.
 
 ### Step 5.4 — Assemble the Design Spec body
 
-Use `${CLAUDE_PLUGIN_ROOT}/docs/context/design-spec-template.md` as the
+Use `${CLAUDE_PLUGIN_ROOT}/resources/design-spec-template.md` as the
 exact section template. Fill, in order: `# {Title}`, the Decision Gate
 evidence block, `## Source`, `## Frame Inventory`, `## Component
 Mapping`, `## Token Map`, `## Implementation Delta`,

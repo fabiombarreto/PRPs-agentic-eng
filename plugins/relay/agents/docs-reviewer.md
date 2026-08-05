@@ -1,6 +1,6 @@
 ---
 name: docs-reviewer
-description: "Validate the Docs Updater's docs-update.md manifest and its surgical docs/ edits against an 8-item rubric (D-R1–D-R8). Emit APPROVED (manifest DRAFT→APPROVED flip + docs-review.jsonl entry) when all checks pass; emit CHANGES_REQUESTED (failing D-R<i> IDs + reasons, no flip) when any check fails. Appends every verdict to PRPs/reports/<feature>/docs-review.jsonl with all D-R1–D-R8 outcomes recorded on every rubric run — no short-circuit (the already-APPROVED precondition guard is not a rubric run and logs no verdict). Owns the manifest DRAFT→APPROVED flip. Dispatched post-merge by the future /relay-approve command after the Docs Updater (Phase 1) runs. Disclaimer: this agent owns the manifest DRAFT→APPROVED flip via a two-line Edit; it is the reviewer half of the Docs Updater/Reviewer writer/reviewer pair."
+description: "Validate the Docs Updater's docs-update.md manifest and its surgical docs/ edits against an 8-item rubric (D-R1–D-R8). Emit APPROVED (manifest DRAFT→APPROVED flip + docs-review.jsonl entry) when all checks pass; emit CHANGES_REQUESTED (failing D-R<i> IDs + reasons, no flip) when any check fails. Appends every verdict to PRPs/reports/<feature>/docs-review.jsonl with all D-R1–D-R8 outcomes recorded on every rubric run — no short-circuit (the already-APPROVED precondition guard is not a rubric run and logs no verdict). Owns the manifest DRAFT→APPROVED flip. Dispatched post-merge by the /relay-approve command after the Docs Updater (Phase 1) runs. Disclaimer: this agent owns the manifest DRAFT→APPROVED flip via a two-line Edit; it is the reviewer half of the Docs Updater/Reviewer writer/reviewer pair."
 model: sonnet
 color: purple
 tools: Read, Edit, Write, Glob, Grep, Bash
@@ -242,7 +242,8 @@ No relay plugin default was injected into a target project's
 to): `max_test_retries: 3`, the `tdd: false` default, the PRP root
 path `PRPs/`, and any other relay-internal constant. These are
 relay's own contracts, not project decisions. This mirrors
-`docs/anti-patterns.md` lines 51–56.
+`docs/anti-patterns.md` ("Injecting plugin defaults into the target
+project's decisions.md").
 
 **Fails when:** `docs/decisions.md` (in the merged diff) contains
 a new entry that records a relay plugin default as if it were a
@@ -501,7 +502,7 @@ The `Write` target path MUST be under
 - **Writing under `.claude/`.** Every path passed to `Write` or
   `Edit` must resolve under `PRPs/reports/<feature>/`. The string
   `.claude/PRPs/` must not appear in any path. See
-  `docs/anti-patterns.md` lines 60–66.
+  `docs/anti-patterns.md` ("Writing pipeline artifacts under .claude/").
 - **Touching the `documentation/` HTML site.** The agent never
   writes there. `documentation/` is a read-only reference for this
   agent; any mention of it in output is a note, never a write.

@@ -17,8 +17,8 @@ actionable phase. Reviewer dispatch is OUT of scope — that is the
 `/relay-plan-review` command (Phase 4 of `plan-authoring`).
 
 See:
-- `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/plan-authoring.prd.md` — this
-  feature's PRD; scope, AC-1 through AC-10, rationale.
+- the source PRD `plan-authoring.prd.md`, in the relay plugin repo
+  (not packaged) — this feature's PRD; scope, AC-1 through AC-10, rationale.
 - `${CLAUDE_PLUGIN_ROOT}/agents/plan-writer.md` — the
   Writer protocol you adopt in Phases 0–5.
 - `${CLAUDE_PLUGIN_ROOT}/agents/research-codebase.md`
@@ -28,7 +28,7 @@ See:
   conditional third subagent the Writer invokes via `Task` during
   its Phase 2 GROUNDING, alongside `research-codebase.md` and
   `research-web.md`, when a Design Spec is available.
-- `${CLAUDE_PLUGIN_ROOT}/docs/context/prd-template.md` —
+- `${CLAUDE_PLUGIN_ROOT}/resources/prd-template.md` —
   canonical PRD shape; the command reads the Implementation Phases
   table from a PRD that conforms to this template.
 
@@ -188,7 +188,7 @@ If the header line is not found, HALT with:
 
 > Implementation Phases table header not found in `<prd_path>`.
 > Expected: `| # | Phase | Description | Status | Parallel | Depends | PRP Plan |`.
-> The PRD must conform to docs/context/prd-template.md before
+> The PRD must conform to ${CLAUDE_PLUGIN_ROOT}/resources/prd-template.md before
 > /relay-plan can run.
 
 Parse the data rows that follow (skip the GFM separator row

@@ -97,10 +97,10 @@ This site is a rendering of the authoritative Markdown files in the plugin repo:
 | Decision gate | `docs/decision-gate.md` |
 | Commands | `docs/api-reference.md` + `plugins/relay/commands/*.md` |
 | Agents | `plugins/relay/agents/*.md` |
-| Test output schema | `docs/context/test-output-schema.md` |
-| Settings allowlist | `docs/context/settings-allowlist.md` |
-| Redaction policy | `docs/context/redaction-policy.md` |
-| PRD template | `docs/context/prd-template.md` |
+| Test output schema | `plugins/relay/resources/test-output-schema.md` |
+| Settings allowlist | `plugins/relay/resources/settings-allowlist.md` |
+| Redaction policy | `plugins/relay/resources/redaction-policy.md` |
+| PRD template | `plugins/relay/resources/prd-template.md` |
 | Phase status | `PRPs/prds/test-runner.prd.md` (implementation phases) |
 
 When the Markdown source changes, the corresponding HTML page should be regenerated or manually updated. Both directions are fine — this is a living doc. The HTML version is the team-facing / external-facing surface; the Markdown is the AI-facing / agent-consumed surface.

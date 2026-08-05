@@ -60,7 +60,7 @@ block. The cap is a ceiling, not a target.
 ### Step 1 — Read the Design Spec's Component Mapping section
 
 `Read` `design_spec_path`. Locate the `## Component Mapping` table
-(per `docs/context/design-spec-template.md`). Extract every `REUSE`
+(per `${CLAUDE_PLUGIN_ROOT}/resources/design-spec-template.md`). Extract every `REUSE`
 row's evidence cell — each cites a `CM-<n>` id in the form
 `` `CM-<n>` (<resolved import path>) ``. Collect the full set of cited
 `CM-<n>` ids. `NEW` and `ASSUMPTION` rows carry no `CM-<n>` reference —

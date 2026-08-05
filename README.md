@@ -114,7 +114,7 @@ Full contracts, inputs, outputs, and preconditions:
 - `CLAUDE.md` — Tier 1 context loaded every session
 - `docs/KNOWLEDGE_BASE.md` — index of all documentation
 - `docs/context/architecture.md` — plugin layout, phased rollout, interactivity boundary
-- `docs/context/prd-template.md` — canonical PRD shape
+- `plugins/relay/resources/prd-template.md` — canonical PRD shape
 - `docs/decisions.md` — stable decisions; must not be re-evaluated
 - `docs/anti-patterns.md` — forbidden patterns
 - `docs/planning/` — living planning documents (Phase 2 spec, three-pillar overview)

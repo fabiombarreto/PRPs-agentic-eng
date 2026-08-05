@@ -115,11 +115,11 @@ the attempt that created the DRAFT, and re-flipping it is not idempotent.
 
 1. **Template conformance is non-negotiable.** Every DRAFT plan must
    match the section order and required sections of
-   `docs/context/plan-template.md` — that file is the canonical
+   `${CLAUDE_PLUGIN_ROOT}/resources/plan-template.md` — that file is the canonical
    source of truth for plan structure. The 15-section list
    (Source PRD prefix + 14 body sections) is restated in Step 4.4
-   below for reference, but `plan-template.md` is authoritative if
-   the two ever drift.
+   below for reference, but `${CLAUDE_PLUGIN_ROOT}/resources/plan-template.md`
+   is authoritative if the two ever drift.
 2. **Decision Gate evidence block is the first fenced block below the
    title.** Emit it exactly once, at the top of the plan, in the same
    shape `prd-writer` uses. If any of the three mandatory Decision
@@ -159,8 +159,8 @@ the attempt that created the DRAFT, and re-flipping it is not idempotent.
    under `<target_root>/PRPs/plans/` or `<target_root>/PRPs/prds/`
    (the latter only for the back-fill `Edit`). The string
    `.claude/PRPs/` MUST NOT appear in any path you pass to `Write`
-   or `Edit`. This mirrors `docs/anti-patterns.md` lines 60–66 and
-   `plan-authoring.prd.md` AC-6 / rubric R6.
+   or `Edit`. This mirrors `docs/anti-patterns.md` ("Writing pipeline
+   artifacts under .claude/") and `plan-authoring.prd.md` AC-6 / rubric R6.
 9. **Never `Write`-rewrite the source PRD.** Back-filling row N uses
    `Edit` with a narrow `old_string` — the full row line copied
    verbatim — so the operation is unambiguous and touches only that
@@ -206,7 +206,7 @@ the attempt that created the DRAFT, and re-flipping it is not idempotent.
     interactive handler MUST name the `[RELAY-MOCK-DATA]` or
     `[RELAY-MOCK-BEHAVIOR]` sentinel (type-matched: data →
     `RELAY-MOCK-DATA`, interactive action → `RELAY-MOCK-BEHAVIOR`)
-    it will emit, per `docs/context/mock-sentinels.md`.
+    it will emit, per `${CLAUDE_PLUGIN_ROOT}/resources/mock-sentinels.md`.
     `plan-reviewer`'s new `R-COH-VISUAL-SCOPE-PURITY` check (Phase 3
     of `PRPs/prds/figma-visual-first-track.prd.md`) rejects any plan
     that violates this. Not applicable — silent no-op — when
@@ -222,7 +222,7 @@ the attempt that created the DRAFT, and re-flipping it is not idempotent.
     item 10), backed by at least one VALIDATE command that fails
     (non-zero exit) if any such sentinel remains — no count threshold,
     no recorded-justification exception, per
-    `docs/context/mock-sentinels.md`'s "no deferral path" rule and the
+    `${CLAUDE_PLUGIN_ROOT}/resources/mock-sentinels.md`'s "no deferral path" rule and the
     source PRD's own Decisions Log ("Sentinel deferral policy: Never
     allowed"). `plan-reviewer`'s new `R-COH-SENTINEL-RESOLUTION-MISSING`
     check (Phase 4 of `PRPs/prds/figma-visual-first-track.prd.md`)
@@ -453,7 +453,7 @@ below):
     since GROUNDING runs before Step 4.4), first resolve the paired
     visual phase's row number from row N's own `Depends` cell (already
     parsed in Phase 1; guaranteed a single bare value for a `[LOGIC]`
-    row per `docs/context/prd-template.md`'s Phase-pairing mechanism),
+    row per `${CLAUDE_PLUGIN_ROOT}/resources/prd-template.md`'s Phase-pairing mechanism),
     then `Read` that row's `PRP Plan` cell path. Hold that plan's `##
     Files to Change` table (the file set to search) and its `##
     Design Source` table, if present (consumed by Step 4.3.5), in
@@ -646,7 +646,7 @@ When `design_source: figma` (Step 4.4 item 5's Metadata value,
 resolved before this step — Metadata assembly and this conditional
 section are resolved together since both key off the same
 non-heuristic source), emit a `## Design Source` section per
-`docs/context/plan-template.md`'s registered shape, citing the
+`${CLAUDE_PLUGIN_ROOT}/resources/plan-template.md`'s registered shape, citing the
 APPROVED Design Spec's path and this phase's in-scope frame subset:
 
 ```
@@ -677,7 +677,7 @@ column, when present, names the VISUAL phase that renders each frame,
 never the logic phase that later wires real data behind it. Instead,
 filter using the paired visual phase's row number, read from row N's
 own `Depends` cell (guaranteed single-valued for a `[LOGIC]` row per
-`docs/context/prd-template.md`'s Phase-pairing mechanism; already
+`${CLAUDE_PLUGIN_ROOT}/resources/prd-template.md`'s Phase-pairing mechanism; already
 resolved during Phase 2's ledger-dispatch extension above, so no
 re-read is required here). This is how a `phase_scope: logic` plan's
 `## Design Source` section inherits the SAME locked frame set the
@@ -778,7 +778,7 @@ Assemble in this order:
    `Description` cell, its Phase Details Goal/Scope text, or any task
    content — sourced by reading row N's own `Phase` cell for its
    mandatory leading `[VISUAL]` or `[LOGIC]` bracket tag (registered
-   in `docs/context/prd-template.md`'s `## Visual-First Mode` →
+   in `${CLAUDE_PLUGIN_ROOT}/resources/prd-template.md`'s `## Visual-First Mode` →
    `### Phase-pairing mechanism`, shipped by Phase 2 of
    `PRPs/prds/figma-visual-first-track.prd.md`): `[VISUAL]` →
    `phase_scope: visual`; `[LOGIC]` → `phase_scope: logic`. When the
@@ -811,13 +811,15 @@ Assemble in this order:
    why) drawn from research-codebase findings + the PRD's Phase
    Details. Every row's path must come from a real research finding
    or be the PRD itself; never invent. When `phase_scope: visual`
-   (from item 5 above), always include `docs/context/mock-sentinels.md`
-   as a P0 `## Mandatory Reading` row — the sentinel convention and
+   (from item 5 above), always include
+   `${CLAUDE_PLUGIN_ROOT}/resources/mock-sentinels.md` (installed relay
+   plugin file) as a P0 `## Mandatory Reading` row — the sentinel convention and
    zero-side-effects/zero-remaining rules every task in this plan must
    satisfy, and the exact reference the Implementer needs when
    executing the plan's tasks. Symmetrically, when `phase_scope: logic`
-   (from item 5 above), always include `docs/context/mock-sentinels.md`
-   as a P0 `## Mandatory Reading` row (the swap-semantics section —
+   (from item 5 above), always include
+   `${CLAUDE_PLUGIN_ROOT}/resources/mock-sentinels.md` (installed relay
+   plugin file) as a P0 `## Mandatory Reading` row (the swap-semantics section —
    resolving `[RELAY-MOCK-DATA]` by replacing the literal with its real
    source, resolving `[RELAY-MOCK-BEHAVIOR]` by filling the real
    handler inside the already-approved choreography — and the
@@ -885,7 +887,7 @@ Assemble in this order:
       interactive handler (e.g., static markup, styling) needs
       neither sentinel — do not force one.
     - Reuse the exact sentinel shape documented in
-      `docs/context/mock-sentinels.md`.
+      `${CLAUDE_PLUGIN_ROOT}/resources/mock-sentinels.md`.
 
     `plan-reviewer`'s new `R-COH-VISUAL-SCOPE-PURITY` check (Phase 3
     of `PRPs/prds/figma-visual-first-track.prd.md`) enforces both
@@ -908,7 +910,7 @@ Assemble in this order:
     - **Author the resolution task(s).** At least one `### Task <i>:
       ...` heading whose `**ACTION**:` enumerates the ledger (inline,
       or by reference to the paired visual plan's Mandatory Reading
-      row) and requires, per `docs/context/mock-sentinels.md`'s Swap
+      row) and requires, per `${CLAUDE_PLUGIN_ROOT}/resources/mock-sentinels.md`'s Swap
       semantics: for every `[RELAY-MOCK-DATA]` entry, replace the
       literal mock value with the real data source at the exact
       sentinel site (the displayed shape does not change, only where
@@ -925,7 +927,7 @@ Assemble in this order:
       Validation Commands` Level 2/3 block) MUST grep the paired
       visual phase's touched files for both sentinel tokens and FAIL
       (non-zero exit, per Hard Constraint #11) if either is still
-      found. Per `docs/context/mock-sentinels.md`'s "Zero remaining
+      found. Per `${CLAUDE_PLUGIN_ROOT}/resources/mock-sentinels.md`'s "Zero remaining
       sentinels — no deferral path" section and the source PRD's own
       Decisions Log ("Sentinel deferral policy: Never allowed"), this
       VALIDATE MUST NOT accept a count threshold, a recorded
@@ -1085,7 +1087,7 @@ Assemble in this order:
       needs to apply its R8b description-mode variant.
 13. `## Risks and Mitigations` — table with columns
     `Risk | Likelihood | Impact | Mitigation` (matching
-    `docs/context/plan-template.md` item 14). At least one data row
+    `${CLAUDE_PLUGIN_ROOT}/resources/plan-template.md` item 14). At least one data row
     when the PRD's Technical Risks section names risks intersecting
     this phase. Otherwise emit a single note row:
     `| (no phase-specific risks beyond those in the PRD) | - | - | - |`.
@@ -1247,8 +1249,8 @@ invoked separately by `/relay-plan-review`.
   emit has `*Status: DRAFT*`, full stop. The `plan-reviewer` agent
   owns the flip.
 - **Writing under `.claude/`.** Breaks autonomy; explicitly forbidden
-  by `docs/anti-patterns.md` lines 60–66 and `plan-authoring.prd.md`
-  AC-6 / R6.
+  by `docs/anti-patterns.md` ("Writing pipeline artifacts under
+  .claude/") and `plan-authoring.prd.md` AC-6 / R6.
 - **Overwriting an existing plan.** Collision → numeric suffix,
   always. APPROVED plans are immutable; DRAFTs are also untouched.
 - **Importing `prp-core` assets.** `plugins/prp-core/commands/prp-plan.md`
@@ -1290,7 +1292,7 @@ invoked separately by `/relay-plan-review`.
   `[RELAY-MOCK-DATA]`/`[RELAY-MOCK-BEHAVIOR]` sentinel in the paired
   visual phase's files, backed by a VALIDATE that fails on any
   remaining sentinel — no count threshold, no recorded-justification
-  exception, per `docs/context/mock-sentinels.md`'s "no deferral path"
+  exception, per `${CLAUDE_PLUGIN_ROOT}/resources/mock-sentinels.md`'s "no deferral path"
   rule and the source PRD's own Decisions Log ("Sentinel deferral
   policy: Never allowed"). `plan-reviewer`'s
   `R-COH-SENTINEL-RESOLUTION-MISSING` check rejects it.

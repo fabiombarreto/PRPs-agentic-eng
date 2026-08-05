@@ -51,7 +51,7 @@ function frameFilename(nodeId) {
 }
 
 // Bounded interaction-step vocabulary — mirrors
-// docs/context/design-spec-template.md's `Interaction` column syntax
+// ${CLAUDE_PLUGIN_ROOT}/resources/design-spec-template.md's `Interaction` column syntax
 // exactly: click(<selector>), fill(<selector>, <value>),
 // wait(<ms> | <selector>), semicolon-separated, executed in order
 // before capture. Absent/"none" parses to zero steps (additive,

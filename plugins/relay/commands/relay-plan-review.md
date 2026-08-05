@@ -18,14 +18,14 @@ Writer dispatch is OUT of scope — that is the `/relay-plan`
 command (Phase 3 of `plan-authoring`, complete).
 
 See:
-- `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/plan-authoring.prd.md` — this
-  feature's PRD; scope, AC-3 / AC-4 / AC-10, rationale.
+- the source PRD `plan-authoring.prd.md`, in the relay plugin repo
+  (not packaged) — this feature's PRD; scope, AC-3 / AC-4 / AC-10, rationale.
 - `${CLAUDE_PLUGIN_ROOT}/agents/plan-reviewer.md` —
   the Reviewer protocol you adopt: 8-item rubric, auto-flip on
   pass, jsonl logging, CHANGES_REQUESTED on fail.
 - `${CLAUDE_PLUGIN_ROOT}/agents/plan-writer.md` —
   the sibling Writer; informational only, not dispatched here.
-- `${CLAUDE_PLUGIN_ROOT}/docs/context/prd-template.md` —
+- `${CLAUDE_PLUGIN_ROOT}/resources/prd-template.md` —
   canonical PRD shape; R8 traceability cross-reads from the
   source PRD's Implementation Phases table.
 

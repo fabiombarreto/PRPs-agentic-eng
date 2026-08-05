@@ -6,15 +6,18 @@ contract that turns one feature's Figma design into something every
 downstream, fully-autonomous phase of the pipeline can trust blindly.
 Both `design-spec-writer` and `design-spec-reviewer` reference this
 file as the single authoritative source for the spec's shape,
-mirroring how `prd-template.md` anchors `prd-writer`/`prd-reviewer`
-and `component-map-template.md` anchors `design-map-writer`/
-`design-map-reviewer`.
+mirroring how `${CLAUDE_PLUGIN_ROOT}/resources/prd-template.md` anchors
+`prd-writer`/`prd-reviewer` and
+`${CLAUDE_PLUGIN_ROOT}/resources/component-map-template.md` anchors
+`design-map-writer`/`design-map-reviewer`.
 
 **Provenance:** this template has no upstream fork — it is
-relay-original, unlike `prd-template.md` (a fork of
-`plugins/prp-core/commands/prp-prd.md`) and `plan-template.md`.
+relay-original, unlike `${CLAUDE_PLUGIN_ROOT}/resources/prd-template.md`
+(a fork of `plugins/prp-core/commands/prp-prd.md`) and
+`${CLAUDE_PLUGIN_ROOT}/resources/plan-template.md`.
 Figma-to-business-interpretation is outside `prp-core`'s scope,
-exactly as `component-map-template.md` records for its own artifact.
+exactly as `${CLAUDE_PLUGIN_ROOT}/resources/component-map-template.md`
+records for its own artifact.
 
 **Keeping this file authoritative:** any change to the spec's shape (a
 new section, a new required column) must land here first, then
@@ -36,8 +39,8 @@ evidence, one file per traversed node plus `variables.json`),
 in-scope frame), and `PRPs/designs/<feature>/design-spec-review.jsonl`
 (the reviewer's append-only verdict log). Directory is created if it
 doesn't exist. NEVER write under `.claude/` — see
-`docs/anti-patterns.md` lines 60–66 and `docs/decisions.md` on the PRP
-artifact path convention.
+`docs/anti-patterns.md` ("Writing pipeline artifacts under .claude/") and
+`docs/decisions.md` on the PRP artifact path convention.
 
 ---
 

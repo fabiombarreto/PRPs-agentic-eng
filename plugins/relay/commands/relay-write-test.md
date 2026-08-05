@@ -20,8 +20,8 @@ of scope — that is the `/relay-test-write-review` command (Phase 1
 sibling artifact, ships in the same release).
 
 See:
-- `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/tdd-writer-reviewer.prd.md` —
-  this feature's PRD; AC-1 through AC-13, scope, rationale.
+- the source PRD `tdd-writer-reviewer.prd.md`, in the relay plugin repo
+  (not packaged) — this feature's PRD; AC-1 through AC-13, scope, rationale.
 - `${CLAUDE_PLUGIN_ROOT}/agents/test-writer.md` — the
   Writer protocol you adopt in Phase A.
 - `docs/context/methodology.md` (in the target project) — the

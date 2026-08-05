@@ -1,5 +1,5 @@
 ---
-description: 'Give every Figma-enabled project a versioned, human-curatable map from Figma library components to real code components. Queries the target project''s Figma library in the main session (search_design_system + node-scoped get_metadata, budget max_library_search_calls=40; get_code_connect_map read opportunistically), persists evidence bundles to PRPs/reports/design-map/evidence/, dispatches the design-map-writer/design-map-reviewer pair in a bounded max_map_review_retries=2 loop to produce an APPROVED docs/design/component-map.md, runs a preflight report (visual-tooling dependency check, dev-server config check), then asks for the user''s own explicit, quoted confirmation before performing the ONLY sanctioned Edit that flips figma_track: true in the target project''s docs/context/methodology.md. Never invoked by /relay-execute — a per-project, one-time (or --refresh) human-triggered setup command.'
+description: 'Give every Figma-enabled project a versioned, human-curatable map from Figma library components to real code components. Queries the target project''s Figma library in the main session (search_design_system, budget max_library_search_calls=40; a local Glob/Grep pre-match against the design-system clone narrows enrichment to candidates only; node-scoped get_metadata for pre-matched candidates, budget max_metadata_calls=150, non-fatal on exhaustion; a re-invocation skips already-recorded work in steps 2, 5, and 6 so a retry can cost only the delta, while --refresh re-runs library search and Code Connect in full and still limits get_metadata enrichment to the delta; get_code_connect_map read opportunistically), persists evidence bundles to PRPs/reports/design-map/evidence/, dispatches the design-map-writer/design-map-reviewer pair in a bounded max_map_review_retries=2 loop to produce an APPROVED docs/design/component-map.md, runs a preflight report (visual-tooling dependency check, dev-server config check), then asks for the user''s own explicit, quoted confirmation before performing the ONLY sanctioned Edit that flips figma_track: true in the target project''s docs/context/methodology.md. Never invoked by /relay-execute — a per-project, one-time (or --refresh) human-triggered setup command.'
 argument-hint: [--refresh]
 ---
 
@@ -35,11 +35,11 @@ per-project, one-time (or explicitly re-run) human-gated action, never
 inferred, never automatic.
 
 See:
-- `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/figma-implementation-track.prd.md` — source PRD, Implementation Phases row 3.
+- the source PRD `figma-implementation-track.prd.md`, in the relay plugin repo (not packaged) — Implementation Phases row 3.
 - `${CLAUDE_PLUGIN_ROOT}/commands/relay-worktree.md` — HALT-code + preflight structure this command mirrors.
 - `${CLAUDE_PLUGIN_ROOT}/commands/relay-implement.md` Phase A.3.5 — the bounded writer/reviewer retry-loop shape this command's Phase C mirrors.
 - `${CLAUDE_PLUGIN_ROOT}/agents/design-map-writer.md` and `${CLAUDE_PLUGIN_ROOT}/agents/design-map-reviewer.md` — the dispatched agent pair.
-- `${CLAUDE_PLUGIN_ROOT}/docs/context/component-map-template.md` — the canonical map shape both agents reference.
+- `${CLAUDE_PLUGIN_ROOT}/resources/component-map-template.md` — the canonical map shape both agents reference.
 - `docs/anti-patterns.md` (target project) — "Flipping `figma_track` (or any future opt-in gating key) by heuristic" entry; this command's Phase E is the one sanctioned non-heuristic flip path.
 
 ---
@@ -94,7 +94,18 @@ byte-exact message:
   the Figma library and additively re-scans: existing `CM-<n>` rows
   are never renumbered, human-verified `Confidence`/`verified_at`
   values are never clobbered without contradicting evidence, and only
-  newly-discovered Figma components receive new `CM-<n>` ids.
+  newly-discovered Figma components receive new `CM-<n>` ids. A
+  plain re-invocation (no `--refresh`) resumes at no extra Figma
+  cost: Phase B steps 2, 5, and 6 all automatically skip Figma calls
+  for work already recorded on disk from a prior run, so retries cost
+  only the delta. `--refresh` deliberately re-runs step 2's search in
+  full (to catch newly-added or newly-removed Figma components) and
+  re-attempts step 6's Code Connect in full (to catch a configuration
+  added or fixed since the last recorded outcome); step 5's
+  enrichment still costs only the delta, enriching only candidates
+  not already covered by an existing metadata file — so `--refresh`
+  costs the full search plus the enrichment delta, never a full
+  re-enrichment.
 
 No other arguments are accepted. Unrecognized flags are ignored with
 a one-line note (never a HALT — this command has no other required
@@ -116,9 +127,9 @@ MCP-access spike, `docs/decisions.md` 2026-07-22). If no Figma MCP
 tool (e.g. `search_design_system`, `get_metadata`,
 `get_code_connect_map`) can be discovered:
 
-> FAILED_FIGMA_MCP_UNAVAILABLE: No Figma MCP server is reachable from
-> this session. `/relay-design-map` requires a configured Figma MCP
-> connection to query the target project's design library.
+> FAILED_FIGMA_MCP_UNAVAILABLE: No Figma MCP tools are discoverable in this session.
+> `/relay-design-map` requires a configured Figma MCP connection to
+> query the target project's design library.
 > To connect: add a Figma MCP server to your Claude Code MCP
 > configuration (see your Figma MCP server's setup instructions), then
 > re-run `/relay-design-map`.
@@ -213,32 +224,285 @@ the payload passed to `design-map-writer`.
 All Figma MCP calls in this phase execute in THIS session — never
 inside a dispatched agent (Decision Gate result above).
 
-1. **Library search.** Call `search_design_system` against the Figma
+Any of this phase's two load-bearing Figma MCP data calls
+(`search_design_system`, `get_metadata`) that fails with a
+quota-exhaustion error HALTs immediately with
+`FAILED_FIGMA_QUOTA_EXHAUSTED` — detection is by error class/string
+match, never by HTTP status, since Figma's MCP documentation defines
+neither `429` nor `Retry-After`. No retry, no backoff: sleeping is
+useless against a per-day or per-month bucket. This rule does NOT
+apply to `get_code_connect_map` (step 6): a quota-exhaustion error
+there follows step 6's existing, unchanged non-fatal path — recorded
+as `code_connect: unavailable(quota-exhausted)` and the run
+CONTINUES — because by the time step 6 runs, the enumeration and any
+enrichment this run was authorized to perform are already recorded,
+so the bundle is as complete as this run intends, and discarding it
+over an opportunistic call would be strictly worse than the
+interrupted-run cost this PRD exists to reduce.
+`PRPs/prds/figma-quota-resilience.prd.md:37` cites Code Connect's
+existing non-fatal path as the model this phase's load-bearing HALT
+emulates, not a defect to remove — failure handling was "inverted
+relative to importance" before this phase; this rule fixes the
+load-bearing side without inverting it back onto the opportunistic
+side.
+
+> FAILED_FIGMA_QUOTA_EXHAUSTED: A Figma MCP data call failed with a
+> quota-exhaustion error — distinct from `FAILED_FIGMA_MCP_UNAVAILABLE`:
+> the Figma MCP connection is live; your seat's call quota for the
+> current window is spent.
+> This message promises no reset time. Figma's MCP documentation
+> states no reset mechanics for any seat, so do not assume a fixed
+> wait-and-retry window.
+> The scoped scan this command already performs (enumerate -> pre-match
+> -> enrich only candidates, bounded by `max_metadata_calls`) is the
+> durable fix for this failure class.
+> Upgrading from a View/Collab seat to Dev/Full multiplies your MCP
+> call quota roughly a thousandfold (6/month vs. 200-600/day).
+> But no Figma seat makes whole-library enrichment viable.
+> Detection is by error class/string match, never by HTTP status —
+> Figma's MCP documentation defines neither `429` nor `Retry-After`.
+> No retry, no backoff: sleeping is useless against a per-day or
+> per-month bucket.
+> When the interruption happened after library search completed,
+> re-running `/relay-design-map` once your quota has recovered
+> costs only the delta — Phase B steps 2, 5, and 6 automatically
+> skip work already recorded on disk.
+> When the interruption happened during search itself, search
+> re-runs from the start on retry, because `search_design_system`
+> exposes no resumable cursor; `--refresh` is only needed when
+> deliberately re-scanning for new or removed Figma components.
+
+1. **Quota preflight (`whoami` probe).** Call the quota-exempt
+   `whoami` tool (Figma documents exactly three quota-exempt tools:
+   `whoami`, `add_code_connect_map`, `generate_figma_design`). When
+   the response exposes a seat (e.g. `View`, `Collab`, `Dev`, `Full`)
+   and a tier/plan (e.g. `Starter`, `Professional`, `Organization`,
+   `Enterprise`), hold both for step 4 and for step 7's evidence
+   recording. When the call fails for any reason, or the response
+   does not expose one or both fields — `whoami`'s response schema is
+   observed, not documented, and may change — record the gap
+   (`seat: unavailable` and/or `tier: unavailable`) and continue; this
+   step never HALTs regardless of what `whoami` returns.
+2. **Library search.** Before issuing any call, check whether
+   `--refresh` is ABSENT and a prior evidence bundle exists at
+   `evidence_dir/library-search.json` whose own `inventory_truncated`
+   field reads `false` (a complete prior enumeration). When both
+   hold, SKIP this step's `search_design_system` calls entirely —
+   reuse the existing component/component-set list verbatim as this
+   run's step 2 result (zero search calls issued, `inventory_truncated`
+   carried forward unchanged) — and record `search_skipped: true` for
+   step 7. Otherwise (either `--refresh` was passed, or no complete
+   prior inventory exists), record `search_skipped: false` and
+   proceed as follows. Call `search_design_system` against the Figma
    library file key(s) from `design_system_config`, enumerating the
    library's components. Budget: `max_library_search_calls = 40` —
    stop issuing further search calls once this budget is reached and
    record the scan as truncated (this feeds the map's
    `inventory_truncated` marker via the evidence bundle).
-2. **Node-scoped metadata.** For each component (or component set)
-   discovered, call node-scoped `get_metadata` to retrieve its
-   variant/property structure.
-3. **Code Connect (opportunistic).** Call `get_code_connect_map` for
+3. **Pre-match candidates (local, Figma-call-free).** Against
+   `design_system_config.local_clone_path`, compare each
+   component/component-set name (and slug) enumerated in step 2 to
+   file names and exported symbol names in the local design-system
+   clone via `Glob`/`Grep`, producing a candidate set for enrichment.
+   This step issues zero Figma MCP calls. Three properties hold by
+   design:
+   - **Recall-oriented.** The pre-match over-includes and never
+     under-includes — any plausible partial match, pluralization
+     difference, or ambiguous multi-candidate name is always
+     included, never excluded.
+   - **No classification authority.** The pre-match never decides
+     `CONFIRMED` vs. `INFERRED` vs. `UNMAPPED` — that remains
+     exclusively `design-map-writer` Step 2's job against the full
+     evidence bundle, and the writer may map any component present in
+     the evidence bundle regardless of membership in this candidate
+     set.
+   - **A duplicated, drifting heuristic.** This step necessarily
+     duplicates part of `design-map-writer.md` Step 2's own
+     name/prop matching heuristic; the two are expected to drift over
+     time, and neither is authoritative over the other — this
+     pre-match only scopes *which components get enriched in step 5*.
+4. **Cost declaration + confirmation.** Before estimating, partition
+   the step 3 candidate set using `evidence_dir`'s existing
+   `metadata/<component-key>.json` files — a candidate with an
+   existing file is already enriched from a prior run (excluded —
+   hold this excluded count as `candidates_skipped_already_enriched`
+   for step 7, on every path below, since it is fully knowable here
+   regardless of which branch follows); the
+   remainder is the delta set step 5 will actually call
+   `get_metadata` for. This partition applies regardless of
+   `--refresh`. When the delta set is empty, do NOT proceed with the
+   declaration/confirmation below: record `metadata_calls_made: 0`,
+   `candidates_skipped_already_enriched` (the full step 3
+   candidate-set size, since every candidate was already enriched),
+   reason `"fully cached — no candidates pending enrichment"`, then
+   continue to steps 6-7 as normal — this is not a HALT (mirroring the
+   existing decline branch below). Otherwise, continue below using the
+   delta set's size — never the full step 3 candidate-set size — as
+   the estimate. Using the step 1 `whoami`
+   result and the delta set (defined above) size, estimate the number of
+   `get_metadata` calls step 5 will issue (the delta set's
+   count, capped at `max_metadata_calls = 150` — this is the
+   arithmetically infeasible part the source PRD's Problem Statement
+   targets, not the cheaper, independently-budgeted step 2 search).
+   Compare the estimate against the documented ceiling for the
+   detected seat: View/Collab seats are limited to 6 calls **per
+   month** on every plan; Dev/Full seats are limited to 200 calls/day
+   (Starter, Professional) or 600 calls/day (Organization) —
+   Enterprise's ceiling is undocumented. **When `whoami` exposed both
+   seat and tier and the estimate exceeds the ceiling:** declare both
+   numbers explicitly (e.g. "This run's pre-matched candidate set is
+   `<N>`, so at most `<N>` `get_metadata` calls will be issued; your
+   `<seat>` seat on the `<tier>` plan is documented to allow
+   `<ceiling>`.") and ask the user for an explicit, quoted affirmative
+   reply before issuing any `get_metadata` call: a non-answer, an
+   ambiguous reply, or any non-affirmative reply MUST be treated as
+   do-not-proceed, never inferred consent. **On decline or
+   non-affirmative reply:** do NOT proceed to step 5; record
+   `metadata_calls_made: 0`, `enrichment_truncated: true`, reason
+   `"cost-declaration preflight declined by operator"`, and
+   `candidates_skipped_already_enriched` (per the step 4 partition
+   above) (fed forward
+   to step 7), then continue to steps 6-7 as normal — this is not a
+   HALT; the evidence gathered so far, and any prior map, remain
+   valid, and re-running later is safe. **When `whoami` did not
+   expose seat and/or tier, or the estimate does not exceed the
+   ceiling:** proceed directly to step 5 without the confirmation
+   gate; when seat/tier was unavailable, record the degradation for
+   step 7 rather than halting.
+5. **Node-scoped metadata (candidates only).** For each component (or
+   component set) in the step 3 candidate set — never the full step 2
+   enumeration — call node-scoped `get_metadata`, scoped to step 4's
+   delta set only — a candidate excluded from the delta set (an
+   existing `metadata/<component-key>.json` file already covers it)
+   issues zero calls here, reusing the on-disk file as this run's
+   evidence for it, to retrieve its
+   variant/property structure. Budget: `max_metadata_calls = 150` —
+   stop issuing further `get_metadata` calls once this budget is
+   reached. Carry forward `candidates_skipped_already_enriched` as
+   established by step 4's partition above for step 7 — the same
+   excluded count, since step 5 iterates exactly the delta set step 4
+   computed and excludes nothing further of its own. Exhaustion is
+   never fatal: record
+   `enrichment_truncated: true` with a reason (e.g.
+   `"max_metadata_calls exhausted at 150/<candidate count>"`) and
+   continue to the next step.
+6. **Code Connect (opportunistic).** Before issuing this call, check
+   whether `--refresh` is ABSENT and a prior evidence bundle already
+   contains `evidence_dir/code-connect.json` — any prior recorded
+   outcome, including a `code_connect: unavailable(<error class>)`
+   marker, counts as already-recorded, since an opportunistic call
+   whose outcome is already known needs no repeat. When both hold,
+   SKIP this call entirely: reuse the existing `code-connect.json`
+   verbatim as this run's step 6 result (zero calls issued), and
+   record `code_connect_skipped: true` for step 7. Otherwise (either
+   `--refresh` was passed — deliberately re-attempting in case a Code
+   Connect configuration was added or fixed since the last recorded
+   outcome — or no prior `code-connect.json` exists), record
+   `code_connect_skipped: false` and proceed as follows. Call
+   `get_code_connect_map` for
    the library. This call is opportunistic — any error (missing Code
    Connect configuration, permission error, timeout) is recorded as
    `code_connect: unavailable(<error class>)` in the evidence bundle's
    header and the run CONTINUES. A Code Connect failure is never
    fatal to this command.
-4. **Persist evidence.** Write every raw result from steps 1–3 to
+7. **Persist evidence.** Write every raw result from steps 1–6 to
    `PRPs/reports/design-map/evidence/` (create the directory if
    absent) as one or more evidence files — at minimum a
-   `library-search.json` (step 1 results plus the
+   `library-search.json` (step 2 results plus the
    `max_library_search_calls` budget consumption and a
-   `truncated: true|false` flag), a `metadata/<component-key>.json`
-   per component (step 2), and a `code-connect.json` (step 3 result or
-   the `unavailable(<error class>)` marker). This is the exact and
-   only evidence surface `design-map-writer` and
-   `design-map-reviewer` are permitted to read for Figma facts — they
-   never call the Figma MCP themselves.
+   `inventory_truncated: true|false` flag; `candidates_prematched`, the size of
+   the step 3 candidate set; `metadata_calls_made`, the count of step
+   5 `get_metadata` calls actually issued this run;
+   `enrichment_truncated: true|false` with its reason when
+   applicable; `seat` — the value read in step 1, or `"unavailable"`
+   when `whoami` did not expose it; `tier` — same convention;
+   `metadata_call_estimate` — the step 4 estimate;
+   `metadata_call_ceiling` — the seat's documented ceiling step 4
+   compared against, or `"unavailable"` when seat/tier was
+   undetermined; and `preflight_confirmed` — `true` when the user gave
+   an explicit affirmative reply, `false` when declined, `null` when
+   the confirmation gate was never triggered because the estimate did
+   not exceed the ceiling or seat/tier was unavailable); `search_skipped`
+   — `true` when step 2 reused a prior run's complete library
+   enumeration verbatim (zero `search_design_system` calls issued this
+   run), `false` otherwise; `candidates_skipped_already_enriched` —
+   the count of step 3 candidates step 5 excluded from its delta set
+   because an existing `metadata/<component-key>.json` file from a
+   prior run was reused instead of a fresh `get_metadata` call; and
+   `code_connect_skipped` — `true` when step 6 reused a prior run's
+   `code-connect.json` verbatim (zero `get_code_connect_map` calls
+   issued this run), `false` otherwise), a
+   `metadata/<component-key>.json` per enriched candidate (step 5),
+   and a `code-connect.json` (step 6 result or the
+   `unavailable(<error class>)` marker). This is the exact and only
+   evidence surface `design-map-writer` and `design-map-reviewer` are
+   permitted to read for Figma facts — they never call the Figma MCP
+   themselves.
+
+   Immediately before this write, maintain a checkpoint at
+   `PRPs/reports/design-map/.state/checkpoint.json` (create the
+   `.state/` directory if absent) — a path deliberately OUTSIDE
+   `evidence_dir`, never reached by either agent's "Read every file
+   under `evidence_dir`" instruction, satisfying the
+   checkpoint-exclusion requirement (PRD AC-9) structurally via path
+   placement rather than a dotfile naming convention. The checkpoint
+   holds a cumulative `call_log`: an array recording every Figma MCP
+   data call this project's `/relay-design-map` has ever issued
+   across every run (tool name, UTC timestamp, outcome), appended to
+   — never replaced — on every run, including a run that HALTs on
+   `FAILED_FIGMA_QUOTA_EXHAUSTED` (capture the partial `call_log`
+   before halting). On every step-7 write, project (copy) the
+   checkpoint's cumulative `call_log` into `library-search.json`'s
+   own header as `call_log`, so a reader of the evidence bundle sees
+   the cumulative total without opening the checkpoint (this is what
+   Success Metric 1's "Cumulative `call_log` in the evidence bundle
+   header" measures).
+
+   Before writing, `Read` the EXISTING `library-search.json` and
+   `metadata/<component-key>.json` files under `evidence_dir` when
+   present (a prior run's bundle) and MERGE this run's
+   newly-observed components/component-sets into them additively —
+   union, never replace. Each merged entry (in `library-search.json`'s
+   component/component-set list, and each
+   `metadata/<component-key>.json` file) carries a `last_seen_scan`
+   field set to this run's generation id — the checkpoint's own
+   monotonically incrementing scan counter, incremented once per
+   `/relay-design-map` invocation and persisted alongside `call_log`.
+   An entry present in the prior bundle but not observed in this
+   run's results is retired (removed from the merged bundle) only
+   when THIS run's own `inventory_truncated` is `false` — a complete,
+   non-budget-truncated library enumeration, so a component's absence
+   genuinely means it left the Figma library. When this run's
+   `inventory_truncated` is `true` (a partial scan), no entry is ever
+   retired — partial scans merge additively and retire nothing (per
+   the source PRD's Decisions Log "Retirement under additive merge"
+   row).
+
+   Both `inventory_truncated` and `enrichment_truncated` are derived
+   by scanning what this write actually has on disk at write time —
+   never trusted from an in-memory flag the run merely believes about
+   itself: `inventory_truncated` is `true` iff step 2's library
+   search stopped before enumerating the full library (cross-checked
+   against the merged component/component-set count, not assumed);
+   `enrichment_truncated` is `true` iff any pre-matched candidate
+   lacks a corresponding `metadata/<component-key>.json` file on disk
+   after this write (counted by scanning the `metadata/` directory's
+   actual file count against the step 3 candidate set size — never
+   from a flag merely recording whether enrichment was attempted).
+   Guard three degenerate cases explicitly: (a) a run that fails
+   before contributing any new evidence must leave the PRIOR bundle's
+   `inventory_truncated`/`enrichment_truncated` values untouched
+   rather than deriving a false `inventory_truncated: false` from an
+   empty diff; (b) an empty component-set list (a library genuinely
+   containing zero component sets) must not derive
+   `enrichment_truncated: false` merely because there was vacuously
+   nothing to enrich — when the candidate set is empty,
+   `enrichment_truncated` reports whether enrichment was even
+   reachable this run, never a silent "complete"; (c)
+   `enrichment_truncated` is always recomputed from the actual
+   `metadata/*.json` file count on disk, never from a field recording
+   only the run's own intent to enrich, so the flag can never diverge
+   from what the evidence bundle actually shows.
 
 ---
 
@@ -406,6 +670,7 @@ entry).
 - `FAILED_FIGMA_MCP_UNAVAILABLE` — P1: no Figma MCP tools discoverable.
 - `FAILED_DESIGN_SYSTEM_CONFIG_INCOMPLETE` — P2: `docs/context/design-system.md` absent or incomplete — a starter file was scaffolded; re-run after filling the listed keys.
 - `FAILED_MAP_REVIEW_BUDGET_EXCEEDED` — Phase C: `max_map_review_retries` exhausted.
+- `FAILED_FIGMA_QUOTA_EXHAUSTED` — Phase B: a Figma MCP data call failed with a quota-exhaustion error; no retry, no backoff.
 
 No artifact is written and no `figma_track` flip occurs on any HALT
 path. Exit non-zero.
@@ -425,7 +690,7 @@ path. Exit non-zero.
    either agent.
 3. **Never write pipeline artifacts under `.claude/`.** Evidence
    bundles go under `PRPs/reports/design-map/evidence/`; the map goes
-   under `docs/design/`. See `docs/anti-patterns.md` lines 60–66.
+   under `docs/design/`. See `docs/anti-patterns.md` ("Writing pipeline artifacts under .claude/").
 4. **Never flip `figma_track` without explicit, quoted human
    confirmation.** No heuristic, no inferred consent, no default-yes
    on silence. This is the one command in the entire pipeline

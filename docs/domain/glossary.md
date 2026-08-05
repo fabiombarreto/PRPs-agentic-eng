@@ -48,8 +48,8 @@ on every plan/PRD phase when the target project declares
 from the `phase_type` precedent — see `docs/decisions.md` 2026-07-23).
 When `figma`, a conditional `## Design Source` section (table of in-scope
 frames: node-id, name-path, route, viewport, diff threshold, ref PNG
-path) accompanies the field in both `docs/context/plan-template.md` and
-`docs/context/prd-template.md`. Absence under `figma_track: true` is a
+path) accompanies the field in both `plugins/relay/resources/plan-template.md` and
+`plugins/relay/resources/prd-template.md`. Absence under `figma_track: true` is a
 structural `CHANGES_REQUESTED` (`plan-reviewer`'s
 `R-COH-DESIGN-SOURCE-MISSING`, `prd-reviewer`'s
 `R-COH-DESIGN-SOURCE-INCOMPLETE`), never self-healed. Part of the Figma
@@ -121,7 +121,7 @@ real side effects (no network call, no persistence, no real state
 mutation) — every value on screen and every interactive action must
 carry one of the two sentinels. The paired `phase_scope: logic` phase
 must resolve every sentinel with no deferral path before it can
-complete. Canonical documentation: `docs/context/mock-sentinels.md`.
+complete. Canonical documentation: `plugins/relay/resources/mock-sentinels.md`.
 The zero-side-effects check at plan-review time
 (`plan-reviewer`'s `R-COH-VISUAL-SCOPE-PURITY`) shipped in Phase 3; the
 zero-remaining-sentinel ledger check (`plan-reviewer`'s
@@ -230,7 +230,7 @@ blocking gate itself (both `auto` and `human` modes) and the
 ## Visual-First Mode
 
 `visual_first: true | false` — a PRD-level opt-in flag (`## Visual-First
-Mode` section of `docs/context/prd-template.md`), present only when the
+Mode` section of `plugins/relay/resources/prd-template.md`), present only when the
 target project's `docs/context/methodology.md` declares `figma_track:
 true`; never inferred from PRD content. When `true`, every row of the
 PRD's Implementation Phases table must be strictly scope-pure — wholly

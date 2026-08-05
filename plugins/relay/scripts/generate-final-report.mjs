@@ -13,7 +13,8 @@
  *   attempts/<N>/stdout.log   — redacted execution log (referenced only)
  *   attempts/<N>/diff.patch   — git diff for the attempt (referenced only)
  *
- * Output: AC-10 compliant markdown report (PRPs/prds/test-runner.prd.md).
+ * Output: AC-10 compliant markdown report (AC-10 of test-runner.prd.md,
+ * in the relay plugin repo, not packaged).
  *
  * Runtime: Node.js ≥ 18. No npm dependencies.
  *

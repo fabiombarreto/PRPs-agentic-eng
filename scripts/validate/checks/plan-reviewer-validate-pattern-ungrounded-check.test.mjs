@@ -46,7 +46,7 @@ import { resolve } from 'node:path';
 
 const PLAN_REVIEWER_PATH = 'plugins/relay/agents/plan-reviewer.md';
 const PLAN_WRITER_PATH = 'plugins/relay/agents/plan-writer.md';
-const PLAN_TEMPLATE_PATH = 'docs/context/plan-template.md';
+const PLAN_TEMPLATE_PATH = 'plugins/relay/resources/plan-template.md';
 const CONVENTIONS_PATH = 'docs/context/conventions.md';
 const DECISIONS_PATH = 'docs/decisions.md';
 

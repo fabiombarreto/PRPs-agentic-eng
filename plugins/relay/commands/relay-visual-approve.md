@@ -210,7 +210,7 @@ Both branches mutate `halt.json` exactly once and append exactly one `visual-app
 2. **Never mutate any `halt.json` field other than the four additions.** `resolution`, `resolved_at`, `resolver_confirmation`, and (on rejection only) `rejection_feedback` are the only fields this command ever adds. Every field `/relay-implement` originally wrote (`outcome`, `phase_scope`, `final_visual_verdict`, `fidelity_report_path`, `attempt_history`, `actionable_recommendation`) is read-only from this command's perspective.
 3. **Never flip on inferred consent, silence, or a generic "continue".** Mirrors `relay-design-map.md`'s own confirmation discipline verbatim in spirit — an ambiguous or non-affirmative, non-negative reply always means "do not flip".
 4. **Never invoked by `/relay-execute`.** This command is exclusively human-triggered, exactly like `/relay-design-map` and `/relay-design-spec`.
-5. **No `Bash` dependency.** `Read`/`Glob`/`Edit`/`Write` only — no new `.claude/settings.json` allowlist entry is required (confirmed against `docs/context/settings-allowlist.md`).
+5. **No `Bash` dependency.** `Read`/`Glob`/`Edit`/`Write` only — no new `.claude/settings.json` allowlist entry is required (confirmed against `${CLAUDE_PLUGIN_ROOT}/resources/settings-allowlist.md`).
 
 ---
 

@@ -28,11 +28,6 @@
  *      the INSTALLED PLUGIN directory, by definition — it never resolves
  *      into a target project, so "names target-project-level content" was
  *      never an accurate reason to exclude any of its sub-prefixes.
- *      `${CLAUDE_PLUGIN_ROOT}/docs/…` and `${CLAUDE_PLUGIN_ROOT}/PRPs/…`
- *      remain excluded from this class as a KNOWN DEFERRED GAP: fixing them
- *      requires first deciding whether the plugin ships `docs/`/`PRPs/` at
- *      all — a materially larger, deliberately deferred design question —
- *      not because they name target-project content.
  *   3. Intra-repo relative markdown-link targets that read as repo-root
  *      paths: `[text](docs/…md)` or `[text](documentation/…html)`.
  *
@@ -71,7 +66,7 @@ const TARGET_PROJECT_SCRIPT_PREFIXES = ['scripts/worktree-bootstrap.'];
 // class 2. "hooks/" is deliberately excluded — plugins/relay/hooks/ is a
 // planned-but-unbuilt tree (docs/context/architecture.md), not a check-D
 // target yet.
-const CLAUDE_PLUGIN_ROOT_ALLOWED_PREFIXES = ['agents/', 'commands/', 'skills/', '.claude-plugin/', 'scripts/'];
+const CLAUDE_PLUGIN_ROOT_ALLOWED_PREFIXES = ['agents/', 'commands/', 'skills/', '.claude-plugin/', 'scripts/', 'resources/'];
 
 // Literal substrings that mark a token as illustrative/placeholder rather
 // than a real reference.

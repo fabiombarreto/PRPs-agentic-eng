@@ -20,8 +20,8 @@ of scope — that is the `/relay-write-test` command (Phase 1 sibling
 artifact).
 
 See:
-- `${CLAUDE_PLUGIN_ROOT}/PRPs/prds/tdd-writer-reviewer.prd.md` —
-  this feature's PRD; AC-1 through AC-13, scope, rationale.
+- the source PRD `tdd-writer-reviewer.prd.md`, in the relay plugin repo
+  (not packaged) — this feature's PRD; AC-1 through AC-13, scope, rationale.
 - `${CLAUDE_PLUGIN_ROOT}/agents/test-reviewer.md` —
   the Reviewer protocol dispatched in Phase A via `Task`.
 - `${CLAUDE_PLUGIN_ROOT}/commands/relay-code-review.md`
@@ -221,8 +221,11 @@ discipline is visible in the command body:
   orchestrator (`/relay-execute`) owns the retry loop with
   budget `max_tdd_review_retries=2` per PRD AC-9.
 - Do NOT mutate `docs/decisions.md`, `documentation/`, or
-  `plugin.json` — those belong to Phase 4 of the source PRD's
-  implementation plan, not to the reviewer command.
+  `plugins/relay/.claude-plugin/plugin.json` — those belong to Phase 4
+  of the source PRD's implementation plan, not to the reviewer
+  command. The real risk this guards against is an autonomous edit
+  landing in the already-installed plugin cache rather than this
+  source repo.
 
 The reviewer command's footprint is: one `Task` dispatch, one
 `Read` of the JSONL, one `Edit` (on APPROVED) of the suite

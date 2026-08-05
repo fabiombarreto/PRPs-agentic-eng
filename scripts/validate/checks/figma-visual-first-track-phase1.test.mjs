@@ -178,10 +178,10 @@ import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { execPath } from 'node:process';
 
-const PRD_TEMPLATE_PATH = 'docs/context/prd-template.md';
-const PLAN_TEMPLATE_PATH = 'docs/context/plan-template.md';
-const DESIGN_SPEC_TEMPLATE_PATH = 'docs/context/design-spec-template.md';
-const MOCK_SENTINELS_PATH = 'docs/context/mock-sentinels.md';
+const PRD_TEMPLATE_PATH = 'plugins/relay/resources/prd-template.md';
+const PLAN_TEMPLATE_PATH = 'plugins/relay/resources/plan-template.md';
+const DESIGN_SPEC_TEMPLATE_PATH = 'plugins/relay/resources/design-spec-template.md';
+const MOCK_SENTINELS_PATH = 'plugins/relay/resources/mock-sentinels.md';
 const KNOWLEDGE_BASE_PATH = 'docs/KNOWLEDGE_BASE.md';
 const CHANGELOG_PATH = 'documentation/changelog.html';
 const THIS_PRD_PATH = 'PRPs/prds/figma-visual-first-track.prd.md';
@@ -389,8 +389,12 @@ test('AC-A3 (real dogfood proof): this feature\'s own phase 1 plan\'s ## Metadat
 // docs/KNOWLEDGE_BASE.md.
 // ---------------------------------------------------------------------------
 
-test('AC-A4: mock-sentinels.md exists and documents both sentinel classes with a language-agnostic inline-comment example each', () => {
-  assert.ok(existsSync(resolve(MOCK_SENTINELS_PATH)), 'expected docs/context/mock-sentinels.md to exist');
+test('AC-A4: mock-sentinels.md exists at its packaged plugins/relay/resources/ location (and no stub remains at the old docs/context/ location), and documents both sentinel classes with a language-agnostic inline-comment example each', () => {
+  assert.ok(existsSync(resolve(MOCK_SENTINELS_PATH)), 'expected plugins/relay/resources/mock-sentinels.md to exist');
+  assert.ok(
+    !existsSync(resolve('docs/context/mock-sentinels.md')),
+    'expected no stub left behind at the old docs/context/mock-sentinels.md location (figma-quota-resilience Phase 1 resource-packaging move)'
+  );
   const content = readRepoFile(MOCK_SENTINELS_PATH);
 
   assert.match(content, /### `\[RELAY-MOCK-DATA\]`/);
@@ -423,9 +427,9 @@ test('AC-A4: mock-sentinels.md documents swap semantics for the paired logic pha
   assert.match(collapsed, /The visual phase's approved choreography is a contract the logic phase must honor, not a scaffold it is free to redesign\./);
 });
 
-test('AC-A4: docs/KNOWLEDGE_BASE.md registers docs/context/mock-sentinels.md in the Project Context section', () => {
+test('AC-A4: docs/KNOWLEDGE_BASE.md registers plugins/relay/resources/mock-sentinels.md in the Project Context section', () => {
   const content = readRepoFile(KNOWLEDGE_BASE_PATH);
-  assert.match(content, /→ docs\/context\/mock-sentinels\.md — the \[RELAY-MOCK-DATA\]\/\[RELAY-MOCK-BEHAVIOR\] inline sentinel convention for phase_scope: visual plans \(Figma Visual-First Track\)/);
+  assert.match(content, /→ plugins\/relay\/resources\/mock-sentinels\.md — the \[RELAY-MOCK-DATA\]\/\[RELAY-MOCK-BEHAVIOR\] inline sentinel convention for phase_scope: visual plans \(Figma Visual-First Track\)/);
 });
 
 // ---------------------------------------------------------------------------

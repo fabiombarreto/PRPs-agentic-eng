@@ -59,7 +59,7 @@
         <li><strong>The tests are authored by relay's own test pair.</strong> <code>docs/context/methodology.md</code> declares <code>test_frameworks: ["node:test"]</code> with <code>tdd: false</code> (test-after). Under R-X strict the Implementer authors zero test files; the <code>test-writer</code> / <code>test-reviewer</code> pair authors and maintains the checker unit tests after the implementation is code-reviewed. See <a href="../concepts/tdd-track.html">the test track</a>.</li>
       </ul>
 
-      <h2 id="the-checks">The eleven static checks</h2>
+      <h2 id="the-checks">The twelve static checks</h2>
 
       <p><code>npm run validate</code> runs each check module under <code>scripts/validate/checks/</code> and aggregates the findings. Each check is a pure function returning <code>{ name, ok, findings }</code> plus a thin file-reading wrapper.</p>
 
@@ -79,6 +79,7 @@
           <tr><td><code>gating-structure</code></td><td>Every registered opt-in methodology key (<code>figma_track</code>, <code>visual_first_approval</code>) documents all three non-heuristic properties in the context-builder skill: default-off emission on <code>*init</code>, preserve-on-<code>*update</code>, and backfill only when the key is entirely absent.</td></tr>
           <tr><td><code>feedback-chain</code></td><td>The <code>prior_feedback</code> contract stays intact end to end: each registered pair's command forwards it, its writer declares it and defines a <code>## Targeted revision mode</code>, and <code>plan-writer</code> holds its three specific invariants (the input declared in both mode groups, the grounding carve-out naming all four grounding-dependent rubric ids, and the re-grounding anti-pattern agreeing with the Phase 2 short-circuit).</td></tr>
           <tr><td><code>timestamp-contract</code></td><td>The <code>review_started_at</code> contract is mechanically enforced across its registry of jsonl-appending reviewers, dispatching commands, and consumers — each reviewer declares the input and carries a fallback branch matched to its own clock capability, each dispatching command captures the UTC instant and passes it through, and each registered consumer reads <code>timestamp_degraded</code> in executable code. Beyond prose, no post-marker jsonl verdict entry may carry a <code>T00:00:00</code> stamp without an accompanying <code>timestamp_degraded</code> flag.</td></tr>
+          <tr><td><code>plugin-root-resolvable</code></td><td>Every plugin-owned resource template is cited under <code>plugins/relay/</code> with its packaged <code>${CLAUDE_PLUGIN_ROOT}/resources/</code> prefix, never bare, and no literal <code>&lt;target_root&gt;/plugins/relay/…</code> path or <code>npm install --prefix plugins/relay/…</code> invocation leaks the source monorepo layout into the packaged artifact.</td></tr>
         </tbody>
       </table>
 
@@ -92,7 +93,7 @@
       <p>Prerequisites: Node 18+ and <code>npm install</code> once (this is the repo's first package manifest — the plugin itself still ships no runtime dependency).</p>
 
       <pre><code class="language-bash">npm install                 # one-time, installs the suite's dev dependencies
-npm run validate            # run all eleven static checks
+npm run validate            # run all twelve static checks
 node --test scripts/validate/checks/*.test.mjs scripts/eval.test.mjs plugins/relay/scripts/*.test.mjs   # the unit tests for the checks and Test Runner scripts
 npm run eval                # behavioral evals of the reviewer agents (needs ANTHROPIC_API_KEY)
 npm run setup-hooks         # one-time: install the pre-commit gate</code></pre>

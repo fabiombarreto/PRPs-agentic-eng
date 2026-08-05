@@ -40,7 +40,7 @@ Emit the evidence block before running anything, per
 - Applicable architectural rules:
   - Must use .claude/settings.json permissions (no prompts during autonomous run)
   - Graceful degradation when Docker / test framework / Context7 absent
-  - Structured output required (schema v1 in docs/context/test-output-schema.md)
+  - Structured output required (schema v1 in ${CLAUDE_PLUGIN_ROOT}/resources/test-output-schema.md)
 - Result: PROCEED
 ```
 
@@ -127,12 +127,12 @@ node --test \
   (skipping `node_modules`).
 - Coverage and trace are not wired for node:test — omit `--coverage` /
   `--trace` in Step 4. See the `### node:test` section of
-  `docs/context/test-output-schema.md` for how the normalizer parses the
+  `${CLAUDE_PLUGIN_ROOT}/resources/test-output-schema.md` for how the normalizer parses the
   resulting XML.
 
 Capture stdout and stderr to a combined log. Apply redaction before
 persisting — env var values matching patterns from
-`docs/context/redaction-policy.md` (in the relay plugin repo) PLUS any
+`${CLAUDE_PLUGIN_ROOT}/resources/redaction-policy.md` (in the relay plugin repo) PLUS any
 entries from `<worktree>/PRPs/redaction-extensions.txt` MUST be
 replaced with `[REDACTED]` (or `[REDACTED_URL]` for connection-string
 env vars) BEFORE the log is written to disk. Never write raw output
