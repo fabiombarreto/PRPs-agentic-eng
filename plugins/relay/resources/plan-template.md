@@ -79,6 +79,22 @@ command-surface decision).
    plan-reviewer's R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE check enforces
    both.
 
+7. **Pattern grounding.** Whenever a Validation or per-task
+   `VALIDATE:` command's pattern decides its exit code, that pattern
+   MUST be grounded in text the plan can demonstrate. Never guess a
+   tool's output format — prefer the tool's own exit code (`node
+   --test <glob>` already exits non-zero on any failure), else pin a
+   machine-readable reporter (`--test-reporter=tap`, `--json`), else
+   paste the tool's verbatim output line beside the command. And when
+   a command asserts the presence of text the plan itself instructs be
+   written, copy that literal byte-for-byte from the `**ACTION**:`
+   prose — including `**` decoration, capitalization, and trailing
+   punctuation — or use a case-insensitive `grep -i`. A command
+   satisfying extensions 5 and 6 can still be worthless: an unmatched
+   pattern makes the gate always-pass, and a mis-cased one makes it
+   always-fail. plan-reviewer's R-COH-VALIDATE-PATTERN-UNGROUNDED
+   check enforces both halves.
+
 ---
 
 ## Output path
@@ -364,6 +380,10 @@ mandatory fields.
     be diff-scoped and exclude the standard `MUST NOT appear`
     quoted-prohibition idiom — see mandatory extension 6 above;
     plan-reviewer R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE enforces this.
+    Any command whose pattern decides its exit code must additionally
+    be grounded — never a guessed reporter format, never a paraphrase
+    of a literal this plan authors — see mandatory extension 7 above;
+    plan-reviewer R-COH-VALIDATE-PATTERN-UNGROUNDED enforces this.
 
 13. `## Acceptance Criteria`
 

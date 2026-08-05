@@ -850,6 +850,119 @@ positive that blocked a correct diff.
   (most plans introduce no forbidden-reference check) passes this
   row trivially.
 
+#### R-COH-VALIDATE-PATTERN-UNGROUNDED — match patterns are grounded in text the plan can demonstrate
+
+**Unconditional — always emitted, never zero-emission.** Like
+`R-COH-VALIDATE-ALWAYS-PASS`, `R-COH-ACTION-VALIDATE-CONTRADICTION`,
+and `R-COH-VALIDATE-SEARCH-AMBIGUOUS`, this check has no project- or
+plan-level declaration to gate on — the patterns a plan's commands
+search for are plan CONTENT, not a declaration — so it always
+contributes exactly one row to `rubric[]`.
+
+Guards against a failure mode distinct from every sibling VALIDATE
+check: a command with correct exit-code semantics AND correct scope
+whose PATTERN cannot match the text it targets. Such a gate either
+carries zero signal (it can never fire) or blocks a compliant
+implementation (it can never clear). Confirmed twice in dogfood
+against `figma-quota-resilience` Phase 2 — once in each polarity, in
+the same plan (`figma-quota-resilience-phase-2-scoped-scan-metadata-budget`;
+the evidence is the `R-L2` and `R-L3` rows of that plan's
+`.code-review.jsonl`):
+
+- **Always-pass / fail-closed.** The Level 3 regression gate parsed
+  the `node:test` corpus with `grep -oE '# fail [0-9]+'`. That
+  reporter emits `ℹ fail 2`, never `# fail` — so under a bare shell
+  `FAIL_COUNT` silently defaulted to `0` and the gate printed PASS
+  regardless of the true corpus state, while under `set -euo
+  pipefail` the failed pipe aborted the script at the assignment.
+  No signal in either shell.
+- **Always-fail.** The Level 2 gate required
+  `grep -q 'recall-oriented'` and
+  `grep -q 'no classification authority'` — both case-sensitive —
+  against prose the SAME plan specified be authored as the bold
+  bullet labels `**Recall-oriented.**` and
+  `**No classification authority.**`. The content was correct and the
+  gate still blocked it.
+
+Both commands exited non-zero on failure, so both passed
+`R-COH-VALIDATE-ALWAYS-PASS`; neither was a forbidden-reference grep,
+so `R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE` never applied. The plan was
+APPROVED with both defects intact.
+
+- Scope: every command body in `## Validation Commands` (Levels 1–3)
+  and every `**VALIDATE**:` command in `## Step-by-Step Tasks`.
+- **(a) Ungrounded runner-output scrape.** In scope when a command
+  extracts a value from the STDOUT of a tool invocation — a pipe into
+  `grep`/`rg`/`sed`/`awk`, or the same inside `$(…)` command
+  substitution — and that value decides the command's exit code
+  (feeding a comparison directly, or assigned to a variable a later
+  comparison reads). FAILS unless the plan does ONE of:
+  - (i) pins a machine-readable output format on the invocation
+    itself (`--test-reporter=tap`, `--json`, `--reporter json`,
+    `--format=json`, or that tool's equivalent); OR
+  - (ii) quotes a VERBATIM sample of that tool's real output, showing
+    the exact line the pattern must match, adjacent to the command —
+    in the same Level block, in that task's `**ACTION**:` /
+    `**VALIDATE**:` prose, or in `## Notes`; OR
+  - (iii) does not scrape at all, asserting on the tool's own exit
+    code instead.
+
+  Human-readable reporter output is not a stable interface — it
+  varies by runner version, reporter selection, and TTY-ness — so a
+  pattern guessed against it is unfalsifiable at authoring time.
+  `reason` names the Level (or task heading), quotes the offending
+  command verbatim, and states the fix: prefer the exit code
+  (`node --test <glob>` already exits non-zero when any test fails),
+  else pin a machine-readable reporter, else paste the verbatim
+  sample line the pattern targets.
+- **(b) Form mismatch against the plan's own authored literal.** In
+  scope when a command asserts the PRESENCE of a fixed string (a
+  `grep -q` / `grep -c` / `rg -q` carrying no `-i` flag and no regex
+  metacharacter that would absorb the difference) in a file that the
+  SAME plan's `**ACTION**:` prose instructs be written, AND that
+  ACTION prose gives the text to write as a quoted or backticked
+  literal. FAILS when the searched pattern is not a byte-exact
+  substring of that authored literal — most commonly a case
+  difference (`recall-oriented` vs `**Recall-oriented.**`) or a
+  markdown-decoration difference (surrounding `**`, a trailing `.`,
+  a leading heading `#`). `reason` quotes the ACTION's authored
+  literal and the VALIDATE's pattern verbatim, names the divergence,
+  and states the fix: search the byte-exact authored form
+  (`grep -q '\*\*Recall-oriented\.\*\*'`), or add `-i` and match on a
+  case-insensitive stem.
+- A command in scope fails this check if EITHER (a) or (b) applies. A
+  single plan can fail both; name both in `reason` when so.
+- PASS iff every in-scope command is either grounded per (a) or
+  byte-consistent per (b). A plan with zero in-scope commands passes
+  this row trivially →
+  `{ "id": "R-COH-VALIDATE-PATTERN-UNGROUNDED", "passed": true }`.
+
+**Relationship to the sibling VALIDATE checks** (all four compose;
+none subsumes another): `R-COH-VALIDATE-ALWAYS-PASS` asks whether a
+command CAN fail at all — a shell-shape property;
+`R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE` asks whether an ABSENCE grep
+matches too much; `R-COH-VALIDATE-SEARCH-AMBIGUOUS` asks whether a
+position-based literal matches in too MANY places; this check asks
+whether a pattern matches in NONE. Against
+`R-COH-ACTION-VALIDATE-CONTRADICTION` the boundary is polarity versus
+form: that check catches an ACTION and its VALIDATE disagreeing about
+whether a literal should be present at all; condition (b) here catches
+them AGREEING on presence while disagreeing on the literal's exact
+form.
+
+**Known limitation (recorded, not blocking):** `plan-reviewer`'s tool
+grant is `Read, Edit, Write` — no `Bash`, no `Grep`, no `Glob` — so
+this check can neither execute the tool to observe its real output
+format nor read the target file to confirm what the pattern would
+match. It detects plan-local proxy signals only: the absence of a
+pinned machine-readable format or an adjacent verbatim sample for
+(a), and a byte divergence from a literal the plan itself authors for
+(b). It can therefore miss a pattern that is wrong against a file this
+plan does not describe authoring, and can false-positive when the
+searched text legitimately originates outside the plan. It is a
+plan-authoring-time gate, not the final safety net; the real
+enforcement remains the Implementer actually running the command.
+
 ### Bounded K=5 LLM judgment pass
 
 After the deterministic checks emit their rows, run a single LLM pass
@@ -907,8 +1020,8 @@ contradictions / the deterministic check held / the K=5 pass returned
 zero findings under that classification, and `false` when a
 contradiction was found (with a non-empty `reason`).
 
-The total `rubric[]` length per run is `8 (R1–R8) + 9 (deterministic
-R-COH-*) + ≤5 (K=5 pass) = 17 to 22 rows` for a project where
+The total `rubric[]` length per run is `8 (R1–R8) + 10 (deterministic
+R-COH-*) + ≤5 (K=5 pass) = 18 to 23 rows` for a project where
 `figma_track` is absent/`false` (the baseline case — unchanged from
 before this section existed). When the target declares
 `figma_track: true`, up to 2 additional conditional deterministic rows
@@ -922,14 +1035,14 @@ conditional deterministic rows may also appear:
 `R-COH-SENTINEL-RESOLUTION-MISSING` (on `phase_scope: logic`), since a
 single plan's `phase_scope` cell carries exactly one value and can
 never be both at once. Together these widen the range to
-`17 to 25 rows` in the maximal case (both design rows present, plus
+`18 to 26 rows` in the maximal case (both design rows present, plus
 exactly one of the two mutually-exclusive phase_scope rows, plus the
-full 5-row K=5 pass) — the range never extends to a 26th row, because
+full 5-row K=5 pass) — the range never extends to a 27th row, because
 `R-COH-VISUAL-SCOPE-PURITY` and `R-COH-SENTINEL-RESOLUTION-MISSING`
 can never both fire on the same plan. Each of the four conditional
 rows is independently zero-emission (contributes nothing) when its
-own gating condition is not met, so the baseline 17–22 range is exact
-for every non-Figma project, and the 17–24 range from the prior
+own gating condition is not met, so the baseline 18–23 range is exact
+for every non-Figma project, and the 18–25 range from the prior
 `design_source` shipment remains exact for a `figma_track: true`
 project whose plan has no `phase_scope` row at all (neither `visual`
 nor `logic` — `visual_first: false`, or the PRD predates the
@@ -1266,7 +1379,8 @@ One JSON object per line, appended (never truncated). Shape:
     { "id": "R-COH-VALIDATE-ALWAYS-PASS", "passed": true },
     { "id": "R-COH-ACTION-VALIDATE-CONTRADICTION", "passed": true },
     { "id": "R-COH-VALIDATE-SEARCH-AMBIGUOUS", "passed": true },
-    { "id": "R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE", "passed": true }
+    { "id": "R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE", "passed": true },
+    { "id": "R-COH-VALIDATE-PATTERN-UNGROUNDED", "passed": true }
   ],
   "action": "final_flip",
   "user_message": ""

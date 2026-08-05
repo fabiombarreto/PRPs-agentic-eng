@@ -479,7 +479,7 @@ test('AC-A7 (regression guard — the missing-property delta over EXISTING_TEST_
 // AC-A8 — the ## review.jsonl format worked example gains a matching row.
 // ---------------------------------------------------------------------------
 
-test('AC-A8: plan-reviewer.md\'s ## review.jsonl format example JSON block includes a new R-COH-VALIDATE-SEARCH-AMBIGUOUS passed:true row immediately after the existing R-COH-ACTION-VALIDATE-CONTRADICTION row, and the merged-in R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE row now closes out all 9 fixed deterministic checks with an example row', () => {
+test('AC-A8: plan-reviewer.md\'s ## review.jsonl format example JSON block includes a new R-COH-VALIDATE-SEARCH-AMBIGUOUS passed:true row immediately after the existing R-COH-ACTION-VALIDATE-CONTRADICTION row, and the later-added R-COH-VALIDATE-PATTERN-UNGROUNDED row now closes out all 10 fixed deterministic checks with an example row', () => {
   const content = readRepoFile(PLAN_REVIEWER_PATH);
 
   assert.ok(content.includes('{ "id": "R-COH-VALIDATE-SEARCH-AMBIGUOUS", "passed": true }'), 'expected the new JSONL example row');
@@ -505,13 +505,13 @@ test('AC-A8: plan-reviewer.md\'s ## review.jsonl format example JSON block inclu
   const fixedRowIds = [...(/** @type {string} */ (jsonlBlock)).matchAll(/"id": "(R-COH-[A-Z-]+)"/g)].map((m) => m[1]);
   assert.equal(
     fixedRowIds.length,
-    9,
-    `expected exactly 9 R-COH-* example rows (one per fixed deterministic check; the four conditional Figma-track checks are zero-emission in this non-Figma worked example), found ${fixedRowIds.length}: ${fixedRowIds.join(', ')}`
+    10,
+    `expected exactly 10 R-COH-* example rows (one per fixed deterministic check; the four conditional Figma-track checks are zero-emission in this non-Figma worked example), found ${fixedRowIds.length}: ${fixedRowIds.join(', ')}`
   );
   assert.equal(
     fixedRowIds[fixedRowIds.length - 1],
-    'R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE',
-    'expected the merged-in R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE row to be the LAST R-COH-* row in the worked example, matching its position as the 9th and final fixed deterministic check'
+    'R-COH-VALIDATE-PATTERN-UNGROUNDED',
+    'expected the later-added R-COH-VALIDATE-PATTERN-UNGROUNDED row to be the LAST R-COH-* row in the worked example, matching its position as the 10th and final fixed deterministic check'
   );
 });
 

@@ -426,7 +426,7 @@ test('AC-4/AC-A1: plan-reviewer.md R-COH-DESIGN-GROUNDED is a zero-emission no-o
   );
 });
 
-test('AC-4/AC-A1: plan-reviewer.md states the rubric[] length range stays the exact 17-22-row baseline for every non-Figma project — each of the four conditional rows is independently zero-emission and widens the range only when its own gating condition is met', () => {
+test('AC-4/AC-A1: plan-reviewer.md states the rubric[] length range stays the exact 18-23-row baseline for every non-Figma project — each of the four conditional rows is independently zero-emission and widens the range only when its own gating condition is met', () => {
   const content = readRepoFile(PLAN_REVIEWER_PATH);
   const block = sliceBetween(
     content,
@@ -442,7 +442,7 @@ test('AC-4/AC-A1: plan-reviewer.md states the rubric[] length range stays the ex
   );
   assert.match(
     collapsed,
-    /Each of the four conditional rows is independently zero-emission \(contributes nothing\) when its own gating condition is not met, so the baseline 17–22 range is exact for every non-Figma project/
+    /Each of the four conditional rows is independently zero-emission \(contributes nothing\) when its own gating condition is not met, so the baseline 18–23 range is exact for every non-Figma project/
   );
 });
 

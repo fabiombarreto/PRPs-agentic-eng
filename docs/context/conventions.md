@@ -129,4 +129,47 @@ here once that component is implemented.
 
 ## Test patterns
 
-Not applicable — no test suite yet. The plugin is prompt + config.
+The plugin ships no runtime source, but the repo self-hosts a
+`node:test` corpus that asserts the prompt/config surface stays
+internally consistent (`docs/decisions.md`, "Validation suite:
+Node/ESM static-check harness + local pre-commit gate"). Two
+conventions govern how it is invoked — both learned the hard way.
+
+- **Always pass a quoted glob, never a bare directory.**
+  `node --test "scripts/validate/checks/*.test.mjs"` is the canonical
+  form. `node --test scripts/validate/checks/` fails with
+  `Cannot find module …\scripts\validate\checks` on this toolchain —
+  a module-resolution error, not a test failure, so it looks like a
+  broken corpus rather than a bad invocation. The quotes matter: an
+  unquoted glob is expanded by the shell, which changes the argument
+  list Node sees.
+- **Read the exit code; do not scrape the reporter.** `node --test`
+  already exits non-zero when any test fails, so a gate needs nothing
+  more than the bare invocation. If a plan or script genuinely needs
+  the counts, it MUST pin a machine-readable reporter rather than
+  guess at the human-readable one — the two formats differ, and the
+  default is not the one most patterns are written against:
+
+  ```
+  # Default reporter (spec, Node v24) — note the ℹ info symbol:
+  ℹ tests 442
+  ℹ pass 440
+  ℹ fail 2
+
+  # Only with an explicit --test-reporter=tap:
+  # tests 442
+  # pass 440
+  # fail 2
+  ```
+
+  A `grep -oE '# fail [0-9]+'` over the DEFAULT reporter matches
+  nothing. In a bare shell the count then silently defaults to `0` and
+  the gate reports success regardless of the real state; under
+  `set -euo pipefail` the failed pipe aborts the script at the
+  assignment. Either way the gate carries zero signal — the exact
+  defect recorded in `docs/decisions.md`'s
+  `R-COH-VALIDATE-PATTERN-UNGROUNDED` entry.
+
+The corpus carries documented pre-existing failures at times; treat
+the current count as the baseline to hold, not as an invariant that
+must be zero.

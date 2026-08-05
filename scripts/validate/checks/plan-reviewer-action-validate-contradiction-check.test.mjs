@@ -352,25 +352,26 @@ test('AC-A7: plan-reviewer.md\'s ## review.jsonl format example JSON block inclu
 });
 
 // ---------------------------------------------------------------------------
-// AC-A4 (full order/count) — the file carries exactly 13 total
+// AC-A4 (full order/count) — the file carries exactly 14 total
 // #### R-COH-* deterministic-check headings: the original 8 fixed
 // (unconditional) checks, then the 4 figma_track/phase_scope-gated
-// conditional checks, then a 9th fixed check
-// (R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE) merged in from origin/development
-// at the tail by the rubric-reconciliation plan — "fixed checks first,
-// conditional checks after" (per docs/decisions.md's [2026-07-26] entry)
-// still holds for the original 8, but no longer holds file-wide once the
-// 9th, merged-in fixed check is counted.
+// conditional checks, then two further fixed checks appended at the tail
+// (R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE, merged in from origin/development
+// by the rubric-reconciliation plan, and R-COH-VALIDATE-PATTERN-UNGROUNDED,
+// added 2026-08-04) — "fixed checks first, conditional checks after" (per
+// docs/decisions.md's [2026-07-26] entry) still holds for the original 8,
+// but no longer holds file-wide once the two tail-appended fixed checks
+// are counted.
 // ---------------------------------------------------------------------------
 
-test('AC-A4: plan-reviewer.md carries exactly 13 total #### R-COH-* deterministic-check headings in this exact merged order — the original 8 fixed checks, then the 4 conditional checks, then the 9th fixed check R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE merged in from origin/development at the tail', () => {
+test('AC-A4: plan-reviewer.md carries exactly 14 total #### R-COH-* deterministic-check headings in this exact merged order — the original 8 fixed checks, then the 4 conditional checks, then the two tail-appended fixed checks R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE and R-COH-VALIDATE-PATTERN-UNGROUNDED', () => {
   const content = readRepoFile(PLAN_REVIEWER_PATH);
   const headingMatches = [...content.matchAll(/^#### (R-COH-[A-Z-]+)/gm)].map((m) => m[1]);
 
   assert.equal(
     headingMatches.length,
-    13,
-    `expected exactly 13 total #### R-COH-* headings (9 fixed + 4 conditional), found ${headingMatches.length}: ${headingMatches.join(', ')}`
+    14,
+    `expected exactly 14 total #### R-COH-* headings (10 fixed + 4 conditional), found ${headingMatches.length}: ${headingMatches.join(', ')}`
   );
 
   const expectedOrder = [
@@ -387,12 +388,13 @@ test('AC-A4: plan-reviewer.md carries exactly 13 total #### R-COH-* deterministi
     'R-COH-VISUAL-SCOPE-PURITY',
     'R-COH-SENTINEL-RESOLUTION-MISSING',
     'R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE',
+    'R-COH-VALIDATE-PATTERN-UNGROUNDED',
   ];
 
   assert.deepEqual(
     headingMatches,
     expectedOrder,
-    'expected exactly these 13 headings in this exact order — the merge appended R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE after the 4 conditional checks, not before them, so file-wide "fixed checks first" no longer holds for this 9th check specifically (it still holds for the original 8)'
+    'expected exactly these 14 headings in this exact order — the merge appended R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE after the 4 conditional checks, and R-COH-VALIDATE-PATTERN-UNGROUNDED was appended after that, so file-wide "fixed checks first" no longer holds for these two checks specifically (it still holds for the original 8)'
   );
 });
 
@@ -414,21 +416,21 @@ test('AC-A6 (regression guard): the forbidden literal "14 to 23" is absent from 
 // (both fixed this same session; see this file's header comment).
 // ---------------------------------------------------------------------------
 
-test('AC-A5: plan-reviewer.md\'s ### Logging discipline paragraph reads 9 fixed deterministic checks, a 17-to-22-row baseline, a 17-to-25-row maximal case, "26th row", and preserves the "Each of the four conditional rows is independently zero-emission" wording verbatim (the merged-in check is FIXED, not a fifth conditional row)', () => {
+test('AC-A5: plan-reviewer.md\'s ### Logging discipline paragraph reads 10 fixed deterministic checks, an 18-to-23-row baseline, an 18-to-26-row maximal case, "27th row", and preserves the "Each of the four conditional rows is independently zero-emission" wording verbatim (the merged-in check is FIXED, not a fifth conditional row)', () => {
   const content = readRepoFile(PLAN_REVIEWER_PATH);
   const block = sliceBetween(content, 'The total `rubric[]` length per run is', 'When the K=5 pass emits N findings');
   assert.ok(block, 'expected an extractable rubric[] length-range paragraph');
   const collapsed = collapseWs(/** @type {string} */ (block));
 
   assert.ok(
-    collapsed.includes('8 (R1–R8) + 9 (deterministic R-COH-*) + ≤5 (K=5 pass) = 17 to 22 rows'),
-    'expected the updated baseline arithmetic (9 fixed checks, 17 to 22 rows)'
+    collapsed.includes('8 (R1–R8) + 10 (deterministic R-COH-*) + ≤5 (K=5 pass) = 18 to 23 rows'),
+    'expected the updated baseline arithmetic (10 fixed checks, 18 to 23 rows)'
   );
-  assert.ok(collapsed.includes('17 to 25 rows'), 'expected the updated 17-to-25-row maximal case');
-  assert.ok(collapsed.includes('26th row'), 'expected the "26th row" never-extends-to wording');
+  assert.ok(collapsed.includes('18 to 26 rows'), 'expected the updated 18-to-26-row maximal case');
+  assert.ok(collapsed.includes('27th row'), 'expected the "27th row" never-extends-to wording');
   assert.ok(
     collapsed.includes('Each of the four conditional rows is independently zero-emission'),
-    'expected the preserved "four conditional rows" wording — unchanged, since the 9th check is FIXED, not a fifth conditional row'
+    'expected the preserved "four conditional rows" wording — unchanged, since the 10th check is FIXED, not a fifth conditional row'
   );
 });
 
