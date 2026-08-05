@@ -1783,6 +1783,81 @@ touched.
 
 ---
 
+## [2026-08-05] `scripts/efficiency.mjs` counted rework per jsonl file; it must count per review session
+
+**Context:** `readCorpus()` groups review verdicts by jsonl FILE (one artifact
+per file), and `aggregate()` divided total entries by artifact count to
+produce runs-per-artifact, the efficiency initiative's headline rework
+number. That grouping is wrong whenever a single file holds more than one
+independent review session — which happens because test-write-review files
+are named per FEATURE rather than per PHASE, so a multi-phase feature
+appends every phase's reviews to one file. A 2026-08-05 measurement over 640
+review runs across six repositories (this one plus `inplay`,
+`assistente-pessoal`, and three `super-ensino` repos: `spe-cms`,
+`spe-services`, `spe-interaction-services`) found 34 of 376 artifacts (9.0%)
+holding two or more APPROVED (or RUBRIC_PASSED) verdicts — the worst being
+`PRPs/plans/figma-implementation-track.test-write-review.jsonl` with 11
+entries, 7 of them APPROVED. Recomputed per session instead of per file: the
+runs-per-session pairs are test-write-review 2.38 to 1.25 (a 47%
+overstatement), plan-review 1.79 to 1.67, code-review 1.49 to 1.37; the
+first-attempt failure pairs move less: code-review 28.5 to 29.4, plan-review
+50.8 to 49.5, test-write-review 26.5 to 21.5. The efficiency initiative's own
+founding diagnosis had called test-write-review the worst stage at 3.50 runs
+per artifact. This cross-project aggregation was produced by a one-off
+script over the `PRPs/plans/*.jsonl` corpora of all six repositories, five
+of which live OUTSIDE this repository — `scripts/efficiency.mjs`, which
+reads only the current repo, cannot reproduce these cross-project figures.
+The session-partition RULE itself, by contrast, is directly reproducible
+here, and is anchored to a commit rather than left live: measured on this
+repository's own corpus at `c6815cd` — the commit that landed the
+partition — `readCorpus()` plus the new `sessionsOf()` export read 187
+artifacts partitioning into 221 sessions, 16 of them split. The artifact
+and session counts necessarily climb afterwards, because the pipeline logs
+its own reviews as new jsonl artifacts: this change's own test-write-review
+and code-review logs added one artifact each, so a re-run during the same
+change already reported 188/222 and then 189/223. The split count is the
+figure that held across all three measurements. Cite the anchored pair, not
+a re-run, when comparing against this entry.
+
+**Decision:** `scripts/efficiency.mjs` now partitions each artifact's
+entries into review sessions at every verdict in the existing `PASSING` set
+(`APPROVED` or `RUBRIC_PASSED`) rather than treating the whole file as one
+session: a session closes on a passing verdict, the following entry opens
+the next session, and a trailing run of entries with no passing verdict is
+itself an unresolved session. `aggregate()` reports rework as runs per
+session (1.25 for test-write-review, corrected from 2.38) and computes
+first-attempt failure from each session's first entry rather than each
+file's first entry; `snapshot`/`compare` print a NOTICE naming how many
+artifacts split and how many sessions resulted, matching the tool's existing
+habit of surfacing doubt (the small-sample caution, the date-only-boundary
+warning, the `timestamp_degraded` exclusion warning) rather than
+manufacturing a clean number. The `timestamp_degraded` exclusion policy is
+UNCHANGED — an artifact carrying any degraded entry is still excluded whole
+from both sides of a marker comparison; this correction changes how entries
+are grouped, never which artifacts participate, so
+`timestamp-contract.mjs`'s CONSUMERS registry assertion continues to hold.
+Any earlier claim resting on runs-per-artifact is SUPERSEDED by the
+per-session figures in Context above — most notably the founding diagnosis's
+framing of test-write-review as the worst stage at 3.50 runs per artifact,
+which this correction inverts: at 1.25 runs per session it is the
+best-behaved stage in the pipeline, not the worst.
+
+**Reason:** The APPROVED-boundary tell needs no filename heuristic and is
+logically conclusive, not probabilistic: a retry loop only continues after a
+rejection, so a passing verdict terminates it. A file holding two or more
+passing verdicts therefore holds two or more independent review sessions,
+necessarily — the same certainty a human would reach reading the log by
+eye. This lets the fix apply to the existing corpus, including every file
+already written, with no renaming of the jsonl artifact-naming convention
+and no migration story.
+
+**Areas affected:** efficiency measurement tooling (`scripts/efficiency.mjs`),
+the efficiency initiative's prior published figures and any decision that
+cited runs-per-artifact, `docs/context/constraints.md` (reviewer
+non-determinism item, corrected in the same change on separate evidence).
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision

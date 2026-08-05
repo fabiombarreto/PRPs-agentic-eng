@@ -80,18 +80,30 @@ attempt 2). Recorded rather than fixed, by explicit human decision:
   assertion class was mutation-tested — a deliberately broken fixture per class
   makes the check fail — rather than merely observed passing on a green tree.
 
-- **Reviewer non-determinism across attempts.** `plan-reviewer` surfaced two
-  disjoint defect classes on two consecutive runs of the same rubric against the
-  same plan (attempt 1: task↔AC linkage; attempt 2: verification coverage),
-  neither run being wrong. Because each pass explores the K=5 judgment space
-  differently, a plan can be rejected repeatedly on progressively finer points —
-  the mechanism behind the 4-attempt plans visible in `PRPs/plans/*.review.jsonl`.
-  This is a fourth efficiency problem, distinct from the three the
-  `targeted-retry` plan addresses (blind retries, writers unaware of the rubric,
-  no complexity routing): those target the WRITER, this one is a REVIEWER
-  property. Not yet scoped — likely candidates are a deterministic checklist
-  ordering for the K=5 pass, or carrying prior-attempt findings into the next
-  run so the reviewer cannot silently change what it looks for.
+- **Reviewer non-determinism across attempts.** `plan-reviewer` was once
+  observed surfacing two disjoint defect classes on two consecutive runs of
+  the same rubric against the same plan (attempt 1: task↔AC linkage; attempt
+  2: verification coverage) — the single-session observation that originally
+  motivated this item. A 2026-08-05 measurement across 204 consecutive
+  attempt pairs, drawn from the same 640-run, six-repository corpus behind
+  the efficiency initiative's other corrections, does not support treating
+  that observation as a systemic problem: 75.0% of retries RESOLVE the prior
+  failure outright; only 9.9% of second-attempt failures are regressions (an
+  item that passed on one attempt and failed on the next); only 9.8% of pairs
+  fail a fully disjoint defect set; and only 5.4% fail the identical set. The
+  metric is sound, not merely sparse — all 640 runs record `passed:true` rows
+  with a median rubric array of 13 items, so pass sets are populated and
+  regressions are detectable whenever they occur. Conclusion: the phenomenon
+  is real but small, it is not a major efficiency problem, and it does not
+  warrant a dedicated wave. Neither candidate fix previously named here — a
+  deterministic checklist ordering for the K=5 pass, or carrying
+  prior-attempt findings into the next run — is justified by this evidence,
+  since what they would address is a small minority of retries rather than a
+  systemic pattern. What the measurement cannot separate: the writer
+  legitimately changes the plan between attempts, so a newly-failing item on
+  attempt 2 may be genuinely newly-introduced by that edit rather than
+  evidence of reviewer drift — that distinction is not observable from
+  verdict logs alone.
 
 - ~~**`reference/validation-checks.html` is two checks behind.** That page's
   contract is a full per-check section (functionality guarded, a passing

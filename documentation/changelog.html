@@ -29,7 +29,53 @@
       </div>
 
       <h2 id="unreleased">Unreleased</h2>
-      <p><em>No changes queued yet.</em></p>
+      <p>Fixes a measurement defect in <code>scripts/efficiency.mjs</code> that inflated the rework metric the whole efficiency initiative is steered by: reviewer verdicts were grouped by jsonl FILE rather than by independent review SESSION, so a feature-named test-write-review file spanning several phases counted later phases' reviews as retries of earlier ones.</p>
+
+      <h3 id="unreleased-changed">Changed</h3>
+      <ul>
+        <li><strong><code>scripts/efficiency.mjs</code></strong>
+          &mdash; entries are now partitioned into review sessions at every
+          passing verdict (the existing <code>PASSING</code> set:
+          <code>APPROVED</code> or <code>RUBRIC_PASSED</code>), not merely by
+          file &mdash; inside one retry loop only the LAST verdict can pass,
+          so a file holding two or more passing verdicts necessarily holds
+          two or more independent sessions. <code>snapshot</code> and
+          <code>compare</code> now report rework as runs per session,
+          labelled as such, and print a NOTICE naming how many artifacts
+          split into more than one session and how many sessions resulted.
+          First-attempt failure is computed from each session's first entry
+          rather than each file's. The <code>timestamp_degraded</code>
+          exclusion policy is unchanged &mdash; it still operates on the
+          whole artifact, never per session.</li>
+        <li><strong>Corrected per-stage figures</strong> (a six-repository
+          measurement: 640 runs, 376 artifacts, 34 of them &mdash; 9.0%
+          &mdash; multi-session): test-write-review 2.38 &rarr; 1.25 runs
+          per session (a 47% overstatement); plan-review 1.79 &rarr; 1.67;
+          code-review 1.49 &rarr; 1.37. This inverts the efficiency
+          initiative's founding diagnosis, which called test-write-review
+          the worst stage at 3.50 runs per artifact &mdash; corrected, it is
+          the best-behaved stage in the pipeline. Any earlier claim resting
+          on runs-per-artifact is superseded; see
+          <code>docs/decisions.md</code> [2026-08-05].</li>
+        <li><strong><code>docs/context/constraints.md</code></strong>
+          &mdash; the "Reviewer non-determinism across attempts" item is
+          rewritten with the measurement it previously lacked: across 204
+          consecutive attempt pairs, 75.0% of retries resolve the failure,
+          9.9% of second-attempt failures are regressions, 9.8% of pairs
+          fail a fully disjoint set, and 5.4% fail the identical set. The
+          phenomenon is real but small and does not warrant a wave.</li>
+        <li><strong><code>docs/decisions.md</code></strong>
+          &mdash; new <code>[2026-08-05]</code> entry recording the
+          measurement defect, the session-splitting correction, the
+          corrected per-stage figures, and the explicit supersession of
+          earlier runs-per-artifact claims.</li>
+        <li><strong><code>documentation/reference/validation-checks.html</code></strong>
+          &mdash; the <code>efficiency-metrics</code> section's unit-test
+          count and description are reconciled with the grown suite (12
+          &rarr; 21 tests, covering the new <code>sessionsOf</code>
+          partition), and the page's summary-table row and totals line are
+          updated to match (149 &rarr; 158).</li>
+      </ul>
 
       <h2 id="v0-28-1">0.28.1 &#8212; 2026-08-05</h2>
       <p>Tightens two items of <code>plan-writer</code>'s pre-emission self-check
