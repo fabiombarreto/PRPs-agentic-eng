@@ -197,7 +197,13 @@ Parse the data rows that follow (skip the GFM separator row
 A row is **actionable** when:
 - Its `Status` cell equals `pending` (case-sensitive), AND
 - Its `Depends` cell is `-` (empty) OR every comma-separated
-  phase number listed has `Status == complete`.
+  phase number listed is in a dependency-satisfying state:
+  `implemented`, `tested`, or `complete`.
+
+(Five-state lifecycle `pending` → `in-progress` → `implemented` →
+`tested` → `complete`; see `plan-writer.md` Step 1.3 for the
+canonical definition and why `implemented` already satisfies a
+dependency.)
 
 If zero rows are actionable, surface plan-writer's AC-2 message
 verbatim and exit 0 (this is success, not failure):

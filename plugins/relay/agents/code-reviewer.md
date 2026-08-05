@@ -873,7 +873,7 @@ Emit a single human-readable confirmation message naming:
 > `tdd: <value>`. Next: the COMMAND will perform D8 mutations
 > (plan flip APPROVED → IMPLEMENTED, plan move to
 > `PRPs/plans/completed/`, source PRD row N flip in-progress →
-> complete).
+> implemented).
 
 ### Standard-mode CHANGES_REQUESTED
 

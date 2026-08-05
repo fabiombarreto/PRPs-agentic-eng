@@ -186,6 +186,41 @@ Current value of `tdd` in `docs/context/methodology.md`: **{true | false}**.
 | 1 | {Phase name} | {What this phase delivers} | pending | - | - | - |
 | 2 | {Phase name} | {What this phase delivers} | pending | - | 1 | - |
 
+#### Phase-status lifecycle
+
+This table IS relay's canonical phase-state machine (`docs/decisions.md`,
+2026-05-04) — there is no separate state file. Every row starts at
+`pending` and advances through exactly five states, in order, never
+skipping backwards:
+
+| Status | Meaning | Written by |
+|--------|---------|------------|
+| `pending` | No plan yet. The only state from which a row is actionable. | Authored here, by hand or by `prd-writer` |
+| `in-progress` | A DRAFT plan exists and the `PRP Plan` cell points at it. | `plan-writer` Step 5.1 back-fill |
+| `implemented` | Code written and code-review APPROVED; tests not yet settled. | `/relay-implement` D8 Mutation c |
+| `tested` | Test suite ran GREEN *and* post-green review confirmed the green was not obtained by weakening tests. | `/relay-execute` Step A.5.3 |
+| `complete` | The orchestrator drove the phase end to end. | `/relay-execute` Step A.6.0 |
+
+Three rules follow from this table and are enforced across the pipeline:
+
+1. **`tested` is skipped, never faked, when nothing was tested.** A project
+   with no declared test framework (or a phase whose test stage self-skipped)
+   goes `implemented` → `complete` directly. The skip reason is recorded in
+   `PRPs/reports/<feature>/orchestrator-run.json`, not hidden in the Status
+   cell.
+2. **A dependency is satisfied from `implemented` onward.** A row listed in
+   another row's `Depends` cell unblocks it once it reaches `implemented`,
+   `tested`, or `complete` — not only at `complete`. Otherwise a
+   hand-invoked `/relay-implement`, which legitimately stops at
+   `implemented` because nothing outside the orchestrator writes the last
+   two states, would block every dependent phase forever.
+3. **`complete` does not mean "merged".** It means the orchestrator finished
+   the phase. Merge, branch cleanup, and post-merge docs sync belong to
+   `/relay-approve`, which never edits this table.
+
+To re-run a phase, hand-edit its `Status` cell back to `pending` — that is
+the documented escape hatch, and the only sanctioned backwards transition.
+
 ### Phase Details
 
 **Phase 1: {Name}**

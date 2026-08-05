@@ -773,7 +773,7 @@ shape; never imported; never `Read`-into-output verbatim.
 - **Flipping plan or PRD status.** The COMMAND owns D8 mutations
   (plan trailing-block flip from APPROVED to IMPLEMENTED, plan
   move to the completed-plans folder, source PRD row N flip from
-  in-progress to complete).
+  in-progress to implemented).
 - **Writing under the dot-claude PRPs subtree.**
   > Anti-pattern reference: `docs/anti-patterns.md` ("Writing pipeline artifacts under .claude/")
   > and source PRD AC-9 — the literal forbidden path is the one

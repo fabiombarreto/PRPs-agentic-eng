@@ -29,7 +29,73 @@
       </div>
 
       <h2 id="unreleased">Unreleased</h2>
-      <p><em>Nothing yet.</em></p>
+      <p>Widens the source PRD's phase-status vocabulary from three values to five, so the Implementation Phases table shows how far each phase has actually got while <code>/relay-execute</code> is still running. Previously a row jumped from <code>in-progress</code> straight to <code>complete</code> the moment code review passed &mdash; before any test had run &mdash; so a phase whose tests were unwritten, red, or never executed still read as done.</p>
+
+      <h3 id="unreleased-changed">Changed</h3>
+      <ul>
+        <li><strong>Phase-status lifecycle &mdash; five states, one owner each.</strong>
+          Rows now move <code>pending</code> &rarr; <code>in-progress</code> &rarr;
+          <code>implemented</code> &rarr; <code>tested</code> &rarr; <code>complete</code>.
+          <code>plan-writer</code> writes <code>in-progress</code> on plan generation
+          (unchanged); <code>/relay-implement</code>'s D8 Mutation c now writes
+          <code>implemented</code> instead of <code>complete</code>; <code>/relay-execute</code>
+          writes the two new tail transitions itself &mdash; <code>tested</code> at Step A.5.3
+          once test-review returns <code>APPROVED</code>, and <code>complete</code> at
+          Step A.6.0 as it closes the phase out. Reaching <code>tested</code> therefore means
+          all three of code-review APPROVED, suite GREEN, and post-green review passed.
+          Recorded in <code>docs/decisions.md</code> [2026-08-05].</li>
+        <li><strong><code>plugins/relay/commands/relay-execute.md</code></strong>
+          &mdash; new Phase A.4.9 defines a single shared <code>flip_row_status</code>
+          procedure used by both new call sites, reusing the verbatim-full-row
+          <code>Edit</code> discipline of D8 Mutation c and the plan-writer back-fill.
+          Both flips are idempotent (a row already at the target value returns success
+          without editing, which the re-invocation model requires) and soft-fail: a
+          failed flip emits a warning naming the manual fix and continues, rather than
+          halting a phase whose artifacts are all on disk and correct. New hard rule 12
+          scopes the command's PRD writes to exactly these two <code>Status</code> cells.</li>
+        <li><strong>Dependency rule widened.</strong> A row listed in another row's
+          <code>Depends</code> cell now unblocks it from <code>implemented</code> onward,
+          not only at <code>complete</code>. Nothing outside the orchestrator writes the
+          last two states, so a hand-invoked <code>/relay-implement</code> would otherwise
+          have blocked its dependents permanently. Under the serial orchestrator this
+          changes no behavior &mdash; a phase always reaches <code>complete</code> before
+          the loop advances. Updated in all four places the actionable-row rule is
+          stated: <code>plan-writer.md</code> Step 1.3 (canonical), <code>relay-plan.md</code>,
+          and both copies in <code>relay-execute.md</code>.</li>
+        <li><strong><code>tested</code> is skipped, never faked.</strong> When the test
+          stage self-skips &mdash; <code>test_frameworks: []</code>, a missing
+          <code>methodology.md</code>, or absent command files &mdash; the row moves
+          <code>implemented</code> &rarr; <code>complete</code> directly. The skip reason
+          stays in <code>orchestrator-run.json</code> rather than being encoded into a
+          status cell that would claim work nobody did.</li>
+        <li><strong><code>plugins/relay/commands/relay-implement.md</code></strong>
+          &mdash; P3 now names all three post-implementation states
+          (<code>implemented</code>, <code>tested</code>, <code>complete</code>) as
+          grounds to refuse re-execution; the success message reports the row marked
+          <code>implemented</code> and points at who writes the rest.</li>
+        <li><strong><code>plugins/relay/agents/plan-reviewer.md</code></strong>
+          &mdash; R8c accepts any state at or past <code>in-progress</code>. All four
+          prove the back-fill ran, which is what R8c actually checks; a plan can
+          legitimately be re-reviewed after implementation.</li>
+        <li><strong><code>plugins/relay/resources/prd-template.md</code></strong>
+          &mdash; new <em>Phase-status lifecycle</em> subsection under the
+          Implementation Phases table: the five values, their owners, the three rules
+          above, and the note that hand-editing a cell back to <code>pending</code> is
+          the only sanctioned backwards transition.</li>
+        <li><strong>Reference pages resynchronized</strong>
+          &mdash; <code>reference/commands.html</code> (D6 state-machine note, new
+          lifecycle paragraph, <code>/relay-plan</code> and <code>/relay-implement</code>
+          input/output rows, <code>/relay-execute</code> output) and
+          <code>reference/agents.html</code> (<code>plan-writer</code> responsibility,
+          never-does, back-fill discipline, R8c). <code>guide/writing-a-prd.html</code>
+          now tells PRD authors to write every row as <code>pending</code> and links
+          the lifecycle.</li>
+      </ul>
+
+      <div class="callout callout--note">
+        <div class="callout__title">On <code>complete</code></div>
+        <p><code>complete</code> means the orchestrator drove the phase end to end &mdash; not that the work is merged. Merge, branch cleanup, and post-merge docs sync remain <code>/relay-approve</code>'s job, and <code>/relay-approve</code> still never edits the Implementation Phases table.</p>
+      </div>
 
       <h2 id="v0-27-0">0.27.0 &#8212; 2026-08-05</h2>
       <p>Adds a tenth fixed deterministic check to <code>plan-reviewer</code>'s coherence layer, resynchronizes the reference page's three reviewer catalogs with the agent files they document, and repairs the <code>/relay-pr</code> test-review gate, which read a field no producer writes. The catalogs had drifted across five separate rubric additions: the rendered page listed 11 of the 23 <code>R-COH-*</code> checks that actually ship, and stated row-count arithmetic that no reviewer has produced since 2026-07-23.</p>

@@ -271,12 +271,16 @@ intermediate command is there for flexibility, not for routine use.
 The `/relay-execute` orchestrator uses the source PRD's Implementation
 Phases table as its canonical state machine (D6 — 2026-05-01 decision).
 
-- **Phase-state representation:** each row's `Status` cell (`pending` /
-  `in-progress` / `complete`) is the authoritative phase-state. No separate
-  state file (e.g. `orchestrator-state.json`) is maintained.
+- **Phase-state representation:** each row's `Status` cell is the
+  authoritative phase-state, moving through five values in order —
+  `pending` → `in-progress` → `implemented` → `tested` → `complete`
+  (2026-08-05 decision; the vocabulary and its rules are documented in
+  `plugins/relay/resources/prd-template.md`). No separate state file
+  (e.g. `orchestrator-state.json`) is maintained.
 - **Idempotency:** on every invocation, the orchestrator re-reads the PRD
-  table from disk. Rows with `Status: complete` are skipped; execution
-  resumes from the first `pending` or `in-progress` row. Re-invoking after
+  table from disk. Only `pending` rows are actionable, so every row that
+  has left `pending` is skipped; execution resumes from the first
+  `pending` row with satisfied dependencies. Re-invoking after
   a budget-exceeded halt is safe and correct. A row `in-progress` because
   of an unresolved `AWAITING_VISUAL_APPROVAL` halt is a distinct case —
   handled explicitly, as of Figma Visual-First Track Phase 6, rather
@@ -285,10 +289,33 @@ Phases table as its canonical state machine (D6 — 2026-05-01 decision).
   when no `resolution` is recorded yet, and resumes that exact phase via
   Phase A.2.5's short-circuit once `/relay-visual-approve` has recorded
   one — see "Interactivity boundary" above.
-- **State transitions:** plan-writer back-fills row N `Status` to
-  `in-progress` on plan generation; `/relay-implement` flips it to
-  `complete` on successful D8 post-approval mutations. The orchestrator
-  reads these transitions but does not write them directly.
+- **State transitions:** each of the four transitions has exactly one
+  owner. `plan-writer` back-fills row N to `in-progress` on plan
+  generation; `/relay-implement` flips it to `implemented` on successful
+  D8 post-approval mutations; `/relay-execute` itself writes the last
+  two — `tested` after test-review returns APPROVED (Step A.5.3), and
+  `complete` as it closes the phase out (Step A.6.0). The orchestrator
+  owning the tail of the lifecycle is a deliberate split of the D8
+  row-mutation rule: `/relay-test` and `/relay-test-review` are plan-
+  and feature-scoped and know neither the row number nor the PRD path,
+  so the orchestrator is the only component positioned to record them.
+  Both orchestrator flips are idempotent and soft-fail — a failed flip
+  warns and continues, because a stale status cell is bookkeeping drift,
+  not a broken tree.
+- **Skipped `tested`:** when a project declares no test framework (or the
+  test stage self-skips for any other reason), the row moves
+  `implemented` → `complete` directly. `tested` is never written for
+  work that was not tested; the skip reason lives in
+  `orchestrator-run.json`.
+- **Dependency satisfaction:** a row listed in another row's `Depends`
+  cell unblocks it from `implemented` onward — not only at `complete`.
+  A hand-invoked `/relay-implement` legitimately stops at `implemented`,
+  since nothing outside the orchestrator writes the last two states, and
+  the stricter rule would block every dependent phase forever.
+- **`complete` ≠ merged:** `complete` means the orchestrator drove the
+  phase end to end. Merge, branch cleanup, and post-merge docs sync
+  belong to `/relay-approve`, which never edits the Implementation
+  Phases table.
 - **Model:** lightweight Airflow-style idempotency-by-convention, appropriate
   for relay's single-developer scale. A durable execution engine (Temporal-
   style event-sourced) would be over-engineering for the current use case.

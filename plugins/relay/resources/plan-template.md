@@ -37,8 +37,9 @@ command-surface decision).
    truth for phase progress. plan-reviewer R8 enforces both
    directions (R8a source PRD exists and is APPROVED; R8b every
    plan AC-A item references a real PRD AC-N; R8c source PRD's row N
-   is `in-progress`/`complete` with this plan's path in its `PRP
-   Plan` cell). In **description mode** (PRD-less plans, per
+   is at or past `in-progress` in the five-state lifecycle —
+   `in-progress`, `implemented`, `tested`, or `complete` — with this
+   plan's path in its `PRP Plan` cell). In **description mode** (PRD-less plans, per
    `/relay-plan PRD-less mode`), the `## Source` section holds the
    verbatim feature description instead of a PRD path; no back-fill
    is attempted; plan-reviewer detects description mode by the absence
@@ -439,8 +440,14 @@ The plan ends with a trailing two-line block:
    research subagents, consult the Decision Gate, assemble a DRAFT
    plan against this template, write to
    `PRPs/plans/<feature>-phase-<N>-<slug>.plan.md`, back-fill the
-   source PRD's row N (`Status` → `in-progress`; `PRP Plan` cell
-   populated).
+   source PRD's row N (`Status` `pending` → `in-progress`; `PRP
+   Plan` cell populated). This is the first of four transitions in
+   the phase-status lifecycle `pending` → `in-progress` →
+   `implemented` → `tested` → `complete`, documented in full in
+   `${CLAUDE_PLUGIN_ROOT}/resources/prd-template.md`; the remaining
+   three are written by
+   `/relay-implement` (`implemented`) and `/relay-execute`
+   (`tested`, `complete`).
 
 2. **`/relay-plan-review` command + `plan-reviewer` agent**
    (Phases 2 & 4 of `plan-authoring`, complete) — load the DRAFT,
