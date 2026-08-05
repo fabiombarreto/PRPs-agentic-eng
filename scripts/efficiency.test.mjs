@@ -2,29 +2,36 @@
 /**
  * Unit tests for the pure classification surface exported by
  * scripts/efficiency.mjs: `classifyArtifacts`, `readCorpus`, `aggregate`,
- * `firstSeen` and `hasDegradedTimestamp`.
+ * `firstSeen`, `hasDegradedTimestamp` and `sessionsOf`.
  *
  * Authored test-after (docs/context/methodology.md: tdd: false +
  * test_frameworks: ["node:test"]) against the already-implemented,
  * code-reviewed, APPROVED scripts/efficiency.mjs.
  *
- * Source plan (description mode — no source PRD):
- *   PRPs/plans/close-the-consumer-half-of-the-v0250-reviewstartedat.plan.md
- *
  * Authored by the test pair under R-X strict (docs/decisions.md
  * [2026-07-12] / [2026-05-06]): the Implementer never touches this file.
  *
- * Scope: covers both the unit-testable classification rule (AC-A1, AC-A2,
- * AC-A5, via direct calls against the imported pure functions) and, via
- * `execFileSync` subprocess invocations of the real CLI against a synthetic
- * corpus built in a fresh `mkdtempSync` temp directory (never the real
- * `PRPs/plans/` corpus), the observable CLI-level contracts of AC-A3, AC-A4
- * and AC-A6. The synthetic corpus is deliberate: it pins BEHAVIOUR (a
- * degraded artifact is excluded from both aggregates and named in a
- * distinct warning) rather than a corpus-dependent count (e.g. the live
- * corpus's "recomputed 82") that would rot as the real corpus grows.
+ * TWO source plans contribute to this file, both description-mode (no
+ * source PRD) and both numbering their criteria `AC-A<i>`. The two AC
+ * namespaces are therefore DISJOINT and must not be read as one list —
+ * each section below names the plan its criteria belong to.
  *
- * Traceability:
+ *   PLAN 1 — degraded-timestamp consumer:
+ *     PRPs/plans/close-the-consumer-half-of-the-v0250-reviewstartedat.plan.md
+ *   PLAN 2 — review-session split:
+ *     PRPs/plans/fix-a-measurement-defect-in-scriptsefficiencymjs-that.plan.md
+ *
+ * Scope: covers the unit-testable pure functions via direct calls against
+ * the imported module, and — via `execFileSync` subprocess invocations of
+ * the real CLI against a synthetic corpus built in a fresh `mkdtempSync`
+ * temp directory (never the real `PRPs/plans/` corpus) — the observable
+ * CLI-level contracts. The synthetic corpus is deliberate: it pins
+ * BEHAVIOUR (a degraded artifact is excluded from both aggregates; a
+ * multi-session file is split and named) rather than a corpus-dependent
+ * count (e.g. the live corpus's "recomputed 82") that would rot as the
+ * real corpus grows.
+ *
+ * Traceability — PLAN 1 (degraded-timestamp consumer):
  *   AC-A1 — readCorpus retains a per-entry `degraded` boolean parsed from
  *     the JSON object's `timestamp_degraded` field; a prose mention of the
  *     token with no such field is NOT treated as degraded. Covered by the
@@ -48,6 +55,33 @@
  *     marker file, and a bare invocation prints `Usage:` and exits
  *     non-zero. Covered by the two CLI-mode tests below.
  *
+ * Traceability — PLAN 2 (review-session split):
+ *   AC-A1 — a pure exported function partitions an artifact's entries into
+ *     review sessions: a session closes on a passing verdict, the next
+ *     entry opens the following session, and a trailing group with no
+ *     passing verdict is itself a session. Covered by the three
+ *     `sessionsOf` partition-shape tests, plus the export-surface tests.
+ *   AC-A2 — the boundary is the `PASSING` set, not a literal 'APPROVED'
+ *     comparison, so `RUBRIC_PASSED` closes a session too. Covered by the
+ *     `sessionsOf` RUBRIC_PASSED test and its never-passed control.
+ *   AC-A3 — the rework metric is reported per session and labelled as such,
+ *     with a notice naming how many artifacts split and into how many
+ *     sessions, while every prior warning survives. Covered by the two
+ *     session-split CLI tests and the `aggregate` per-session test.
+ *   AC-A4 — first-attempt failure is computed from the first entry of each
+ *     SESSION, not of each file. Covered by the `aggregate` per-session
+ *     test (per file the same fixture reports 0%) and the amendment test.
+ *   AC-A5 — the degraded-timestamp policy is unchanged: exclusion still
+ *     operates on the WHOLE artifact, never per session. Covered by the
+ *     multi-session degraded-exclusion test.
+ *   AC-A6..AC-A9 — documentation and governance prose
+ *     (documentation/reference/validation-checks.html,
+ *     documentation/changelog.html, docs/context/constraints.md,
+ *     docs/decisions.md). Not node:test scope; see the manifest's AC
+ *     outcomes table.
+ *   AC-A10 — this suite itself, with fixtures proven to fail when the
+ *     partition is broken; see the manifest's mutation-verification table.
+ *
  * Run: node --test scripts/efficiency.test.mjs
  */
 
@@ -59,7 +93,7 @@ import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import { classifyArtifacts, readCorpus, aggregate, firstSeen, hasDegradedTimestamp } from './efficiency.mjs';
+import { classifyArtifacts, readCorpus, aggregate, firstSeen, hasDegradedTimestamp, sessionsOf } from './efficiency.mjs';
 
 const MARKER = '2026-07-31T18:02:16.966Z';
 
@@ -237,13 +271,13 @@ test('scripts/efficiency.mjs: importing the module has no side effects (no CLI d
   );
 
   const exportedNames = JSON.parse(out.trim());
-  for (const name of ['classifyArtifacts', 'readCorpus', 'aggregate', 'firstSeen', 'hasDegradedTimestamp']) {
+  for (const name of ['classifyArtifacts', 'readCorpus', 'aggregate', 'firstSeen', 'hasDegradedTimestamp', 'sessionsOf']) {
     assert.ok(exportedNames.includes(name), `expected module to export ${name}`);
   }
 });
 
 test('scripts/efficiency.mjs: the top-level import in this test file itself resolved to real functions, not undefined stand-ins', () => {
-  for (const [name, fn] of Object.entries({ classifyArtifacts, readCorpus, aggregate, firstSeen, hasDegradedTimestamp })) {
+  for (const [name, fn] of Object.entries({ classifyArtifacts, readCorpus, aggregate, firstSeen, hasDegradedTimestamp, sessionsOf })) {
     assert.equal(typeof fn, 'function', `expected ${name} to be exported as a function`);
   }
 });
@@ -383,4 +417,269 @@ test('CLI: a bare invocation with no mode prints Usage: for both CLI modes and e
   assert.match(caught.stderr, /Usage:/);
   assert.match(caught.stderr, /node scripts\/efficiency\.mjs snapshot --label/);
   assert.match(caught.stderr, /node scripts\/efficiency\.mjs compare/);
+});
+
+// ===========================================================================
+// PLAN 2 — review-session split
+//   PRPs/plans/fix-a-measurement-defect-in-scriptsefficiencymjs-that.plan.md
+//
+// A jsonl file is not a review session. Inside one retry loop only the LAST
+// verdict can be a passing one, because a passing verdict terminates the
+// loop -- so a file holding two passing verdicts necessarily holds two
+// independent sessions. Everything below pins that partition and the two
+// metrics derived from it, and pins that the split changed GROUPING only:
+// degraded exclusion still operates on the whole artifact.
+//
+// The AC-A<i> ids in this section belong to PLAN 2 and are unrelated to the
+// identically-numbered ids in the PLAN 1 sections above.
+// ===========================================================================
+
+/** Build a synthetic artifact from a bare verdict sequence, in file order. */
+function verdictSeq(file, verdicts) {
+  return artifact(
+    file,
+    verdicts.map((verdict, i) => entry({ verdict, timestamp: `2026-08-05T0${i}:00:00Z` })),
+  );
+}
+
+/** Reduce a session partition to its verdict shape, so assertions read as the partition itself. */
+const shapeOf = (sessions) => sessions.map((s) => s.map((e) => e.verdict));
+
+// ---------------------------------------------------------------------------
+// PLAN 2 AC-A1 — the three partition shapes. Each asserts the CONTENTS of
+// every session, not merely the count: a partition that lands the right
+// number of sessions while assigning the wrong entries to them still fails.
+// ---------------------------------------------------------------------------
+
+test('sessionsOf: a single retry loop is ONE session -- the rejections and the passing verdict that ends them belong together', () => {
+  const oneLoop = verdictSeq('single-loop.review.jsonl', ['CHANGES_REQUESTED', 'CHANGES_REQUESTED', 'APPROVED']);
+
+  assert.deepEqual(shapeOf(sessionsOf(oneLoop)), [['CHANGES_REQUESTED', 'CHANGES_REQUESTED', 'APPROVED']]);
+});
+
+test('sessionsOf: two passing verdicts followed by a retry loop are THREE sessions, split at each passing verdict', () => {
+  const threeSessions = verdictSeq('three.review.jsonl', ['APPROVED', 'APPROVED', 'CHANGES_REQUESTED', 'APPROVED']);
+
+  // Each passing verdict CLOSES its session and the entry after it OPENS the
+  // next, so the two consecutive APPROVEDs are two one-entry sessions rather
+  // than one two-entry session -- the shape that made 2.38 runs per file read
+  // as rework when it was three unrelated reviews.
+  assert.deepEqual(shapeOf(sessionsOf(threeSessions)), [['APPROVED'], ['APPROVED'], ['CHANGES_REQUESTED', 'APPROVED']]);
+});
+
+test('sessionsOf: a trailing group with no passing verdict is itself a session, never dropped', () => {
+  const unresolvedTail = verdictSeq('trailing.review.jsonl', ['APPROVED', 'CHANGES_REQUESTED']);
+
+  // An in-flight review that has not been approved yet is still a session; a
+  // partition that only emitted a session on a passing verdict would silently
+  // discard the second entry and undercount both runs and first attempts.
+  assert.deepEqual(shapeOf(sessionsOf(unresolvedTail)), [['APPROVED'], ['CHANGES_REQUESTED']]);
+});
+
+// ---------------------------------------------------------------------------
+// PLAN 2 AC-A2 — the boundary is the PASSING set, not a literal 'APPROVED'.
+// This is the load-bearing test of the pair: replacing `PASSING.has(entry
+// .verdict)` with `entry.verdict === 'APPROVED'` collapses the first fixture
+// below from two sessions to one, because `prd-reviewer` in subagent mode
+// emits RUBRIC_PASSED rather than APPROVED and that verdict also terminates
+// a retry loop.
+// ---------------------------------------------------------------------------
+
+test('sessionsOf: RUBRIC_PASSED closes a session, because the boundary is the PASSING set and not a literal APPROVED comparison', () => {
+  const rubricPassed = verdictSeq('rubric-passed.review.jsonl', ['RUBRIC_PASSED', 'CHANGES_REQUESTED']);
+
+  assert.deepEqual(shapeOf(sessionsOf(rubricPassed)), [['RUBRIC_PASSED'], ['CHANGES_REQUESTED']]);
+
+  // Discriminative control, same two-entry shape with a NON-passing verdict
+  // in the first slot: it must NOT split. Without this pair an implementation
+  // that started a new session after every entry would satisfy the assertion
+  // above by accident.
+  const neverPassed = verdictSeq('never-passed.review.jsonl', ['CHANGES_REQUESTED', 'CHANGES_REQUESTED']);
+
+  assert.deepEqual(shapeOf(sessionsOf(neverPassed)), [['CHANGES_REQUESTED', 'CHANGES_REQUESTED']]);
+});
+
+// ---------------------------------------------------------------------------
+// PLAN 2 AC-A3 / AC-A4 — the two metrics derived from the partition, at the
+// pure-function level. The fixture is chosen so per-file and per-session
+// disagree on BOTH metrics, which is what makes the assertions discriminative
+// rather than merely descriptive.
+// ---------------------------------------------------------------------------
+
+test('aggregate: rework and first-attempt failure are counted per session, and a file holding two sessions is reported as split', () => {
+  const multiSession = verdictSeq('multi.review.jsonl', ['APPROVED', 'CHANGES_REQUESTED', 'APPROVED']);
+
+  const metrics = aggregate([multiSession])['plan-review'];
+
+  assert.equal(metrics.artifacts, 1);
+  assert.equal(metrics.sessions, 2);
+  assert.equal(metrics.splitArtifacts, 1);
+  assert.equal(metrics.runs, 3);
+  // 3 runs over 2 sessions. Divided by FILES the same fixture reads as 3.0 --
+  // exactly the overstatement this metric exists to remove.
+  assert.equal(metrics.runsPerSession, 1.5);
+  // Session 1 opens on APPROVED (a clean first attempt); session 2 opens on
+  // CHANGES_REQUESTED (a failed one). Per FILE only the file's first entry --
+  // APPROVED -- would be examined, reporting 0 failures and 0%.
+  assert.equal(metrics.firstAttemptFailures, 1);
+  assert.equal(metrics.firstAttemptFailureRate, 50);
+});
+
+test('aggregate: a human_authorized_ac_amendment entry is still excluded from the first-attempt count, now scoped per session', () => {
+  const amended = artifact('amended.review.jsonl', [
+    entry({ verdict: 'APPROVED', action: 'final_flip', timestamp: '2026-08-05T01:00:00Z' }),
+    entry({ verdict: 'CHANGES_REQUESTED', action: 'human_authorized_ac_amendment', timestamp: '2026-08-05T02:00:00Z' }),
+    entry({ verdict: 'APPROVED', action: 'final_flip', timestamp: '2026-08-05T03:00:00Z' }),
+  ]);
+
+  const metrics = aggregate([amended])['plan-review'];
+
+  assert.equal(metrics.sessions, 2);
+  // Session 2 opens with an amendment -- an audit record, not a rubric run --
+  // so its first ATTEMPT is the APPROVED that follows. Were the amendment
+  // filter dropped when the metric moved per session, that CHANGES_REQUESTED
+  // would be read as a failed first attempt and this would report 1 / 50%.
+  assert.equal(metrics.firstAttemptFailures, 0);
+  assert.equal(metrics.firstAttemptFailureRate, 0);
+
+  // A session consisting of NOTHING but amendments contributes no first-attempt
+  // observation at all, rather than crashing on an empty filtered session.
+  const trailingAmendmentOnly = artifact('amendment-tail.review.jsonl', [
+    entry({ verdict: 'APPROVED', action: 'final_flip', timestamp: '2026-08-05T01:00:00Z' }),
+    entry({ verdict: 'CHANGES_REQUESTED', action: 'human_authorized_ac_amendment', timestamp: '2026-08-05T02:00:00Z' }),
+  ]);
+
+  const tailMetrics = aggregate([trailingAmendmentOnly])['plan-review'];
+
+  assert.equal(tailMetrics.sessions, 2);
+  assert.equal(tailMetrics.firstAttemptFailures, 0);
+  assert.equal(tailMetrics.firstAttemptFailureRate, 0);
+});
+
+// ---------------------------------------------------------------------------
+// PLAN 2 AC-A5 — the split changed GROUPING, never PARTICIPATION. A degraded
+// artifact is excluded whole even when it holds several sessions, one of
+// which is entirely clean. This is the property `timestamp-contract`'s
+// CONSUMERS registry pins, and the one a per-session exclusion rule would
+// have quietly broken.
+// ---------------------------------------------------------------------------
+
+test('classifyArtifacts: a multi-session artifact carrying one degraded entry is excluded WHOLE -- no clean session leaks into before or after', () => {
+  const multiSessionDegraded = artifact('multi-degraded.review.jsonl', [
+    // Session 1 is clean and pre-marker: absent the exclusion it would land in `before`.
+    entry({ timestamp: '2026-07-25T09:00:00Z', verdict: 'APPROVED' }),
+    // Session 2 opens on the degraded entry.
+    entry({ timestamp: '2026-08-02T09:00:00Z', verdict: 'CHANGES_REQUESTED', degraded: true }),
+    entry({ timestamp: '2026-08-03T09:00:00Z', verdict: 'APPROVED' }),
+  ]);
+
+  // Fixture preconditions, asserted rather than assumed: the artifact really
+  // does hold two sessions (so a per-session rule would have had a clean one
+  // to leak) and really is degraded at the artifact level.
+  assert.equal(sessionsOf(multiSessionDegraded).length, 2);
+  assert.equal(hasDegradedTimestamp(multiSessionDegraded), true);
+
+  const result = classifyArtifacts([multiSessionDegraded], MARKER);
+
+  assert.deepEqual(result.before, []);
+  assert.deepEqual(result.after, []);
+  assert.deepEqual(result.undated, []);
+  assert.deepEqual(result.degraded.map((a) => a.file), ['multi-degraded.review.jsonl']);
+});
+
+// ---------------------------------------------------------------------------
+// PLAN 2 AC-A3 — CLI level. Same synthetic-corpus technique as the PLAN 1 CLI
+// tests: a fresh temp directory is built per test and the real CLI is driven
+// against it with execFileSync, so nothing here reads or mutates the real
+// PRPs/plans/ corpus and no assertion hardcodes a live-corpus count.
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a synthetic corpus whose after-set contains one MULTI-SESSION
+ * artifact, plus a degraded artifact so the new split notice and the
+ * pre-existing degraded warning are observed coexisting in one run.
+ *
+ * Deliberately distinct from `buildDegradedExclusionFixture`: that fixture's
+ * tests assert `1 before -> 1 after` and the absence of a drift warning, and
+ * adding a multi-session artifact to it would perturb those assertions.
+ */
+function buildSessionSplitFixture() {
+  const tempDir = mkdtempSync(join(tmpdir(), 'efficiency-session-cli-test-'));
+  const plansDir = join(tempDir, 'PRPs', 'plans');
+  mkdirSync(plansDir, { recursive: true });
+
+  const jsonl = (objs) => objs.map((o) => JSON.stringify(o)).join('\n') + '\n';
+
+  writeFileSync(
+    join(plansDir, 'baseline.review.jsonl'),
+    jsonl([{ timestamp: '2020-01-01T00:00:00.000Z', verdict: 'APPROVED', action: 'final_flip', rubric: [] }]),
+  );
+
+  execFileSync(process.execPath, [SCRIPT_PATH, 'snapshot', '--label', 'baseline'], { cwd: tempDir, encoding: 'utf-8' });
+
+  const markerRaw = readFileSync(join(tempDir, 'PRPs', 'reports', 'efficiency', 'baseline.json'), 'utf-8');
+  const markerMs = new Date(JSON.parse(markerRaw).markerUtc).getTime();
+  const at = (offsetMs) => new Date(markerMs + offsetMs).toISOString();
+
+  // Two independent sessions in ONE file. Per file: 3 runs over 1 artifact
+  // with a passing first entry -> 3.0 runs and 0% first-attempt failure. Per
+  // session: 3 runs over 2 sessions -> 1.5 runs and 50%.
+  writeFileSync(
+    join(plansDir, 'multi.review.jsonl'),
+    jsonl([
+      { timestamp: at(3600_000), verdict: 'APPROVED', action: 'final_flip', rubric: [] },
+      { timestamp: at(7200_000), verdict: 'CHANGES_REQUESTED', action: 'final_flip', rubric: [] },
+      { timestamp: at(10800_000), verdict: 'APPROVED', action: 'final_flip', rubric: [] },
+    ]),
+  );
+
+  writeFileSync(
+    join(plansDir, 'degraded.review.jsonl'),
+    jsonl([
+      { timestamp: at(14400_000), verdict: 'CHANGES_REQUESTED', action: 'final_flip', rubric: [], timestamp_degraded: true },
+    ]),
+  );
+
+  const stdout = execFileSync(process.execPath, [SCRIPT_PATH, 'compare', '--since', 'baseline'], {
+    cwd: tempDir,
+    encoding: 'utf-8',
+  });
+
+  return { tempDir, stdout };
+}
+
+test('CLI: compare labels the rework metric per session and reports the per-session first-attempt rate, not the per-file one', () => {
+  const { tempDir, stdout } = buildSessionSplitFixture();
+  try {
+    // Per file this same after-set reads as `3` runs and `0%`; the values
+    // asserted here are reachable only if the entries were partitioned.
+    assert.match(stdout, /runs per session\s+1 -> 1\.5 \(\+0\.5\)/);
+    assert.match(stdout, /first-attempt fail\s+0% -> 50% \(\+50\)/);
+    // The superseded label must be gone, so no reader mistakes the new figure
+    // for the old one. (The notice's own "not per artifact" phrasing is a
+    // different string and is asserted in the next test.)
+    assert.doesNotMatch(stdout, /runs per artifact/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('CLI: compare prints a NOTICE naming how many artifacts split, the resulting session total, and each split file, alongside every prior warning', () => {
+  const { tempDir, stdout } = buildSessionSplitFixture();
+  try {
+    assert.match(stdout, /NOTICE - 1 artifact\(s\) hold more than one review session/);
+    assert.match(stdout, /3 artifacts in the corpus split into 4 sessions/);
+
+    // The notice enumerates the affected file, mirroring the degraded block --
+    // the correction is auditable, not just counted.
+    const notice = stdout.slice(stdout.indexOf('NOTICE - 1 artifact(s)'));
+    assert.ok(notice.includes('multi.review.jsonl'), 'expected the split notice to name the multi-session file');
+    assert.ok(!notice.includes('baseline.review.jsonl'), 'the split notice must not name a single-session file');
+
+    // Every pre-existing doubt signal survives the new block.
+    assert.match(stdout, /WARNING - 1 artifact\(s\) carry a producer-flagged unreliable timestamp/);
+    assert.match(stdout, /CAUTION: 1 artifact\(s\) is a small sample/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 });
