@@ -29,9 +29,12 @@
       </div>
 
       <h2 id="unreleased">Unreleased</h2>
+      <p><em>Nothing yet.</em></p>
+
+      <h2 id="v0-28-0">0.28.0 &#8212; 2026-08-05</h2>
       <p>Widens the source PRD's phase-status vocabulary from three values to five, so the Implementation Phases table shows how far each phase has actually got while <code>/relay-execute</code> is still running. Previously a row jumped from <code>in-progress</code> straight to <code>complete</code> the moment code review passed &mdash; before any test had run &mdash; so a phase whose tests were unwritten, red, or never executed still read as done.</p>
 
-      <h3 id="unreleased-changed">Changed</h3>
+      <h3 id="v0-28-0-changed">Changed</h3>
       <ul>
         <li><strong>Phase-status lifecycle &mdash; five states, one owner each.</strong>
           Rows now move <code>pending</code> &rarr; <code>in-progress</code> &rarr;
@@ -90,6 +93,11 @@
           never-does, back-fill discipline, R8c). <code>guide/writing-a-prd.html</code>
           now tells PRD authors to write every row as <code>pending</code> and links
           the lifecycle.</li>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.27.0</code> &rarr; <code>0.28.0</code> to
+          match this release; users running <code>/plugin</code> after pulling
+          this version will get a fresh <code>relay/0.28.0/</code> cache directory
+          with all newly-shipped commands and agents registered.</li>
       </ul>
 
       <div class="callout callout--note">
