@@ -29,7 +29,26 @@
       </div>
 
       <h2 id="unreleased">Unreleased</h2>
-      <p>Nothing queued yet.</p>
+
+      <h3 id="unreleased-fixed">Fixed</h3>
+      <ul>
+        <li><strong><code>reference/agents.html</code>,
+          <code>reference/commands.html</code>,
+          <code>assets/data/search-index.json</code></strong>
+          &mdash; the <code>design-map-reviewer</code> rubric is now described
+          as seven items (<code>R-DM1</code>&ndash;<code>R-DM7</code>) in all
+          three places, with <code>R-DM7</code> enumerated alongside the other
+          six. Phase 4 of the <code>figma-quota-resilience</code> PRD (source
+          AC-12) added <code>R-DM7</code> &mdash; it fails a map whose declared
+          <code>enrichment_truncated</code> marker contradicts the evidence
+          bundle's actual <code>metadata/</code> coverage, or whose
+          <code>CONFIRMED</code> rows depend on non-variant property data the
+          bundle never enriched. The site still claimed six items in the
+          agent's Responsibility line, its "Never does" short-circuit clause,
+          the <code>/relay-design-map</code> Notes row, and the search-index
+          excerpt. The canonical <code>docs/api-reference.md</code> row was
+          corrected in the same change.</li>
+      </ul>
 
       <h2 id="v0-26-0">0.26.0 &#8212; 2026-08-03</h2>
       <p>Resource packaging &mdash; Phase 1 of the <code>figma-quota-resilience</code> PRD, absorbing <code>PRPs/reports/plugin-root-audit/fix-plan.md</code>'s F2&ndash;F6 as its authoritative scope (F0/F1 already shipped in <code>9857be0</code> / v0.25.1). The eight plugin-owned resource templates under <code>docs/context/</code> were unreachable from every installed instance of the plugin, because <code>${CLAUDE_PLUGIN_ROOT}</code> resolves to <code>plugins/relay/</code> only and <code>docs/</code> was never packaged. This release moves them to a new <code>plugins/relay/resources/</code> directory &mdash; a name deliberately distinct from <code>docs/</code>, so the packaged/target-scoped distinction becomes mechanically checkable &mdash; and rewrites roughly 140 references across some 25 agent/command/skill/doc files.</p>

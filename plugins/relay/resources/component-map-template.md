@@ -104,6 +104,8 @@ when genuinely none was found — never silently empty.>
 | {Figma name} ({Figma key})   | {why no confident code-component match was found} |
 
 inventory_truncated: true | false — {reason when true; "full library scan completed" when false}
+enrichment_truncated: true | false — {reason when true; "enrichment complete for all pre-matched candidates" when false — never `false` for an empty candidate set}
+rung: FULL | DEGRADED_PARTIAL_INVENTORY | DEGRADED_NO_ENRICHMENT
 
 ---
 
@@ -144,6 +146,22 @@ inventory_truncated: true | false — {reason when true; "full library scan comp
   trailing status block. `true` whenever the evidence bundle notes a
   truncated/incomplete Figma library scan (e.g. a search-call budget
   reached); `false` only when the scan is genuinely complete.
+- **`enrichment_truncated`** — boolean + reason, immediately below
+  `inventory_truncated`. Derived by scanning what the evidence
+  bundle actually has on disk (the `metadata/` directory's actual
+  file count against the pre-matched candidate set size), never from
+  a flag merely recording whether enrichment was attempted. `true`
+  whenever any pre-matched candidate lacks a corresponding
+  `metadata/<component-key>.json` file, OR the pre-matched candidate
+  set is empty — an empty candidate set must never derive `false`
+  merely because there was vacuously nothing to enrich; `false` only
+  when enrichment is genuinely complete for a non-empty pre-matched
+  candidate set.
+- **`rung`** — one of `FULL`, `DEGRADED_PARTIAL_INVENTORY`,
+  `DEGRADED_NO_ENRICHMENT`, immediately below `enrichment_truncated`.
+  Worse-condition-wins computation: `DEGRADED_PARTIAL_INVENTORY` when
+  `inventory_truncated: true`; else `DEGRADED_NO_ENRICHMENT` when
+  `enrichment_truncated: true`; else `FULL`.
 
 The map ends with a trailing two-line block, identical in shape to
 every other relay artifact's status convention:
@@ -174,11 +192,12 @@ every other relay artifact's status convention:
    `docs/design/component-map.md` conforming to this shape.
 
 2. **`design-map-reviewer` agent** (Phase 3) — validates the DRAFT
-   map against the six-item `R-DM1`–`R-DM6` rubric (import-path
+   map against the seven-item `R-DM1`–`R-DM7` rubric (import-path
    resolution, evidence cross-reference, prop/variant existence, no
    duplicate keys/ids, honest `inventory_truncated` scoping,
-   non-empty `## Conventions` when warranted) and auto-flips
-   `*Status: DRAFT*` → `*Status: APPROVED*` on full pass.
+   non-empty `## Conventions` when warranted, dishonest completeness)
+   and auto-flips `*Status: DRAFT*` → `*Status: APPROVED*` on full
+   pass.
 
 3. **Human curator** (ongoing) — the map is designed to be
    hand-edited after approval: correcting an `INFERRED` row,

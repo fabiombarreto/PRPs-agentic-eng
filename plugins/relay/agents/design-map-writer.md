@@ -131,7 +131,16 @@ Execute these steps in order.
    `evidence_dir` as zero evidence, not as an error to halt on: write
    a map whose component table is empty and whose `## UNMAPPED`
    section is empty, with `inventory_truncated: true` and a reason
-   naming the missing evidence.
+   naming the missing evidence. When `evidence_dir` is present but
+   partial — `library-search.json` exists and reports its own
+   `inventory_truncated`/`enrichment_truncated` flags — propagate
+   those flags verbatim into the map you write rather than
+   re-deriving them independently; the writer has no basis to
+   compute completeness more accurately than the command that
+   scanned the actual Figma library. The checkpoint at
+   `PRPs/reports/design-map/.state/` is never part of this read — it
+   lives outside `evidence_dir` by design, so this instruction
+   structurally never reaches it.
 3. `Read` `design_system_config` to locate the local design-system
    clone path, the package name, and the token module path.
 
@@ -164,6 +173,20 @@ For each Figma component present in the evidence bundle:
    `## UNMAPPED` naming the Figma component (name and key) and a
    reason (e.g., "no candidate found in clone", "multiple ambiguous
    candidates, none confidently primary").
+5. **Surgical downgrade under `DEGRADED_NO_ENRICHMENT`.** When this
+   run's rung (Step 4) is `DEGRADED_NO_ENRICHMENT`
+   (`enrichment_truncated: true` — no `get_metadata` data available
+   for the component being classified), a row may remain `CONFIRMED`
+   ONLY when its `Props/variant mapping` relies exclusively on
+   variant axes recoverable from the Figma component's own name (a
+   `Prop=Value` naming scheme parseable without node enrichment); a
+   row whose classification depends on any non-variant property
+   (booleans, `TEXT`, `INSTANCE_SWAP`, or any property not derivable
+   from the component name alone) MUST be downgraded to `INFERRED`
+   when unenriched. A row that already carries a human-populated
+   `verified_at` is NEVER downgraded by this rule — flag it for
+   re-verification (a note in the row) instead of silently
+   overriding a human's prior judgment.
 
 ### Step 3 — Write the `## Conventions` section
 
@@ -184,7 +207,8 @@ to `${CLAUDE_PLUGIN_ROOT}/resources/component-map-template.md`'s shape: the `Com
 Map` heading, `## Conventions`, the component table (`CM-id | Figma
 component (name/key) | Import path | Props/variant mapping |
 Confidence | verified_at`), `## UNMAPPED`, the `inventory_truncated`
-marker line, and the trailing:
+marker line, the `enrichment_truncated` marker line, a `rung` marker
+line, and the trailing:
 
 ```
 *Generated: <YYYY-MM-DD>*
@@ -194,6 +218,15 @@ marker line, and the trailing:
 `verified_at` is left blank/`unverified` for a freshly-written row —
 this field is populated only by a human curator's later hand-edit,
 never invented by this agent.
+
+**Rung computation.** Mirroring `visual-verifier.md:88`'s "fail
+toward the safer degraded rung" idiom (worse condition wins):
+`rung = "DEGRADED_PARTIAL_INVENTORY"` when `inventory_truncated:
+true`; else `rung = "DEGRADED_NO_ENRICHMENT"` when
+`enrichment_truncated: true`; else `rung = "FULL"`. This `rung`
+value is written into the map itself, not only surfaced in the
+writer's handoff summary — making degradation visible in the
+artifact, not only to the caller (mirroring `visual-verifier.md:142`).
 
 ---
 

@@ -159,7 +159,7 @@
     "title": "design-map-reviewer",
     "path": "reference/agents.html#design-map-reviewer",
     "category": "Reference",
-    "excerpt": "Reviewer agent invoked by /relay-design-map after design-map-writer. Validates a DRAFT component-map.md against the six-item R-DM1-R-DM6 rubric (import-path resolution, evidence cross-reference, prop/variant existence, duplicate-id guard, honest inventory_truncated scoping, non-empty Conventions) and owns the DRAFT-to-APPROVED flip. MCP-free."
+    "excerpt": "Reviewer agent invoked by /relay-design-map after design-map-writer. Validates a DRAFT component-map.md against the seven-item R-DM1-R-DM7 rubric (import-path resolution, evidence cross-reference, prop/variant existence, duplicate-id guard, honest inventory_truncated scoping, non-empty Conventions, honest enrichment_truncated scoping) and owns the DRAFT-to-APPROVED flip. MCP-free."
   },
   {
     "title": "/relay-design-spec",

@@ -63,6 +63,31 @@
  *     design-map-writer.md itself is unaffected (zero agent files touched).
  *
  * Run: node --test scripts/validate/checks/figma-quota-resilience-phase2.test.mjs
+ *
+ * EXISTING_TEST_UPDATED (this session, against Phase 3 — "Quota preflight +
+ * named failure"): Phase 3's Task 2 restructures Phase B from 5 numbered
+ * steps to 7, inserting a new step 1 ("Quota preflight (`whoami` probe)")
+ * and a new step 4 ("Cost declaration + confirmation"), and renumbering the
+ * rest (library search 1->2, pre-match candidates 2->3, node-scoped
+ * metadata 3->5, code connect 4->6, persist evidence 5->7). This renumbers
+ * every internal cross-reference the six tests below pinned by coordinate
+ * (step count, step-index array positions, `phaseB.indexOf('5. **Persist
+ * evidence')`, and three `sliceBetween(phaseB, '2. **Pre-match candidates',
+ * '3. **Node-scoped metadata')` boundary needles). Per code-reviewer
+ * arbitration on Phase 3's plan (DISPUTE_UPHELD_TEST_WRONG, recorded in the
+ * Phase 3 plan's `## Notes`), these six assertions are updated here as
+ * EXISTING_TEST_UPDATED — their CONTRACT is unchanged (enrichment stays
+ * scoped to the pre-match candidate set rather than the full enumeration;
+ * the pre-match stays recall-oriented and non-authoritative; persist-evidence
+ * still records `candidates_prematched`/`metadata_calls_made`); only the
+ * COORDINATES (step numbers, slice boundaries) are updated to match Phase
+ * 3's renumbering. The three `sliceBetween` boundary needles are updated to
+ * `'3. **Pre-match candidates'` / `'4. **Cost declaration'` (the
+ * immediately-following step after Phase 3's insertion), not `'5. **
+ * Node-scoped metadata'` — using the adjacent next-step heading preserves
+ * each test's original narrow-isolation intent (scoped to pre-match's own
+ * prose only) rather than widening the slice to also swallow the new step
+ * 4's unrelated cost-declaration text.
  */
 
 import { test } from 'node:test';
@@ -124,7 +149,7 @@ function collapseWs(str) {
 // metadata_calls_made.
 // ---------------------------------------------------------------------------
 
-test('AC-1/AC-A1: Phase B enumerates exactly 5 sequential numbered steps, in strict pipeline order (library search -> pre-match candidates -> node-scoped metadata -> code connect -> persist evidence) — the enumerate-then-pre-match-then-enrich-candidates-only inversion replacing the pre-Phase-2 4-step enumerate-then-enrich-everything shape', () => {
+test('AC-1/AC-A1 (updated for Phase 3 AC-A2): Phase B enumerates exactly 7 sequential numbered steps, in strict pipeline order (quota preflight -> library search -> pre-match candidates -> cost declaration -> node-scoped metadata -> code connect -> persist evidence) — Phase 3 inserted the whoami preflight (new step 1) and the cost-declaration/confirmation gate (new step 4) around the Phase 2 enumerate-then-pre-match-then-enrich-candidates-only pipeline, renumbering the rest', () => {
   const content = readRepoFile(COMMAND_PATH);
   const phaseB = sliceBetween(content, '## Phase B — Query the Figma library', '## Phase C');
   assert.ok(phaseB, 'expected a Phase B section delimited by the "## Phase C" heading');
@@ -132,26 +157,28 @@ test('AC-1/AC-A1: Phase B enumerates exactly 5 sequential numbered steps, in str
   const stepLabels = [...phaseB.matchAll(/^\d+\.\s+\*\*(.+?)\*\*/gm)].map((m) => m[1].toLowerCase());
   assert.equal(
     stepLabels.length,
-    5,
-    `expected exactly 5 top-level numbered steps in Phase B, found ${stepLabels.length}: ${JSON.stringify(stepLabels)}`
+    7,
+    `expected exactly 7 top-level numbered steps in Phase B, found ${stepLabels.length}: ${JSON.stringify(stepLabels)}`
   );
-  assert.match(stepLabels[0], /library search/);
-  assert.match(stepLabels[1], /pre-match candidates/);
-  assert.match(stepLabels[2], /node-scoped metadata/);
-  assert.match(stepLabels[3], /code connect/);
-  assert.match(stepLabels[4], /persist evidence/);
+  assert.match(stepLabels[0], /quota preflight/);
+  assert.match(stepLabels[1], /library search/);
+  assert.match(stepLabels[2], /pre-match candidates/);
+  assert.match(stepLabels[3], /cost declaration/);
+  assert.match(stepLabels[4], /node-scoped metadata/);
+  assert.match(stepLabels[5], /code connect/);
+  assert.match(stepLabels[6], /persist evidence/);
 });
 
-test('AC-1/AC-A1: Phase B step 3 (metadata enrichment) scopes get_metadata calls to the step 2 pre-matched candidate set — never the full step 1 library enumeration — and stops issuing further calls once max_metadata_calls is reached', () => {
+test('AC-1/AC-A1 (updated for Phase 3 AC-A2): Phase B step 5 (metadata enrichment, renumbered from step 3 by Phase 3\'s two step insertions) scopes get_metadata calls to the step 3 pre-matched candidate set — never the full step 2 library enumeration — and stops issuing further calls once max_metadata_calls is reached', () => {
   const content = readRepoFile(COMMAND_PATH);
   const phaseB = sliceBetween(content, '## Phase B — Query the Figma library', '## Phase C');
   const collapsed = collapseWs(phaseB);
 
   assert.ok(
     collapsed.includes(
-      'in the step 2 candidate set — never the full step 1 enumeration — call node-scoped `get_metadata`'
+      'in the step 3 candidate set — never the full step 2 enumeration — call node-scoped `get_metadata`'
     ),
-    'expected step 3 to scope enrichment explicitly to the step 2 candidate set, excluding the full step 1 enumeration'
+    'expected step 5 to scope enrichment explicitly to the step 3 candidate set, excluding the full step 2 enumeration'
   );
   assert.ok(
     collapsed.includes(
@@ -161,21 +188,21 @@ test('AC-1/AC-A1: Phase B step 3 (metadata enrichment) scopes get_metadata calls
   );
 });
 
-test('AC-1/AC-A1: the persist-evidence step records candidates_prematched (defined as the size of the step 2 candidate set) and metadata_calls_made (defined as the count of get_metadata calls actually issued this run) as library-search.json header fields', () => {
+test('AC-1/AC-A1 (updated for Phase 3 AC-A2): the persist-evidence step (renumbered from step 5 to step 7 by Phase 3\'s two step insertions) records candidates_prematched (defined as the size of the step 3 candidate set) and metadata_calls_made (defined as the count of step 5 get_metadata calls actually issued this run) as library-search.json header fields', () => {
   const content = readRepoFile(COMMAND_PATH);
   const phaseB = sliceBetween(content, '## Phase B — Query the Figma library', '## Phase C');
   assert.ok(phaseB, 'expected a Phase B section');
-  const step5Start = phaseB.indexOf('5. **Persist evidence');
-  assert.notEqual(step5Start, -1, 'expected a step 5 ("Persist evidence") heading in Phase B');
-  const collapsed = collapseWs(phaseB.slice(step5Start));
+  const step7Start = phaseB.indexOf('7. **Persist evidence');
+  assert.notEqual(step7Start, -1, 'expected a step 7 ("Persist evidence") heading in Phase B');
+  const collapsed = collapseWs(phaseB.slice(step7Start));
 
   assert.ok(
-    collapsed.includes('`candidates_prematched`, the size of the step 2 candidate set'),
-    'expected candidates_prematched to be defined as the size of the step 2 candidate set'
+    collapsed.includes('`candidates_prematched`, the size of the step 3 candidate set'),
+    'expected candidates_prematched to be defined as the size of the step 3 candidate set'
   );
   assert.ok(
     collapsed.includes(
-      '`metadata_calls_made`, the count of step 3 `get_metadata` calls actually issued this run'
+      '`metadata_calls_made`, the count of step 5 `get_metadata` calls actually issued this run'
     ),
     'expected metadata_calls_made to be defined as the count of get_metadata calls actually issued this run'
   );
@@ -244,15 +271,19 @@ test('AC-2/AC-A2: max_metadata_calls exhaustion is stated explicitly as never fa
 // carries no classification authority.
 // ---------------------------------------------------------------------------
 
-test('AC-3/AC-A3: the pre-match step (step 2) states explicitly, in its own prose, that it is recall-oriented — it over-includes and never under-includes, naming concrete over-inclusion triggers', () => {
+test('AC-3/AC-A3 (updated for Phase 3 AC-A2): the pre-match step (renumbered from step 2 to step 3 by Phase 3\'s whoami-preflight insertion as the new step 1) states explicitly, in its own prose, that it is recall-oriented — it over-includes and never under-includes, naming concrete over-inclusion triggers', () => {
   const content = readRepoFile(COMMAND_PATH);
   const phaseB = sliceBetween(content, '## Phase B — Query the Figma library', '## Phase C');
   assert.ok(phaseB, 'expected a Phase B section');
-  // Scoped to step 2 specifically so the assertion is about THIS step's own
-  // framing, not an incidental match anywhere else in the ~260-line block.
-  const step2 = sliceBetween(phaseB, '2. **Pre-match candidates', '3. **Node-scoped metadata');
-  assert.ok(step2, 'expected to isolate step 2 ("Pre-match candidates") text');
-  const collapsed = collapseWs(step2);
+  // Scoped to step 3 specifically so the assertion is about THIS step's own
+  // framing, not an incidental match anywhere else in the ~350-line block.
+  // Bounded by step 4 ("Cost declaration"), the immediately-following step
+  // Phase 3 inserted right after pre-match — preserving the original
+  // narrow-isolation contract rather than widening it to also swallow step
+  // 4's unrelated cost-declaration prose.
+  const step3 = sliceBetween(phaseB, '3. **Pre-match candidates', '4. **Cost declaration');
+  assert.ok(step3, 'expected to isolate step 3 ("Pre-match candidates") text');
+  const collapsed = collapseWs(step3);
 
   assert.match(collapsed, /recall-oriented/i);
   assert.ok(
@@ -267,13 +298,16 @@ test('AC-3/AC-A3: the pre-match step (step 2) states explicitly, in its own pros
   );
 });
 
-test('AC-3/AC-A3: the pre-match step (step 2) states explicitly, in its own prose, that it carries no classification authority and that design-map-writer remains free to map anything in the evidence bundle regardless of candidate-set membership', () => {
+test('AC-3/AC-A3 (updated for Phase 3 AC-A2): the pre-match step (renumbered from step 2 to step 3 by Phase 3\'s whoami-preflight insertion as the new step 1) states explicitly, in its own prose, that it carries no classification authority and that design-map-writer remains free to map anything in the evidence bundle regardless of candidate-set membership', () => {
   const content = readRepoFile(COMMAND_PATH);
   const phaseB = sliceBetween(content, '## Phase B — Query the Figma library', '## Phase C');
   assert.ok(phaseB, 'expected a Phase B section');
-  const step2 = sliceBetween(phaseB, '2. **Pre-match candidates', '3. **Node-scoped metadata');
-  assert.ok(step2, 'expected to isolate step 2 ("Pre-match candidates") text');
-  const collapsed = collapseWs(step2);
+  // Bounded by step 4 ("Cost declaration"), the immediately-following step —
+  // see the sibling recall-oriented test above for why this preserves the
+  // original narrow-isolation contract.
+  const step3 = sliceBetween(phaseB, '3. **Pre-match candidates', '4. **Cost declaration');
+  assert.ok(step3, 'expected to isolate step 3 ("Pre-match candidates") text');
+  const collapsed = collapseWs(step3);
 
   assert.match(collapsed, /no classification authority/i);
   assert.ok(
@@ -288,13 +322,16 @@ test('AC-3/AC-A3: the pre-match step (step 2) states explicitly, in its own pros
   );
 });
 
-test('AC-3/AC-A3: the pre-match step (step 2) names, as prose, that it duplicates part of design-map-writer.md Step 2\'s own name/prop matching heuristic and that neither heuristic is authoritative over the other', () => {
+test('AC-3/AC-A3 (updated for Phase 3 AC-A2): the pre-match step (renumbered from step 2 to step 3 by Phase 3\'s whoami-preflight insertion as the new step 1) names, as prose, that it duplicates part of design-map-writer.md Step 2\'s own name/prop matching heuristic and that neither heuristic is authoritative over the other', () => {
   const content = readRepoFile(COMMAND_PATH);
   const phaseB = sliceBetween(content, '## Phase B — Query the Figma library', '## Phase C');
   assert.ok(phaseB, 'expected a Phase B section');
-  const step2 = sliceBetween(phaseB, '2. **Pre-match candidates', '3. **Node-scoped metadata');
-  assert.ok(step2, 'expected to isolate step 2 ("Pre-match candidates") text');
-  const collapsed = collapseWs(step2);
+  // Bounded by step 4 ("Cost declaration"), the immediately-following step —
+  // see the sibling recall-oriented test above for why this preserves the
+  // original narrow-isolation contract.
+  const step3 = sliceBetween(phaseB, '3. **Pre-match candidates', '4. **Cost declaration');
+  assert.ok(step3, 'expected to isolate step 3 ("Pre-match candidates") text');
+  const collapsed = collapseWs(step3);
 
   assert.ok(
     collapsed.includes('duplicates part of `design-map-writer.md` Step 2\'s own'),

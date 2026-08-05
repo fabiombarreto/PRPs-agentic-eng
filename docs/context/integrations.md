@@ -31,9 +31,10 @@ phases.
   description.
 - **Auth type:** provided by the user's MCP configuration.
 - **Used by:** the interactive commands only — `/relay-design-map`
-  (confirmed, Phase 3: queries via `search_design_system`, node-scoped
-  `get_metadata`, and opportunistic `get_code_connect_map`; budget
-  `max_library_search_calls = 40`) and `/relay-design-spec` (Phase 4:
+  (confirmed, Phase 3: queries via a quota-exempt `whoami` preflight
+  probe (figma-quota-resilience Phase 3), `search_design_system`,
+  node-scoped `get_metadata`, and opportunistic `get_code_connect_map`;
+  budget `max_library_search_calls = 40`) and `/relay-design-spec` (Phase 4:
   node-scoped `get_metadata` first, then chunked `get_design_context`
   at 6–8 calls per chunk with persist-then-discard evidence capture,
   `get_variable_defs` for tokens, and per-frame `get_screenshot` at 1x;

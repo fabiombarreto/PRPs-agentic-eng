@@ -164,7 +164,24 @@
  *     CONFIRMED/INFERRED row's cited import path to actually resolve in
  *     the design-system clone source BEFORE the map can reach APPROVED,
  *     and the DRAFT→APPROVED flip is structurally gated behind a full
- *     R-DM1..R-DM6 pass (never performed on a CHANGES_REQUESTED verdict).
+ *     R-DM1..R-DM7 pass (never performed on a CHANGES_REQUESTED verdict).
+ *
+ *   Lifecycle update (2026-08-04, EXISTING_TEST_UPDATED — test-after session
+ *     for figma-quota-resilience Phase 4, "Evidence contract + rungs +
+ *     R-DM7"): design-map-reviewer.md's rubric grew from six items
+ *     (R-DM1-R-DM6) to seven (R-DM1-R-DM7) — a new R-DM7 item ("Declared
+ *     completeness is honest; no CONFIRMED row rests on unenriched data")
+ *     was added per that phase's own AC-A5/AC-A6 (PRD figma-quota-resilience
+ *     AC-12/AC-13). The two assertions immediately below this comment (and
+ *     this comment itself) are updated from R-DM6/"six" to R-DM7/"seven" to
+ *     track the new live count — the assertion's MEANING (the DRAFT→APPROVED
+ *     flip is gated behind a FULL rubric pass, and the CHANGES_REQUESTED
+ *     branch never flips) is preserved unchanged; only the pinned coordinate
+ *     (which rubric item is last) moves. A DERIVED, re-count-based
+ *     replacement for the "how many rubric items" fact itself is authored
+ *     separately in design-map-reviewer-rubric-count-derived.test.mjs and
+ *     design-spec-reviewer-rubric-count-derived.test.mjs per PRD AC-13, so a
+ *     future R-DM8 cannot silently re-incur this same drift.
  *
  * Run: node --test scripts/validate/checks/figma-track-phase3.test.mjs
  */
@@ -300,7 +317,7 @@ test('AC-1/AC-A1: every OTHER command file under plugins/relay/commands/ (all fi
 // ---------------------------------------------------------------------------
 // AC-2 / AC-A2 — design-map-reviewer's R-DM1 rubric item requires the cited
 // import path to resolve in the design-system clone BEFORE APPROVED, and the
-// DRAFT→APPROVED flip is structurally gated behind a full R-DM1..R-DM6 pass.
+// DRAFT→APPROVED flip is structurally gated behind a full R-DM1..R-DM7 pass.
 // ---------------------------------------------------------------------------
 
 test('AC-2/AC-A2: design-map-reviewer.md\'s R-DM1 rubric item requires every CONFIRMED/INFERRED row\'s cited import path to resolve to a real file in the design-system clone before the map can reach APPROVED', () => {
@@ -319,16 +336,16 @@ test('AC-2/AC-A2: design-map-reviewer.md\'s R-DM1 rubric item requires every CON
   );
 });
 
-test('AC-2/AC-A2: the map\'s DRAFT→APPROVED flip is structurally gated behind a full R-DM1..R-DM6 pass — never performed on a CHANGES_REQUESTED verdict', () => {
+test('AC-2/AC-A2: the map\'s DRAFT→APPROVED flip is structurally gated behind a full R-DM1..R-DM7 pass — never performed on a CHANGES_REQUESTED verdict', () => {
   const content = readRepoFile(REVIEWER_PATH);
   const collapsed = collapseWs(content);
 
   assert.match(
     collapsed,
-    /This flip happens ONLY inside the APPROVED branch\*\* — gated by a full R-DM1\.\.R-DM6 pass\. It is NEVER performed on CHANGES_REQUESTED\./
+    /This flip happens ONLY inside the APPROVED branch\*\* — gated by a full R-DM1\.\.R-DM7 pass\. It is NEVER performed on CHANGES_REQUESTED\./
   );
 
-  const changesRequestedBlock = sliceBetween(content, '**If any `passed: false`', '**If all six items pass');
+  const changesRequestedBlock = sliceBetween(content, '**If any `passed: false`', '**If all seven items pass');
   assert.ok(changesRequestedBlock, 'expected an extractable CHANGES_REQUESTED branch block');
   assert.match(collapseWs(changesRequestedBlock), /Do NOT flip the map\. Do NOT proceed to Step 4\./);
 });
