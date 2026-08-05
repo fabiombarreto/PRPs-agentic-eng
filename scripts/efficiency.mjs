@@ -94,6 +94,34 @@ export function readCorpus() {
 }
 
 /**
+ * Partition one artifact's entries into review sessions. Inside a single
+ * retry loop only the LAST verdict can be a passing one, because a passing
+ * verdict terminates the loop — so a session closes on any verdict in the
+ * `PASSING` set (line 59, reused rather than re-derived: a literal
+ * 'APPROVED' comparison would wrongly keep splitting a `RUBRIC_PASSED`
+ * artifact open) and the following entry opens the next session. A trailing
+ * run of entries with no passing verdict is itself an unresolved session,
+ * never dropped. The artifact itself is untouched by this split — it stays
+ * the unit `hasDegradedTimestamp`/`classifyArtifacts` operate on; sessions
+ * are a derived view consumed by `aggregate()` for the rework metric.
+ * @param {{entries: Array<{verdict: string}>}} artifact
+ * @returns {Array<Array<{verdict: string}>>}
+ */
+export function sessionsOf(artifact) {
+  const sessions = [];
+  let current = [];
+  for (const entry of artifact.entries) {
+    current.push(entry);
+    if (PASSING.has(entry.verdict)) {
+      sessions.push(current);
+      current = [];
+    }
+  }
+  if (current.length) sessions.push(current);
+  return sessions;
+}
+
+/**
  * Aggregate a set of artifacts into the headline metrics.
  * @param {ReturnType<typeof readCorpus>} artifacts
  */
@@ -102,11 +130,17 @@ export function aggregate(artifacts) {
   const out = {};
   for (const stage of Object.values(STAGES)) {
     const group = artifacts.filter((a) => a.stage === stage);
+    const sessionsByArtifact = group.map((a) => sessionsOf(a));
+    const sessions = sessionsByArtifact.flat();
+    const splitArtifacts = sessionsByArtifact.filter((s) => s.length > 1).length;
     const runs = group.reduce((n, a) => n + a.entries.length, 0);
     // A rubric-amendment entry is an audit record, not a rubric run - counting
     // it as a first attempt would understate the first-pass failure rate.
-    const rubricRuns = group
-      .map((a) => a.entries.filter((e) => e.action !== 'human_authorized_ac_amendment'))
+    // Scoped to the first entry of each SESSION (not each artifact/file), so
+    // a multi-session artifact contributes one first-attempt observation per
+    // session instead of one for the whole file.
+    const rubricRuns = sessions
+      .map((s) => s.filter((e) => e.action !== 'human_authorized_ac_amendment'))
       .filter((e) => e.length);
     const firstFail = rubricRuns.filter((e) => !PASSING.has(e[0].verdict)).length;
     /** @type {Record<string, number>} */
@@ -114,8 +148,10 @@ export function aggregate(artifacts) {
     for (const a of group) for (const e of a.entries) for (const id of e.fails) fails[id] = (fails[id] ?? 0) + 1;
     out[stage] = {
       artifacts: group.length,
+      sessions: sessions.length,
+      splitArtifacts,
       runs,
-      runsPerArtifact: group.length ? +(runs / group.length).toFixed(2) : null,
+      runsPerSession: sessions.length ? +(runs / sessions.length).toFixed(2) : null,
       firstAttemptFailures: firstFail,
       firstAttemptFailureRate: rubricRuns.length ? +((100 * firstFail) / rubricRuns.length).toFixed(1) : null,
       topFailures: Object.entries(fails)
@@ -190,7 +226,7 @@ function doSnapshot() {
   process.stdout.write(`Baseline recorded: ${path}\n  marker (UTC): ${markerUtc}\n`);
   for (const [stage, m] of Object.entries(snap.metrics)) {
     process.stdout.write(
-      `  ${stage.padEnd(18)} ${m.artifacts} artifacts, ${m.runs} runs, ${m.runsPerArtifact ?? 'n/a'} runs/artifact, ${pct(m.firstAttemptFailureRate)} first-attempt failure\n`,
+      `  ${stage.padEnd(18)} ${m.artifacts} artifacts, ${m.sessions} sessions, ${m.runs} runs, ${m.runsPerSession ?? 'n/a'} runs/session, ${pct(m.firstAttemptFailureRate)} first-attempt failure\n`,
     );
   }
 }
@@ -244,6 +280,24 @@ function doCompare() {
     process.stdout.write('\n');
   }
 
+  // Surface doubt rather than manufacture a clean number: a jsonl file can
+  // hold more than one independent review session (a retry loop only ends
+  // on a passing verdict, so two or more in one file mean two or more
+  // sessions). Splitting is silent otherwise, so it is named here exactly
+  // like the degraded-exclusion warning above.
+  const splitArtifacts = artifacts.filter((a) => sessionsOf(a).length > 1);
+  if (splitArtifacts.length) {
+    const totalSessions = artifacts.reduce((n, a) => n + sessionsOf(a).length, 0);
+    process.stdout.write(
+      `  NOTICE - ${splitArtifacts.length} artifact(s) hold more than one review session\n` +
+        `  (an APPROVED or RUBRIC_PASSED verdict followed by further entries): the\n` +
+        `  ${artifacts.length} artifacts in the corpus split into ${totalSessions} sessions.\n` +
+        `  Rework below is reported per session, not per artifact:\n`,
+    );
+    for (const a of splitArtifacts) process.stdout.write(`    ${a.file}\n`);
+    process.stdout.write('\n');
+  }
+
   const totalAfter = Object.values(STAGES).reduce((n, s) => n + afterNow[s].artifacts, 0);
   if (totalAfter === 0) {
     process.stdout.write('  No artifacts authored since the marker yet - nothing to compare.\n');
@@ -259,14 +313,14 @@ function doCompare() {
       process.stdout.write(`    no new artifacts since the marker (before: ${b.artifacts})\n\n`);
       continue;
     }
-    const dRuns = b.runsPerArtifact !== null && a.runsPerArtifact !== null ? +(a.runsPerArtifact - b.runsPerArtifact).toFixed(2) : null;
+    const dRuns = b.runsPerSession !== null && a.runsPerSession !== null ? +(a.runsPerSession - b.runsPerSession).toFixed(2) : null;
     const dRate =
       b.firstAttemptFailureRate !== null && a.firstAttemptFailureRate !== null
         ? +(a.firstAttemptFailureRate - b.firstAttemptFailureRate).toFixed(1)
         : null;
     const sign = (n) => (n === null ? '' : n > 0 ? ` (+${n})` : ` (${n})`);
     process.stdout.write(`    artifacts            ${b.artifacts} before -> ${a.artifacts} after\n`);
-    process.stdout.write(`    runs per artifact    ${b.runsPerArtifact ?? 'n/a'} -> ${a.runsPerArtifact ?? 'n/a'}${sign(dRuns)}\n`);
+    process.stdout.write(`    runs per session     ${b.runsPerSession ?? 'n/a'} -> ${a.runsPerSession ?? 'n/a'}${sign(dRuns)}\n`);
     process.stdout.write(`    first-attempt fail   ${pct(b.firstAttemptFailureRate)} -> ${pct(a.firstAttemptFailureRate)}${sign(dRate)}\n`);
     if (a.artifacts < 10) {
       process.stdout.write(`    CAUTION: ${a.artifacts} artifact(s) is a small sample - treat the delta as directional only\n`);
