@@ -586,7 +586,7 @@ test('AC-A2 (PRD AC-3): plan-reviewer.md\'s R-COH-VISUAL-SCOPE-PURITY returns pa
   );
 });
 
-test('AC-A2 (PRD AC-3), superseded wording confirmed current by the Phase 4, 2026-07-28 R-COH-VALIDATE-SEARCH-AMBIGUOUS, and rubric-reconciliation-merge lifecycle updates above: plan-reviewer.md widens the rubric[] length-range prose to 17-25 rows for the maximal case (both design rows present, plus exactly one of the two mutually-exclusive phase_scope rows, never both), each conditional row class independently zero-emission, preserving the exact 17-22 baseline for non-Figma projects and the 17-24 range for a figma_track: true project with no phase_scope row at all', () => {
+test('AC-A2 (PRD AC-3), superseded wording confirmed current by the Phase 4, 2026-07-28 R-COH-VALIDATE-SEARCH-AMBIGUOUS, rubric-reconciliation-merge, and 2026-08-04 R-COH-VALIDATE-PATTERN-UNGROUNDED lifecycle updates above: plan-reviewer.md widens the rubric[] length-range prose to 18-26 rows for the maximal case (both design rows present, plus exactly one of the two mutually-exclusive phase_scope rows, never both), each conditional row class independently zero-emission, preserving the exact 18-23 baseline for non-Figma projects and the 18-25 range for a figma_track: true project with no phase_scope row at all', () => {
   const content = readRepoFile(PLAN_REVIEWER_PATH);
   const block = sliceBetween(content, 'The total `rubric[]` length per run is', 'When the K=5 pass emits N findings');
   assert.ok(block, 'expected an extractable rubric[] length-range paragraph');
@@ -594,15 +594,15 @@ test('AC-A2 (PRD AC-3), superseded wording confirmed current by the Phase 4, 202
 
   assert.ok(
     collapsed.includes(
-      'exactly one of two mutually-exclusive 3rd conditional deterministic rows may also appear: `R-COH-VISUAL-SCOPE-PURITY` (on `phase_scope: visual`) or `R-COH-SENTINEL-RESOLUTION-MISSING` (on `phase_scope: logic`), since a single plan\'s `phase_scope` cell carries exactly one value and can never be both at once. Together these widen the range to `17 to 25 rows` in the maximal case (both design rows present, plus exactly one of the two mutually-exclusive phase_scope rows, plus the full 5-row K=5 pass) — the range never extends to a 26th row, because `R-COH-VISUAL-SCOPE-PURITY` and `R-COH-SENTINEL-RESOLUTION-MISSING` can never both fire on the same plan.'
+      'exactly one of two mutually-exclusive 3rd conditional deterministic rows may also appear: `R-COH-VISUAL-SCOPE-PURITY` (on `phase_scope: visual`) or `R-COH-SENTINEL-RESOLUTION-MISSING` (on `phase_scope: logic`), since a single plan\'s `phase_scope` cell carries exactly one value and can never be both at once. Together these widen the range to `18 to 26 rows` in the maximal case (both design rows present, plus exactly one of the two mutually-exclusive phase_scope rows, plus the full 5-row K=5 pass) — the range never extends to a 27th row, because `R-COH-VISUAL-SCOPE-PURITY` and `R-COH-SENTINEL-RESOLUTION-MISSING` can never both fire on the same plan.'
     ),
-    'expected the mutually-exclusive-3rd-row widening statement, capping at 17-25 (never 17-26)'
+    'expected the mutually-exclusive-3rd-row widening statement, capping at 18-26 (never 18-27)'
   );
   assert.ok(
     collapsed.includes(
-      'Each of the four conditional rows is independently zero-emission (contributes nothing) when its own gating condition is not met, so the baseline 17–22 range is exact for every non-Figma project, and the 17–24 range from the prior `design_source` shipment remains exact for a `figma_track: true` project whose plan has no `phase_scope` row at all (neither `visual` nor `logic` — `visual_first: false`, or the PRD predates the visual-first track).'
+      'Each of the four conditional rows is independently zero-emission (contributes nothing) when its own gating condition is not met, so the baseline 18–23 range is exact for every non-Figma project, and the 18–25 range from the prior `design_source` shipment remains exact for a `figma_track: true` project whose plan has no `phase_scope` row at all (neither `visual` nor `logic` — `visual_first: false`, or the PRD predates the visual-first track).'
     ),
-    'expected the preserved-baseline-and-preserved-17-24-range statement'
+    'expected the preserved-baseline-and-preserved-18-25-range statement'
   );
 });
 

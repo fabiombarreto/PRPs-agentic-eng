@@ -162,7 +162,7 @@ Check whether `PRPs/reports/<feature>/run.json` exists.
 
 Do **not** HALT. Continue to Step 5.
 
-**If `run.json` exists**: check for `PRPs/reports/<feature>/test-review.json`. Read the file and verify the top-level field `status` equals `APPROVED` (case-insensitive). If the file is absent, unreadable, or `status` is not `APPROVED`, HALT:
+**If `run.json` exists**: check for `PRPs/reports/<feature>/test-review.json`. Read the file and verify the top-level field `verdict` equals `APPROVED` (case-insensitive). `verdict` is the canonical field name — it is what `/relay-test-review` writes (`plugins/relay/commands/relay-test-review.md`, "Write the review record") and what `generate-final-report.mjs` reads. Do **not** read a `status` field; no producer writes one, so reading it would HALT on every genuinely-approved review. If the file is absent, unreadable, or `verdict` is not `APPROVED`, HALT:
 
 > FAILED_TEST_REVIEW_NOT_APPROVED: `PRPs/reports/<feature>/run.json` exists (a test framework
 > is configured) but `PRPs/reports/<feature>/test-review.json` is absent or not APPROVED.

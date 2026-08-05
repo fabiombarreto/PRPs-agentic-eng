@@ -190,7 +190,12 @@ the attempt that created the DRAFT, and re-flipping it is not idempotent.
     full wrong→right table — including the diff-scope and
     prohibition-idiom traps that apply specifically to
     forbidden-reference greps (e.g. `\.claude/PRPs`), enforced by
-    `plan-reviewer`'s R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE check.
+    `plan-reviewer`'s R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE check. The
+    same item also covers the pattern-grounding traps that apply
+    whenever a command's pattern decides its exit code — never guess a
+    runner's output format, and copy an authored literal
+    byte-for-byte from your own `**ACTION**:` prose — enforced by
+    `plan-reviewer`'s R-COH-VALIDATE-PATTERN-UNGROUNDED check.
 12. **`phase_scope: visual` task purity (when applicable).** When
     the plan's `## Metadata` carries `phase_scope: visual`, every
     task under `## Step-by-Step Tasks` MUST stay within UI-and-mocks
@@ -1023,6 +1028,48 @@ Assemble in this order:
     Any forbidden-reference VALIDATE command that skips either the
     diff-scoping or the `MUST NOT appear` exclusion is rejected by
     `plan-reviewer`'s `R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE` check.
+
+    **Pattern-grounding traps (mandatory whenever a command's pattern
+    decides its exit code).** A command can satisfy BOTH rules above
+    and still be worthless, because its pattern cannot match the text
+    it targets — always-passing when the pattern never fires, or
+    always-failing when it can never clear. Two dogfood incidents in
+    a single plan confirm both polarities
+    (`figma-quota-resilience-phase-2-scoped-scan-metadata-budget`; the
+    evidence is the `R-L2` and `R-L3` rows of that plan's
+    `.code-review.jsonl`):
+
+    ```
+    # WRONG — scrapes a human-readable reporter with a guessed format.
+    # node:test emits "ℹ fail 2", never "# fail 2", so FAIL_COUNT
+    # silently defaults to 0 in a bare shell (gate always passes), and
+    # the failed pipe aborts the script under set -euo pipefail:
+    FAIL_COUNT=$(node --test "<glob>" | grep -oE '# fail [0-9]+' | grep -oE '[0-9]+')
+    [ "$FAIL_COUNT" -eq 0 ]
+
+    # RIGHT — the runner's own exit code already carries the signal.
+    # node --test exits non-zero when any test fails; no parsing at all:
+    node --test "<glob>"
+
+    # WRONG — case-sensitive grep against prose this same plan's ACTION
+    # specifies be written as a bold bullet label ("**Recall-oriented.**"),
+    # so a fully compliant implementation is blocked:
+    grep -q 'recall-oriented' docs/context/conventions.md
+
+    # RIGHT — search the byte-exact authored form (or add -i and match
+    # a case-insensitive stem):
+    grep -q '\*\*Recall-oriented\.\*\*' docs/context/conventions.md
+    ```
+
+    Rule of thumb: never guess a tool's output format. Prefer the exit
+    code; if a count is genuinely needed, pin a machine-readable
+    reporter (`--test-reporter=tap`, `--json`) or paste the tool's
+    verbatim output line next to the command. And when a VALIDATE
+    asserts the presence of text this plan itself instructs be
+    written, copy the literal byte-for-byte from your own `**ACTION**:`
+    prose — including `**` decoration, capitalization, and trailing
+    punctuation. `plan-reviewer`'s
+    `R-COH-VALIDATE-PATTERN-UNGROUNDED` check rejects both shapes.
 12. `## Acceptance Criteria` — bulleted list.
     - **PRD mode (`description_mode = false`):** every bullet must
       reference at least one PRD `AC-N` it derives from (rubric R8).
@@ -1256,6 +1303,20 @@ invoked separately by `/relay-plan-review`.
   against a correct diff. See Step 4.4 item 11's diff-scope and
   prohibition-idiom traps; `plan-reviewer`'s
   R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE rejects both gaps.
+- **Guessing a tool's output format, or paraphrasing your own
+  authored literal, in a command whose pattern decides its exit
+  code.** A gate that scrapes a human-readable reporter with an
+  invented pattern (`grep -oE '# fail [0-9]+'` against `node:test`,
+  which emits `ℹ fail N`) carries no signal in either shell: the count
+  silently defaults to `0` in a bare shell, and the failed pipe aborts
+  the script under `set -euo pipefail`. Its mirror image is a
+  case-sensitive `grep -q 'recall-oriented'` against prose the same
+  plan's `**ACTION**:` specifies as `**Recall-oriented.**` — that gate
+  blocks a fully compliant implementation. Prefer the tool's exit
+  code, pin a machine-readable reporter, or paste the verbatim output
+  line; and copy authored literals byte-for-byte. See Step 4.4 item
+  11's pattern-grounding traps; `plan-reviewer`'s
+  R-COH-VALIDATE-PATTERN-UNGROUNDED rejects both shapes.
 
 ---
 
