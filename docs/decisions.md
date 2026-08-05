@@ -1634,6 +1634,147 @@ than partially patched here.
 
 ---
 
+## [2026-08-05] Scoped Figma scan: a command-side `Glob`/`Grep` pre-match, recall-oriented and non-authoritative
+
+**Context:** `/relay-design-map` Phase B instructed one node-scoped `get_metadata` call **per component or component set discovered** in the target Figma library, with no budget. On a real production library (7019 components, 71 component sets) that is 7090 calls against a documented Figma MCP quota of 6 calls/month (View/Collab seat, every plan) or 200–600 calls/day (Dev/Full seat). The step was arithmetically infeasible on every published plan.
+
+**Decision:** Phase B is inverted from *enumerate-then-enrich-everything* to **enumerate → pre-match → enrich only candidates**. The pre-match is a deterministic name/slug comparison performed by the command itself via `Glob`/`Grep` against the design-system clone already named in `design_system_config.local_clone_path`. It is declared **recall-oriented** (over-includes by design, never under-includes) and **explicitly non-authoritative**: it scopes only *which components get enriched*, and `design-map-writer` remains free to map any component present in the evidence bundle regardless of membership in the candidate set. The bundle header records `candidates_prematched` and `metadata_calls_made`.
+
+**Reason:** Requires no new agent, no new write-scope grant, and no new Decision Gate entry, and respects the [2026-07-22] decision keeping Figma MCP calls in the interactive command's own session — a dispatched `design-map-candidate-writer` agent emitting `candidates.json` was the rejected alternative. **Accepted cost, named here so it is not rediscovered later:** the pre-match necessarily duplicates part of `design-map-writer.md` Step 2's own name/prop matching heuristic, and the two are expected to drift. Neither is authoritative over the other; the coupling is stated in prose at both sites rather than left implicit.
+
+**Areas affected:** `/relay-design-map` command Phase B, `design-map-writer` agent Step 2, `docs/context/design-system.md` consumers
+
+---
+
+## [2026-08-05] Figma call budgets: `max_library_search_calls = 40`, `max_metadata_calls = 150`
+
+**Context:** Before this feature, `max_library_search_calls = 40` was the only numeric Figma budget in the entire plugin — it governed the *cheap* call, had no rationale entry, and was calibrated 6.7× above a View seat's entire monthly quota. The expensive call (`get_metadata`) had no budget at all. Grounding confirmed neither number had a `docs/decisions.md` entry, unlike `max_test_retries = 3`.
+
+**Decision:** Both budgets are relay-level constants hardcoded in `/relay-design-map`, declared in **both** the command body and the frontmatter `description` — the restatement convention `relay-design-map.md` and `relay-design-spec.md` already follow, and which no other budget in the plugin uses.
+
+- `max_library_search_calls = 40` — the enumeration budget (cheap call).
+- `max_metadata_calls = 150` — the enrichment budget (expensive call). Sized to fit inside a single Dev/Full day (200/day on Starter and Professional, 600/day on Organization) with headroom for the enumeration calls that precede it. **Exhaustion is non-fatal**: it records `enrichment_truncated: true` with a reason and the run continues, because the budget is a safety net against pre-match over-inclusion, not a correctness gate.
+
+Neither value is ever written into a target project's governance files — injecting plugin defaults into a target's `decisions.md` is a standing anti-pattern.
+
+**Reason:** A bounded loop whose stopping point is recorded is strictly better than an unbounded one with undefined failure semantics. `150` is a starting point, not a measured optimum — the relationship between one `search_design_system` call and one quota unit is undocumented (recorded as an open question in the source PRD), so `max_library_search_calls = 40` may need recalibrating downward once that is known.
+
+**Override guidance:** These are plugin constants, not per-project config. A project that needs different values should raise it as a plugin change, not fork the command.
+
+**Areas affected:** `/relay-design-map` command (body + frontmatter), evidence bundle header, future recalibration if Figma documents `search_design_system`'s quota cost
+
+---
+
+## [2026-08-05] `FAILED_FIGMA_QUOTA_EXHAUSTED`: detection by error class/string, never by HTTP status
+
+**Context:** No code in relay distinguished a mid-run Figma rate-limit from `FAILED_FIGMA_MCP_UNAVAILABLE`'s connectivity precondition. In the observed incident the quota was already at zero, tools were still discoverable, P1 passed, and the command advanced confidently into the one region of the protocol with no failure handling.
+
+**Decision:** A new terminal HALT code `FAILED_FIGMA_QUOTA_EXHAUSTED`, distinct from `FAILED_FIGMA_MCP_UNAVAILABLE`. **Detection is by error class / error string, never by HTTP status code** — Figma's MCP documentation names neither `429` nor `Retry-After`. The observed exhaustion string is `"You've reached the Figma MCP tool call limit for your <seat> seat on the <plan> plan."`
+
+Scope is deliberately narrow: the rule fires only on Phase B's two **load-bearing** data calls (`search_design_system`, `get_metadata`). It does **not** apply to `get_code_connect_map`, whose existing non-fatal path is unchanged — a quota error there records `code_connect: unavailable(quota-exhausted)` and the run CONTINUES, because by then the enumeration and any authorized enrichment are already recorded, and discarding a usable bundle over an opportunistic call would be strictly worse than the interrupted-run cost this work exists to reduce.
+
+The message names the scoped scan as the durable fix, **promises no reset time** (the MCP reset window is undocumented in every source consulted), and where it mentions a Dev/Full seat it carries both halves of the fact: the upgrade improves quota roughly a thousandfold **and** no seat makes whole-library enrichment viable.
+
+**Reason:** Building detection on HTTP semantics would infer REST behavior the MCP has never documented. Naming a reset time relay cannot know would be a fabricated promise. The narrow scope inverts the pre-existing defect where the one *optional* call had the only specified failure path.
+
+**Areas affected:** `/relay-design-map` command Phase B, HALT-code registry, evidence bundle header (records the rung)
+
+---
+
+## [2026-08-05] Response to Figma quota exhaustion is abort-and-record — retry/backoff is rejected outright
+
+**Context:** A hand-written REST script observed during grounding responded to exhaustion with capped exponential backoff: it slept through five attempts against a monthly bucket and enriched zero nodes.
+
+**Decision:** On a quota-class Figma error, relay **aborts and records**. No sleep, no backoff, no retry rung. The partial `call_log` is captured and the run halts with the named code.
+
+**Reason:** Backoff is the correct response to a **per-minute** bucket and useless against a **per-day** (200–600) or **per-month** (6) one. A degradation ladder whose only recovery rung is "try again" reproduces the original defect while appearing to handle it. This is the one place where doing less is the fix.
+
+**Areas affected:** `/relay-design-map` command Phase B, the degradation ladder, `docs/anti-patterns.md` (companion entry)
+
+---
+
+## [2026-08-05] Cost preflight via `whoami` declares and asks — it never auto-refuses
+
+**Context:** The load-bearing Figma calls had no cost declaration: the operator ran the command blind and discovered the cost only after the quota was gone. `whoami` is one of exactly three documented quota-exempt tools (with `add_code_connect_map` and `generate_figma_design`), making it the only probe affordable before spending.
+
+**Decision:** Before issuing any data call, `/relay-design-map` probes `whoami`, reads seat/tier when the response exposes them, and — when the estimated call cost exceeds the documented ceiling for that seat — **declares the estimate and the ceiling and requires an explicit affirmative reply**, mirroring the confirm-then-flip discipline the command already uses for the `figma_track` flip. A non-answer or an ambiguous reply is treated as do-not-proceed. When `whoami`'s response does not expose seat/tier, the preflight **proceeds without the declaration and records the degradation in the bundle header** rather than halting.
+
+**Decision (explicit rejection): no automatic quota-exhaustion refusal.**
+
+**Reason:** `whoami` reports on **identity, not on the plan governing the file key** — Figma's REST documentation states verbatim that a file's own plan governs the limit regardless of the requester's seat, which is the documented mechanism behind the observed seat/plan mismatch. A hard auto-refusal built on a misread plan would block runs that would have succeeded: a false-negative HALT is worse than the false-positive PASS being fixed. `whoami`'s response schema is observed, not documented, so the conditional-by-construction design also degrades safely if Figma changes the shape.
+
+**Areas affected:** `/relay-design-map` command Phase B, interactivity boundary (this command already sits outside the autonomous stretch, so no new boundary extension), evidence bundle header
+
+---
+
+## [2026-08-05] Evidence bundle is additive and cumulative; only a complete scan may retire an entry
+
+**Context:** An observed partial enrichment pass rewrote `library-search.json` non-cumulatively, erasing two prior successful calls from the record and **retroactively invalidating an already-APPROVED component map**, which then failed `R-DM4` and `R-DM5`. Without a contract, any re-run could falsify an approved artifact.
+
+**Decision:** Evidence writes are **additive** — a partial run merges into the bundle rather than replacing it, and the call log is cumulative across runs. Retirement is constrained rather than abandoned: each entry carries a `last_seen_scan` generation id, and **only a scan reporting `inventory_truncated: false` may retire entries**; a partial scan merges additively and retires nothing.
+
+Both completeness flags are split and **derived by scanning what is on disk**, never from the invoking run's intent: `inventory_truncated` describes the component list, `enrichment_truncated` describes `metadata/` coverage. A bundle whose component list is complete and whose `metadata/` directory holds zero enriched nodes therefore reports `inventory_truncated: false` and `enrichment_truncated: true`.
+
+**Reason:** Pure merge-only was the rejected alternative: it silently breaks the withdrawal detection `design-map-writer.md` depends on — a component deleted in Figma would never leave the bundle, and `--refresh` would quietly stop working for deletions. Deriving the flags from disk rather than from run intent is what makes them describe **the artifact** rather than **the run**; the observed incident produced a map carrying `inventory_truncated: false` with 31 of 48 rows INFERRED purely because enrichment never ran.
+
+**Areas affected:** `/relay-design-map` command Phase B, `design-map-writer` agent Step 1, `design-map-reviewer` agent Step 1 (gains the missing-evidence branch it lacked), `R-DM7`
+
+---
+
+## [2026-08-05] The run checkpoint lives outside `evidence_dir`, at `PRPs/reports/design-map/.state/checkpoint.json`
+
+**Context:** Both `design-map-writer` and `design-map-reviewer` are instructed to read **every file** under `evidence_dir`. The observed checkpoint was 7.15 MB — larger than the manifest itself.
+
+**Decision:** The checkpoint is written to `PRPs/reports/design-map/.state/checkpoint.json`, a path deliberately **outside** `evidence_dir`. Exclusion from the agents' read surface is enforced **by path**, not by a dotfile naming convention.
+
+**Reason:** A leading dot in a filename is a convention, not a contract — nothing guarantees an agent's glob skips dotfiles, and a 7 MB accidental read would blow the context budget of both consumers. Keeping it under `PRPs/` respects the [2026-04-19] artifact-path decision; only its position relative to `evidence_dir` changed.
+
+**Areas affected:** `/relay-design-map` command, `design-map-writer` agent, `design-map-reviewer` agent, `docs/context/architecture.md` PRP artifact paths table
+
+---
+
+## [2026-08-05] Confidence downgrade under `DEGRADED_NO_ENRICHMENT` is surgical, never wholesale
+
+**Context:** The named degradation ladder (`FULL`, `DEGRADED_NO_ENRICHMENT`, `DEGRADED_PARTIAL_INVENTORY`, `DEGRADED_NO_TOKENS`) clones `visual-verifier.md`'s idiom — unprefixed names for non-terminal states, `FAILED_*` reserved for terminal HALTs, exhaustive outcome mapping, "fail toward the safer rung" for unrecognized responses, and the rung persisted in the artifact rather than only reported to the caller. What the ladder did not settle was how far a degraded rung should downgrade the map's own confidence column.
+
+**Decision:** Under `DEGRADED_NO_ENRICHMENT` the downgrade is **surgical**:
+
+- Rows whose `Props/variant mapping` relies only on variant axes recoverable from the Figma component's own name (the `Prop=Value` naming pattern) **may remain `CONFIRMED`**.
+- Rows depending on non-variant properties (booleans, `TEXT`, `INSTANCE_SWAP`, or anything not derivable from the name) **may not**.
+- A row carrying a human `verified_at` is **never** downgraded by this rule — only flagged for re-verification.
+
+**Reason:** Variant axes survive without node enrichment because they are parseable from the component name — which is precisely how 17 rows were legitimately `CONFIRMED` in an observed zero-enrichment bundle. A wholesale downgrade rule would have destroyed them, converting an honest partial result into a useless one. Never silently overriding a human `verified_at` follows the same reasoning as the standing prohibition on heuristic gating-key flips: machine degradation must not quietly erase a human judgment.
+
+**Areas affected:** `design-map-writer` agent, `component-map-template.md` (defines the rung and confidence fields), `R-DM7`, `docs/anti-patterns.md` (companion entry)
+
+---
+
+## [2026-08-05] Rubric-count assertions are re-derived from live headings, never hardcoded
+
+**Context:** Adding `R-DM7` to `design-map-reviewer` broke `figma-track-phase3.test.mjs`, which matched the string "all six items pass" by exact regex. `design-map-reviewer.md` encodes its item count across roughly 20 sites (frontmatter, opening prose, hard constraints, rubric heading and intro, the `###` headings themselves, the Step 2 walk, both verdict branches, the worked JSONL example, the format spec, two anti-pattern bullets), and `design-spec-reviewer.md` repeats the identical pattern at seven items.
+
+**Decision:** The `R-DM` and `R-DS` rubric-count assertions **re-derive the count from a live grep of the `### R-DM<n>` / `### R-DS<n>` headings** and fail loudly on drift, rather than asserting against a hardcoded literal. Shipped as `scripts/validate/checks/design-map-reviewer-rubric-count-derived.test.mjs` and `design-spec-reviewer-rubric-count-derived.test.mjs`, adopting the precedent already set by `plan-reviewer-rubric-arithmetic-derived.test.mjs`.
+
+**Reason:** The existing exact-regex assertion had to be rewritten either way, so re-deriving pays the debt instead of re-incurring it. The failure mode being prevented is specific: a rubric addition that misses one of ~20 encoded "six" sites leaves the reviewer internally inconsistent, and a hardcoded test passes right through that. A derived assertion converts silent drift into a loud failure.
+
+**Areas affected:** `scripts/validate/` corpus, `design-map-reviewer` agent, `design-spec-reviewer` agent, any future `R-DM`/`R-DS` rubric change
+
+---
+
+## [2026-08-05] Plugin-owned resources live in `plugins/relay/resources/`, not `docs/context/`
+
+**Context:** `${CLAUDE_PLUGIN_ROOT}` resolves to `plugins/relay/` only, and plugin install is a verbatim directory copy — the manifest has no `files`/`include`/`exclude` field. The installed cache (`relay/0.25.1`) contained only `README.md`, `agents/`, `commands/`, `scripts/`, `skills/` — **no `docs/` directory**. Every `${CLAUDE_PLUGIN_ROOT}/docs/context/*-template.md` read therefore failed for every installed user, resolving only when cwd happened to be this repo — which is exactly the dogfooding case, which is why the defect survived five releases.
+
+**Decision:** The eight plugin-owned resources (`prd-template.md`, `plan-template.md`, `design-spec-template.md`, `component-map-template.md`, `redaction-policy.md`, `settings-allowlist.md`, `test-output-schema.md`, `mock-sentinels.md`) live at `plugins/relay/resources/`, moved via `git mv` with no stubs left behind. The directory name is deliberately distinct from `docs/` so the packaged/target-scoped distinction becomes mechanically checkable. The four resource-reference citation classes are written into `docs/context/conventions.md`, and a `plugin-root-resolvable` check (the 12th) guards the reference form in `npm run validate`.
+
+This work absorbed `PRPs/reports/plugin-root-audit/fix-plan.md` F2–F6, which is **marked superseded** — the `figma-quota-resilience` PRD is the single source of truth for it.
+
+**Reason:** Any resource an installed agent must read has to live inside `plugins/relay/`. Absorbing the fix-plan gives one source of truth and one sequencing surface; the accepted cost is that the fix-plan overlapped a live plan and had to be explicitly superseded rather than left to diverge silently. **Note the residual gap:** no in-repo check can prove packaging — the installed cache is the source of truth, so `plugin-root-resolvable` guards the *reference form* while only a post-publish `ls ~/.claude/plugins/cache/relay-marketplace/relay/<version>/resources/` guards the *packaging*.
+
+**Areas affected:** all 8 resource files, ~134 references across agents/commands/skills/docs, 55 hardcoded test-path constants, `scripts/validate/` (11 → 12 checks), `docs/context/conventions.md`, `PRPs/reports/plugin-root-audit/fix-plan.md` (superseded)
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision
