@@ -1157,10 +1157,16 @@ the body, then write. This front-runs `plan-reviewer`, which re-runs
 its full rubric independently regardless; it does not replace it.
 
 1. **Tasks and acceptance criteria cover each other both ways** —
-   no task satisfying nothing, no criterion nothing delivers.
+   no task satisfying nothing, no criterion nothing delivers, and
+   every `### Task <i>` body names, literally, the `AC-A<i>` item
+   it delivers, or carries an explicit infrastructure/scaffolding
+   annotation when it genuinely delivers no criterion.
 2. **No two sections contradict** — `## Summary`, `## Metadata` and
    `## Files to Change` must agree with the task list on the file
-   set, the counts, and the approach.
+   set, the counts, and the approach; more generally, any sentence
+   asserting what another part of this plan says, does, or
+   contains must match that part, and any quotation presented as
+   verbatim must match its source character-for-character.
 3. **Every `**MIRROR**` cites a `# SOURCE:` anchor present in this
    plan's `## Patterns to Mirror`** — add the snippet if it is
    missing; never name an anchor then say it does not apply.

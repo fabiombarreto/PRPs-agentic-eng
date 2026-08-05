@@ -29,7 +29,37 @@
       </div>
 
       <h2 id="unreleased">Unreleased</h2>
-      <p><em>Nothing yet.</em></p>
+      <p><em>No changes queued yet.</em></p>
+
+      <h2 id="v0-28-1">0.28.1 &#8212; 2026-08-05</h2>
+      <p>Tightens two items of <code>plan-writer</code>'s pre-emission self-check
+        (Step 4.4.ter) after a 370-artifact, six-repository measurement found
+        neither one front-runs the review-time defect it was meant to catch:
+        task-AC coverage findings rose from 16.7% to 36.4% of plan-review
+        artifacts, and internal-contradiction findings became the single top
+        failure everywhere with 37 recorded occurrences.</p>
+
+      <h3 id="v0-28-1-changed">Changed</h3>
+      <ul>
+        <li><strong><code>plugins/relay/agents/plan-writer.md</code></strong>
+          &mdash; Step 4.4.ter's items 1 and 2 are reworded in place, keeping
+          every existing obligation. Item 1 now also requires each
+          <code>### Task &lt;i&gt;</code> body to name, literally, the
+          <code>AC-A&lt;i&gt;</code> item it delivers &mdash; or carry an
+          explicit infrastructure/scaffolding annotation &mdash; which is the
+          observable <code>plan-reviewer</code>'s task-AC-coverage check
+          actually greps for. Item 2 widens from three named sections
+          agreeing with the task list to any self-descriptive claim: a
+          sentence asserting what another part of the plan says, does, or
+          contains, or a quotation presented as verbatim, must match what it
+          describes. Recorded in <code>docs/decisions.md</code>
+          [2026-08-05].</li>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.28.0</code> &rarr; <code>0.28.1</code> to
+          match this release; users running <code>/plugin</code> after pulling
+          this version will get a fresh <code>relay/0.28.1/</code> cache
+          directory with the reworded self-check registered.</li>
+      </ul>
 
       <h2 id="v0-28-0">0.28.0 &#8212; 2026-08-05</h2>
       <p>Widens the source PRD's phase-status vocabulary from three values to five, so the Implementation Phases table shows how far each phase has actually got while <code>/relay-execute</code> is still running. Previously a row jumped from <code>in-progress</code> straight to <code>complete</code> the moment code review passed &mdash; before any test had run &mdash; so a phase whose tests were unwritten, red, or never executed still read as done.</p>

@@ -184,5 +184,20 @@ artifacts live under `PRPs/` at the repo root, never under `.claude/`. See
 session. Full semantics, flakiness/oscillation interactions, and override
 guidance live in `docs/decisions.md`.)
 
+- **This repository is not a representative sample for pipeline metrics
+  (2026-08-05).** A 370-artifact, six-repository measurement found that
+  after wave 2's pre-emission self-checks went live, the relay repo's own
+  plans got SMALLER by task median (8 to 5) yet needed MORE review runs
+  (1.6 to 2.8), while the five external repositories' plans GREW by task
+  median (6 to 8) yet needed FEWER (2.0 to 1.8) — the opposite direction.
+  Plan complexity was the obvious candidate explanation and was tested and
+  refuted: Pearson r between task count and review runs is 0.089 across 46
+  clean artifacts, effectively no correlation. The remaining explanation is
+  an untested hypothesis, not a finding — relay's own plans edit the very
+  agent prompts and rubrics that judge them, which no external repository's
+  plans do — and it is recorded here rather than assumed. See
+  `docs/decisions.md` [2026-08-05] for the full measurement and the two
+  `plan-writer` self-check items it motivated.
+
 These are the items most likely to drift if not revisited before Phase 2
 implementation begins.

@@ -1696,6 +1696,93 @@ PRD template, documentation site
 
 ---
 
+## [2026-08-05] Two `plan-writer` pre-emission self-check items tightened after a 370-artifact cross-project measurement
+
+**Context:** A scratchpad aggregation over `PRPs/plans/*.jsonl` from six
+repositories (this one plus `inplay`, `assistente-pessoal`, and three
+`super-ensino` repos: `spe-cms`, `spe-services`, `spe-interaction-services`)
+covering 370 artifacts and 630 review runs used the install flipping to
+`0.24.0` at `2026-07-31T14:20:37Z` as its boundary — the instant wave 2 (the
+[2026-07-30] pre-emission self-check entry above) became live for every
+project consuming the installed plugin, as opposed to this repo's own
+uninstalled working tree. After that boundary, `R-COH-TASK-AC-MISSING` rose
+from 16.7% to 36.4% of plan-review artifacts, and
+`R-COH-OTHER-INTERNAL-CONTRADICTION` became the single top failure everywhere
+with 37 recorded occurrences. Splitting the corpus: the relay repo's own
+post-wave-2 plans shrank in task median (8 to 5) yet needed MORE review runs
+(1.6 to 2.8), while the five external repositories' plans grew in task median
+(6 to 8) yet needed FEWER (2.0 to 1.8) — the opposite direction, which rules
+out plan complexity as the shared explanation, confirmed
+statistically by a Pearson r of 0.089 between task count and review
+runs across 46 clean artifacts. The same split holds for
+plan-review first-attempt failure rates: the relay repo moved from
+51.3% before the boundary to 77.8% after, while the external
+projects moved from 47.2% to 53.8% (n=13 post-boundary artifacts);
+external code-review failure rates, by contrast, improved over the
+same boundary, from 22.7% to 18.2%. This aggregation was produced
+by a one-off script over the `PRPs/plans/*.jsonl` corpora of all
+six repositories, five of which live OUTSIDE this repository —
+`scripts/efficiency.mjs`, which reads only the current repo,
+cannot reproduce these cross-project figures. Neither existing
+self-check item front-runs either defect class: item 1 asked for "both ways"
+task/AC coverage without naming the literal token `plan-reviewer` greps for,
+and item 2 scoped contradiction-hunting to three named sections agreeing
+with the task list, while most recorded contradictions are a different
+shape — a sentence describing another part of the plan that disagrees with
+that part.
+
+**Decision:** The ~35% first-attempt threshold from the [2026-07-30]
+entry's decisive follow-up is met by BOTH groups on the literal
+numbers, not neither — per the rates recorded in Context above,
+neither the relay repo's 77.8% nor the external projects' 53.8%
+fell below 35%. Wave 2 is nonetheless NOT reverted, because that
+threshold was defined on relay-only data and the relay repo is now
+demonstrably unrepresentative — the complexity confound was tested
+and refuted, per Context above: relay's plans got SMALLER (task
+median 8 to 5) while needing MORE review runs (1.6 to 2.8), external
+plans got BIGGER (6 to 8) while needing FEWER (2.0 to 1.8), and
+Pearson r between task count and review runs is 0.089 across 46
+clean artifacts (see also `docs/context/constraints.md`, "Known
+TODOs / open planning items"). A threshold calibrated on the
+unrepresentative case does not bind the representative one. On the
+external projects — the representative case — Context's rates above
+show plan-review moving only a few points on a small n=13 sample
+(47.2% to 53.8%), while code-review IMPROVED (22.7% to 18.2%). The
+dominant failure class also has an identified, mechanically-checkable
+precision gap — item 1 never named the literal token the reviewer
+greps for — so the cheaper and more informative move is to repair
+that mechanism and re-measure rather than discard it. Post-boundary
+sample sizes remain small on both sides; this decision is
+explicitly revisitable on more data. Instead, the two
+under-performing items are tightened in place. Item 1 keeps its
+existing both-ways coverage obligation and adds the
+observable `plan-reviewer`'s `R-COH-TASK-AC-MISSING` check actually
+resolves: every `### Task <i>` body names, literally, the `AC-A<i>`
+item it delivers, or carries an explicit infrastructure/scaffolding
+annotation when it genuinely delivers none. Item 2 keeps its
+existing `## Summary` / `## Metadata` / `## Files to Change`
+agreement requirement as a named instance and generalizes it to
+self-descriptive accuracy: any sentence asserting what another part
+of the plan says, does, or contains must match that part, and any
+quotation presented as verbatim must match its source
+character-for-character.
+
+**Reason:** Both classes were measurably dominant and neither was adequately
+covered by the existing wording, so a targeted reword — rather than a new
+fifth item or a broader rewrite — closes the precision gap the [2026-07-30]
+entry's own decisive follow-up asked about, without adding block length to a
+prompt read on every emission. The wording stays inside that entry's binding
+rule: items state artifact properties in the plan's own vocabulary
+(`AC-A<i>` is a token the plan itself emits) and never the reviewer's rubric
+wording, which is verified mechanically by
+`scripts/validate/checks/feedback-chain.mjs`'s `SELF_CHECKS` registry.
+
+**Areas affected:** plan authoring (`plugins/relay/agents/plan-writer.md`
+Step 4.4.ter items 1 and 2); no reviewer file, rubric item, or budget is
+touched.
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision
