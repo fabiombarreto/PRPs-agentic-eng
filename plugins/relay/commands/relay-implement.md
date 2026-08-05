@@ -1,5 +1,5 @@
 ---
-description: 'Autonomous code generation from an APPROVED plan. Validates the plan path, runs preconditions, then adopts the implementer/code-reviewer pair via an internal writer↔reviewer loop with bounded retries (max_implement_retries=3), wall-clock budget (max_implement_minutes=45), oscillation detection always-on, dispute cap (max_disputes_per_session=2), per-attempt diff capture at PRPs/reports/<feature>/phase-<N>/attempts/<i>/diff.patch, and on APPROVED rubric dispatches a docs-sync sub-phase (Phase A.3.5 — docs-updater/docs-reviewer pair, non-interactive, own max_docs_review_retries=2 budget, gated by docs_sync/--no-docs, graceful degradation on budget exhaustion, docs pair grounded via explicit feature/prd_path inputs rather than orchestrator-run.json which does not exist yet at implement time) before performing all three D8 post-approval mutations atomically (plan trailing-block flip to *Status: IMPLEMENTED*, plan move to PRPs/plans/completed/, source PRD row N flip from in-progress to complete). Reviewer adoption is single-shot via Task per attempt — there is no Phase B; the loop lives entirely inside Phase A.'
+description: 'Autonomous code generation from an APPROVED plan. Validates the plan path, runs preconditions, then adopts the implementer/code-reviewer pair via an internal writer↔reviewer loop with bounded retries (max_implement_retries=3), wall-clock budget (max_implement_minutes=45), oscillation detection always-on, dispute cap (max_disputes_per_session=2), per-attempt diff capture at PRPs/reports/<feature>/phase-<N>/attempts/<i>/diff.patch, and on APPROVED rubric dispatches a docs-sync sub-phase (Phase A.3.5 — docs-updater/docs-reviewer pair, non-interactive, own max_docs_review_retries=2 budget, gated by docs_sync/--no-docs, graceful degradation on budget exhaustion, docs pair grounded via explicit feature/prd_path inputs rather than orchestrator-run.json which does not exist yet at implement time) before performing all three D8 post-approval mutations atomically (plan trailing-block flip to *Status: IMPLEMENTED*, plan move to PRPs/plans/completed/, source PRD row N flip from in-progress to implemented — the later tested/complete transitions belong to /relay-execute). Reviewer adoption is single-shot via Task per attempt — there is no Phase B; the loop lives entirely inside Phase A.'
 argument-hint: <plan-path>
 ---
 
@@ -143,7 +143,7 @@ Proceed to P4.
 
 | # | Phase | Description | Status | Parallel | Depends | PRP Plan |
 
-Locate row `<N>` (the row whose first cell, trimmed, equals the integer `<N>`). Verify the `Status` cell is exactly `in-progress` (case-sensitive). If the cell value is anything else (`pending`, `complete`, or other), HALT with the source PRD AC-11 message verbatim:
+Locate row `<N>` (the row whose first cell, trimmed, equals the integer `<N>`). Verify the `Status` cell is exactly `in-progress` (case-sensitive). If the cell value is anything else (`pending`, `implemented`, `tested`, `complete`, or other), HALT with the source PRD AC-11 message verbatim:
 
 > Source PRD `PRPs/prds/<feature>.prd.md` row <N> has Status cell
 > value `<actual>`, expected `in-progress`. /relay-implement
@@ -156,7 +156,7 @@ Locate row `<N>` (the row whose first cell, trimmed, equals the integer `<N>`). 
 >       back-fill was bypassed for a documented reason.
 > No code has been changed and no review has been run.
 
-The check is for `in-progress` specifically. If the cell shows `complete`, the implementation has already been performed — refuse rather than re-execute (D8 mutations would corrupt the per-phase state machine).
+The check is for `in-progress` specifically. If the cell shows any of the three post-implementation states (`implemented`, `tested`, `complete`), the implementation has already been performed — refuse rather than re-execute (D8 mutations would corrupt the per-phase state machine). See the phase-status lifecycle in `${CLAUDE_PLUGIN_ROOT}/resources/prd-template.md`: `in-progress` is the ONLY state from which implementation may start.
 
 ### P4 — Decision Gate sources readable
 
@@ -519,13 +519,13 @@ The destination directory `PRPs/plans/completed/` is expected to exist (already 
 
 Record `mutation_b_success: true|false`. On `false`, capture the error message and the mid-state plan path.
 
-#### Mutation c — Source PRD row N status flip
+#### Mutation c — Source PRD row N status flip (`in-progress` → `implemented`)
 
 **PRD-less gate:** If `is_prd_less == true`, skip Mutation c entirely — no source PRD row exists to flip. Record `mutation_c_skipped: true`. This is NOT a failure; do not raise `PARTIAL_D8_FAILURE` for this skip. Proceed directly to the atomicity discipline section.
 
 **PRD mode only (`is_prd_less == false`):** `Edit` `PRPs/prds/<feature>.prd.md`:
 - `old_string`: the verbatim full row N line copied from the source PRD (including all leading and trailing pipes and whitespace; the full line guarantees a unique match).
-- `new_string`: the same row line with `Status` cell `in-progress` → `complete`. The `PRP Plan` cell is left unchanged (plan-writer already populated it with the relative path; that path now resolves under `PRPs/plans/completed/` after Mutation b, but the cell is not updated to reflect the move — the row's PRP Plan cell carries the *original* plan name as a stable reference).
+- `new_string`: the same row line with `Status` cell `in-progress` → `implemented`. `implemented` is the third state of the five-state phase-status lifecycle documented in `${CLAUDE_PLUGIN_ROOT}/resources/prd-template.md` (`pending` → `in-progress` → `implemented` → `tested` → `complete`); it means "code written and code-review APPROVED, tests not yet settled". This command NEVER writes `tested` or `complete` — those two later transitions are owned by `/relay-execute` (its Step A.5.3 and Phase A.6 respectively). A hand-invoked `/relay-implement` outside the orchestrator therefore legitimately leaves the row at `implemented`; dependent phases still unblock, because the `Depends` rule treats `implemented`, `tested`, and `complete` alike. The `PRP Plan` cell is left unchanged (plan-writer already populated it with the relative path; that path now resolves under `PRPs/plans/completed/` after Mutation b, but the cell is not updated to reflect the move — the row's PRP Plan cell carries the *original* plan name as a stable reference).
 - `replace_all`: `false`
 
 Record `mutation_c_success: true|false`. On `false`, capture the error message.
@@ -549,7 +549,7 @@ If any attempted mutation fails: write `<artifact_root>../halt.json` with:
   "manual_recovery_steps": [
     "<step 1 — e.g., re-run Edit on plan trailing block>",
     "<step 2 — e.g., move plan to completed/ by hand>",
-    "<step 3 — e.g., flip source PRD row N Status cell to complete by hand>"
+    "<step 3 — e.g., flip source PRD row N Status cell to implemented by hand>"
   ],
   "attempt_history": [...],
   "dispute_history": [...]
@@ -598,7 +598,9 @@ On the success path (Phase A.3 standard-mode APPROVED + all applicable D8 mutati
 **PRD mode (`is_prd_less == false`):**
 
 > ✅ Plan **IMPLEMENTED** at `PRPs/plans/completed/<basename>.plan.md`.
-> Source PRD `PRPs/prds/<feature>.prd.md` row <N> marked `complete`.
+> Source PRD `PRPs/prds/<feature>.prd.md` row <N> marked `implemented`.
+> (`tested` and `complete` are written later by `/relay-execute` —
+> Step A.5.3 and Phase A.6. A hand-invoked run stops at `implemented`.)
 > Implementation diff (final attempt) at
 > `<artifact_root><attempt>/diff.patch`.
 > Code-review verdict at

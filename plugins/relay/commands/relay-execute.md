@@ -1,5 +1,5 @@
 ---
-description: 'Autonomous multi-phase orchestrator for relay pipeline. Takes an APPROVED PRD and serially drives every actionable Implementation Phases row through plan → plan-review → implement → test → test-review by adopting each downstream command protocol inline via Read (D7 dispatch model; zero logic duplication per D15). Adds exactly two orchestration-layer budgets: max_plan_review_retries=2 (re-runs /relay-plan when /relay-plan-review returns CHANGES_REQUESTED, bounded retry) and max_orchestrator_minutes=240 (session-level wall-clock; 0 forbidden). Maintains orchestrator-run.json audit artifact at PRPs/reports/<feature>/. Eight HALT outcome codes: FAILED_PLAN_REVIEW_BUDGET_EXCEEDED, FAILED_PLAN_REVIEW_STUCK (same rubric items fail across consecutive attempts — early halt before budget exhaustion), FAILED_ORCHESTRATOR_TIME_BUDGET_EXCEEDED, FAILED_TEST_REVIEW_REJECTED, plus four propagated from /relay-implement (FAILED_AFTER_N_RETRIES, FAILED_TIME_BUDGET_EXCEEDED, FAILED_OSCILLATION_DETECTED, FAILED_DISPUTE_CAP_EXCEEDED, PARTIAL_D8_FAILURE) and two from /relay-test. State machine is the source PRD Implementation Phases table (D6); re-invocation is idempotent — picks up at next pending row. TDD routing read at startup; the B7/B8 test pair is shipped and engaged in Phase A.3.5 (test-first) or Phase A.4.5 (test-after). Phase 6 of figma-visual-first-track.prd.md adds AWAITING_VISUAL_APPROVAL, a new propagated non-failure pause (see the Phase A.1 resumable visual-approval check + the Phase A.2.5 resume short-circuit) distinct from the failure codes above.'
+description: 'Autonomous multi-phase orchestrator for relay pipeline. Takes an APPROVED PRD and serially drives every actionable Implementation Phases row through plan → plan-review → implement → test → test-review by adopting each downstream command protocol inline via Read (D7 dispatch model; zero logic duplication per D15). Adds exactly two orchestration-layer budgets: max_plan_review_retries=2 (re-runs /relay-plan when /relay-plan-review returns CHANGES_REQUESTED, bounded retry) and max_orchestrator_minutes=240 (session-level wall-clock; 0 forbidden). Maintains orchestrator-run.json audit artifact at PRPs/reports/<feature>/. Eight HALT outcome codes: FAILED_PLAN_REVIEW_BUDGET_EXCEEDED, FAILED_PLAN_REVIEW_STUCK (same rubric items fail across consecutive attempts — early halt before budget exhaustion), FAILED_ORCHESTRATOR_TIME_BUDGET_EXCEEDED, FAILED_TEST_REVIEW_REJECTED, plus four propagated from /relay-implement (FAILED_AFTER_N_RETRIES, FAILED_TIME_BUDGET_EXCEEDED, FAILED_OSCILLATION_DETECTED, FAILED_DISPUTE_CAP_EXCEEDED, PARTIAL_D8_FAILURE) and two from /relay-test. State machine is the source PRD Implementation Phases table (D6), whose rows move through the five-state lifecycle pending -> in-progress -> implemented -> tested -> complete; this command owns the last two transitions via the Phase A.4.9 shared flip procedure (Step A.5.3 writes tested after test-review APPROVED; Step A.6.0 writes complete, accepting implemented directly when the test stage self-skipped), both idempotent and soft-fail. A dependency is satisfied from implemented onward. Re-invocation is idempotent — picks up at next pending row. TDD routing read at startup; the B7/B8 test pair is shipped and engaged in Phase A.3.5 (test-first) or Phase A.4.5 (test-after). Phase 6 of figma-visual-first-track.prd.md adds AWAITING_VISUAL_APPROVAL, a new propagated non-failure pause (see the Phase A.1 resumable visual-approval check + the Phase A.2.5 resume short-circuit) distinct from the failure codes above.'
 argument-hint: <prd-path>
 ---
 
@@ -115,7 +115,9 @@ Parse the data rows that follow (skip the GFM separator row consisting only of d
 
 A row is **actionable** when:
 - Its `Status` cell equals `pending` (case-sensitive), AND
-- Its `Depends` cell is `-` (empty) OR every comma-separated phase number listed has `Status == complete`.
+- Its `Depends` cell is `-` (empty) OR every comma-separated phase number listed is in a dependency-satisfying state: `implemented`, `tested`, or `complete`.
+
+(Five-state lifecycle `pending` → `in-progress` → `implemented` → `tested` → `complete`; see `plan-writer.md` Step 1.3 for the canonical definition. This command owns the last two transitions — Step A.5.3 writes `tested`, Phase A.6 writes `complete`.)
 
 **Resumable visual-approval check (new, additive — runs BEFORE the zero-actionable-rows exit below; never changes the actionable-row rule above).** For every row whose `Status` cell equals `in-progress`, check whether `PRPs/reports/<feature>/phase-<row's #>/halt.json` exists and, if so, `Read` it. When a row's halt.json has `outcome == "AWAITING_VISUAL_APPROVAL"`:
 - If the halt.json carries NO `resolution` field yet (the human has not yet run `/relay-visual-approve`): do NOT apply the zero-actionable-rows exit below, even when no row is independently `pending`. Instead emit:
@@ -213,7 +215,7 @@ Re-read the Implementation Phases table from `prd_path` (do not reuse a stale sn
 
 A row is **actionable** when:
 - Its `Status` cell equals `pending` (case-sensitive), AND
-- Its `Depends` cell is `-` (empty) OR every comma-separated phase number listed has `Status == complete`.
+- Its `Depends` cell is `-` (empty) OR every comma-separated phase number listed is in a dependency-satisfying state: `implemented`, `tested`, or `complete` (identical to the P3 rule above; `plan-writer.md` Step 1.3 holds the canonical definition).
 
 **Resumable visual-approval check (new, additive — mirrors the P3 precondition's own check verbatim; re-run here because Phase A.1 re-reads the table fresh on every loop iteration, per its own existing "do not reuse a stale snapshot" instruction above).** Before picking the lowest-numbered actionable row below, scan for any row whose `Status` cell equals `in-progress` and whose `PRPs/reports/<feature>/phase-<row's #>/halt.json` has `outcome == "AWAITING_VISUAL_APPROVAL"`:
 - No `resolution` field yet: apply the SAME structured no-op the P3 precondition performs (emit the "awaiting human visual approval" message, exit 0, no artifacts) rather than falling through to the "no actionable row" branch below.
@@ -225,7 +227,7 @@ Pick the lowest-numbered actionable row. Record `current_phase_N` and `current_p
 
 Reset `last_plan_review_failing_ids = null` at the start of each new phase iteration so stuck-loop detection does not carry state across phases.
 
-If **no** actionable row is found (all phases are `complete` or all remaining `pending` rows have unsatisfied dependencies):
+If **no** actionable row is found (every phase has reached a terminal state — `complete`, or `implemented`/`tested` left behind by a hand-invoked run this orchestrator did not drive — or all remaining `pending` rows have unsatisfied dependencies):
 
 Write `PRPs/reports/<feature>/orchestrator-run.json` with the final summary:
 
@@ -259,7 +261,7 @@ Write `PRPs/reports/<feature>/orchestrator-halt.json`:
 {
   "outcome": "FAILED_ORCHESTRATOR_TIME_BUDGET_EXCEEDED",
   "phases_completed": <phases_completed>,
-  "partial_state_note": "Source PRD Implementation Phases table reflects phase states at the time of timeout. Phases that reached complete are recorded; remaining pending rows can be retried.",
+  "partial_state_note": "Source PRD Implementation Phases table reflects phase states at the time of timeout across the five-state lifecycle (pending / in-progress / implemented / tested / complete). A row left at in-progress, implemented, or tested names exactly how far that phase got; remaining pending rows can be retried.",
   "manual_recovery": "re-invoke /relay-execute <prd_path>; picks up at next pending row with satisfied dependencies",
   "orchestrator_run_log": <orchestrator_run_log>,
   "worktree_attempted": <boolean | null>,
@@ -272,8 +274,9 @@ HALT with verbatim message:
 
 > FAILED_ORCHESTRATOR_TIME_BUDGET_EXCEEDED. /relay-execute aborted after
 > max_orchestrator_minutes=240. Phases completed this session: <phases_completed>.
-> Partial state preserved on disk; source PRD table reflects whatever phases
-> reached complete. Re-invoke /relay-execute to pick up at the next pending row.
+> Partial state preserved on disk; the source PRD table's Status cells name how
+> far each phase got (pending / in-progress / implemented / tested / complete).
+> Re-invoke /relay-execute to pick up at the next pending row.
 > Halt state at PRPs/reports/<feature>/orchestrator-halt.json.
 
 ### Phase A.2.5 — Resume-from-visual-approval short-circuit
@@ -609,7 +612,9 @@ Else: re-adopt `/relay-write-test` role passing `prior_feedback = <captured defe
 Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-implement.md` and execute its full protocol inline against `current_plan_path`. The command's own D8 post-approval mutations run as part of its internal Phase A.4:
 - Mutation a: plan trailing-block flip `*Status: APPROVED*` → `*Status: IMPLEMENTED*`
 - Mutation b: plan move to `PRPs/plans/completed/<basename>.plan.md`
-- Mutation c: source PRD row flip `in-progress → complete`
+- Mutation c: source PRD row flip `in-progress → implemented`
+
+The row does NOT reach `complete` here. This command carries the remaining two transitions of the five-state lifecycle itself: Step A.5.3 writes `implemented → tested` once the test stage passes, and Phase A.6 writes `→ complete` as it closes the phase out. Both are defined as **orchestrator-owned row mutations** below — an extension of the D8 ownership rule, taken because `/relay-test` and `/relay-test-review` are plan- and feature-scoped and know neither the row number `N` nor `prd_path` (codified in `docs/decisions.md`, 2026-08-05).
 
 **On success path (APPROVED rubric + D8 mutations succeeded):**
 
@@ -722,6 +727,40 @@ GREEN-legitimate check + `R-LIFECYCLE-LEGITIMATE` because `tdd: false`).
 - **On APPROVED:** append `{"phase": <N>, "stage": "test_after", "outcome": "APPROVED", "suite_path": "<current_suite_path>"}`; proceed to Phase A.5. The APPROVED suite manifest (with its lifecycle ledger) is the positive authorization the post-green reviewer (B5, Step A.5.3) consults for legitimate removals/skips.
 - **On CHANGES_REQUESTED:** capture the defect list; increment `tdd_review_attempts`; if `> max_tdd_review_retries`, write `orchestrator-halt.json` with `outcome: "FAILED_TDD_REVIEW_BUDGET_EXCEEDED"` (same shape as Step A.3.5.2) and HALT; else re-adopt `/relay-write-test` with `prior_feedback = <defect list>` and loop back to Step A.4.5.2.
 
+### Phase A.4.9 — Shared procedure: orchestrator-owned PRD row-status flip
+
+Steps A.5.3 and A.6 each advance the current phase's row through the five-state lifecycle. Both use this one procedure; it is defined once here so the two call sites stay byte-identical in behaviour.
+
+**`flip_row_status(<expected-from-set>, <to>)`:**
+
+1. `Read` `<prd_path>` and locate the Implementation Phases table by its exact-match header line:
+
+   | # | Phase | Description | Status | Parallel | Depends | PRP Plan |
+
+2. Locate row `<current_phase_N>` (the row whose first cell, trimmed, equals that integer).
+3. Read its `Status` cell.
+   - If it already equals `<to>`: the flip is already done (a re-entered or resumed run). Record `flip_skipped_idempotent: true` and return success without editing. This makes the procedure idempotent, which the re-invocation model (D6) requires.
+   - If it is not in `<expected-from-set>` and not `<to>`: do NOT edit. Treat as a soft failure per step 5 with reason `"unexpected source state <actual>"`.
+4. `Edit` `<prd_path>`:
+   - `old_string`: the verbatim full row line copied from the PRD, including all leading and trailing pipes and whitespace. The full line guarantees a unique match; `Edit` fails closed if multiple rows match.
+   - `new_string`: the same row line with only the `Status` cell replaced by `<to>`. Never modify any other cell of row `<current_phase_N>`; never touch any other row; never `Write`-rewrite the PRD. This is the same verbatim-row discipline `/relay-implement`'s D8 Mutation c and `plan-writer`'s Step 5.1 back-fill already use.
+   - `replace_all`: `false`.
+5. **Soft-fail discipline.** These flips are status bookkeeping, not gates — a failure must never destroy a phase's real work. On any failure (row not matched because of whitespace drift, unexpected source state, `Edit` error), do NOT halt and do NOT retry. Append to `orchestrator_run_log`:
+   ```json
+   {"phase": <current_phase_N>, "stage": "row_status_flip", "outcome": "FAILED", "to": "<to>", "reason": "<error or unexpected-state description>"}
+   ```
+   and surface a non-fatal warning:
+
+   > Warning: could not flip source PRD row `<current_phase_N>` Status to
+   > `<to>` (`<reason>`). The phase's work is complete and its artifacts are
+   > intact; only the status cell is stale. Fix it by hand — set row
+   > `<current_phase_N>`'s Status cell to `<to>` — or dependent phases may
+   > stay blocked.
+
+   Then continue the orchestration flow exactly as if the flip had succeeded. This is deliberately weaker than `/relay-implement`'s `PARTIAL_D8_FAILURE`: Mutation c is paired with a plan move and a plan-status flip that can leave the tree genuinely inconsistent, whereas a missed `tested`/`complete` cell leaves every artifact on disk correct.
+
+6. On success, record `flip_success: true` and return.
+
 ### Phase A.5 — Per-phase test sub-flow (guarded by command-exists check)
 
 #### Step A.5.0 — methodology.md gate (self-skip when `test_frameworks: []` or file absent)
@@ -733,6 +772,8 @@ Re-read `<target_root>/docs/context/methodology.md` (already read in P5 — re-r
   {"phase": <N>, "stage": "test", "outcome": "skipped_no_test_framework"}
   ```
   Proceed directly to Phase A.6. Steps A.5.1–A.5.3 are not reached.
+
+  **Row status stays at `implemented`.** No `tested` flip is performed on this path — nothing was tested, and the Status cell must not claim otherwise. Phase A.6 flips `implemented → complete` directly, skipping `tested` entirely; the reason is already on the record in `orchestrator_run_log` as `skipped_no_test_framework`.
 
 - If `test_frameworks` is non-empty: proceed to Step A.5.1.
 
@@ -752,6 +793,8 @@ Record in `orchestrator_run_log`:
 ```json
 {"phase": <N>, "stage": "test", "outcome": "skipped_command_absent"}
 ```
+
+Row status stays at `implemented` for the same reason as Step A.5.0's self-skip: no test stage ran, so no `tested` flip is warranted. Phase A.6 flips `implemented → complete` directly.
 
 Proceed to Phase A.6.
 
@@ -800,6 +843,10 @@ Append to `orchestrator_run_log`:
 {"phase": <N>, "stage": "test_review", "outcome": "APPROVED"}
 ```
 
+**Row-status flip — `implemented → tested`.** Call `flip_row_status(["implemented"], "tested")` (Phase A.4.9). This is the fourth state of the five-state lifecycle and the only place in relay that writes it: the phase's code passed code review AND its test suite ran GREEN AND the post-green reviewer confirmed the green was not obtained by weakening tests. Reaching `tested` therefore means all three of those hold — which is why neither the `/relay-test` GREEN result alone (Step A.5.2) nor a skipped test stage (Steps A.5.0 / A.5.1) is enough to write it.
+
+Per Phase A.4.9's soft-fail discipline, a failed flip warns and continues — it never halts a phase whose tests genuinely passed.
+
 Proceed to Phase A.6.
 
 **On CHANGES_REQUESTED** (weakened tests, coverage drop, trivial assertions):
@@ -834,6 +881,20 @@ HALT with verbatim message (AC-5):
 > **Note — de-facto contradictory path now structurally impossible:** Prior to Step A.5.0, a framework-less project could reach Phase A.5 and receive a `FAILED_INFRA_UNRECOVERABLE` outcome from `/relay-test` while the session still declared `ALL_PHASES_COMPLETE` (observed in dogfood-B, 2026-05-11). This path is now structurally impossible: Step A.5.0 intercepts the `test_frameworks: []` or file-absent case before any command dispatch, logs `skipped_no_test_framework`, and proceeds directly to Phase A.6 — bypassing Steps A.5.1–A.5.3 entirely. A framework-declared project that encounters genuine infra failure (missing `settings.json`, docker not running, container failure, normalizer failure) still reaches Step A.5.2 and HALTs with `FAILED_INFRA_UNRECOVERABLE` before reaching Phase A.6 or `ALL_PHASES_COMPLETE`. The two paths are mutually exclusive at the structural level; a session cannot simultaneously enter the A.5.0 self-skip branch and the A.5.2 strict-halt branch.
 
 ### Phase A.6 — State-transition record + loop
+
+#### Step A.6.0 — Row-status flip (`implemented` | `tested` → `complete`)
+
+Call `flip_row_status(["implemented", "tested"], "complete")` (Phase A.4.9). This is the final state of the five-state lifecycle and the last write this orchestrator makes to the phase's row.
+
+Both source states are accepted, and which one the row is actually in is itself meaningful:
+- `tested` — the normal path for a project with a declared test framework: Step A.5.3 already advanced the row after test-review APPROVED.
+- `implemented` — the test stage self-skipped (Step A.5.0's `test_frameworks: []` or missing `methodology.md`, or Step A.5.1's absent command files). The row moves straight from `implemented` to `complete`, never passing through `tested`, because nothing was tested. The skip reason is preserved in `orchestrator_run_log`.
+
+`complete` here means "this orchestrator finished driving the phase end to end", NOT "merged". Merge and close-out remain `/relay-approve`'s job, and `/relay-approve` does not touch the Implementation Phases table at all.
+
+The flip runs BEFORE the completion record is appended below, so that a crash between the two leaves the PRD table — the canonical state machine (D6) — correct rather than the audit artifact. Per Phase A.4.9's soft-fail discipline, a failed flip warns and continues into the completion record; it never halts the loop.
+
+#### Step A.6.1 — Completion record
 
 Append a completion record to `orchestrator_run_log`:
 ```json
@@ -885,7 +946,7 @@ Write / overwrite `PRPs/reports/<feature>/orchestrator-run.json` with the full l
 
 Push `current_phase_N` to `phases_completed`.
 
-Loop back to Phase A.1 (re-read the Implementation Phases table; phases whose `Depends` cell became all-`complete` after this phase are now actionable per AC-12).
+Loop back to Phase A.1 (re-read the Implementation Phases table; phases whose `Depends` cell became fully dependency-satisfying — every listed row now `implemented`, `tested`, or `complete` — after this phase are now actionable per AC-12).
 
 ---
 
@@ -961,6 +1022,8 @@ On any HALT path (one of `FAILED_PLAN_REVIEW_BUDGET_EXCEEDED`, `FAILED_ORCHESTRA
 
 11. **Never commit working-tree changes or create a PR.** `/relay-execute` terminates at "all phases complete" state with implementation changes uncommitted in the worktree. `git add`, `git commit`, `git push`, `gh pr create`, and any equivalent operations are Pillar 3's exclusive responsibility (`/relay-commit` then `/relay-pr`). This is a permanent architectural boundary, not a deferral — see `docs/decisions.md` 2026-05-18.
 
+12. **The only source-PRD writes this command makes are the two row-status flips of Phase A.4.9 — `implemented → tested` (Step A.5.3) and `implemented`|`tested` → `complete` (Step A.6.0) — each touching exactly one `Status` cell of the current phase's row.** Every other PRD mutation belongs to someone else: `pending → in-progress` is `plan-writer`'s Step 5.1 back-fill, and `in-progress → implemented` is `/relay-implement`'s D8 Mutation c. The orchestrator never edits any other cell, any other row, or any other section of the PRD, and never `Write`-rewrites the file. Splitting row ownership this way is deliberate — `/relay-test` and `/relay-test-review` are plan- and feature-scoped and know neither `N` nor `prd_path`, so the orchestrator is the only component positioned to record the last two transitions (`docs/decisions.md`, 2026-08-05).
+
 ---
 
 ## What you do NOT do
@@ -973,7 +1036,8 @@ On any HALT path (one of `FAILED_PLAN_REVIEW_BUDGET_EXCEEDED`, `FAILED_ORCHESTRA
 - **Targeting a specific phase via `--phase <N>` flag** — Could-item; deferred. Idempotency via D6 state machine (re-invocation picks up at next pending row) is sufficient for MVP.
 - **Persisting research blobs** — research subagents invoked during `/relay-plan` adoption write to the plan file via the plan-writer protocol; no separate research artifact is written by the orchestrator.
 - **Committing between phases or at the end** — permanently out of scope (covered by hard rule 11). Commit discipline belongs to Pillar 3.
-- **Re-running a `complete` phase** — refused via P3 (zero actionable rows with status `complete` are not re-picked). Manual hand-edit of the row's `Status` cell back to `pending` is the documented escape hatch.
+- **Re-running a phase that already left `pending`** — refused via P3: only `pending` rows are actionable, so `in-progress`, `implemented`, `tested`, and `complete` rows are never re-picked. Manual hand-edit of the row's `Status` cell back to `pending` is the documented escape hatch.
+- **Writing `complete` to mean "merged"** — `complete` means "this orchestrator drove the phase end to end". Merge, cleanup, and post-merge docs sync belong to `/relay-approve`, which never touches the Implementation Phases table.
 - **Parallel phase orchestration** — MVP is strictly serial. The `Parallel` cell is read but not acted upon.
 - **Multi-PRD orchestration** — one PRD per invocation; cross-PRD coordination is a separate orchestrator's job.
 - **Performing the human visual-approval decision itself** — that dialogue lives entirely in the separate, explicitly human-triggered `/relay-visual-approve` command; `/relay-execute` never asks the user anything, it only detects an already-recorded decision (Phase A.1) and resumes (Phase A.2.5).

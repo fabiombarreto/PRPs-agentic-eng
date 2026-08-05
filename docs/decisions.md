@@ -1634,6 +1634,68 @@ than partially patched here.
 
 ---
 
+## [2026-08-05] Five-state phase-status lifecycle, with the last two transitions owned by the orchestrator
+
+**Context:** The source PRD's Implementation Phases table is relay's canonical
+state machine ([2026-05-04] entry), but its `Status` cell carried only three
+values: `pending`, `in-progress`, `complete`. `complete` was written by
+`/relay-implement`'s D8 Mutation c the moment code review returned APPROVED —
+before any test had run. A row therefore read `complete` while its tests were
+still unwritten, still red, or never executed at all, and an operator watching
+a long `/relay-execute` run had no way to tell how far a phase had actually
+got.
+
+**Decision:** The vocabulary becomes five values in strict order —
+`pending` → `in-progress` → `implemented` → `tested` → `complete` — with one
+owner per transition:
+
+| Transition | Owner |
+|---|---|
+| `pending` → `in-progress` | `plan-writer` Step 5.1 back-fill (unchanged) |
+| `in-progress` → `implemented` | `/relay-implement` D8 Mutation c (retargeted from `complete`) |
+| `implemented` → `tested` | `/relay-execute` Step A.5.3, after test-review APPROVED |
+| `implemented` \| `tested` → `complete` | `/relay-execute` Step A.6.0 |
+
+Three supporting rules:
+
+1. `tested` is skipped, never faked. When the test stage self-skips (no
+   declared framework, or absent command files) the row goes
+   `implemented` → `complete` directly; the reason is recorded in
+   `orchestrator-run.json`, not encoded in the status cell.
+2. A `Depends` reference is satisfied from `implemented` onward, not only at
+   `complete`.
+3. `complete` means "the orchestrator drove this phase end to end", not
+   "merged". `/relay-approve` still never touches the table.
+
+This splits the D8 row-mutation rule: `/relay-execute` gains two PRD row
+writes of its own, via a shared `flip_row_status` procedure (its Phase A.4.9)
+that reuses the verbatim-full-row `Edit` discipline already used by D8
+Mutation c and the plan-writer back-fill. Both orchestrator flips are
+idempotent (a row already at the target value returns success without
+editing) and soft-fail (a failed flip warns and continues rather than
+halting).
+
+**Reason:** Status granularity was the actual ask, and it is only worth
+anything if each value is earned — hence `tested` requiring GREEN *and*
+post-green review, and being skipped outright when nothing ran. The
+orchestrator owns the last two transitions because `/relay-test` and
+`/relay-test-review` are plan- and feature-scoped and know neither the row
+number `N` nor `prd_path`; pushing the row number down into them would have
+coupled two commands to the PRD table purely to preserve single-owner purity.
+The `Depends` widening is what keeps a hand-invoked `/relay-implement`
+usable: nothing outside the orchestrator writes `tested` or `complete`, so a
+`complete`-only dependency rule would have made every standalone
+implementation permanently block its dependents. Soft-fail over
+`PARTIAL_D8_FAILURE` is deliberate — D8's mutations are paired with a plan
+move and a plan-status flip that can leave the tree genuinely inconsistent,
+whereas a missed `tested`/`complete` cell leaves every artifact on disk
+correct and only the bookkeeping stale.
+
+**Areas affected:** orchestration, plan authoring, implementation authoring,
+PRD template, documentation site
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision

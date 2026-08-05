@@ -319,7 +319,25 @@ A row is **actionable** when:
 
 - Its `Status` cell equals `pending` (case-sensitive), AND
 - Its `Depends` cell is empty (`-`) OR every comma-separated phase
-  number listed there has `Status == complete`.
+  number listed there is in a **dependency-satisfying state**:
+  `implemented`, `tested`, or `complete`.
+
+**The five-state phase-status lifecycle.** A phase row moves
+`pending` → `in-progress` → `implemented` → `tested` → `complete`
+(the vocabulary is documented alongside the Implementation Phases
+table in `${CLAUDE_PLUGIN_ROOT}/resources/prd-template.md`). Each
+transition has exactly one owner: this agent's own Step 5.1
+back-fill writes `in-progress`; `/relay-implement`'s D8 Mutation c
+writes `implemented`; `/relay-execute` writes `tested` (Step A.5.3)
+and `complete` (Phase A.6).
+
+A dependency counts as satisfied from `implemented` onward — the
+depended-on phase's code exists and passed code review, which is
+what a downstream phase actually needs to build on. Waiting for
+`complete` specifically would permanently block dependents whenever
+`/relay-implement` was hand-invoked outside the orchestrator, since
+nothing in that path ever writes `tested` or `complete`. `pending`
+and `in-progress` never satisfy a dependency.
 
 Pick the first (lowest `#`) actionable row. Call it **row N**.
 
@@ -465,9 +483,11 @@ below):
     returned `findings` (each carrying a `path:line` `source` field)
     become the initial sentinel ledger Step 4.4 item 10 requires. If
     the paired visual row's `PRP Plan` cell is empty/unreadable
-    (should not happen — Step 1.3's `Depends`-completeness gate
-    already guarantees the visual row is `complete` with a populated
-    `PRP Plan` cell before a paired logic row is ever actionable),
+    (should not happen — Step 1.3's `Depends` gate already guarantees
+    the visual row reached a dependency-satisfying state
+    (`implemented`, `tested`, or `complete`), and every one of those
+    is past the back-fill that populates the `PRP Plan` cell, before a
+    paired logic row is ever actionable),
     fall back to `TBD - needs validation` for the ledger rather than
     halting — a defensive fallback per Hard Constraint #6, not an
     expected path.
@@ -1193,6 +1213,12 @@ row N flip) does not apply for description-mode plans.
   - The `PRP Plan` cell value (`-` or `(no plan ...)`) → the relative
     plan path `PRPs/plans/<feature>-phase-<N>-<slug>.plan.md`.
 - `replace_all`: `false`.
+
+`in-progress` is the ONLY status value this agent ever writes. The
+three later states of the lifecycle (Step 1.3) belong to other
+components — `implemented` to `/relay-implement`, `tested` and
+`complete` to `/relay-execute` — and writing any of them here would
+claim work that has not happened.
 
 Never `Write`-rewrite the PRD. Never modify any cell other than
 `Status` and `PRP Plan` of row N. Never touch any other row.

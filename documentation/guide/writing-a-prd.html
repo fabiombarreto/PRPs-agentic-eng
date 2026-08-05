@@ -154,7 +154,7 @@
         <li><strong>Acceptance Criteria (test scenarios)</strong> — the concrete <code>given ... when ... then</code> behaviors the implementation must satisfy.</li>
         <li><strong>Users &amp; Context</strong>, <strong>Solution Detail (MoSCoW)</strong>, <strong>MVP Scope</strong>, <strong>User Flow</strong>.</li>
         <li><strong>Technical Approach</strong> (feasibility, architecture notes, TDD routing, technical risks).</li>
-        <li><strong>Implementation Phases</strong> — a table with phase number, name, description, status, parallelism hints, dependencies, and a <code>PRP Plan</code> column the Plan Writer back-fills with the relative plan path when planning that row (codified in <code>docs/decisions.md</code> 2026-04-25).</li>
+        <li><strong>Implementation Phases</strong> — a table with phase number, name, description, status, parallelism hints, dependencies, and a <code>PRP Plan</code> column the Plan Writer back-fills with the relative plan path when planning that row (codified in <code>docs/decisions.md</code> 2026-04-25). Write every row's status as <code>pending</code>; the pipeline advances it through <code>in-progress</code>, <code>implemented</code>, <code>tested</code>, and <code>complete</code> as the phase progresses, so the table doubles as live progress. A <code>Depends</code> reference unblocks its row from <code>implemented</code> onward. See the <a href="../reference/commands.html#relay-execute">phase-status lifecycle</a>.</li>
         <li><strong>Decisions Log</strong>, <strong>Research Summary</strong>.</li>
       </ul>
 

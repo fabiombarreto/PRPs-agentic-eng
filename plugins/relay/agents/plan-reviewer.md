@@ -292,7 +292,11 @@ Three sub-checks, all of which must pass:
   pattern; rename the file or re-run /relay-plan"`. Otherwise, in
   the source PRD's Implementation Phases table, locate row `<N>` and
   verify:
-  - `Status` cell is `in-progress` or `complete`.
+  - `Status` cell is any state at or past `in-progress` in the
+    five-state lifecycle — `in-progress`, `implemented`, `tested`,
+    or `complete`. All four prove the back-fill ran; which one the
+    row is in just says how far the phase has since progressed.
+    (A plan can legitimately be re-reviewed after implementation.)
   - `PRP Plan` cell contains the plan's relative path
     (`PRPs/plans/<basename>.plan.md`).
   A row still showing `pending` or `-` in `PRP Plan` fails R8c
