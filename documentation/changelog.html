@@ -29,9 +29,12 @@
       </div>
 
       <h2 id="unreleased">Unreleased</h2>
-      <p>Adds a tenth fixed deterministic check to <code>plan-reviewer</code>'s coherence layer, and resynchronizes the reference page's three reviewer catalogs with the agent files they document. The catalogs had drifted across five separate rubric additions: the rendered page listed 11 of the 23 <code>R-COH-*</code> checks that actually ship, and stated row-count arithmetic that no reviewer has produced since 2026-07-23.</p>
+      <p><em>Nothing yet.</em></p>
 
-      <h3 id="unreleased-added">Added</h3>
+      <h2 id="v0-27-0">0.27.0 &#8212; 2026-08-05</h2>
+      <p>Adds a tenth fixed deterministic check to <code>plan-reviewer</code>'s coherence layer, resynchronizes the reference page's three reviewer catalogs with the agent files they document, and repairs the <code>/relay-pr</code> test-review gate, which read a field no producer writes. The catalogs had drifted across five separate rubric additions: the rendered page listed 11 of the 23 <code>R-COH-*</code> checks that actually ship, and stated row-count arithmetic that no reviewer has produced since 2026-07-23.</p>
+
+      <h3 id="v0-27-0-added">Added</h3>
       <ul>
         <li><strong><code>plugins/relay/agents/plan-reviewer.md</code></strong>
           &mdash; new deterministic check <code>R-COH-VALIDATE-PATTERN-UNGROUNDED</code>,
@@ -67,7 +70,16 @@
           appears only under an explicit <code>--test-reporter=tap</code>).</li>
       </ul>
 
-      <h3 id="unreleased-fixed">Fixed</h3>
+      <h3 id="v0-27-0-changed">Changed</h3>
+      <ul>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.26.0</code> &rarr; <code>0.27.0</code> to
+          match this release; users running <code>/plugin</code> after pulling
+          this version will get a fresh <code>relay/0.27.0/</code> cache directory
+          with all newly-shipped commands and agents registered.</li>
+      </ul>
+
+      <h3 id="v0-27-0-fixed">Fixed</h3>
       <ul>
         <li><strong><code>documentation/reference/agents.html</code></strong>
           &mdash; the <code>plan-reviewer</code> <code>R-COH-*</code> catalog listed 5
@@ -108,18 +120,25 @@
           the <code>/relay-design-map</code> Notes row, and the search-index
           excerpt. The canonical <code>docs/api-reference.md</code> row was
           corrected in the same change.</li>
+        <li><strong><code>plugins/relay/commands/relay-pr.md</code></strong>
+          &mdash; the framework-conditional test-review gate verified a
+          top-level <code>status</code> field in
+          <code>PRPs/reports/&lt;feature&gt;/test-review.json</code>, but no
+          producer writes one. The canonical field is <code>verdict</code>:
+          it is what <code>/relay-test-review</code> documents in its "Write
+          the review record" schema, and what
+          <code>generate-final-report.mjs</code> reads. On any project with a
+          non-empty <code>test_frameworks</code> (so <code>run.json</code>
+          exists) the gate read an absent field and halted with
+          <code>FAILED_TEST_REVIEW_NOT_APPROVED</code> even when the
+          post-green review had genuinely passed &mdash; a guaranteed false
+          negative blocking every relay PR in a framework-declared project.
+          Observed live against an artifact carrying
+          <code>"verdict": "APPROVED"</code>. The gate now reads
+          <code>verdict</code> and states why, so the drift does not recur.
+          <code>relay-approve.md</code> was checked and carries no
+          test-review gate.</li>
       </ul>
-
-      <div class="callout callout--warn">
-        <div class="callout__title">Pending on the next release cut</div>
-        <p>This block contains plugin assets under <code>plugins/relay/</code>, so
-        cutting it &mdash; at any level, patch included &mdash; requires bumping
-        <code>plugins/relay/.claude-plugin/plugin.json</code> from
-        <code>0.26.0</code> to the released value in the same commit, per
-        <a href="AGENTS.md">AGENTS.md</a> &sect;7.5. Without it, installed users keep
-        loading the cached <code>relay/0.26.0/</code> plugin and never see the new
-        rubric check.</p>
-      </div>
 
       <h2 id="v0-26-0">0.26.0 &#8212; 2026-08-03</h2>
       <p>Resource packaging &mdash; Phase 1 of the <code>figma-quota-resilience</code> PRD, absorbing <code>PRPs/reports/plugin-root-audit/fix-plan.md</code>'s F2&ndash;F6 as its authoritative scope (F0/F1 already shipped in <code>9857be0</code> / v0.25.1). The eight plugin-owned resource templates under <code>docs/context/</code> were unreachable from every installed instance of the plugin, because <code>${CLAUDE_PLUGIN_ROOT}</code> resolves to <code>plugins/relay/</code> only and <code>docs/</code> was never packaged. This release moves them to a new <code>plugins/relay/resources/</code> directory &mdash; a name deliberately distinct from <code>docs/</code>, so the packaged/target-scoped distinction becomes mechanically checkable &mdash; and rewrites roughly 140 references across some 25 agent/command/skill/doc files.</p>
