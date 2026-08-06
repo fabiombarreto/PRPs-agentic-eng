@@ -97,6 +97,36 @@
  * one additional, specifically-justified, already-APPROVED filename was
  * added to each exclusion list.
  *
+ * Lifecycle updates (this session, EXISTING_TEST_UPDATED, this file's own
+ * anchor — full justification in PRPs/reports/repair-the-stale-document-
+ * order-anchor-in-scriptsvalidatec/test-suite.diff's Lifecycle ledger):
+ * this file's own `AC-A1 (PRD AC-4)` test (below) built its `ruleIdx`
+ * anchor against the `Depends`-cell rule's mutable lifecycle-state tail —
+ * `content.indexOf('every comma-separated phase number listed has')`.
+ * Commit `09ad56b` ("feat(relay): advance phase status through five states
+ * during orchestration") deliberately and correctly rewrote that rule at
+ * both `relay-execute.md:118` and `:218` from "...has `Status ==
+ * complete`." to "...is in a dependency-satisfying state: `implemented`,
+ * `tested`, or `complete`." — the word "has" no longer appears at either
+ * site, so `ruleIdx` resolved to `-1` and the six-index document-order
+ * chain's `assert.ok` collapsed (`571 tests, 570 pass, 1 fail` — the
+ * repo's only pre-fix corpus failure). The production file is correct;
+ * this test's own anchor was stale. Fixed by re-anchoring `ruleIdx` on
+ * `every comma-separated phase number listed` — the invariant lead-in
+ * clause both the pre- and post-`09ad56b` wording share verbatim at both
+ * sites, describing the `Depends` cell's multi-value *format* rather than
+ * the lifecycle-state *vocabulary* that already changed once. `indexOf`'s
+ * first-match semantics still resolve to the P3-section occurrence
+ * (`relay-execute.md:118`), the same position the stale anchor targeted,
+ * so `ruleIdx`'s place in the ordering chain is unchanged in every respect
+ * but the literal it searches for. Verified via discriminative mutation:
+ * temporarily restoring the stale `'...listed has'` literal reproduces
+ * today's RED assertion; the corrected literal turns it GREEN. All five
+ * other anchors (`p3Idx`, `checkIdx`, `awaitingMsgIdx`, `amendedExitIdx`,
+ * `allCompleteIdx`) and the full six-comparison `assert.ok` chain below
+ * are left byte-identical — this is a stale landmark repair, not a
+ * relaxation of the ordering property under test.
+ *
  * Traceability (PRPs/prds/figma-visual-first-track.prd.md Acceptance
  * Criteria, filtered to phase 6's in-scope subset per the plan's own
  * ## Acceptance Criteria section AC-A1 through AC-A6; PRD AC-2, AC-3, AC-5,
@@ -222,7 +252,7 @@ test('AC-A1 (PRD AC-4): P3\'s resumable visual-approval check is positioned stri
   const content = readRepoFile(RELAY_EXECUTE_PATH);
 
   const p3Idx = content.indexOf('### P3 — Implementation Phases table parseable');
-  const ruleIdx = content.indexOf('every comma-separated phase number listed has');
+  const ruleIdx = content.indexOf('every comma-separated phase number listed');
   const checkIdx = content.indexOf('Resumable visual-approval check (new, additive — runs BEFORE');
   const awaitingMsgIdx = content.indexOf('Phase `<row #>` (`<Phase name>`) is awaiting human visual approval. Run');
   const amendedExitIdx = content.indexOf(
