@@ -117,6 +117,25 @@ Figma design instead of a blank-page feature idea.
    ```
    The `design-spec-reviewer` agent is the one that adds
    `*Approved: ...*` and flips the status. You never emit `APPROVED`.
+10. **Never silently skip a Phase 2 degradation branch.** Every Figma
+    MCP refusal in Phase 2 (`get_design_context`, `get_variable_defs`,
+    or `get_screenshot`) resolves to exactly one of: proceed `FULL`,
+    the partial-evidence branch (narrowed node/frame scope, or rung
+    `DEGRADED_NO_TOKENS`), or — only when zero evidence was gathered
+    at all — a HALT: `FAILED_FIGMA_QUOTA_EXHAUSTED` when the
+    refusal(s) were quota-exhaustion errors, or the same zero-evidence
+    HALT naming the actual refusal honestly (e.g. a persistent auth or
+    transient error across all three call types) when they were not —
+    zero evidence never proceeds silently, whatever its cause. Mirrors
+    `visual-verifier.md:88`'s "fail toward the safer degraded rung,
+    never toward silently reporting FULL" idiom. A quota-exhaustion
+    error is detected by error class/string match (e.g. Figma's
+    documented exhaustion message shape, "You've reached the Figma
+    MCP tool call limit for your `<seat>` seat on the `<plan>`
+    plan."), never by HTTP status — Figma's MCP documentation
+    defines neither `429` nor `Retry-After`
+    (`plugins/relay/commands/relay-design-map.md:227-232`). No
+    retry, no backoff.
 
 ---
 
@@ -179,19 +198,66 @@ All Figma MCP calls in this phase execute directly in this session
    node; use `:`→`-` filesystem-safe substitution in the filename only,
    e.g. node `123:456` → `raw/123-456.json`), then discard the chunk's
    payload from your working context (Hard Constraint 6) before
-   starting the next chunk.
+   starting the next chunk. If a `get_design_context` call is refused,
+   do not retry it — keep whatever `raw/<node-id>.json` files earlier
+   chunks already persisted and move on. When the refusal is a
+   quota-exhaustion error (Hard Constraint 10), stop issuing further
+   `get_design_context` calls for the rest of this traversal — the
+   same session-wide Figma quota backs `get_variable_defs` and
+   `get_screenshot` too, so a refusal here means those calls would
+   fail identically.
 4. **Token extraction.** Call `get_variable_defs` for the in-scope
    subtree; persist the result to `PRPs/designs/<feature>/raw/variables.json`.
+   If this call is refused, do not retry it — `raw/variables.json` is
+   simply not written this run. When the refusal is a quota-exhaustion
+   error (Hard Constraint 10), do not attempt this call again later in
+   this traversal — the same session-wide budget backs
+   `get_design_context` and `get_screenshot` too.
 5. **Reference screenshots.** For every frame in scope, call
    `get_screenshot` at 1x and save the result to
    `PRPs/designs/<feature>/refs/<node-id>.png` (same filesystem-safe
    substitution as step 3). Record each screenshot's node-id, name-path,
    and pixel dimensions — this is the evidence `design-spec-reviewer`'s
-   R-DS1 will verify against.
+   R-DS1 will verify against. If a `get_screenshot` call is refused, do
+   not retry it — keep whatever `refs/<node-id>.png` files earlier
+   calls already persisted and move on. When the refusal is a
+   quota-exhaustion error (Hard Constraint 10), stop issuing further
+   `get_screenshot` calls for the rest of this traversal — the same
+   session-wide budget backs `get_design_context` and
+   `get_variable_defs` too.
 
-Do not proceed to Phase 3 until every in-scope node has a persisted
-evidence file under `raw/` and every in-scope frame has a persisted
-reference screenshot under `refs/`.
+### Evidence-completeness branch (replaces an unconditional exit gate)
+
+- **Zero evidence gathered at all** (no file under `raw/` other than
+  a possible `variables.json`, no file under `refs/`) — HALT:
+  `FAILED_FIGMA_QUOTA_EXHAUSTED` when the refusal(s) were
+  quota-exhaustion errors, or the same zero-evidence HALT naming the
+  actual refusal honestly (e.g. a persistent auth or transient error
+  across all three call types) when they were not — either way, a
+  spec with nothing behind it is worse than no spec at all. Point to
+  `relay-design-spec.md`'s "If the Writer halts" list for how this
+  HALT propagates.
+- **Partial-evidence branch** (some, but not all, in-scope evidence
+  gathered) — for `raw/` incomplete: narrow the in-scope node set to
+  exactly the nodes with a persisted `raw/<node-id>.json`, mirroring
+  Hard Constraint 7's narrowing idiom (loud note naming every
+  excluded node and why); for `refs/` incomplete: same narrowing
+  discipline applied to the in-scope frame set feeding `## Frame
+  Inventory` / `## Visual Acceptance Criteria`; for
+  `raw/variables.json` absent entirely: this loss does not narrow
+  scope (no "some tokens in scope" concept) — set rung
+  `DEGRADED_NO_TOKENS` and write every `## Token Map` row as
+  "tokens not collected — `get_variable_defs` was refused this run"
+  instead of attempting a resolution the evidence cannot support.
+- **Full evidence** — every in-scope node/frame/token surface is
+  present; rung is `FULL`. Proceed exactly as this gate always did.
+
+Record the determined rung (`FULL` or `DEGRADED_NO_TOKENS`) in
+`## Behavioral Notes` — visible in the artifact itself, not only in
+this phase's own reasoning (mirroring `design-map-writer.md:222-229`).
+Do not proceed to Phase 3 until this branch has been evaluated and —
+for the HALT case — exited, or — for the `DEGRADED_NO_TOKENS`/`FULL`
+cases — the rung has been determined.
 
 ---
 
@@ -355,6 +421,8 @@ Emit exactly:
 
 > DRAFT written to `PRPs/designs/<feature>/design-spec.md`.
 > Decision Gate: **{PROCEED | HALT}**.
+> Evidence rung: **{FULL | DEGRADED_NO_TOKENS}**. Figma MCP calls
+> issued this pass: **{figma_call_count}**.
 > Handing off to the Design Spec Reviewer for validation.
 
 Do not emit anything after this line. The `/relay-design-spec` command

@@ -176,9 +176,24 @@ off value, no matching token — intentional per Figma design"). The
 Token Map is embedded as a real table in the spec body — not a pointer
 to `raw/`.
 
+**Degraded-evidence exception (rung `DEGRADED_NO_TOKENS`).** When
+`raw_dir/variables.json` is absent entirely (the writer's Phase 2
+evidence-completeness branch could not collect tokens this run),
+this item does not fail on missing per-value resolution — instead
+verify every `## Token Map` row honestly states "tokens not
+collected" and report the finding as "tokens not collected" (never
+"token does not resolve", which describes a different failure: a
+value that WAS evaluated against a present `variables.json` and
+still could not be matched).
+
 **Fails when:** `## Token Map` is a pointer/placeholder instead of an
-embedded table, or any row's value neither resolves to a token nor
-carries an explicit justification.
+embedded table; OR `raw_dir/variables.json` is present and a row's
+value neither resolves to a token nor carries an explicit
+justification (report: "token does not resolve"); OR
+`raw_dir/variables.json` is absent and any `## Token Map` row omits
+the "tokens not collected" declaration or attempts a resolution the
+evidence cannot support (report: "tokens not collected" is
+missing/dishonest).
 
 ### R-DS5 — Every EXISTS/NEW delta claim is spot-verifiable
 

@@ -174,8 +174,20 @@ restate-and-wait confirmation (Phase 1) and every batched Q&A round
 (Phase 4) to the user exactly as the Writer's protocol specifies.
 
 The Writer's Phase 5.6 confirmation (`DRAFT written to ...`) is the
-handoff signal. At that point, record the final DRAFT path and
-proceed to Phase B.
+handoff signal. At that point, record the final DRAFT path, add this
+pass's reported Figma MCP call count to a running session total
+`cumulative_figma_calls` (initialized `0` at the start of Phase A on
+first adoption, never reset on re-adoption), record
+`last_round_quota_degraded = true` when the Writer's handoff reported
+rung `DEGRADED_NO_TOKENS`, `false` otherwise, and proceed to Phase B.
+This recording is gated on the 5.6 confirmation actually firing: when
+the Writer instead HALTs on zero evidence gathered — `FAILED_FIGMA_QUOTA_EXHAUSTED`
+when the refusal(s) were quota-exhaustion errors, or the same
+zero-evidence HALT naming the actual refusal honestly when they were
+not — 5.6 never fires, `cumulative_figma_calls` /
+`last_round_quota_degraded` are left exactly as they were entering this
+pass, and the command exits per the third bullet below without
+reaching Phase B.
 
 ### If the Writer halts
 
@@ -186,6 +198,13 @@ proceed to Phase B.
   conflict emerged. Surface the conflict to the user, ask how to
   proceed, and (at the user's direction) either restart the Writer
   from the appropriate phase or exit.
+- **Writer HALTs on zero evidence gathered** (Writer's
+  evidence-completeness branch, Phase 2) — no evidence survived Phase
+  2 at all. The halt names `FAILED_FIGMA_QUOTA_EXHAUSTED` when the
+  refusal(s) were quota-exhaustion errors, or the same zero-evidence
+  HALT naming the actual refusal honestly (e.g. a persistent auth or
+  transient error) when they were not. Surface the Writer's halt
+  message verbatim and exit. Do not adopt the Reviewer role.
 
 ---
 
@@ -229,12 +248,29 @@ appended to `PRPs/designs/<feature>/design-spec-review.jsonl` counts
 as one). `max_spec_review_retries = 2`.
 
 - On the **first** and **second** `CHANGES_REQUESTED`, let the
-  Reviewer's Step 5 dialogue loop run normally with the user.
+  Reviewer's Step 5 dialogue loop run normally with the user. When
+  Step 5's own dialogue loop instead determines the defect requires a
+  fresh `design-spec-writer` pass ("If the change requires
+  re-traversing the Figma design..."), the re-adopted Writer's Phase
+  5.6 handoff feeds the SAME `cumulative_figma_calls` /
+  `last_round_quota_degraded` tracking established above — this is
+  the second of the two user-chosen re-traversal paths whose
+  consumption is carried forward, alongside this section's own
+  `last_round_quota_degraded == false` outcome 1 ("Retry with
+  corrected inputs") — the only branch in which outcome 1 is itself a
+  re-traversal path; the `true`-branch outcome 1 (Abort) consumes no
+  further Figma calls.
 - If a **third** `CHANGES_REQUESTED` would occur (the budget is
   exhausted without reaching `APPROVED`), do NOT enter another round
-  of the dialogue loop. Instead, interject with exactly two named
-  outcomes:
+  of the dialogue loop. Instead, interject with the outcome(s)
+  determined by `last_round_quota_degraded`:
 
+  **When `last_round_quota_degraded` is `false`** — present both
+  existing outcomes, preceded by a statement of the session's Figma
+  MCP consumption so far:
+
+  > This session has issued **`cumulative_figma_calls`** Figma MCP
+  > calls so far.
   > The Design Spec has not reached APPROVED after
   > `max_spec_review_retries = 2` review rounds. What would you like
   > to do?
@@ -243,6 +279,25 @@ as one). `max_spec_review_retries = 2`.
   >    corrected component map) and I will re-adopt the Writer role
   >    from Phase 1 with your correction.
   > 2. **Abort** — stop here. The DRAFT is preserved at
+  >    `PRPs/designs/<feature>/design-spec.md`; nothing is discarded.
+  >    You can resume later by re-running `/relay-design-spec` with
+  >    the same or corrected arguments.
+
+  **When `last_round_quota_degraded` is `true`** — outcome 1 is suppressed
+  — the most recent round degraded to rung `DEGRADED_NO_TOKENS` because
+  Figma token evidence (`get_variable_defs`) could not be collected;
+  "corrected inputs" (a different node, added business context, a
+  corrected component map) cannot resolve an unresolved Figma MCP
+  evidence-collection refusal, whatever its specific cause — quota
+  exhaustion or otherwise. Present only a single, renumbered outcome:
+
+  > This session has issued **`cumulative_figma_calls`** Figma MCP
+  > calls so far, and the most recent round degraded to rung
+  > `DEGRADED_NO_TOKENS`: Figma token evidence could not be collected.
+  > The Design Spec has not reached APPROVED after
+  > `max_spec_review_retries = 2` review rounds. What would you like
+  > to do?
+  > 1. **Abort** — stop here. The DRAFT is preserved at
   >    `PRPs/designs/<feature>/design-spec.md`; nothing is discarded.
   >    You can resume later by re-running `/relay-design-spec` with
   >    the same or corrected arguments.
