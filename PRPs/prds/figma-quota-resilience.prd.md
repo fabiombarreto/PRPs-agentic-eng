@@ -200,7 +200,7 @@ Note for planning: several ACs here (AC-13 above all) land squarely on existing 
 | 3 | Quota preflight + named failure | `whoami` cost declaration with explicit confirmation; corrected P1 message; `FAILED_FIGMA_QUOTA_EXHAUSTED` | complete | - | 2 | PRPs/plans/figma-quota-resilience-phase-3-quota-preflight-named-failure.plan.md |
 | 4 | Evidence contract + rungs + R-DM7 | Additive cumulative bundle, relocated checkpoint, disk-derived split flags, persisted rungs, surgical downgrade, `R-DM7`, DERIVED rubric-count tests | complete | - | 1, 3 | PRPs/plans/figma-quota-resilience-phase-4-evidence-contract-rungs-r-dm7.plan.md |
 | 5 | Checkpoint / resume | Resume semantics so an interrupted run and `--refresh` cost only the delta | complete | - | 4 | PRPs/plans/figma-quota-resilience-phase-5-checkpoint-resume.plan.md |
-| 6 | Design-spec quota path | Partial-evidence branch on the Phase 2 exit gate, `DEGRADED_NO_TOKENS`, consumption counter across re-traversal paths | pending | - | 3 | - |
+| 6 | Design-spec quota path | Partial-evidence branch on the Phase 2 exit gate, `DEGRADED_NO_TOKENS`, consumption counter across re-traversal paths | in-progress | - | 3 | PRPs/plans/figma-quota-resilience-phase-6-design-spec-quota-path.plan.md |
 
 ### Phase Details
 
