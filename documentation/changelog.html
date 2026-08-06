@@ -33,39 +33,6 @@
 
       <p>Also closes row 9 of <code>test-pair-universalization.prd.md</code>, pending since 2026-07-10 &mdash; the concept and pipeline pages still described the superseded "TDD track" model.</p>
 
-      <h3 id="unreleased-changed">Changed</h3>
-      <ul>
-        <li><strong><code>documentation/concepts/tdd-track.html</code></strong>
-          &mdash; reframed from "TDD opt-in" to "The test pair". The page taught
-          that the pair activates only on <code>tdd: true</code> and skips
-          otherwise; the gate has been a declared <code>test_frameworks</code>
-          since 2026-07-10, with <code>tdd:</code> selecting ordering only. It
-          now documents both orderings, the two keys and what each decides, the
-          lifecycle ledger, and the mode-selected legitimacy check. Retitled in
-          NAV and the search index per the three-file rule; the <em>path</em> is
-          deliberately unchanged so every existing inbound link keeps resolving.
-          A dated note records the reframing.</li>
-        <li><strong><code>documentation/concepts/pipeline.html</code></strong>
-          &mdash; the test stage said it activates "only when
-          <code>tdd: true</code>", named the agents by their pre-rename titles,
-          and described the suite as unconditionally red. Corrected on all
-          three counts: activation is the declared framework in both modes,
-          <code>tdd:</code> only moves the stage, and the suite is red in
-          test-first but expected green in test-after.</li>
-      </ul>
-
-      <h3 id="unreleased-fixed-tdd">Fixed</h3>
-      <ul>
-        <li><strong><code>documentation/concepts/tdd-track.html</code></strong>
-          &mdash; the page asserted that "when TDD is off, the Implementer
-          writes tests alongside the code". That contradicts <code>R-X</code>,
-          which rejects any test-file change in an Implementer's diff in
-          <em>both</em> modes. A test-after project's tests come from the pair.
-          The graceful-degradation table also called an empty
-          <code>test_frameworks</code> under <code>tdd: true</code> a "hard
-          abort"; it is a silent self-skip.</li>
-      </ul>
-
       <h3 id="unreleased-added">Added</h3>
       <ul>
         <li><strong><code>documentation/governance/decisions.html</code></strong>
@@ -86,8 +53,48 @@
           <code>design-spec-writer</code> is deliberately outside the rule.</li>
       </ul>
 
+      <h3 id="unreleased-changed">Changed</h3>
+      <ul>
+        <li><strong><code>documentation/concepts/tdd-track.html</code></strong>
+          &mdash; reframed from "TDD opt-in" to "The test pair". The page taught
+          that the pair activates only on <code>tdd: true</code> and skips
+          otherwise; the gate has been a declared <code>test_frameworks</code>
+          since 2026-07-10, with <code>tdd:</code> selecting ordering only. It
+          now documents both orderings, the two keys and what each decides, the
+          lifecycle ledger, and the mode-selected legitimacy check. Retitled in
+          NAV and the search index per the three-file rule; the <em>path</em> is
+          deliberately unchanged so every existing inbound link keeps resolving.
+          A dated note records the reframing.</li>
+        <li><strong><code>documentation/concepts/pipeline.html</code></strong>
+          &mdash; the test stage said it activates "only when
+          <code>tdd: true</code>", named the agents by their pre-rename titles,
+          and described the suite as unconditionally red. Corrected on all
+          three counts: activation is the declared framework in both modes,
+          <code>tdd:</code> only moves the stage, and the suite is red in
+          test-first but expected green in test-after.</li>
+        <li><strong>Residual "TDD opt-in" naming swept from four more pages</strong>
+          &mdash; <code>governance/decision-gate.html</code> described
+          <code>methodology.md</code> as a "TDD opt-in flag" whose
+          <code>tdd: false</code> skips a "TDD branch", the last live copy of
+          the superseded rule; it now names the real gate and the two other
+          declared keys, and its sample evidence block was corrected to match.
+          <code>concepts/pillars.html</code>, <code>reference/skills.html</code>
+          and <code>README.md</code> carried the stale label in directory-tree
+          comments and the concepts list. The two <code>skills.html</code>
+          statements that the test guardrail is "independent of the TDD opt-in"
+          were true on the merits and only needed the current name.</li>
+      </ul>
+
       <h3 id="unreleased-fixed">Fixed</h3>
       <ul>
+        <li><strong><code>documentation/concepts/tdd-track.html</code></strong>
+          &mdash; the page asserted that "when TDD is off, the Implementer
+          writes tests alongside the code". That contradicts <code>R-X</code>,
+          which rejects any test-file change in an Implementer's diff in
+          <em>both</em> modes. A test-after project's tests come from the pair.
+          The graceful-degradation table also called an empty
+          <code>test_frameworks</code> under <code>tdd: true</code> a "hard
+          abort"; it is a silent self-skip.</li>
         <li><strong><code>documentation/governance/anti-patterns.html</code></strong>
           &mdash; the test-pair activation rule was factually wrong, not merely
           stale. It told readers to "check exactly one key: <code>tdd: true |

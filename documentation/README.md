@@ -54,7 +54,7 @@ This is **Part 1** of the documentation. Delivered pages:
 
 Planned for subsequent drops (sidebar links exist but pages TBD):
 
-- `concepts/` — pipeline stages, TDD opt-in, PRP artifacts, graceful degradation
+- `concepts/` — pipeline stages, test pair, PRP artifacts, graceful degradation
 - `guide/` — installation, first run, writing a PRD, running tests, troubleshooting
 - `reference/` — agents, skills, scripts, test-output schema, settings allowlist, redaction policy
 - `governance/` — anti-patterns, decision gate

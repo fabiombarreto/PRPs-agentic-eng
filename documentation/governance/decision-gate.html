@@ -74,7 +74,7 @@
         <dt><code>docs/context/constraints.md</code></dt>
         <dd>Project-level "do-not" list: frameworks, languages, patterns disallowed. The agent confirms its plan doesn't invoke any.</dd>
         <dt><code>docs/context/methodology.md</code></dt>
-        <dd>TDD opt-in flag. The agent uses this to decide whether TDD-specific behavior applies. No file / <code>tdd: false</code> → TDD branch skipped.</dd>
+        <dd>Methodology declarations. <code>test_frameworks</code> is the activation gate for the test pair — non-empty runs it, <code>[]</code> or no file skips it silently; <code>tdd</code> selects only the ordering (<code>true</code> test-first, <code>false</code> test-after). <code>docs_sync</code> and <code>figma_track</code> gate their own opt-in flows the same declared, non-heuristic way. <a href="../concepts/tdd-track.html">Details</a>.</dd>
         <dt><code>docs/domain/areas/*.md</code></dt>
         <dd>Bounded contexts for the task. The agent identifies which area(s) the change touches and respects each area's specific invariants.</dd>
       </div>
@@ -95,7 +95,7 @@ Sources consulted:
   - docs/decisions.md       (entries 7, 8, 9, 10)
   - docs/anti-patterns.md   (sections 1, 5, 7)
   - docs/context/architecture.md (pipeline stages, Test Runner boundary)
-  - docs/context/methodology.md  (tdd: false — TDD branch not applicable)
+  - docs/context/methodology.md  (test_frameworks: [] — test pair inactive)
   - docs/domain/areas/*.md  (no areas touched — infra-only change)
 Binding decisions for this task:
   - max_test_retries = 3 (entry 7): loop budget

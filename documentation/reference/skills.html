@@ -60,7 +60,7 @@
 │   │   ├── conventions.md        # naming, file structure, imports
 │   │   ├── integrations.md       # external services (no secret values)
 │   │   ├── constraints.md        # runtime versions, tech debt, what NOT to do
-│   │   ├── methodology.md        # TDD opt-in frontmatter (default: tdd: false)
+│   │   ├── methodology.md        # methodology frontmatter (default: test_frameworks: [])
 │   │   └── testing.md            # mandatory test guardrail + detected run commands
 │   ├── domain/
 │   │   ├── glossary.md           # business terms
@@ -100,7 +100,7 @@
 
       <p>Generates 6 files: <code>architecture.md</code>, <code>conventions.md</code>, <code>integrations.md</code>, <code>constraints.md</code>, <code>methodology.md</code>, <code>testing.md</code>. Each inferred from the Phase 1 scan with <code>[INFERRED - VALIDATE]</code> markers where the skill couldn't be confident. <code>methodology.md</code> defaults to <code>tdd: false</code> regardless of signals — heuristic activation is an <a href="../governance/anti-patterns.html">anti-pattern</a>.</p>
 
-      <p><code>testing.md</code> is a binding test guardrail, independent of the TDD opt-in: it requires every change — including small, single-file edits made without any relay command — to keep the existing test suites green, update tests that assert changed behavior, run the covering suites (at minimum the e2e suite), and, when the tests cannot be run, end the response with an explicit warning plus manual run instructions. It carries a table of the test suites detected in Phase 1 (tier, framework, run command, prerequisites). The guardrail is not waived by the Decision Gate scope exemptions, so "exempt" single-file changes still run it.</p>
+      <p><code>testing.md</code> is a binding test guardrail, independent of whether the test pair is active: it requires every change — including small, single-file edits made without any relay command — to keep the existing test suites green, update tests that assert changed behavior, run the covering suites (at minimum the e2e suite), and, when the tests cannot be run, end the response with an explicit warning plus manual run instructions. It carries a table of the test suites detected in Phase 1 (tier, framework, run command, prerequisites). The guardrail is not waived by the Decision Gate scope exemptions, so "exempt" single-file changes still run it.</p>
 
       <h3 id="phase-3">Phase 3 — Create <code>docs/domain</code></h3>
 
@@ -156,7 +156,7 @@
         <li><strong>Plain text paths only</strong> in Tier 1 and 2 — no <code>@</code> triggers that bloat the context window.</li>
         <li><strong>No <code>[INFERRED - VALIDATE]</code></strong> markers in Tier 1 or 2 — they belong only in Tier 3 and domain area files.</li>
         <li><strong>Never activate TDD heuristically.</strong> <code>methodology.md</code> defaults to <code>tdd: false</code>.</li>
-        <li><strong>The Test Guardrail is always emitted and always in force.</strong> It is independent of the TDD opt-in, binds every change (not just pipeline runs), and is not waived by the Decision Gate scope exemptions.</li>
+        <li><strong>The Test Guardrail is always emitted and always in force.</strong> It is independent of whether the test pair is active, binds every change (not just pipeline runs), and is not waived by the Decision Gate scope exemptions.</li>
         <li><strong>Business rules belong in <code>docs/domain/areas/</code></strong>, not in <code>CLAUDE.md</code>.</li>
       </ul>
 
