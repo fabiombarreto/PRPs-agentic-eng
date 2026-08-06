@@ -32,13 +32,15 @@
 
       <ol>
         <li><a href="#weakening-tests">Weakening or deleting tests to make the loop turn green</a></li>
-        <li><a href="#tdd-mirroring">Writing TDD tests that mirror imagined implementation</a></li>
+        <li><a href="#tdd-mirroring">Writing tests that mirror the implementation instead of the requirements</a></li>
         <li><a href="#secrets-in-reports">Emitting secret values in run reports or logs</a></li>
-        <li><a href="#heuristic-tdd">Activating the TDD track by heuristic</a></li>
+        <li><a href="#heuristic-tdd">Activating the test pair by heuristic</a></li>
         <li><a href="#interactive-prompts">Relying on interactive permission prompts in the autonomous loop</a></li>
         <li><a href="#inject-defaults">Injecting plugin defaults into the target project's decisions.md</a></li>
         <li><a href="#writing-claude">Writing pipeline artifacts under <code>.claude/</code></a></li>
         <li><a href="#prp-core-active">Treating <code>plugins/prp-core/</code> as active relay code</a></li>
+        <li><a href="#heuristic-gating-keys">Flipping <code>figma_track</code> (or any opt-in gating key) by heuristic</a></li>
+        <li><a href="#mcp-from-subagent">Querying the Figma MCP from a dispatched writer/reviewer agent</a></li>
       </ol>
 
       <h2 id="weakening-tests">1. Weakening or deleting tests to make the loop turn green</h2>
@@ -48,17 +50,18 @@
         <p><strong>What it is:</strong> An agent edits, skips, or removes failing tests in order to satisfy the "all tests pass" exit condition of the Test Runner loop.</p>
         <p><strong>Why it's forbidden:</strong> Optimizes for "verde" instead of "correto". The loop is supposed to fix the implementation, not the contract. The post-green reviewer (B5) exists precisely to catch this.</p>
         <p><strong>What to do instead:</strong> Fix the implementation, or — if the failure exposes a real requirement gap — abort and surface the conflict to the human.</p>
-        <p><strong>Areas affected:</strong> Test Runner (B1–B5), auto-correction loop (B4).</p>
+        <p><strong>Carve-out (NOT weakening):</strong> legitimate retirement of an <strong>obsolete</strong> test (its behavior-under-test is gone from the in-scope criteria) or a <strong>redundant</strong> test (a proven duplicate), performed by the approved test pair, recorded in the suite manifest's lifecycle ledger, and validated by <code>test-reviewer</code>'s <code>R-LIFECYCLE-LEGITIMATE</code>. The post-green reviewer accepts a removal or skip only when it matches an APPROVED ledger entry; every unmatched removal — and every removal when no manifest exists — still blocks. The implementer and the auto-correction loop still author zero test-file changes. See <a href="decisions.html#test-pair-universalized">decision 41</a>.</p>
+        <p><strong>Areas affected:</strong> Test Runner (B1–B5), auto-correction loop (B4), test pair (<code>test-writer</code>, <code>test-reviewer</code>).</p>
       </div>
 
-      <h2 id="tdd-mirroring">2. Writing TDD tests that mirror imagined implementation</h2>
+      <h2 id="tdd-mirroring">2. Writing tests that mirror the implementation instead of the requirements</h2>
 
       <div class="callout callout--error">
         <div class="callout__title">Anti-pattern</div>
-        <p><strong>What it is:</strong> In TDD mode, the TDD Writer (B7) produces tests that encode specific implementation choices (internal method names, private data shapes, mocked collaborators that presuppose a design) instead of requirements from the PRD.</p>
-        <p><strong>Why it's forbidden:</strong> Tests and implementation then "nascem acoplados" and exert no design pressure on the code — the core failure mode of AI-driven TDD called out by the planning document.</p>
-        <p><strong>What to do instead:</strong> TDD Writer derives tests from PRD Acceptance Criteria and observable behavior. TDD Reviewer (B8) rejects suites that leak implementation details, rely on excessive mocks, or contain trivial asserts.</p>
-        <p><strong>Areas affected:</strong> TDD track (B7, B8).</p>
+        <p><strong>What it is:</strong> <code>test-writer</code> produces tests that encode specific implementation choices (internal method names, private data shapes, mocked collaborators that presuppose a design) instead of requirements from the PRD. In test-first this mirrors an <em>imagined</em> implementation; in test-after the risk sharpens — the tests can mirror the <em>actual</em> code just written, exerting no independent pressure.</p>
+        <p><strong>Why it's forbidden:</strong> Tests and implementation are then born coupled and exert no design pressure on the code — the core failure mode of AI-driven testing.</p>
+        <p><strong>What to do instead:</strong> <code>test-writer</code> derives tests from PRD requirements and observable behavior. <code>test-reviewer</code> rejects suites that leak implementation details (<code>R-IMPL-LEAK</code>), rely on excessive mocks, or contain trivial asserts — in both modes.</p>
+        <p><strong>Areas affected:</strong> test pair (<code>test-writer</code>, <code>test-reviewer</code>).</p>
       </div>
 
       <h2 id="secrets-in-reports">3. Emitting secret values in run reports or logs</h2>
@@ -71,14 +74,19 @@
         <p><strong>Areas affected:</strong> Test Runner infra (A4), report generator (B6).</p>
       </div>
 
-      <h2 id="heuristic-tdd">4. Activating the TDD track by heuristic</h2>
+      <h2 id="heuristic-tdd">4. Activating the test pair by heuristic</h2>
 
       <div class="callout callout--error">
         <div class="callout__title">Anti-pattern</div>
-        <p><strong>What it is:</strong> Inferring that a project "does TDD" from the existence of a test folder, a high test count, or a CI job, and enabling B7/B8 automatically.</p>
-        <p><strong>Why it's forbidden:</strong> TDD is a methodology, not a side effect of having tests. Activating it silently surprises teams that test a lot without practicing TDD.</p>
-        <p><strong>What to do instead:</strong> Read <code>docs/context/methodology.md</code> and check exactly one key: <code>tdd: true | false</code>. No declaration file, <code>tdd: false</code>, or missing frontmatter → skip B7/B8 silently. The context-builder skill MUST create this file in every <code>*init</code> run with <code>tdd: false</code> as the default.</p>
-        <p><strong>Areas affected:</strong> orchestrator activation, context-builder skill, TDD agents (B7, B8).</p>
+        <p><strong>What it is:</strong> Inferring that a project wants relay-authored tests from the existence of a test folder, a high test count, or a CI job, and enabling the test pair automatically — or inferring the <code>tdd:</code> value the same way.</p>
+        <p><strong>Why it's forbidden:</strong> Activation is a methodology declaration, not a side effect of having tests; silent activation surprises teams. And <code>tdd:</code> selects <em>ordering</em> (test-first versus test-after), which must not be guessed.</p>
+        <p><strong>What to do instead:</strong> Read <code>docs/context/methodology.md</code>. The single activation gate is a declared framework: a non-empty <code>test_frameworks</code> runs the pair in <strong>both</strong> modes; <code>test_frameworks: []</code> or missing frontmatter skips it silently. The <code>tdd:</code> value only selects ordering — <code>true</code> is test-first, <code>false</code> is test-after — never whether the pair runs. The context-builder skill MUST create this file in every <code>*init</code> run with <code>tdd: false</code> and <code>test_frameworks: []</code> as the defaults, so the pair is opt-in by declaring a framework.</p>
+        <p><strong>Areas affected:</strong> orchestrator activation, context-builder skill, test pair (<code>test-writer</code>, <code>test-reviewer</code>).</p>
+      </div>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Corrected 2026-08-06</div>
+        <p>This item previously said the gate was "exactly one key: <code>tdd: true | false</code>", with <code>tdd: false</code> skipping the pair. That was superseded on 2026-07-10 (<a href="decisions.html#test-pair-universalized">decision 41</a>) and the page had not caught up. This repository is its own counterexample: it declares <code>tdd: false</code> <em>and</em> <code>test_frameworks: ["node:test"]</code>, and the pair is active in test-after mode.</p>
       </div>
 
       <h2 id="interactive-prompts">5. Relying on interactive permission prompts in the autonomous loop</h2>
@@ -120,6 +128,27 @@
         <p><strong>Why it's forbidden:</strong> <code>prp-core</code> is the upstream Wirasm plugin kept on disk as a format reference. Mixing it into relay couples relay to upstream evolution and blurs ownership. See <code>docs/decisions.md</code>.</p>
         <p><strong>What to do instead:</strong> Read prp-core files when you need to see how a Claude Code skill/command/agent/hook is structured. Never cite or import them as part of relay.</p>
         <p><strong>Areas affected:</strong> plugin scope, documentation scope.</p>
+      </div>
+
+      <h2 id="heuristic-gating-keys">9. Flipping <code>figma_track</code> (or any opt-in gating key) by heuristic</h2>
+
+      <div class="callout callout--error">
+        <div class="callout__title">Anti-pattern</div>
+        <p><strong>What it is:</strong> Inferring that a project wants the Figma track active from Figma-shaped filenames, <code>.fig</code> references, pasted Figma URLs, or design-tool mentions in commit history, and flipping <code>figma_track: true</code> automatically instead of by explicit human or command action.</p>
+        <p><strong>Why it's forbidden:</strong> <code>figma_track</code> follows the same non-heuristic contract already established for <code>docs_sync</code> and <code>tdd</code>: default-<code>false</code> on <code>*init</code>, preserve an already-set value on <code>*update</code>, and backfill only when the key is entirely absent. A run whose behavior depends on Figma involvement being <em>detected</em> rather than <em>declared</em> reintroduces exactly the "forgot to check" versus "doesn't apply" ambiguity the declaration model exists to prevent.</p>
+        <p><strong>What to do instead:</strong> Read <code>figma_track</code> from <code>docs/context/methodology.md</code> frontmatter only. It flips to <code>true</code> solely via a human edit or the explicit confirmation step of <code>/relay-design-map</code> — never by detection. Enforced deterministically by the <a href="../reference/validation-checks.html#gating-structure"><code>gating-structure</code></a> check, extensible to future keys by appending to its registry.</p>
+        <p><strong>Areas affected:</strong> context-builder skill, <code>npm run validate</code> (gating-structure check), the Figma implementation track.</p>
+      </div>
+
+      <h2 id="mcp-from-subagent">10. Querying the Figma MCP from a dispatched writer/reviewer agent</h2>
+
+      <div class="callout callout--error">
+        <div class="callout__title">Anti-pattern</div>
+        <p><strong>What it is:</strong> A <code>Task</code>-dispatched agent calls a Figma MCP tool directly, instead of reading only the Figma evidence already persisted to disk by the interactive command that dispatched it.</p>
+        <p><strong>Why it's forbidden:</strong> Confirmed technically reachable by the 2026-07-22 spike (<a href="decisions.html#mcp-access-spike">decision 44</a>), but the baseline architecture deliberately keeps every Figma MCP call in the interactive command's own session, so the entire autonomous stretch of the pipeline stays structurally independent of Figma and MCP availability and context-budget management stays centralized.</p>
+        <p><strong>What to do instead:</strong> Dispatched agents read Figma facts exclusively from the persisted evidence bundle the calling command writes before dispatch. This is enforced structurally, not just by instruction: those agents carry no Figma-MCP tool and no <code>Bash</code> or <code>WebFetch</code> in their allowlists.</p>
+        <p><strong>Scope note:</strong> The rule targets <em>Task-dispatched</em> agents. <code>design-spec-writer</code> is inline-adopted by <code>/relay-design-spec</code> and never dispatched, so it queries the Figma MCP directly in its own session by design — the premise does not apply to an inline-adopted role.</p>
+        <p><strong>Areas affected:</strong> <code>design-map-writer</code>, <code>design-map-reviewer</code>, <code>research-design</code>, <code>visual-verifier</code>, <code>/relay-design-map</code>.</p>
       </div>
 
       <h2 id="how-to-add">Adding a new anti-pattern</h2>
