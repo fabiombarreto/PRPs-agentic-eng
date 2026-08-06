@@ -69,7 +69,7 @@
     "title": "Validation suite",
     "path": "guide/validation-suite.html",
     "category": "Guide",
-    "excerpt": "The plugin's own self-test: npm run validate runs eleven static consistency checks and npm run eval checks the reviewer agents against golden fixtures. Why it exists, why it is built this way, how to run it, cost, and how to maintain it."
+    "excerpt": "The plugin's own self-test: npm run validate runs twelve static consistency checks and npm run eval checks the reviewer agents against golden fixtures. Why it exists, why it is built this way, how to run it, cost, and how to maintain it."
   },
   {
     "title": "Handling failures",
@@ -117,7 +117,7 @@
     "title": "Validation checks",
     "path": "reference/validation-checks.html",
     "category": "Reference",
-    "excerpt": "Complete per-check catalog of the validation suite: for each of the eleven static checks and the eval layer, the functionality guarded, a passing example, a failing example with the verbatim finding text, and the covering unit tests (149 total)."
+    "excerpt": "Complete per-check catalog of the validation suite: for each of the twelve static checks and the eval layer, the functionality guarded, a passing example, a failing example with the verbatim finding text, and the covering unit tests (166 total)."
   },
   {
     "title": "Test output schema",
