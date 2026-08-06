@@ -29,11 +29,14 @@
       </div>
 
       <h2 id="unreleased">Unreleased</h2>
+      <p><em>No changes queued yet.</em></p>
+
+      <h2 id="v0-29-0">0.29.0 &#8212; 2026-08-06</h2>
       <p>Fixes a measurement defect in <code>scripts/efficiency.mjs</code> that inflated the rework metric the whole efficiency initiative is steered by: reviewer verdicts were grouped by jsonl FILE rather than by independent review SESSION, so a feature-named test-write-review file spanning several phases counted later phases' reviews as retries of earlier ones.</p>
 
       <p>Also documents <code>plugin-root-resolvable</code>, which had shipped as the twelfth static check without ever reaching the reference catalog.</p>
 
-      <h3 id="unreleased-added">Added</h3>
+      <h3 id="v0-29-0-added">Added</h3>
       <ul>
         <li><strong><code>documentation/reference/validation-checks.html</code></strong>
           &mdash; a full per-check section for <code>plugin-root-resolvable</code>,
@@ -54,7 +57,7 @@
           content.</li>
       </ul>
 
-      <h3 id="unreleased-changed">Changed</h3>
+      <h3 id="v0-29-0-changed">Changed</h3>
       <ul>
         <li><strong><code>scripts/efficiency.mjs</code></strong>
           &mdash; entries are now partitioned into review sessions at every
@@ -98,9 +101,17 @@
           &rarr; 21 tests, covering the new <code>sessionsOf</code>
           partition), and the page's summary-table row and totals line are
           updated to match (149 &rarr; 158).</li>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.28.1</code> &rarr; <code>0.29.0</code> to
+          match this release; users running <code>/plugin</code> after pulling
+          this version will get a fresh <code>relay/0.29.0/</code> cache directory
+          with all newly-shipped commands and agents registered. This is the
+          release that carries the <code>/relay-code-review</code> P3 fix below to
+          installed users &mdash; until the cache directory turns over, an
+          installed plugin keeps loading the old precondition.</li>
       </ul>
 
-      <h3 id="unreleased-fixed">Fixed</h3>
+      <h3 id="v0-29-0-fixed">Fixed</h3>
       <ul>
         <li><strong><code>/relay-code-review</code></strong>
           &mdash; precondition P3 ("working tree has a diff against
