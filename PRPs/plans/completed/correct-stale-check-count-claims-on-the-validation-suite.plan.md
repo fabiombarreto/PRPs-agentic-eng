@@ -543,4 +543,4 @@ source PRD, so no `(PRD AC-N)` token is carried on the items below.
 
 *Generated: 2026-07-31*
 *Approved: 2026-07-31*
-*Status: APPROVED*
+*Status: IMPLEMENTED*

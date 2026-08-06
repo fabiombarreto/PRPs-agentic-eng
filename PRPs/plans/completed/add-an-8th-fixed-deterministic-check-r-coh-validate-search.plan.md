@@ -749,4 +749,4 @@ Three existing tests assert the pre-change wording/counts this phase's Task 1/Ta
 
 *Generated: 2026-07-28*
 *Approved: 2026-07-28*
-*Status: APPROVED*
+*Status: IMPLEMENTED*
