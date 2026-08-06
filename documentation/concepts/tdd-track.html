@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>TDD opt-in — relay</title>
+  <title>Test pair — relay</title>
   <link rel="stylesheet" href="../assets/css/app.css" />
 </head>
 <body>
@@ -17,80 +17,97 @@
         <span class="breadcrumb__sep">›</span>
         <span>Concepts</span>
         <span class="breadcrumb__sep">›</span>
-        <span>TDD opt-in</span>
+        <span>Test pair</span>
       </div>
 
-      <h1>TDD opt-in</h1>
-      <p class="page-subtitle">relay has a dedicated TDD track that writes tests <strong>before</strong> production code. It's opt-in per project, activated only by an explicit declaration. This page explains why TDD is a first-class concept in relay, how projects enable it, and what the track actually does.</p>
+      <h1>The test pair</h1>
+      <p class="page-subtitle">relay has a dedicated writer/reviewer pair that owns every test file in the pipeline. It runs in two orderings — test-first (TDD), where the suite is written before production code, and test-after, where it is written against code that already exists and passed review. This page explains why the pair exists, what activates it, what it does in each mode, and what it deliberately will not do.</p>
 
-      <h2 id="why-it-matters">Why TDD is a first-class concept</h2>
+      <div class="callout callout--note">
+        <div class="callout__title">This page was reframed on 2026-08-06</div>
+        <p>It previously described a "TDD track" that activated only on <code>tdd: true</code> and skipped otherwise. That model was superseded on 2026-07-10: activation is now keyed on a declared test framework and runs in <strong>both</strong> orderings, with <code>tdd:</code> selecting only which one. See <a href="../governance/decisions.html#test-pair-universalized">decision 41</a>. The page path is unchanged so existing links keep resolving.</p>
+      </div>
+
+      <h2 id="why-it-matters">Why the pair is a first-class concept</h2>
 
       <p>
         When an AI writes the tests and the code in the same session, it almost always writes them <strong>together</strong> — the tests end up mirroring the implementation rather than driving it. The result looks like TDD but provides none of its benefits: tests that pass trivially, don't exercise real contracts, and don't catch regressions.
       </p>
 
       <p>
-        Real TDD requires two properties:
+        Tests that carry weight require two properties:
       </p>
 
       <ol>
-        <li><strong>Tests exist before the implementation.</strong> The suite is red at the start. Passing it means satisfying a contract, not repeating what was just written.</li>
-        <li><strong>Tests derive from requirements, not from imagined code.</strong> They name behaviors, not method signatures. <code>it('rejects expired tokens')</code>, not <code>it('calls validateToken()')</code>.</li>
+        <li><strong>They are written by someone other than the author of the code.</strong> That separation is what stops a suite from restating the implementation. In test-first it is enforced by ordering; in test-after it is enforced by authorship — the pair writes the tests, never the Implementer.</li>
+        <li><strong>They derive from requirements, not from imagined or observed code.</strong> They name behaviors, not method signatures. <code>it('rejects expired tokens')</code>, not <code>it('calls validateToken()')</code>.</li>
       </ol>
 
       <p>
-        relay's TDD track enforces both structurally: it has a dedicated <strong>TDD Writer</strong> that reads the PRD's Acceptance Criteria and produces tests <em>before</em> the Implementer runs, and a <strong>TDD Reviewer</strong> that refuses to approve tests that leak implementation details, use trivial asserts, or over-mock.
+        relay enforces both structurally with <strong><code>test-writer</code></strong>, which reads the PRD's Acceptance Criteria and authors the suite, and <strong><code>test-reviewer</code></strong>, which refuses to approve tests that leak implementation details, use trivial asserts, or over-mock. The separation is bidirectional and enforced at the tool level: the pair writes tests but never production code, and the Implementer writes production code but never tests — the universal <code>R-X</code> guard rejects any test-file change in an Implementer's diff.
+      </p>
+
+      <p>
+        Test-after sharpens the first risk rather than removing it. When the code already exists, a suite can mirror what was just written just as easily as it can mirror an imagined design. That is precisely why authorship, not merely ordering, is the load-bearing rule.
       </p>
 
       <h2 id="how-to-activate">How to activate</h2>
 
       <p>
-        Every project initialized by the <code>context-builder</code> skill gets a <code>docs/context/methodology.md</code> file. The default state is <strong>TDD off</strong>:
+        Every project initialized by the <code>context-builder</code> skill gets a <code>docs/context/methodology.md</code> file. Two keys govern the pair, and they answer different questions:
+      </p>
+
+      <div class="kv">
+        <dt><code>test_frameworks</code></dt><dd>The <strong>activation gate</strong>, and the only one. A non-empty list runs the pair; <code>[]</code> or a missing file skips it silently. This is the key that decides <em>whether</em> the pair runs at all.</dd>
+        <dt><code>tdd</code></dt><dd>The <strong>ordering selector</strong>. <code>true</code> is test-first, <code>false</code> is test-after. It never decides whether the pair runs — only when.</dd>
+      </div>
+
+      <p>
+        The default state after <code>*init</code> is no framework declared, so the pair is off:
       </p>
 
       <pre><code class="language-default">---
 tdd: false
 tdd_evidence: null
-test_frameworks:
-  - pytest
-  - vitest
-  - playwright
+test_frameworks: []
 ---
 
 # Methodology
 
 ## TDD (Test-Driven Development)
 
-Current state: **not declared** (default).
+Current state: **inactive** (no framework declared).
 
-The TDD track (agents B7 and B8) activates only when `tdd: true` in
-the frontmatter above. Heuristics MUST NOT flip this value — only a
-human edit or an explicit user declaration during `*init` can.
-
-### Observed signals
-
-[The context-builder populates this with signals it found during the
- scan — CI coverage-first rules, test-before-code commit patterns,
- mentions in CONTRIBUTING.md. None of these activate TDD on their own.]
+The test pair (`test-writer` + `test-reviewer`) activates when
+`test_frameworks` above is non-empty — in BOTH modes. The `tdd:`
+value only selects ORDERING: `tdd: true` = test-first (the pair
+authors before the Implementer), `tdd: false` = test-after (the pair
+authors after the Implementer + Code Review). Heuristics MUST NOT
+flip these values — only a human edit or an explicit declaration can.
 </code></pre>
 
       <p>
-        To activate the TDD track:
+        To activate the pair:
       </p>
 
       <ol>
-        <li>Confirm with the team that TDD is the project's actual methodology.</li>
-        <li>Change <code>tdd: false</code> to <code>tdd: true</code>.</li>
-        <li>Set <code>tdd_evidence</code> to <code>"user-declared"</code> or a path to a CONTRIBUTING doc that records the choice.</li>
+        <li>Add the project's real test framework(s) to <code>test_frameworks</code> — for example <code>["pytest"]</code> or <code>["node:test"]</code>. The pair needs a declared framework because it cannot author a test without knowing the idiom.</li>
+        <li>Decide the ordering. Leave <code>tdd: false</code> for test-after, the dominant mode outside strict-TDD shops; set <code>tdd: true</code> only if the team genuinely practices test-first.</li>
+        <li>If you set <code>tdd: true</code>, set <code>tdd_evidence</code> to <code>"user-declared"</code> or a path to a doc recording the choice.</li>
         <li>Commit the change.</li>
       </ol>
 
-      <p>That's it. Next time <code>/relay-execute</code> runs, the TDD track activates automatically — Writer and Reviewer slot in between Plan Reviewer and Implementer.</p>
+      <p>That is it. On the next <code>/relay-execute</code> run the pair activates automatically, slotting in before the Implementer in test-first and after Code Review in test-after.</p>
+
+      <div class="callout callout--warn">
+        <div class="callout__title">Declaring a framework is what turns the pair on</div>
+        <p>Setting <code>tdd: false</code> does <strong>not</strong> disable the pair. This repository is the worked example: it declares <code>tdd: false</code> and <code>test_frameworks: ["node:test"]</code>, and the pair authors and maintains every one of its test files in test-after mode. To switch the pair off entirely, empty <code>test_frameworks</code>.</p>
+      </div>
 
       <h2 id="why-explicit-only">Why only explicit activation?</h2>
 
       <p>
-        Activating TDD based on heuristics (test folder exists, high coverage, etc.) is explicitly <strong>forbidden</strong>. The reason is in <a href="../governance/anti-patterns.html">anti-patterns</a>: many projects have tests without practicing TDD. Turning on the TDD track for them would surprise the team — suddenly every feature gets a red-first test suite that doesn't match their actual workflow.
+        Inferring either key from the codebase — a test folder exists, coverage is high, CI runs a suite — is explicitly <strong>forbidden</strong>. The reason is in <a href="../governance/anti-patterns.html#heuristic-tdd">anti-patterns</a>: having tests is not the same as wanting relay to author them, and practising test-first is not something a folder layout can reveal. Silent activation surprises teams, and a guessed ordering is worse than no ordering.
       </p>
 
       <p>
@@ -98,16 +115,16 @@ human edit or an explicit user declaration during `*init` can.
       </p>
 
       <div class="callout callout--error">
-        <div class="callout__title">Anti-pattern: activating the TDD track by heuristic</div>
-        <p><strong>What it is:</strong> Inferring that a project "does TDD" from the existence of a test folder, a high test count, or a CI job, and enabling B7/B8 automatically.</p>
-        <p><strong>Why it's forbidden:</strong> TDD is a methodology, not a side effect of having tests. Activating it silently surprises teams that test a lot without practicing TDD.</p>
-        <p><strong>What to do instead:</strong> Read <code>docs/context/methodology.md</code> and check exactly one key: <code>tdd: true | false</code>. No declaration file, <code>tdd: false</code>, or missing frontmatter → skip B7/B8 silently.</p>
+        <div class="callout__title">Anti-pattern: activating the test pair by heuristic</div>
+        <p><strong>What it is:</strong> Inferring that a project wants relay-authored tests from the existence of a test folder, a high test count, or a CI job — or inferring the <code>tdd:</code> value the same way.</p>
+        <p><strong>Why it's forbidden:</strong> Activation is a methodology declaration, not a side effect of having tests. And <code>tdd:</code> selects ordering, which must not be guessed.</p>
+        <p><strong>What to do instead:</strong> Read <code>docs/context/methodology.md</code>. The single activation gate is a declared framework: a non-empty <code>test_frameworks</code> runs the pair in both modes; <code>test_frameworks: []</code> or missing frontmatter skips it silently. <code>tdd:</code> only selects ordering, never whether the pair runs.</p>
       </div>
 
-      <h2 id="what-happens-when-active">What happens when TDD is active</h2>
+      <h2 id="what-happens-when-active">What happens when the pair is active</h2>
 
       <p>
-        With <code>tdd: true</code>, the Pillar 2 pipeline gains two stages between Plan Review and Implementation:
+        The pair contributes the same two stages in both modes; only their position moves. With <code>tdd: true</code> they sit between Plan Review and Implementation, so the Implementer inherits a red suite as its contract:
       </p>
 
       <div class="pipeline">
@@ -122,13 +139,13 @@ human edit or an explicit user declaration during `*init` can.
         </div>
         <div class="pipeline__arrow">↓</div>
         <div class="pipeline__row pipeline__row--autonomous">
-          <div class="pipeline__label">stage 4 (TDD)</div>
-          <div class="pipeline__text"><strong>TDD Writer</strong> — reads PRD AC + plan, produces red test suite. Commits tests only — <em>never production code</em>.</div>
+          <div class="pipeline__label">stage 4 (pair)</div>
+          <div class="pipeline__text"><strong><code>test-writer</code></strong> — reads PRD AC + plan, produces a red test suite. Authors tests only — <em>never production code</em>.</div>
         </div>
         <div class="pipeline__arrow">↓</div>
         <div class="pipeline__row pipeline__row--autonomous">
-          <div class="pipeline__label">stage 4 (TDD)</div>
-          <div class="pipeline__text"><strong>TDD Reviewer</strong> — validates the suite against five known pitfalls (implementation leaks, trivial asserts, mock abuse, AC coverage, test duplication). Flips to APPROVED.</div>
+          <div class="pipeline__label">stage 4 (pair)</div>
+          <div class="pipeline__text"><strong><code>test-reviewer</code></strong> — validates the suite against five pitfalls (implementation leaks, trivial asserts, mock abuse, AC coverage, duplication) plus <code>R-RED-LEGITIMATE</code> and the lifecycle-ledger check. Flips the manifest to APPROVED.</div>
         </div>
         <div class="pipeline__arrow">↓</div>
         <div class="pipeline__row pipeline__row--autonomous">
@@ -137,7 +154,19 @@ human edit or an explicit user declaration during `*init` can.
         </div>
       </div>
 
-      <p>The Test Runner downstream respects the TDD contract: B4 (auto-correction loop) explicitly refuses to weaken tests that the TDD Reviewer approved, and B5 (post-green review) uses the TDD suite as the baseline for "tests were not removed."</p>
+      <p>
+        With <code>tdd: false</code> the same two stages run <em>after</em> the Implementer and Code Review, against code that already exists. The reviewer's mode-selected legitimacy check flips accordingly — <code>R-GREEN-LEGITIMATE</code> instead of <code>R-RED-LEGITIMATE</code>, because a suite authored against shipped code is expected to be green, and a red result there signals an implementation bug or a bad test rather than a healthy starting point.
+      </p>
+
+      <h3 id="lifecycle-ledger">The lifecycle ledger</h3>
+
+      <p>
+        The pair owns the full test-file lifecycle, not just creation. Alongside writing new tests it may <strong>update</strong> a test whose contract changed under a live criterion, or <strong>retire</strong> one that is obsolete (its behavior is gone from the in-scope criteria) or redundant (a proven duplicate naming its survivor). Every non-create operation is recorded in the suite manifest's <strong>lifecycle ledger</strong> with a classification and a justification, and <code>test-reviewer</code>'s <code>R-LIFECYCLE-LEGITIMATE</code> re-validates each one independently.
+      </p>
+
+      <p>
+        The ledger is a positive authorization signal, never a blanket exemption. The post-green reviewer downstream accepts a removal or a skip only when it matches an APPROVED ledger entry; an unmatched removal — and every removal when no manifest exists — still blocks. The auto-correction loop refuses to weaken tests the pair approved, and neither it nor the Implementer authors any test-file change at all.
+      </p>
 
       <h2 id="foundation-phases">Foundation phases (compiled languages)</h2>
 
@@ -146,7 +175,7 @@ human edit or an explicit user declaration during `*init` can.
       </p>
 
       <p>
-        In an interpreted language this is survivable: a reference to a not-yet-created symbol fails at run time, one test at a time. In a <strong>compiled</strong> language (Java/JUnit, Go, C#/.NET) it is fatal — a reference to a missing type breaks compilation of the entire test source set, so no test can run at all. The result was a dead end: the TDD Writer returned <code>AMBIGUOUS</code> for the seam phase's Acceptance Criteria even though those ACs were perfectly precise. The problem was never AC quality; it was <strong>ordering</strong>.
+        In an interpreted language this is survivable: a reference to a not-yet-created symbol fails at run time, one test at a time. In a <strong>compiled</strong> language (Java/JUnit, Go, C#/.NET) it is fatal — a reference to a missing type breaks compilation of the entire test source set, so no test can run at all. The result was a dead end: <code>test-writer</code> returned <code>AMBIGUOUS</code> for the seam phase's Acceptance Criteria even though those ACs were perfectly precise. The problem was never AC quality; it was <strong>ordering</strong>.
       </p>
 
       <p>
@@ -161,19 +190,20 @@ human edit or an explicit user declaration during `*init` can.
 
       <div class="callout callout--note">
         <div class="callout__title">Red-by-design is first-class in compiled languages</div>
-        <p>For the feature phases that follow a foundation phase, the TDD Reviewer's red-legitimacy check applies a <strong>seam-set discriminator</strong>: a compile error whose unresolved symbols are all in the plan's <code>## Files to Change</code> <code>CREATE</code>/<code>UPDATE</code> set is a legitimate red-by-design failure — the test drives a production symbol that does not exist yet. Only unresolved symbols <em>outside</em> that set (typos, wrong imports, missing dependencies) or a pure test-source syntax error count as broken setup.</p>
+        <p>For the feature phases that follow a foundation phase, <code>test-reviewer</code>'s red-legitimacy check applies a <strong>seam-set discriminator</strong>: a compile error whose unresolved symbols are all in the plan's <code>## Files to Change</code> <code>CREATE</code>/<code>UPDATE</code> set is a legitimate red-by-design failure — the test drives a production symbol that does not exist yet. Only unresolved symbols <em>outside</em> that set (typos, wrong imports, missing dependencies) or a pure test-source syntax error count as broken setup.</p>
       </div>
 
       <div class="callout callout--warn">
         <div class="callout__title">If a foundation phase is misclassified</div>
-        <p>When the TDD Writer returns <code>AMBIGUOUS</code> for ACs that are clearly written (they have Given/When/Then), the phase is usually a foundation phase that was tagged <code>feature</code>. The fix is not to rewrite the PRD — it is to mark the plan <code>phase_type: foundation</code> and re-run. <code>/relay-execute</code>'s halt message now surfaces this recovery path explicitly.</p>
+        <p>When <code>test-writer</code> returns <code>AMBIGUOUS</code> for ACs that are clearly written (they have Given/When/Then), the phase is usually a foundation phase that was tagged <code>feature</code>. The fix is not to rewrite the PRD — it is to mark the plan <code>phase_type: foundation</code> and re-run. <code>/relay-execute</code>'s halt message now surfaces this recovery path explicitly.</p>
       </div>
 
-      <h2 id="what-doesnt-change">What doesn't change when TDD is active</h2>
+      <h2 id="what-doesnt-change">What doesn't change between the two modes</h2>
 
       <ul>
-        <li><strong>Acceptance Criteria remain the source of truth.</strong> The PRD's AC section is the contract whether TDD is on or off. When TDD is off, the Implementer writes tests alongside the code; when on, the TDD Writer derives tests from AC before the Implementer runs.</li>
-        <li><strong>The Test Runner doesn't care.</strong> It runs the suite, classifies failures, and auto-corrects. It doesn't know whether the suite was written by a TDD Writer or an Implementer; it just runs what's there.</li>
+        <li><strong>Acceptance Criteria remain the source of truth.</strong> The PRD's AC section is the contract in both orderings. The pair walks every in-scope criterion either way; only the moment it does so moves.</li>
+        <li><strong>The Implementer never writes tests.</strong> This holds in <em>both</em> modes and is not a test-first-only rule. <code>R-X</code> rejects any test-file change in an Implementer's diff, so a test-after project's tests come from the pair, not from the Implementer writing them alongside the code.</li>
+        <li><strong>The Test Runner doesn't care.</strong> It runs the suite, classifies failures, and auto-corrects. It does not know which mode produced the suite; it just runs what is there.</li>
         <li><strong>The rest of the pipeline is unchanged.</strong> Post-green review, report generation, PR creation — all behave the same.</li>
       </ul>
 
@@ -182,18 +212,19 @@ human edit or an explicit user declaration during `*init` can.
       <p>Three scenarios matter:</p>
 
       <div class="kv">
-        <dt>methodology.md missing</dt><dd>Treated as <code>tdd: false</code>. TDD track silently skipped. A note in the final report flags "methodology.md not found — consider re-running <code>*update</code>."</dd>
-        <dt>methodology.md has <code>tdd: true</code> but no test framework detected</dt><dd>Hard abort with actionable message. TDD without a test framework is a misconfiguration; the user must either install a test framework or flip <code>tdd: false</code>.</dd>
-        <dt>methodology.md has <code>tdd: true</code> and TDD Reviewer exhausts retries</dt><dd>The pipeline halts for human review. The partially-written test suite stays in the worktree for manual completion or discard.</dd>
+        <dt><code>methodology.md</code> missing</dt><dd>Treated as no declared framework. The pair self-skips silently, and a note in the final report flags "methodology.md not found — consider re-running <code>*update</code>."</dd>
+        <dt><code>test_frameworks: []</code>, whatever <code>tdd:</code> says</dt><dd>The pair self-skips silently and exits 0. This is the sole self-skip of the gate: with no declared framework there is no idiom to author a test in, so the skip is correct rather than a misconfiguration. It is not an abort, and <code>tdd: true</code> does not change it.</dd>
+        <dt><code>test-reviewer</code> exhausts its retry budget</dt><dd>The pipeline halts for human review. The partially-written suite stays in the worktree for manual completion or discard.</dd>
       </div>
 
       <h2 id="related">Related</h2>
 
       <ul>
         <li><a href="../reference/commands.html#relay-write-test"><code>/relay-write-test</code></a> and <a href="../reference/commands.html#relay-test-write-review"><code>/relay-test-write-review</code></a> — command references</li>
-        <li><a href="../governance/decisions.html#tdd-opt-in">Decision: TDD activation is opt-in by explicit declaration only</a></li>
-        <li><a href="../governance/decisions.html#methodology-file">Decision: methodology declaration lives in <code>docs/context/methodology.md</code></a></li>
-        <li><a href="../governance/anti-patterns.html">Anti-patterns — see "activating the TDD track by heuristic"</a></li>
+        <li><a href="../governance/decisions.html#test-pair-universalized">Decision 41: test pair universalized — framework activates, <code>tdd:</code> only orders</a> (supersedes the original opt-in framing)</li>
+        <li><a href="../governance/decisions.html#tdd-opt-in">Decision 4: TDD activation is opt-in by explicit declaration only</a> — the original entry, kept for lineage</li>
+        <li><a href="../governance/decisions.html#methodology-file">Decision 5: methodology declaration lives in <code>docs/context/methodology.md</code></a></li>
+        <li><a href="../governance/anti-patterns.html#heuristic-tdd">Anti-pattern: activating the test pair by heuristic</a></li>
       </ul>
 
       <div class="page-footer"></div>

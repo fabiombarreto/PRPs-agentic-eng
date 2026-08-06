@@ -36,10 +36,10 @@
     "excerpt": "Writer/reviewer pairs plus the Test Runner. Each stage has a specific input, output, and recovery path. This page walks through all eight stages and their per-stage retry budgets."
   },
   {
-    "title": "TDD opt-in",
+    "title": "Test pair",
     "path": "concepts/tdd-track.html",
     "category": "Concepts",
-    "excerpt": "TDD is an explicit opt-in via docs/context/methodology.md with tdd: true. Heuristic activation is forbidden — explicit declaration only. When active, tests are written before implementation by the TDD Writer. Foundation phases (phase_type: foundation) skip test-first in compiled languages (Java/JUnit, Go, .NET) so the seam can be created first."
+    "excerpt": "The test-writer/test-reviewer pair owns every test file. Activation is a declared test framework in docs/context/methodology.md, never a heuristic; tdd: only selects ordering — true is test-first (TDD), false is test-after. The pair owns the full create/update/delete lifecycle with a manifest ledger, and the Implementer never writes tests in either mode. Foundation phases skip test-first in compiled languages so the seam can be created first."
   },
   {
     "title": "PRP artifact paths",

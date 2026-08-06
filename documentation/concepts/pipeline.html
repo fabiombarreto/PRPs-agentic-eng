@@ -68,10 +68,10 @@
 
       <div class="kv">
         <dt>Input</dt><dd>Approved plan + PRD Acceptance Criteria.</dd>
-        <dt>Output</dt><dd>Test files committed to worktree. Suite is <strong>red</strong> — no production code yet.</dd>
-        <dt>Activation</dt><dd>Only when <code>docs/context/methodology.md</code> declares <code>tdd: true</code>. Otherwise silent skip. <a href="tdd-track.html">Details</a>.</dd>
-        <dt>Writer</dt><dd><code>TDD Writer</code> — derives tests from the PRD's Acceptance Criteria, never from imagined implementation.</dd>
-        <dt>Reviewer</dt><dd><code>TDD Reviewer</code> — flags tests that mirror implementation, trivial asserts, mocks that hide behavior, coverage gaps against AC.</dd>
+        <dt>Output</dt><dd>Test files written to the worktree, plus a suite manifest. In test-first the suite is <strong>red</strong> — no production code yet; in test-after it is written against code that already passed review and is expected to be <strong>green</strong>.</dd>
+        <dt>Activation</dt><dd>Whenever <code>docs/context/methodology.md</code> declares a non-empty <code>test_frameworks</code> — in <strong>both</strong> modes. <code>tdd:</code> selects only the ordering (<code>true</code> before the Implementer, <code>false</code> after Code Review); it never decides whether the stage runs. Empty or missing frameworks is a silent skip. <a href="tdd-track.html">Details</a>.</dd>
+        <dt>Writer</dt><dd><code>test-writer</code> — derives tests from the PRD's Acceptance Criteria, never from imagined or already-written implementation. Owns the full create/update/delete lifecycle, with every non-create operation recorded in the manifest's ledger.</dd>
+        <dt>Reviewer</dt><dd><code>test-reviewer</code> — flags tests that mirror implementation, trivial asserts, mocks that hide behavior, coverage gaps against AC, and independently re-validates every recorded lifecycle operation.</dd>
         <dt>Failure mode</dt><dd>Same as Plan — retry exhausted halts the pipeline.</dd>
       </div>
 

@@ -34,7 +34,7 @@
         { title: "The three pillars",       path: "concepts/pillars.html" },
         { title: "Interactivity boundary",  path: "concepts/interactivity-boundary.html" },
         { title: "Pipeline stages",         path: "concepts/pipeline.html" },
-        { title: "TDD opt-in",              path: "concepts/tdd-track.html" },
+        { title: "Test pair",               path: "concepts/tdd-track.html" },
         { title: "PRP artifact paths",      path: "concepts/prp-artifacts.html" },
         { title: "Graceful degradation",    path: "concepts/graceful-degradation.html" },
       ],
