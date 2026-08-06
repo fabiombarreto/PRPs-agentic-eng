@@ -1,0 +1,130 @@
+{
+  "label": "session-metric",
+  "markerUtc": "2026-08-06T13:56:34.166Z",
+  "note": "First boundary recorded with the per-session rework metric (docs/decisions.md 2026-08-05; the partition shipped in c6815cd). NOT a release cut - plugin.json stays 0.28.1 and no changelog release was cut for it. Rework here is runs per SESSION: entries are split at every APPROVED or RUBRIC_PASSED verdict, because a passing verdict terminates a retry loop, so one file holding two of them holds two independent sessions. DO NOT compare this markers rework figure against v0.24.0 or v0.25.0 - both hold the pre-fix runsPerArtifact key measured per LOG FILE, which overstated rework everywhere and worst on test-write-review (2.38 per file against 1.25 per session across the six-repo corpus). Comparing across the two shapes repeats the exact error this metric was corrected to remove; treat the older pair as a closed audit record, not as a baseline. The v0.25.0 marker is still the boundary for the wave-2 evaluation and carries its own steering note - use compare --since v0.25.0 for that, since compare now defaults to this newer marker. First-attempt failure is per session from here on too.",
+  "metrics": {
+    "plan-review": {
+      "artifacts": 92,
+      "sessions": 101,
+      "splitArtifacts": 7,
+      "runs": 167,
+      "runsPerSession": 1.65,
+      "firstAttemptFailures": 52,
+      "firstAttemptFailureRate": 52,
+      "topFailures": [
+        {
+          "id": "R-COH-TASK-AC-MISSING",
+          "n": 30
+        },
+        {
+          "id": "R-COH-OTHER-INTERNAL-CONTRADICTION",
+          "n": 22
+        },
+        {
+          "id": "R-COH-AC-TASK-DECOUPLED",
+          "n": 15
+        },
+        {
+          "id": "R-COH-PATTERN-TASK-DRIFT",
+          "n": 11
+        },
+        {
+          "id": "R-COH-MANDATORY-READING-IRRELEVANT",
+          "n": 9
+        },
+        {
+          "id": "R-COH-VALIDATE-FRAMEWORK-MISMATCH",
+          "n": 8
+        },
+        {
+          "id": "R-COH-VALIDATE-ALWAYS-PASS",
+          "n": 7
+        },
+        {
+          "id": "R8",
+          "n": 6
+        }
+      ]
+    },
+    "code-review": {
+      "artifacts": 78,
+      "sessions": 82,
+      "splitArtifacts": 4,
+      "runs": 122,
+      "runsPerSession": 1.49,
+      "firstAttemptFailures": 30,
+      "firstAttemptFailureRate": 36.6,
+      "topFailures": [
+        {
+          "id": "R-COH-OTHER-INTERNAL-CONTRADICTION",
+          "n": 28
+        },
+        {
+          "id": "R-SEM",
+          "n": 17
+        },
+        {
+          "id": "R-COH-COMMENT-MISMATCH",
+          "n": 9
+        },
+        {
+          "id": "R-L3",
+          "n": 3
+        },
+        {
+          "id": "R-COH-TASK-CONTRADICTION",
+          "n": 3
+        },
+        {
+          "id": "R-COH-REGISTRY-MISSING",
+          "n": 2
+        },
+        {
+          "id": "R-L2",
+          "n": 2
+        },
+        {
+          "id": "R-S3",
+          "n": 1
+        }
+      ]
+    },
+    "test-write-review": {
+      "artifacts": 19,
+      "sessions": 41,
+      "splitArtifacts": 6,
+      "runs": 55,
+      "runsPerSession": 1.34,
+      "firstAttemptFailures": 12,
+      "firstAttemptFailureRate": 29.3,
+      "topFailures": [
+        {
+          "id": "R-AC-COVERAGE",
+          "n": 8
+        },
+        {
+          "id": "R-DUPLICATE",
+          "n": 2
+        },
+        {
+          "id": "R-GREEN-LEGITIMATE",
+          "n": 2
+        },
+        {
+          "id": "R-IMPL-LEAK",
+          "n": 1
+        },
+        {
+          "id": "R-LIFECYCLE-LEGITIMATE",
+          "n": 1
+        },
+        {
+          "id": "R-TRIVIAL-ASSERT",
+          "n": 1
+        }
+      ]
+    }
+  },
+  "corpusFiles": 189,
+  "corpusRuns": 344
+}
