@@ -117,7 +117,10 @@ The check is for one of the two acceptable values exactly. Both contexts (APPROV
 
 (Implementation order: runs after P5, which derives `<base_commit>`.)
 
-Run `git diff --quiet HEAD <base_commit>`. The exit code semantics:
+Run `git diff --quiet <base_commit>` — ONE commit argument, deliberately.
+That form compares the WORKING TREE (staged and unstaged alike) against
+`<base_commit>`, which is the question P3 actually asks. The exit code
+semantics:
 - Non-zero → there ARE differences in the working tree → proceed.
 - Zero → no diff → HALT with:
 
@@ -129,6 +132,18 @@ Run `git diff --quiet HEAD <base_commit>`. The exit code semantics:
   > in the worktree, or run /relay-implement against the plan
   > if you want the autonomous loop to produce code from
   > scratch.
+
+**Never write `git diff --quiet HEAD <base_commit>`.** Two commit arguments
+compare two COMMIT TREES and ignore the working tree entirely. P5 derives
+`base_commit` as `git merge-base HEAD <base_branch>`, so whenever the review
+runs on the base branch itself — the ordinary case of reviewing uncommitted
+work on `main` or `development` — `base_commit` resolves to HEAD, the
+two-argument form compares a commit to itself, exits `0`, and HALTs with "No
+working-tree diff" against a worktree full of changes. That was this
+precondition's shipped behavior until 2026-08-06, when a real invocation
+false-halted on a five-file diff. The one-argument form is not more
+permissive, only correct: with a genuinely clean tree it still exits `0` and
+still HALTs.
 
 ### P4 — Decision Gate sources readable
 

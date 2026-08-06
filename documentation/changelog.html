@@ -102,6 +102,21 @@
 
       <h3 id="unreleased-fixed">Fixed</h3>
       <ul>
+        <li><strong><code>/relay-code-review</code></strong>
+          &mdash; precondition P3 ("working tree has a diff against
+          <code>base_commit</code>") ran <code>git diff --quiet HEAD
+          &lt;base_commit&gt;</code>, which compares two commit TREES and
+          ignores the working tree. P5 derives <code>base_commit</code> as
+          <code>git merge-base HEAD &lt;base_branch&gt;</code>, so reviewing
+          uncommitted work while on the base branch itself made
+          <code>base_commit</code> resolve to HEAD, compared a commit to
+          itself, exited <code>0</code>, and false-halted with "No
+          working-tree diff" against a dirty worktree. Now
+          <code>git diff --quiet &lt;base_commit&gt;</code> &mdash; one
+          argument, comparing the working tree. Not more permissive: a
+          genuinely clean tree still exits <code>0</code> and still halts.
+          The command body now also states the two-argument form as an
+          explicit "never write this" so the shape cannot return.</li>
         <li><strong><code>documentation/reference/validation-checks.html</code></strong>
           &mdash; stale check-count claims corrected from eleven to twelve in the
           page subtitle, the how-to-read callout, and the totals line, and the
