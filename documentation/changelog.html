@@ -29,12 +29,38 @@
       </div>
 
       <h2 id="unreleased">Unreleased</h2>
-      <p>Brings the two governance mirror pages back in line with their canonical Markdown. <code>governance/decisions.html</code> promised "entries are added here as they're committed there" while carrying 14 of 68 entries, all dated 2026-04-19 &mdash; roughly three and a half months of drift. <code>governance/anti-patterns.html</code> was missing two anti-patterns and, worse, taught a test-pair activation rule superseded in July.</p>
+      <p><em>No changes queued yet.</em></p>
+
+      <h2 id="v0-30-0">0.30.0 &#8212; 2026-08-06</h2>
+      <p>Gives <code>/relay-design-spec</code> a defined outcome when Figma refuses a traversal, closing the last phase of the <code>figma-quota-resilience</code> PRD. Previously the design-spec Writer's traversal ended in an unconditional exit gate, so a refused call deadlocked the command with no diagnosis.</p>
+
+      <p>Also brings the two governance mirror pages back in line with their canonical Markdown. <code>governance/decisions.html</code> promised "entries are added here as they're committed there" while carrying 14 of 68 entries, all dated 2026-04-19 &mdash; roughly three and a half months of drift. <code>governance/anti-patterns.html</code> was missing two anti-patterns and, worse, taught a test-pair activation rule superseded in July.</p>
 
       <p>Also closes row 9 of <code>test-pair-universalization.prd.md</code>, pending since 2026-07-10 &mdash; the concept and pipeline pages still described the superseded "TDD track" model.</p>
 
-      <h3 id="unreleased-added">Added</h3>
+      <h3 id="v0-30-0-added">Added</h3>
       <ul>
+        <li><strong>Design-spec quota path</strong>
+          &mdash; <code>figma-quota-resilience</code> Phase 6, the last row of
+          that PRD and the only one outside its MVP.
+          <code>design-spec-writer</code>'s Phase 2 traversal gains a
+          partial-evidence branch covering all three symmetric evidence losses
+          (<code>raw/</code> nodes, <code>refs/</code> screenshots,
+          <code>raw/variables.json</code> tokens), a
+          <code>DEGRADED_NO_TOKENS</code> rung specific to an absent token map,
+          and a Hard Constraint stating the outcome mapping. Zero evidence
+          gathered at all now HALTs in two named variants:
+          <code>FAILED_FIGMA_QUOTA_EXHAUSTED</code> when the refusals were
+          quota-exhaustion errors, or the same zero-evidence HALT naming the
+          actual refusal honestly when they were not &mdash; so a persistent
+          auth or transient failure is no longer misreported as a quota
+          problem. <code>/relay-design-spec</code> carries a
+          <code>cumulative_figma_calls</code> count across both user-chosen
+          re-traversal paths, shows it in the
+          <code>max_spec_review_retries</code> exhaustion offer, and suppresses
+          that offer's retry-with-corrected-inputs outcome after a degraded
+          round, because no input correction resolves an MCP
+          evidence-collection refusal.</li>
         <li><strong><code>documentation/governance/decisions.html</code></strong>
           &mdash; the 54 missing decision entries, taking the page from 14 to
           all 68 in <code>docs/decisions.md</code>. Each follows the page's
@@ -53,8 +79,27 @@
           <code>design-spec-writer</code> is deliberately outside the rule.</li>
       </ul>
 
-      <h3 id="unreleased-changed">Changed</h3>
+      <h3 id="v0-30-0-changed">Changed</h3>
       <ul>
+        <li><strong><code>plugins/relay/agents/design-spec-reviewer.md</code></strong>
+          &mdash; <code>R-DS4</code> now reports "tokens not collected" rather
+          than "token does not resolve" when <code>raw/variables.json</code> is
+          absent, so a <code>DEGRADED_NO_TOKENS</code> spec is diagnosed
+          accurately instead of read as a broken token reference. The rubric
+          stays at seven items.</li>
+        <li><strong><code>docs/</code> knowledge base</strong>
+          &mdash; <code>context/architecture.md</code> and
+          <code>context/integrations.md</code> record the refusal behavior, and
+          <code>api-reference.md</code>'s three <code>/relay-design-spec</code>
+          rows &mdash; command, writer and reviewer &mdash; no longer describe
+          only the pre-Phase-6 happy path.</li>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.29.0</code> &rarr; <code>0.30.0</code> to
+          match this release; users running <code>/plugin</code> after pulling
+          this version will get a fresh <code>relay/0.30.0/</code> cache directory
+          with all newly-shipped commands and agents registered. Required by
+          <a href="AGENTS.md">AGENTS.md</a> &sect;7.5 because this release ships
+          assets under <code>plugins/relay/</code>.</li>
         <li><strong><code>documentation/concepts/tdd-track.html</code></strong>
           &mdash; reframed from "TDD opt-in" to "The test pair". The page taught
           that the pair activates only on <code>tdd: true</code> and skips
@@ -85,7 +130,7 @@
           were true on the merits and only needed the current name.</li>
       </ul>
 
-      <h3 id="unreleased-fixed">Fixed</h3>
+      <h3 id="v0-30-0-fixed">Fixed</h3>
       <ul>
         <li><strong><code>documentation/concepts/tdd-track.html</code></strong>
           &mdash; the page asserted that "when TDD is off, the Implementer
