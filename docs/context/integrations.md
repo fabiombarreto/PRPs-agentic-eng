@@ -45,7 +45,13 @@ phases.
   node-scoped `get_metadata` first, then chunked `get_design_context`
   at 6–8 calls per chunk with persist-then-discard evidence capture,
   `get_variable_defs` for tokens, and per-frame `get_screenshot` at 1x;
-  hard cap `max_figma_nodes = 20`). Never called from a Task-dispatched
+  hard cap `max_figma_nodes = 20`; a refusal on any of these three calls
+  (figma-quota-resilience Phase 6) narrows scope, or — for
+  `get_variable_defs` specifically — sets rung `DEGRADED_NO_TOKENS`,
+  rather than retrying, and zero evidence gathered at all HALTs
+  `FAILED_FIGMA_QUOTA_EXHAUSTED` when the refusal(s) were
+  quota-exhaustion errors or the same HALT naming the actual refusal
+  honestly otherwise). Never called from a Task-dispatched
   agent — `design-map-writer` and `design-map-reviewer` are MCP-free by
   design (no Figma MCP tool in either's allowlist), reading only the
   evidence `/relay-design-map` persists to

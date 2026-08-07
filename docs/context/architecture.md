@@ -234,7 +234,18 @@ table and contracts in `docs/api-reference.md`; rationale in
   MCP-free pair the way `/relay-design-map` does. It performs all Figma
   MCP querying itself, in this session, as the Writer's own protocol
   directs; it is never called by `/relay-execute`. See "Interactivity
-  boundary" above and `docs/decisions.md` [2026-07-23].
+  boundary" above and `docs/decisions.md` [2026-07-23]. Since
+  figma-quota-resilience Phase 6, a Figma MCP refusal mid-traversal no
+  longer deadlocks the Writer's Phase 2: partial evidence narrows scope
+  (and, for a missing token map specifically, sets rung
+  `DEGRADED_NO_TOKENS`), while zero evidence gathered at all HALTs —
+  `FAILED_FIGMA_QUOTA_EXHAUSTED` when the refusal(s) were
+  quota-exhaustion errors, or the same zero-evidence HALT naming the
+  actual refusal honestly otherwise. A `cumulative_figma_calls` count,
+  carried across both user-chosen re-traversal paths, is displayed in
+  the `max_spec_review_retries` exhaustion offer, which suppresses its
+  "retry with corrected inputs" outcome after a `DEGRADED_NO_TOKENS`
+  round.
 - **A third standalone, human-triggered command mirrors
   `/relay-implement`'s own visual-verification dispatch, read-only.**
   `/relay-visual-review` (Figma Implementation Track, Phase 7) is a
