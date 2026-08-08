@@ -131,21 +131,34 @@ test('AC-A4: documentation/concepts/pipeline.html\'s stage-2 Reviewer entry name
 // AC-A4 -- documentation/changelog.html's mandatory Unreleased entry.
 // ---------------------------------------------------------------------------
 
-test('AC-A4: documentation/changelog.html carries a new Unreleased > Changed entry naming the plan-review materiality threshold and the corrected pages, replacing the "no changes queued yet" placeholder', () => {
+test('AC-A4: documentation/changelog.html carries a Changed entry (in whichever release or Unreleased block currently holds it) naming the plan-review materiality threshold and the corrected pages', () => {
   const content = read(CHANGELOG_HTML_PATH);
-  const unreleasedStart = content.indexOf('<h2 id="unreleased">Unreleased</h2>');
-  assert.notEqual(unreleasedStart, -1);
-  const nextH2 = content.indexOf('<h2 id="v0-30-0">', unreleasedStart);
-  assert.notEqual(nextH2, -1, 'expected the pre-existing v0.30.0 heading to still directly follow the Unreleased section');
-  const unreleasedSection = content.slice(unreleasedStart, nextH2);
 
-  assert.doesNotMatch(unreleasedSection, /No changes queued yet\./, 'expected the placeholder to be replaced now that a real entry exists');
-  assert.match(unreleasedSection, /<h3 id="unreleased-changed">Changed<\/h3>/);
-  assert.match(unreleasedSection, /Plan-review gating documentation corrected for the materiality threshold/);
-  assert.match(unreleasedSection, /<code>docs\/api-reference\.md<\/code>/);
-  assert.match(unreleasedSection, /<code>documentation\/reference\/commands\.html<\/code>/);
-  assert.match(unreleasedSection, /<code>documentation\/concepts\/pipeline\.html<\/code>/);
-  assert.match(unreleasedSection, /every rubric check carries a <code>blocking<\/code> or\s+<code>advisory<\/code> class/);
+  // Release-cut-resilient anchor (documentation/AGENTS.md 7.3/7.5 renames
+  // Unreleased's content to a dated <h2 id="v..."> and opens a fresh, empty
+  // Unreleased block above it on every cut): locate the entry by its OWN
+  // distinguishing text, not by the `Unreleased` heading or the
+  // `unreleased-changed` id -- both move (or vanish) at the next cut, while
+  // the entry text itself is permanent; only its enclosing heading ids change.
+  const entryTitleStart = content.indexOf('Plan-review gating documentation corrected for the materiality threshold');
+  assert.notEqual(entryTitleStart, -1, 'expected the plan-review materiality changelog entry to exist somewhere in the changelog');
+  const entryEnd = content.indexOf('</li>', entryTitleStart);
+  assert.notEqual(entryEnd, -1, "expected the entry's enclosing <li> to close");
+  const entry = content.slice(entryTitleStart, entryEnd);
+
+  // The entry must still be filed under a "Changed" subsection -- match the
+  // nearest preceding <h3>'s TEXT rather than a specific id (the id is
+  // "unreleased-changed" pre-cut, "v0-31-0-changed" post-cut, and will keep
+  // changing at every future cut).
+  const precedingH3Start = content.lastIndexOf('<h3 id="', entryTitleStart);
+  assert.notEqual(precedingH3Start, -1, 'expected a preceding <h3> subsection heading');
+  const precedingH3 = content.slice(precedingH3Start, content.indexOf('</h3>', precedingH3Start));
+  assert.match(precedingH3, /-changed">Changed$/, 'expected the entry to be filed under a "Changed" subsection');
+
+  assert.match(entry, /<code>docs\/api-reference\.md<\/code>/);
+  assert.match(entry, /<code>documentation\/reference\/commands\.html<\/code>/);
+  assert.match(entry, /<code>documentation\/concepts\/pipeline\.html<\/code>/);
+  assert.match(entry, /every rubric check carries a <code>blocking<\/code> or\s+<code>advisory<\/code> class/);
 
   // Regression net: the pre-existing v0.30.0 entry's own text is unperturbed.
   assert.match(content, /Gives <code>\/relay-design-spec<\/code> a defined outcome when Figma refuses a traversal/);
