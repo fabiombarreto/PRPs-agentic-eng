@@ -60,6 +60,18 @@
           every other id blocking), the advisory-by-default rule for newly
           added checks, the one-way escalation valve, and the absent-<code>class</code>
           reads-as-blocking rule for historic verdicts.</li>
+        <li><strong>Governance decisions page carries the four
+          <code>plan-review-materiality</code> decisions</strong>
+          &mdash; <code>documentation/governance/decisions.html</code> mirrors
+          <code>docs/decisions.md</code>, which gained one entry per phase of
+          the feature. Every other dated decision was already represented; only
+          these four were absent. Added as entries 69&ndash;72 (materiality
+          classes, retry convergence ratchet, advisory pass-through,
+          class-aware measurement). The gap is structural rather than an
+          oversight: the <code>docs-updater</code> / <code>docs-reviewer</code>
+          pair is forbidden from touching <code>documentation/</code> by its
+          own <code>D-R6</code> rubric check, so the rendered site is always
+          updated by a plan task or a follow-up, never by the docs pair.</li>
       </ul>
 
       <h2 id="v0-30-0">0.30.0 &#8212; 2026-08-06</h2>
