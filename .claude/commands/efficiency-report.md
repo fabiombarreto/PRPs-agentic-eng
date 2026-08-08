@@ -76,6 +76,25 @@ Two headline metrics per stage:
    research was right and the checks should be reverted — not that more
    checklist items are needed. Report that outcome as readily as a win.
 
+6. **Sample advisory→defect conversion (semi-manual).** After reporting the
+   per-stage deltas above, read the per-class tallies now emitted by
+   `scripts/efficiency.mjs` — `topFailuresByClass`, `blockingFailRows`,
+   `advisoryFailRows` — printed whenever a stage's after-set carries at
+   least one advisory-classed failing row. For the advisory-classed ids
+   that appear most often in `topFailuresByClass.advisory`, sample a
+   handful of the artifacts that carried them (`Read` their
+   `PRPs/plans/<basename>.review.jsonl`, and the same feature's
+   `.code-review.jsonl` / test records where relevant) and judge whether
+   the same phase later failed code-review or tests for a related reason.
+   Report the sampled conversion rate with an explicit statement that
+   attribution is judgment-based and the sample size is small — never
+   present it as a computed precision figure. The decision rule this
+   sampling feeds: an advisory-classed check that converts often is a
+   candidate for promotion to blocking via a recorded `docs/decisions.md`
+   entry citing the measured evidence — the inverse of the incident-driven
+   ratchet that grew the rubric — but promotion is never automatic; it
+   requires that explicit human-recorded decision.
+
 ---
 
 ## Recording a new marker

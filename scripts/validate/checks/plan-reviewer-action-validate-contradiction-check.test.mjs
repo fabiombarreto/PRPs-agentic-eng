@@ -141,6 +141,25 @@
  * being touched. Full justification for both fixes recorded in
  * PRPs/reports/rubric-reconciliation/test-suite.diff's Lifecycle ledger.
  *
+ * Lifecycle update (2026-08-07, EXISTING_TEST_UPDATED, performed by the
+ * plan-review-materiality Phase 1 test-writer session, test-after per
+ * docs/context/methodology.md): PRPs/plans/completed/plan-review-materiality-phase-1-class-taxonomy-gating.plan.md
+ * (source PRD PRPs/prds/plan-review-materiality.prd.md) added an additive
+ * `"class": "blocking" | "advisory"` field to every row of the
+ * `## review.jsonl format` worked example in plan-reviewer.md, including
+ * the `R-COH-VALIDATE-ALWAYS-PASS` and `R-COH-ACTION-VALIDATE-CONTRADICTION`
+ * rows this file's own AC-A7 test pins byte-exactly. The two-field shape
+ * (`{ "id": "...", "passed": true }`) this test asserted no longer matches
+ * the live three-field rows (`{ "id": "...", "passed": true, "class":
+ * "blocking" }`), so the AC-A7 test's two `content.includes(...)` pins went
+ * stale. Confirmed by directly reading the post-implementation
+ * plan-reviewer.md content. Anti-weakening check: the fix below *extends*
+ * both pinned substrings to include the new `, "class": "blocking"` segment
+ * so they again pin the SAME two rows' SAME adjacency byte-exactly — no
+ * assertion is dropped, no scope is narrowed, only the literal byte shape
+ * the additive field changed is followed. Full justification recorded in
+ * PRPs/reports/plan-review-materiality/test-suite.diff's Lifecycle ledger.
+ *
  * Run: node --test scripts/validate/checks/plan-reviewer-action-validate-contradiction-check.test.mjs
  */
 
@@ -340,14 +359,14 @@ test('AC-A7: plan-reviewer.md\'s ## review.jsonl format example JSON block inclu
   const content = readRepoFile(PLAN_REVIEWER_PATH);
 
   assert.ok(
-    content.includes('{ "id": "R-COH-ACTION-VALIDATE-CONTRADICTION", "passed": true }'),
-    'expected the new JSONL example row'
+    content.includes('{ "id": "R-COH-ACTION-VALIDATE-CONTRADICTION", "passed": true, "class": "blocking" }'),
+    'expected the new JSONL example row (now carrying the additive class field)'
   );
   assert.ok(
     content.includes(
-      '{ "id": "R-COH-VALIDATE-ALWAYS-PASS", "passed": true },\n    { "id": "R-COH-ACTION-VALIDATE-CONTRADICTION", "passed": true }'
+      '{ "id": "R-COH-VALIDATE-ALWAYS-PASS", "passed": true, "class": "blocking" },\n    { "id": "R-COH-ACTION-VALIDATE-CONTRADICTION", "passed": true, "class": "blocking" }'
     ),
-    'expected the new row positioned immediately after the existing R-COH-VALIDATE-ALWAYS-PASS row, with no other row between them'
+    'expected the new row positioned immediately after the existing R-COH-VALIDATE-ALWAYS-PASS row, with no other row between them (both now carrying the additive class field)'
   );
 });
 

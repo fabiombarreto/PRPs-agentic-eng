@@ -29,7 +29,50 @@
       </div>
 
       <h2 id="unreleased">Unreleased</h2>
-      <p><em>No changes queued yet.</em></p>
+
+      <h3 id="unreleased-changed">Changed</h3>
+      <ul>
+        <li><strong>Plan-review gating documentation corrected for the materiality threshold</strong>
+          &mdash; <code>docs/api-reference.md</code>,
+          <code>documentation/reference/commands.html</code> and
+          <code>documentation/concepts/pipeline.html</code> described
+          plan-review gating as "any rubric failure &rarr;
+          <code>CHANGES_REQUESTED</code>" over an unqualified "8-item
+          structural rubric". Since the <code>plan-review-materiality</code>
+          Phase 1 decision (<code>docs/decisions.md</code> 2026-08-06),
+          every rubric check carries a <code>blocking</code> or
+          <code>advisory</code> class: every item is still evaluated and
+          recorded with no short-circuit, but only a
+          <code>blocking</code>-classed failure gates the verdict &mdash; an
+          advisory-only outcome approves, with the open advisories recorded
+          and passed to the Implementer. All three pages now state that
+          contract.</li>
+        <li><strong>Agent reference page aligned with the materiality threshold</strong>
+          &mdash; <code>documentation/reference/agents.html</code>'s
+          <code>plan-reviewer</code> block still described the pre-materiality
+          contract: Responsibility read "on any failure, emit a
+          CHANGES_REQUESTED bullet list", and Never does asserted the flip
+          requires "all 8 R1&ndash;R8 plus all R-COH-* must read
+          <code>passed: true</code>" &mdash; which an advisory-only approval
+          contradicts. Both now state the blocking-gates / advisory-passes
+          rule, and a new <a href="reference/agents.html#plan-reviewer-materiality">Materiality
+          classes</a> subsection documents the partition (five advisory ids,
+          every other id blocking), the advisory-by-default rule for newly
+          added checks, the one-way escalation valve, and the absent-<code>class</code>
+          reads-as-blocking rule for historic verdicts.</li>
+        <li><strong>Governance decisions page carries the four
+          <code>plan-review-materiality</code> decisions</strong>
+          &mdash; <code>documentation/governance/decisions.html</code> mirrors
+          <code>docs/decisions.md</code>, which gained one entry per phase of
+          the feature. Every other dated decision was already represented; only
+          these four were absent. Added as entries 69&ndash;72 (materiality
+          classes, retry convergence ratchet, advisory pass-through,
+          class-aware measurement). The gap is structural rather than an
+          oversight: the <code>docs-updater</code> / <code>docs-reviewer</code>
+          pair is forbidden from touching <code>documentation/</code> by its
+          own <code>D-R6</code> rubric check, so the rendered site is always
+          updated by a plan task or a follow-up, never by the docs pair.</li>
+      </ul>
 
       <h2 id="v0-30-0">0.30.0 &#8212; 2026-08-06</h2>
       <p>Gives <code>/relay-design-spec</code> a defined outcome when Figma refuses a traversal, closing the last phase of the <code>figma-quota-resilience</code> PRD. Previously the design-spec Writer's traversal ended in an unconditional exit gate, so a refused call deadlocked the command with no diagnosis.</p>

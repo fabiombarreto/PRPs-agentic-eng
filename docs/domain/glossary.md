@@ -4,6 +4,41 @@ Recurring terms used across the `relay` plugin, its planning documents, and
 the documentation. Sourced from `docs/planning/planejamento_fase_2.docx` §13
 and the upstream prp-core vocabulary.
 
+## Advisory Pass-Through
+
+The mechanism that carries a plan-review verdict's open advisory-classed
+findings (see Materiality Class below) forward to the Implementer and to
+the operator, without gating anything. `/relay-implement`'s Phase A.0
+derives `open_advisories: list<{rubric_id, reason}>` from the plan's
+`<basename>.review.jsonl` LAST entry — every row carrying both `"class":
+"advisory"` and `passed: false` (a row with no `class` field reads as
+blocking per Materiality Class's compatibility rule, so it can never
+contribute an advisory); a plan with no `review.jsonl` yet simply
+contributes none, no halt, no warning. `open_advisories` is computed
+ONCE per invocation and carried unmodified into every attempt's
+implementer dispatch of that invocation. Phase A.2's dispatch payload
+carries an `advisories` key set to `open_advisories` only when
+non-empty — the key is OMITTED entirely, never passed as `null`, on a
+zero-advisory run, so that dispatch stays byte-identical to the
+pre-Phase-3 shape. `implementer.md` declares `advisories` as an
+optional input and reads it BEFORE executing tasks, absorbing each as a
+non-blocking caveat during normal execution (e.g. re-locating a
+drifted `file:line` cite by content search instead of trusting the
+number) — advisories never add tasks, never modify the plan, and never
+gate completion. Advisories are never a retry trigger and are never
+counted by any session budget (`max_implement_retries`,
+`max_implement_minutes`, `max_disputes_per_session`). Separately,
+standalone `/relay-plan-review`'s own APPROVED summary MAY carry a
+second, informational-only line — `Open advisories: <n> (recorded in
+review.jsonl; not gating).` — when the approving entry has open
+advisory-classed rows; the command appends nothing else of its own, and
+no sidecar artifact is written (console-only surfacing by design).
+Shipped as Phase 3 of `plan-review-materiality` (see
+`docs/decisions.md` 2026-08-07); class-aware `efficiency.mjs`
+measurement and PR-body advisory surfacing — see Measurement +
+Surfaces below — shipped as Phase 4 (see `docs/decisions.md`
+2026-08-07), completing `plan-review-materiality` end to end.
+
 ## Agent
 
 Within Claude Code, a specialized persona with a dedicated system prompt and
@@ -109,6 +144,81 @@ run tests itself — hands off to the Test Runner.
 Claude Code's distribution container for plugins. In this repo, declared at
 `.claude-plugin/marketplace.json` and publishes the single plugin `relay`.
 
+## Materiality Class
+
+`class: blocking | advisory` — a statically declared per-check
+attribute on every `plan-reviewer` rubric check id (R1–R8 and every
+deterministic/K=5 `R-COH-*` id), recorded in
+`plugins/relay/agents/plan-reviewer.md`'s `## Materiality classes
+(blocking / advisory)` partition table. `blocking` gates the
+`APPROVED`/`CHANGES_REQUESTED` verdict — R1–R8 are all `blocking`.
+`advisory` is recorded and surfaced in `review.jsonl` but never gates
+approval on its own: a run whose only failing rows are advisory-classed
+still flips to `APPROVED`, with an added `Open advisories: <n>` summary
+line. A check id added to the rubric after this taxonomy shipped
+defaults to `advisory`; promotion to `blocking` requires a recorded
+`docs/decisions.md` entry citing measured evidence. A one-way
+**escalation valve** lets the reviewer mark an individual
+advisory-classed finding `"class": "blocking", "escalated": true`
+when it would mislead the Implementer, with a `reason` naming the
+concrete Implementer-impact — never the reverse; no demotion
+mechanism exists anywhere in the protocol. Every emitted
+`review.jsonl` rubric row carries a `class` field; rows without one
+predate this taxonomy and are read as `blocking`. Shipped as Phase 1
+of `plan-review-materiality` (see `docs/decisions.md` 2026-08-06). A
+retry convergence ratchet narrowing blocking scope on retry attempts
+≥2 — see Retry Convergence Ratchet below — shipped as Phase 2 (see
+`docs/decisions.md` 2026-08-07). `/relay-implement` advisory
+pass-through — see Advisory Pass-Through above — shipped as Phase 3
+(see `docs/decisions.md` 2026-08-07); class-aware `efficiency.mjs`
+measurement and PR-body advisory surfacing — see Measurement +
+Surfaces below — shipped as Phase 4 (see `docs/decisions.md`
+2026-08-07), completing `plan-review-materiality` end to end.
+
+## Measurement + Surfaces
+
+The Phase 4 (final) capability of `plan-review-materiality`, making the
+Materiality Class taxonomy's (see above) hypothesis measurable and its
+open advisories visible outside `review.jsonl` itself.
+`scripts/efficiency.mjs`'s `readCorpus()` captures each failing rubric
+row's `class` as `failClasses` — a row missing the field reads as
+`blocking`, the same absence-is-blocking compatibility rule Materiality
+Class established; `aggregate()` computes per-stage `blockingFailRows`,
+`advisoryFailRows`, and `topFailuresByClass: {blocking, advisory}` (top
+8 ids each by count), leaving `firstAttemptFailureRate` semantics
+unchanged (it is verdict-based, so an advisory-carrying `APPROVED`
+already counted as a first-attempt pass before this phase);
+`doCompare()`'s console output gains one conditional `blocking/advisory`
+summary line per stage (top 4 advisory ids), printed only when that
+stage's after-set carries at least one advisory-classed failing row, so
+a pre-materiality corpus's comparison output stays byte-identical to
+before this phase. `plugins/relay/scripts/generate-final-report.mjs`
+gains `loadOpenPlanReviewAdvisories()`, which walks a feature's
+phase-numbered plans across `PRPs/plans/` and `PRPs/plans/completed/`,
+reads each `<basename>.review.jsonl`'s last entry, and collects every
+open (`passed: false`, `"class": "advisory"`) rubric row into an "Open
+plan-review advisories" PR-body table — omitted entirely (no heading)
+when none exist, mirroring the Visual Fidelity section's own
+discover-then-guard idiom, so a merge with zero open advisories
+produces a byte-identical PR body. The `efficiency-report` skill
+(`.claude/commands/efficiency-report.md`) gains a semi-manual sampling
+step: read the new per-class tallies, sample artifacts carrying the
+most-frequent advisory-classed ids, and judge — never compute — whether
+the same phase later failed code-review or tests for a related reason,
+feeding the evidence-based promotion loop Materiality Class already
+named (a frequently-converting advisory-classed check is a *candidate*
+for promotion to `blocking`, only via an explicit, human-recorded
+`docs/decisions.md` entry citing the measured evidence; promotion is
+never automatic). Shipped as Phase 4 of `plan-review-materiality` (see
+`docs/decisions.md` 2026-08-07) — the feature's final phase. All four
+phases (Materiality Class, Retry Convergence Ratchet, Advisory
+Pass-Through, Measurement + Surfaces) are now shipped end to end; the
+source PRD's own Success Metrics (≤20% first-attempt
+`CHANGES_REQUESTED`, ≤1.25 mean verdicts per plan, <10% open advisories
+implicated in a later failure) remain UNVALIDATED as of this entry —
+they require measurement over the first ~20 post-release plan
+artifacts, which has not yet accumulated.
+
 ## Mock Sentinel Convention
 
 `[RELAY-MOCK-DATA]` / `[RELAY-MOCK-BEHAVIOR]` — a plain, language-agnostic
@@ -177,6 +287,35 @@ reviewed by the PRD Reviewer. Serves as input to the Plan Writer.
 
 Concept inherited from `prp-core`: PRD + repository intelligence + an
 executable runbook the AI can follow.
+
+## Retry Convergence Ratchet
+
+A `plan-reviewer` mechanism (`### Step 1.5 — Prior-verdict ratchet
+context`) that narrows blocking scope on a plan-review retry (attempt
+≥2). Computes `previously_cited_ids` (the prior `CHANGES_REQUESTED`
+entry's blocking-classed failing ids only) and `implicated_sections`
+(those ids mapped to plan sections, mirroring `plan-writer.md`'s own
+`## Targeted revision mode` cited-id→section mapping). **ACTIVE** only
+when both the prior `review.jsonl` entry and the current invocation
+carry a `section_hashes` map (a per-`## `-heading content-hash map,
+computed by the invoking command's own shell — `plan-reviewer` never
+computes a hash itself) and every section outside `implicated_sections`
+is unchanged between the two maps. Under an ACTIVE ratchet, a
+blocking-classed failing row is "blocking-effective" (gates the
+verdict) only when previously cited or anchored inside an implicated
+section; every other blocking-classed row is downgraded to `"class":
+"advisory"` plus `"ratchet": "out-of-scope-new-finding"` and does not
+gate. Under an **INACTIVE** ratchet (no prior entry, prior `APPROVED`,
+either hash map absent, or a hash mismatch outside the implicated
+set — the last case recording a `ratchet_void_reason`), every
+blocking-classed row is blocking-effective, i.e. Materiality Class's
+Phase 1 semantics verbatim. Narrows gating only — never widens it, and
+never changes what Step 2 evaluates or logs (the AC-10 no-short-circuit
+invariant is unchanged). The Materiality Class escalation valve always
+wins regardless of ratchet state. `relay-execute.md`'s
+`FAILED_PLAN_REVIEW_STUCK` stuck-loop detection and its `prior_feedback`
+payload both compose over blocking-effective ids only. Shipped as Phase
+2 of `plan-review-materiality` (see `docs/decisions.md` 2026-08-07).
 
 ## Skill
 

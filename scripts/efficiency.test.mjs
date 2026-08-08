@@ -82,6 +82,57 @@
  *   AC-A10 — this suite itself, with fixtures proven to fail when the
  *     partition is broken; see the manifest's mutation-verification table.
  *
+ * ===========================================================================
+ * PHASE 4 (plan-review-materiality PRD, PRD mode -- dual `AC-A<i> (PRD
+ * AC-N)` labelling, unlike PLAN 1/PLAN 2's disjoint description-mode AC-A<i>
+ * namespaces above):
+ *   PRPs/plans/completed/plan-review-materiality-phase-4-measurement-surfaces.plan.md
+ *   Source PRD: PRPs/prds/plan-review-materiality.prd.md
+ *
+ * Extends this same SUT module (readCorpus, aggregate, doCompare's CLI
+ * print path) with the class dimension: readCorpus captures each failing
+ * rubric row's class (absent => blocking, the Phase-1 compatibility rule);
+ * aggregate emits blockingFailRows/advisoryFailRows/topFailuresByClass per
+ * stage; doCompare gains one conditional print line, emitted only when a
+ * stage's after-set carries >=1 advisory-classed row. Every addition is
+ * strictly additive -- fails, topFailures, firstAttemptFailureRate, and
+ * every other pre-existing key/behavior are unchanged (pinned by the
+ * regression assertions folded into the new tests below).
+ *
+ * Existing-coverage scan performed before authoring (Step 2.1 -- an
+ * Explore-agent sweep of all 53 scripts/validate/checks/*.test.mjs files
+ * plus this file itself for "failClasses", "topFailuresByClass",
+ * "blockingFailRows", "advisoryFailRows", and "blocking/advisory"): zero
+ * matches anywhere. NEW_TEST_REQUIRED throughout; this file is EXTENDED
+ * (recorded as EXISTING_TEST_UPDATED at the file-operation level -- an Edit
+ * against an already-approved file, not a fresh Write) rather than forked
+ * into a sibling file, because this IS the SUT module's own dedicated test
+ * file and its established convention (see PLAN 1 / PLAN 2 above) is to
+ * accrete one traceability section per contributing plan in this same
+ * file. Zero pre-existing test's assertions are modified, narrowed, or
+ * removed by this addition -- see the suite manifest's Lifecycle ledger for
+ * the non-weakening justification.
+ *
+ * Traceability (plan's own `## Acceptance Criteria`, dual-labelled):
+ *   AC-A1 (PRD AC-8) -- "top-failure tallies are reported per class
+ *     (blocking vs advisory)... rows without a class field count as
+ *     blocking... firstAttemptFailureRate plus every pre-existing key keep
+ *     their current semantics." Covered by the readCorpus row-mapping test,
+ *     the aggregate real-corpus round-trip test, and the
+ *     topFailuresByClass sort/slice-to-8 test below.
+ *   AC-A3 (PRD AC-8) (print-path half only -- the command-file
+ *     sampling-step half is covered separately by
+ *     efficiency-report-materiality-sampling.test.mjs) -- "the after-side
+ *     per-class split... appears whenever any advisory-classed row
+ *     exists... and is omitted byte-identically to today when none do."
+ *     Covered by the two CLI compare tests below.
+ *
+ * Authored test-after (docs/context/methodology.md: tdd: false +
+ * test_frameworks: ["node:test"]) against the already-implemented,
+ * IMPLEMENTED plan (see
+ * PRPs/reports/plan-review-materiality/phase-4/attempts/1/diff.patch).
+ * ===========================================================================
+ *
  * Run: node --test scripts/efficiency.test.mjs
  */
 
@@ -679,6 +730,235 @@ test('CLI: compare prints a NOTICE naming how many artifacts split, the resultin
     // Every pre-existing doubt signal survives the new block.
     assert.match(stdout, /WARNING - 1 artifact\(s\) carry a producer-flagged unreliable timestamp/);
     assert.match(stdout, /CAUTION: 1 artifact\(s\) is a small sample/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+// ===========================================================================
+// PHASE 4 -- plan-review-materiality Phase 4 (measurement + surfaces)
+//   PRPs/plans/completed/plan-review-materiality-phase-4-measurement-surfaces.plan.md
+//   Source PRD: PRPs/prds/plan-review-materiality.prd.md
+//
+// AC-A1 (PRD AC-8) -- class-aware measurement (readCorpus/aggregate).
+// AC-A3 (PRD AC-8) -- print-path half only (doCompare's conditional line);
+// the command-file sampling-step half of AC-A3 is covered separately by
+// efficiency-report-materiality-sampling.test.mjs. See the file header's
+// PHASE 4 block above for the full traceability note.
+// ===========================================================================
+
+test('AC-A1 (PRD AC-8): readCorpus maps each failing rubric row into failClasses -- an explicit "advisory" class is preserved, while an absent class field or any other value collapses to "blocking" (the Phase-1 compatibility rule) -- and the pre-existing fails id-list stays byte-identical', () => {
+  const originalCwd = process.cwd();
+  const tempDir = mkdtempSync(join(tmpdir(), 'efficiency-test-phase4-'));
+  try {
+    process.chdir(tempDir);
+    mkdirSync('PRPs/plans', { recursive: true });
+    const entryObj = {
+      timestamp: '2026-08-07T10:00:00Z',
+      verdict: 'CHANGES_REQUESTED',
+      action: 'final_flip',
+      rubric: [
+        { id: 'R-ADV', passed: false, class: 'advisory' },
+        { id: 'R-BLOCK', passed: false, class: 'blocking' },
+        { id: 'R-LEGACY', passed: false }, // no class field at all -- pre-materiality shape
+        { id: 'R-WEIRD', passed: false, class: 'urgent' }, // a non-canonical value must still collapse to blocking
+        { id: 'R-PASS', passed: true, class: 'advisory' }, // passing rows are never in fails or failClasses
+      ],
+    };
+    writeFileSync(join('PRPs', 'plans', 'phase4-rowmap.review.jsonl'), JSON.stringify(entryObj) + '\n');
+
+    const artifacts = readCorpus();
+    assert.equal(artifacts.length, 1);
+    const [entry0] = artifacts[0].entries;
+
+    assert.deepEqual(entry0.fails, ['R-ADV', 'R-BLOCK', 'R-LEGACY', 'R-WEIRD'], 'expected the pre-existing fails id-list unchanged by the failClasses addition');
+    assert.deepEqual(entry0.failClasses, [
+      { id: 'R-ADV', class: 'advisory' },
+      { id: 'R-BLOCK', class: 'blocking' },
+      { id: 'R-LEGACY', class: 'blocking' },
+      { id: 'R-WEIRD', class: 'blocking' },
+    ]);
+  } finally {
+    process.chdir(originalCwd);
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('AC-A1 (PRD AC-8): aggregate tallies blockingFailRows/advisoryFailRows/topFailuresByClass from the real corpus, a historic row with no class field counts as blocking, and every pre-existing key (fails via topFailures, firstAttemptFailureRate) computes unchanged on the same fixture', () => {
+  const originalCwd = process.cwd();
+  const tempDir = mkdtempSync(join(tmpdir(), 'efficiency-test-phase4-agg-'));
+  try {
+    process.chdir(tempDir);
+    mkdirSync('PRPs/plans', { recursive: true });
+
+    // legacy.review.jsonl: pre-materiality shape -- two failing rows, neither
+    // carries a class field at all.
+    const legacy = {
+      timestamp: '2026-08-01T00:00:00Z',
+      verdict: 'CHANGES_REQUESTED',
+      action: 'final_flip',
+      rubric: [
+        { id: 'R-OLD-1', passed: false },
+        { id: 'R-OLD-2', passed: false },
+      ],
+    };
+    writeFileSync(join('PRPs', 'plans', 'phase4-legacy.review.jsonl'), JSON.stringify(legacy) + '\n');
+
+    // fresh.review.jsonl: one advisory row, plus a repeat of R-OLD-1 this
+    // time explicitly classed blocking.
+    const fresh = {
+      timestamp: '2026-08-07T00:00:00Z',
+      verdict: 'CHANGES_REQUESTED',
+      action: 'final_flip',
+      rubric: [
+        { id: 'R-ADV', passed: false, class: 'advisory' },
+        { id: 'R-OLD-1', passed: false, class: 'blocking' },
+      ],
+    };
+    writeFileSync(join('PRPs', 'plans', 'phase4-fresh.review.jsonl'), JSON.stringify(fresh) + '\n');
+
+    const metrics = aggregate(readCorpus())['plan-review'];
+
+    // New per-class tallies, with the class-absent legacy rows counted blocking.
+    assert.equal(metrics.blockingFailRows, 3, 'R-OLD-1 (legacy, no class) + R-OLD-2 (legacy, no class) + R-OLD-1 (fresh, explicit blocking)');
+    assert.equal(metrics.advisoryFailRows, 1, 'R-ADV only');
+    assert.equal(metrics.topFailuresByClass.advisory.length, 1);
+    assert.deepEqual(metrics.topFailuresByClass.advisory[0], { id: 'R-ADV', n: 1 });
+    const blockingR1 = metrics.topFailuresByClass.blocking.find((f) => f.id === 'R-OLD-1');
+    const blockingR2 = metrics.topFailuresByClass.blocking.find((f) => f.id === 'R-OLD-2');
+    assert.ok(blockingR1 && blockingR1.n === 2, 'expected R-OLD-1 tallied twice across the two files');
+    assert.ok(blockingR2 && blockingR2.n === 1);
+
+    // Regression net: the pre-existing fails/topFailures tally is UNCHANGED --
+    // it counts every failing row regardless of class, exactly as before this
+    // phase.
+    const topR1 = metrics.topFailures.find((f) => f.id === 'R-OLD-1');
+    assert.ok(topR1 && topR1.n === 2, 'expected topFailures (pre-existing, class-blind) to still count R-OLD-1 twice');
+    assert.ok(metrics.topFailures.some((f) => f.id === 'R-ADV' && f.n === 1), 'expected topFailures to still include the advisory-classed id -- it is class-blind by design');
+
+    // Regression net: firstAttemptFailureRate is unaffected by the class
+    // dimension -- both single-entry sessions opened on CHANGES_REQUESTED, an
+    // advisory-carrying entry is not exempted from this verdict-based metric.
+    assert.equal(metrics.sessions, 2);
+    assert.equal(metrics.firstAttemptFailureRate, 100);
+  } finally {
+    process.chdir(originalCwd);
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('AC-A1 (PRD AC-8): topFailuresByClass.advisory is sorted descending by count and sliced to 8, mirroring topFailures\' own shape', () => {
+  const originalCwd = process.cwd();
+  const tempDir = mkdtempSync(join(tmpdir(), 'efficiency-test-phase4-top8-'));
+  try {
+    process.chdir(tempDir);
+    mkdirSync('PRPs/plans', { recursive: true });
+
+    // 10 distinct advisory-classed ids, each repeated a DIFFERENT number of
+    // times (10 down to 1, all distinct -- no ties), so the expected top-8
+    // descending order is unambiguous.
+    for (let i = 1; i <= 10; i++) {
+      const reps = 11 - i;
+      const lines = Array.from({ length: reps }, () =>
+        JSON.stringify({ timestamp: '2026-08-07T00:00:00Z', verdict: 'CHANGES_REQUESTED', action: 'final_flip', rubric: [{ id: `R-ADV-${i}`, passed: false, class: 'advisory' }] }),
+      ).join('\n');
+      writeFileSync(join('PRPs', 'plans', `phase4-top8-${i}.review.jsonl`), lines + '\n');
+    }
+
+    const metrics = aggregate(readCorpus())['plan-review'];
+
+    assert.equal(metrics.topFailuresByClass.advisory.length, 8, 'expected the advisory top-list capped at 8 even though 10 distinct ids exist');
+    const counts = metrics.topFailuresByClass.advisory.map((f) => f.n);
+    const sortedDesc = [...counts].sort((a, b) => b - a);
+    assert.deepEqual(counts, sortedDesc, 'expected descending sort order');
+    assert.deepEqual(metrics.topFailuresByClass.advisory[0], { id: 'R-ADV-1', n: 10 }, 'expected the highest-count id first');
+    assert.ok(
+      !metrics.topFailuresByClass.advisory.some((f) => f.id === 'R-ADV-9' || f.id === 'R-ADV-10'),
+      'expected the two lowest-count ids (counts 2 and 1) to be excluded by the top-8 cap',
+    );
+  } finally {
+    process.chdir(originalCwd);
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('CLI: compare prints a "blocking/advisory" line with the after-side blocking/advisory row counts and the top advisory ids (by count) when the after-set carries at least one advisory-classed failing row', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'efficiency-cli-phase4-adv-'));
+  const plansDir = join(tempDir, 'PRPs', 'plans');
+  mkdirSync(plansDir, { recursive: true });
+  try {
+    const jsonlLine = (obj) => JSON.stringify(obj) + '\n';
+    const baselineEntry = { timestamp: '2020-01-01T00:00:00.000Z', verdict: 'APPROVED', action: 'final_flip', rubric: [] };
+    writeFileSync(join(plansDir, 'baseline.review.jsonl'), jsonlLine(baselineEntry));
+
+    execFileSync(process.execPath, [SCRIPT_PATH, 'snapshot', '--label', 'baseline'], { cwd: tempDir, encoding: 'utf-8' });
+    const markerRaw = readFileSync(join(tempDir, 'PRPs', 'reports', 'efficiency', 'baseline.json'), 'utf-8');
+    const markerMs = new Date(JSON.parse(markerRaw).markerUtc).getTime();
+    const at = (offsetMs) => new Date(markerMs + offsetMs).toISOString();
+
+    // ADV-A appears in both after-files (count 2); ADV-B once (count 1);
+    // BLOCK-A and BLOCK-B once each (blocking total 2).
+    writeFileSync(
+      join(plansDir, 'after1.review.jsonl'),
+      jsonlLine({
+        timestamp: at(3600_000),
+        verdict: 'CHANGES_REQUESTED',
+        action: 'final_flip',
+        rubric: [
+          { id: 'ADV-A', passed: false, class: 'advisory' },
+          { id: 'ADV-B', passed: false, class: 'advisory' },
+          { id: 'BLOCK-A', passed: false, class: 'blocking' },
+        ],
+      }),
+    );
+    writeFileSync(
+      join(plansDir, 'after2.review.jsonl'),
+      jsonlLine({
+        timestamp: at(7200_000),
+        verdict: 'CHANGES_REQUESTED',
+        action: 'final_flip',
+        rubric: [
+          { id: 'ADV-A', passed: false, class: 'advisory' },
+          { id: 'BLOCK-B', passed: false, class: 'blocking' },
+        ],
+      }),
+    );
+
+    const stdout = execFileSync(process.execPath, [SCRIPT_PATH, 'compare', '--since', 'baseline'], { cwd: tempDir, encoding: 'utf-8' });
+
+    assert.match(stdout, /blocking\/advisory\s+2 blocking, 3 advisory; top advisory ADV-A x2, ADV-B x1/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('CLI: compare OMITS the "blocking/advisory" line entirely when the after-set carries zero advisory-classed rows -- including when every failing row is shaped exactly like a pre-materiality corpus (no class field at all) -- printing byte-identically to the pre-Phase-4 output', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'efficiency-cli-phase4-noadv-'));
+  const plansDir = join(tempDir, 'PRPs', 'plans');
+  mkdirSync(plansDir, { recursive: true });
+  try {
+    const jsonlLine = (obj) => JSON.stringify(obj) + '\n';
+    const baselineEntry = { timestamp: '2020-01-01T00:00:00.000Z', verdict: 'APPROVED', action: 'final_flip', rubric: [] };
+    writeFileSync(join(plansDir, 'baseline.review.jsonl'), jsonlLine(baselineEntry));
+
+    execFileSync(process.execPath, [SCRIPT_PATH, 'snapshot', '--label', 'baseline'], { cwd: tempDir, encoding: 'utf-8' });
+    const markerRaw = readFileSync(join(tempDir, 'PRPs', 'reports', 'efficiency', 'baseline.json'), 'utf-8');
+    const markerMs = new Date(JSON.parse(markerRaw).markerUtc).getTime();
+
+    // Pre-materiality shape: no `class` field anywhere, exactly like every
+    // artifact this file's own PLAN 1/PLAN 2 fixtures above already use.
+    const afterEntry = {
+      timestamp: new Date(markerMs + 3600_000).toISOString(),
+      verdict: 'CHANGES_REQUESTED',
+      action: 'final_flip',
+      rubric: [{ id: 'R-OLD', passed: false }],
+    };
+    writeFileSync(join(plansDir, 'after.review.jsonl'), jsonlLine(afterEntry));
+
+    const stdout = execFileSync(process.execPath, [SCRIPT_PATH, 'compare', '--since', 'baseline'], { cwd: tempDir, encoding: 'utf-8' });
+
+    assert.match(stdout, /top failures after\s+R-OLD x1/, 'sanity: the pre-existing top-failures line is unaffected');
+    assert.doesNotMatch(stdout, /blocking\/advisory/, 'expected the new per-class line to be entirely absent when the after-set has zero advisory-classed rows');
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

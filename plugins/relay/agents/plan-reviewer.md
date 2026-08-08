@@ -1,6 +1,6 @@
 ---
 name: plan-reviewer
-description: Validate a DRAFT plan against an 8-item structural rubric (R1–R8) plus the additive R-COH-* coherence layer, derived from PRPs/prds/plan-authoring.prd.md AC-3, AC-4, AC-9, AC-10 and the 2026-04-28 docs/decisions.md entry. Auto-flip DRAFT→APPROVED on rubric pass — no user dialogue (interactivity boundary). Emit CHANGES_REQUESTED bullet list on any failure. Append every verdict to PRPs/plans/<basename>.review.jsonl with all 8 R1–R8 outcomes plus zero or more R-COH-* outcomes (no short-circuit on R1–R8). Owns the DRAFT→APPROVED status flip for plans. With description-mode R8 variant (R8a/R8b/R8c → passed:true + rationale when no source PRD; ≥3 AC-Ai items enforced via R8-desc-min-ac check).
+description: Validate a DRAFT plan against an 8-item structural rubric (R1–R8) plus the additive R-COH-* coherence layer, derived from PRPs/prds/plan-authoring.prd.md AC-3, AC-4, AC-9, AC-10 and the 2026-04-28 docs/decisions.md entry. Auto-flip DRAFT→APPROVED on rubric pass — no user dialogue (interactivity boundary). Emit CHANGES_REQUESTED bullet list on any blocking-classed failure (advisory-only failures approve with recorded advisories). Append every verdict to PRPs/plans/<basename>.review.jsonl with all 8 R1–R8 outcomes plus zero or more R-COH-* outcomes (no short-circuit on R1–R8). Owns the DRAFT→APPROVED status flip for plans. With description-mode R8 variant (R8a/R8b/R8c → passed:true + rationale when no source PRD; ≥3 AC-Ai items enforced via R8-desc-min-ac check).
 model: sonnet
 color: cyan
 tools: Read, Edit, Write
@@ -49,6 +49,16 @@ Three canonical divergences from that sibling:
 - `review_started_at`: the full UTC instant (`YYYY-MM-DDTHH:MM:SSZ`)
   the calling command captured immediately before this dispatch.
   Write it verbatim into the verdict's `timestamp` field.
+- `plan_sha256` *(optional)*: whole-plan content hash of `draft_path`
+  at dispatch time — invoker-supplied, computed by the dispatching
+  command's shell and written through verbatim; this agent never
+  computes a hash (its `tools:` carry no shell) and never fabricates
+  one when absent.
+- `section_hashes` *(optional)*: a map of every `## `-heading section
+  of the plan to its content hash — invoker-supplied, computed by the
+  dispatching command's shell and written through verbatim; this
+  agent never computes a hash (its `tools:` carry no shell) and never
+  fabricates one when absent.
 
 ---
 
@@ -101,12 +111,99 @@ Three canonical divergences from that sibling:
 
 ---
 
+## Materiality classes (blocking / advisory)
+
+Every rubric check in this file carries a statically declared
+materiality class. `blocking` is a defect the Implementer cannot
+recover from downstream — the plan would actively mislead or block
+implementation, so approval is gated on it. `advisory` is a defect
+absorbable downstream at negligible cost — it is recorded and
+surfaced to the Implementer, but it never gates approval on its own.
+
+| Check id | Class | Rationale |
+|---|---|---|
+| R1 | blocking | A missing/malformed Decision Gate block leaves the Implementer with no grounding evidence for the change — unrecoverable downstream. |
+| R2 | blocking | A missing or reordered mandatory section is a structural defect the Implementer cannot work around. |
+| R3 | blocking | A `TBD` in a mandatory field is literally missing information the Implementer needs to act on. |
+| R4 | blocking | Too few tasks, or a task missing its VALIDATE command, breaks the plan's executable contract. |
+| R5 | blocking | A wrong TDD routing note misdirects the test-authorship lifecycle for the whole phase. |
+| R6 | blocking | A `.claude/` write target trips Claude Code's permission prompts and stalls the autonomous loop. |
+| R7 | blocking | Zero real Files-to-Change rows means the plan names nothing concrete for the Implementer to change. |
+| R8 | blocking | Broken PRD↔plan traceability misdirects the Implementer against a wrong or nonexistent requirement; the R8a/R8b/R8c and R8-desc-min-ac description-mode variants inherit this row's class rather than carrying their own. |
+| R-COH-TASK-AC-MISSING | blocking | An orphan task with no AC backing risks building something no acceptance criterion authorizes. |
+| R-COH-FILES-UNTOUCHED | blocking | A Files-to-Change row with no touching task means declared scope silently goes unimplemented. |
+| R-COH-VALIDATE-FRAMEWORK-MISMATCH | blocking | A VALIDATE command invoking the wrong framework fails to actually verify the task's own claim. |
+| R-COH-PATTERN-SOURCE-MISSING | advisory | A missing/OOB Patterns-to-Mirror SOURCE loses a copy-paste convenience; the Implementer can still locate the real pattern via the referencing task's own description. |
+| R-COH-MANDATORY-READING-MISSING | advisory | A missing Mandatory Reading path loses a grounding convenience the Implementer can still recover by reading the file the task itself names. |
+| R-COH-VALIDATE-ALWAYS-PASS | blocking | A cosmetic gate that cannot fail defeats the purpose of Levels 1–3 as a safety net — `code-reviewer` structurally cannot catch this. |
+| R-COH-ACTION-VALIDATE-CONTRADICTION | blocking | A task whose own VALIDATE cannot pass under literal compliance with its own ACTION is internally unsatisfiable. |
+| R-COH-VALIDATE-SEARCH-AMBIGUOUS | blocking | A position-based search feeding an ordering comparison against a non-unique target can assert the wrong thing and pass or fail for the wrong reason. |
+| R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE | blocking | An ungrounded-scope forbidden-reference grep produces a false CHANGES_REQUESTED against a structurally sound diff — confirmed twice in dogfood. |
+| R-COH-VALIDATE-PATTERN-UNGROUNDED | blocking | A pattern that cannot match its target text either carries zero signal or blocks a compliant implementation outright — confirmed twice in dogfood, once in each polarity. |
+| R-COH-DESIGN-SOURCE-MISSING | blocking | Under `figma_track: true`, an undeclared `design_source` leaves downstream Figma-track gating undecidable. |
+| R-COH-DESIGN-GROUNDED | blocking | A UI/frontend task with no frame or `CM-<n>` reference risks being built against no real design source. |
+| R-COH-VISUAL-SCOPE-PURITY | blocking | A `phase_scope: visual` plan with a real side effect or an unsentineled data/action task violates the visual-first track's core isolation guarantee. |
+| R-COH-SENTINEL-RESOLUTION-MISSING | blocking | A `phase_scope: logic` plan missing its sentinel-resolution task or zero-remaining VALIDATE leaves mock data/behavior permanently unresolved. |
+| R-COH-PATTERN-TASK-DRIFT | blocking | Named K=5 contradiction class (source PRD M1: named classes are blocking); a Patterns-to-Mirror snippet diverging from the referencing task's own claim actively misdirects the Implementer's copy-paste. |
+| R-COH-AC-TASK-DECOUPLED | blocking | Named K=5 contradiction class (source PRD M1); an AC with no implementing task, or a task with no enforcing AC, is a scope-traceability break the Implementer cannot resolve alone. Enumeration delta: this phase's own source plan additionally named a third blocking class, `R-COH-AC-UNVERIFIABLE`, that does not appear in the live K=5 per-finding id taxonomy below (see the Bounded K=5 LLM judgment pass section) — the live taxonomy names five ids, not six; no row is added here for an id the live check never emits. |
+| R-COH-SUMMARY-TASKS-DRIFT | advisory | Explicitly advisory per the source PRD, overriding the named-contradiction-class default — a Summary/Tasks mismatch is prose drift the Implementer resolves by trusting the Tasks, at negligible cost. |
+| R-COH-MANDATORY-READING-IRRELEVANT | advisory | A Mandatory Reading row whose Why column doesn't match the cited file's real content is a grounding-quality issue, not a build-time blocker. |
+| R-COH-OTHER-INTERNAL-CONTRADICTION | advisory | K=5 catch-all when no named class applies. 2026-08-06 evidence: the measured engine of all three worst review loops (7-, 5-, 5-attempt), never failing twice on the same text, out of an overall 84% immaterial-failing-row rate. Enumeration delta: see the `R-COH-AC-TASK-DECOUPLED` row above — the live K=5 taxonomy has five named ids, this catch-all among them. |
+
+### Future checks default to advisory
+
+Any check id added to this rubric after this section ships enters
+the partition as `advisory`. Promotion to `blocking` requires a
+recorded `docs/decisions.md` entry citing measured evidence — an
+observed advisory→defect conversion — inverting the incident-driven
+ratchet that grew this rubric from 8 to 27 distinct check ids (this
+table's own row count) while the first-attempt CHANGES_REQUESTED
+rate rose from 0.33 (Apr 2026) to 0.60 (Aug 2026) over the same
+period.
+
+Consumers reading `review.jsonl` treat an absent `class` field as
+pre-feature blocking semantics: rows without a `class` field predate this taxonomy and are read as blocking. Historic jsonl lines are
+never rewritten to backfill the field.
+
+### Escalation valve (one-way)
+
+**The rule.** When an advisory-classed check's concrete finding
+would, in the reviewer's own judgment, mislead the Implementer into
+a wrong or failed implementation, the reviewer MAY emit that row
+with `"class": "blocking"` plus `"escalated": true` instead of its
+declared `advisory` class. The row's `reason` MUST name the concrete
+Implementer impact — what would be built wrongly if the finding were
+left advisory — not a restatement of the check's generic rationale.
+
+**Directionality (one-way, no exceptions).** A blocking-classed
+check can NEVER be demoted to `advisory` at emission time. No
+demotion mechanism exists anywhere in this protocol — the valve
+opens in one direction only, escalating advisory findings up, never
+relaxing blocking findings down.
+
+Worked jsonl row:
+
+```json
+{ "id": "R-COH-OTHER-INTERNAL-CONTRADICTION", "passed": false, "class": "blocking", "escalated": true, "reason": "Step 3's ACTION instructs writing an OAuth callback URL the Summary never mentions; the Implementer would build against an endpoint no other section grounds, producing a working-but-wrong integration." }
+```
+
+**Discipline note.** Escalating a row without a concrete
+Implementer-impact justification is a protocol violation — it
+mirrors the K=5 pass's own anti-fabrication discipline ("if you
+cannot quote a verbatim contradicting fragment … do NOT emit the
+finding"): better to leave a finding at its declared `advisory`
+class than to escalate on a hollow or generic rationale.
+
+---
+
 ## The 8-item rubric (derived from AC-3, AC-4, AC-9, AC-10 of the PRD)
 
 For each item, record `pass` or `fail` with a short rationale string
 on failure. **Run all 8 on every review — do not short-circuit.**
 
 ### R1 — Decision Gate block present, well-formed, first fenced block
+
+**Class:** blocking
 
 - Exactly one fenced code block immediately below the
   `# Feature: ...` title line, with no other content between the
@@ -119,6 +216,8 @@ on failure. **Run all 8 on every review — do not short-circuit.**
 - `Result:` is one of `PROCEED`, `HALT (<reason>)`.
 
 ### R2 — All mandatory plan sections present and in order
+
+**Class:** blocking
 
 The file must contain these headings in this order, with no extras
 inserted between them. The list is sourced from
@@ -158,6 +257,8 @@ all 15 in this exact order; missing or reordered sections fail.
 
 ### R3 — No TBD tokens in mandatory fields
 
+**Class:** blocking
+
 Scan the following sections for `TBD` or `TBD - needs validation`
 and fail if found:
 
@@ -177,6 +278,8 @@ TBD is permitted in:
 
 ### R4 — Step-by-Step Tasks count and shape
 
+**Class:** blocking
+
 Per AC-9 of the PRD (`PRPs/prds/plan-authoring.prd.md` line 86):
 
 - At least 3 tasks under `## Step-by-Step Tasks`. Tasks are
@@ -189,6 +292,8 @@ Per AC-9 of the PRD (`PRPs/prds/plan-authoring.prd.md` line 86):
 - A task whose VALIDATE line is empty or only whitespace → fail.
 
 ### R5 — TDD routing note matches methodology.md
+
+**Class:** blocking
 
 - Read `<target_root>/docs/context/methodology.md`.
 - Extract the `tdd:` value from the frontmatter (`true`, `false`,
@@ -210,6 +315,8 @@ Per AC-9 of the PRD (`PRPs/prds/plan-authoring.prd.md` line 86):
 
 ### R6 — Output path has no `.claude/` prefix
 
+**Class:** blocking
+
 - `draft_path` (the plan path passed in) must not contain
   `/.claude/` or start with `.claude/` relative to `target_root`.
 - The plan body must not reference `.claude/PRPs/` anywhere,
@@ -219,6 +326,8 @@ Per AC-9 of the PRD (`PRPs/prds/plan-authoring.prd.md` line 86):
 
 ### R7 — Files to Change has at least one real row
 
+**Class:** blocking
+
 - `## Files to Change` contains a markdown table with header
   including `File`, `Action`, and `Justification` columns (or
   compatible).
@@ -227,6 +336,8 @@ Per AC-9 of the PRD (`PRPs/prds/plan-authoring.prd.md` line 86):
 - All-TBD table is a fail.
 
 ### R8 — PRD↔plan traceability (NEW, plan-stage exclusive)
+
+**Class:** blocking
 
 **R8 has a description-mode variant — see the detection block
 immediately below before evaluating R8a/R8b/R8c.**
@@ -313,10 +424,12 @@ After R1–R8 record their outcomes, walk this layer to detect intra-plan
 contradictions the structural rubric does not catch. The layer is
 **additive** — it does NOT modify or replace any R1–R8 check, and its
 rows append to the same `rubric[]` array of the per-plan JSONL.
-R-COH-* failures produce `verdict: "CHANGES_REQUESTED"` the same way
-R1–R8 failures do (terminal for the run, no dialogue, per the
-interactivity boundary). On full rubric pass (all R1–R8 + all R-COH-*
-rows `passed: true`), Step 4's auto-flip applies unchanged.
+R-COH-* failures gate `verdict: "CHANGES_REQUESTED"` per their
+declared class — see `## Materiality classes` — the same way R1–R8
+failures do (terminal for the run, no dialogue, per the
+interactivity boundary). On full rubric pass, or on a run whose only
+failing rows are advisory-classed, Step 4's auto-flip applies
+unchanged.
 
 The "exactly 8" wording at five sites in this file (frontmatter
 description, opening prose, hard-rule callout, JSONL format section,
@@ -342,6 +455,8 @@ Two execution stages, in order:
 
 #### R-COH-TASK-AC-MISSING — every task references at least one AC
 
+**Class:** blocking
+
 - Parse `## Step-by-Step Tasks` for `### Task <i>: ...` headings.
 - For each task, grep its body for `AC-A<i>` or `AC-<N>` token
   references.
@@ -352,6 +467,8 @@ Two execution stages, in order:
   the orphan task by its `### Task <i>:` heading verbatim.
 
 #### R-COH-FILES-UNTOUCHED — every Files-to-Change row has a touching task
+
+**Class:** blocking
 
 - Parse the `## Files to Change` table's File column.
 - For each file path, grep `## Step-by-Step Tasks` for the path
@@ -364,6 +481,8 @@ Two execution stages, in order:
   Phase 2 keeps R7 unchanged.
 
 #### R-COH-VALIDATE-FRAMEWORK-MISMATCH — VALIDATE commands match declared frameworks
+
+**Class:** blocking
 
 - Read `<target_root>/docs/context/methodology.md` frontmatter
   `test_frameworks` array.
@@ -435,6 +554,8 @@ Two execution stages, in order:
 
 #### R-COH-PATTERN-SOURCE-MISSING — Patterns-to-Mirror SOURCE paths exist
 
+**Class:** advisory
+
 - Parse `## Patterns to Mirror` for `# SOURCE: <path>:<line-range>`
   headers.
 - For each header, verify `<path>` resolves under `<target_root>`
@@ -448,6 +569,8 @@ Two execution stages, in order:
 
 #### R-COH-MANDATORY-READING-MISSING — Mandatory Reading paths exist
 
+**Class:** advisory
+
 - Parse the `## Mandatory Reading` table's Path column.
 - Skip URLs (paths starting with `http://` or `https://`) — web
   reads are out of `plan-reviewer`'s tool surface.
@@ -456,6 +579,8 @@ Two execution stages, in order:
   table row's Why column verbatim.
 
 #### R-COH-VALIDATE-ALWAYS-PASS — validation commands can actually fail
+
+**Class:** blocking
 
 Guards against cosmetic validation gates: commands that print
 "FAIL" (or report an anti-pattern hit) but still exit 0, so the
@@ -485,6 +610,8 @@ exit code the plan author chose.
   `if <check>; then echo "FAIL: …"; exit 1; else echo "PASS: …"; fi`.
 
 #### R-COH-ACTION-VALIDATE-CONTRADICTION — a task's ACTION prose does not contradict that SAME task's own VALIDATE command
+
+**Class:** blocking
 
 **Unconditional — always emitted, never zero-emission.** Unlike the
 four `figma_track`/`phase_scope`-gated conditional checks below,
@@ -542,6 +669,8 @@ enforcement remains the Implementer actually running the task's own
 VALIDATE command.
 
 #### R-COH-VALIDATE-SEARCH-AMBIGUOUS — position-based search terms feeding an ordering comparison must be provably unique, or explicitly sentineled as first-match-intended
+
+**Class:** blocking
 
 **Unconditional — always emitted, never zero-emission.** Like
 `R-COH-VALIDATE-ALWAYS-PASS` and `R-COH-ACTION-VALIDATE-CONTRADICTION`,
@@ -633,6 +762,8 @@ file.
 
 #### R-COH-DESIGN-SOURCE-MISSING — design_source declared when figma_track is active
 
+**Class:** blocking
+
 **Deliberate divergence from Phase 0's `phase_type` behavior — stated
 explicitly:** "has Figma or not" is a business decision the reviewer
 cannot manufacture on the plan-writer's behalf, unlike `phase_type` (a
@@ -660,6 +791,8 @@ as a structural defect, full stop.
 
 #### R-COH-DESIGN-GROUNDED — UI/frontend tasks reference the Design Source frame set
 
+**Class:** blocking
+
 - **Zero-emission branch:** if `## Design Source` is absent from the
   plan (the common case — `figma_track` off, or `design_source:
   none`), emit NO row at all for this check, mirroring
@@ -682,6 +815,8 @@ as a structural defect, full stop.
     file (nothing to check — vacuously true).
 
 #### R-COH-VISUAL-SCOPE-PURITY — `phase_scope: visual` plans contain no side-effecting tasks and no unsentineled data/action tasks
+
+**Class:** blocking
 
 **Deliberate mirror of `R-COH-DESIGN-SOURCE-MISSING`/`R-COH-DESIGN-GROUNDED`'s
 zero-emission/otherwise shape, applied to the `phase_scope` field's own
@@ -732,6 +867,8 @@ safety net; Phase 5 (`Implement-time gate`) of
 checked against real code, out of this check's scope.
 
 #### R-COH-SENTINEL-RESOLUTION-MISSING — `phase_scope: logic` plans contain a sentinel-resolution task and its zero-remaining VALIDATE
+
+**Class:** blocking
 
 **Deliberate mirror of `R-COH-VISUAL-SCOPE-PURITY`'s
 zero-emission/otherwise shape, applied to the opposite `phase_scope`
@@ -798,6 +935,8 @@ command.
 
 #### R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE — forbidden-reference greps are diff-scoped and prohibition-aware
 
+**Class:** blocking
+
 Guards against a distinct failure mode from R-COH-VALIDATE-ALWAYS-PASS:
 a Validation command that DOES exit non-zero on a match (so it is not
 a cosmetic gate) but is scoped to match the WRONG thing — content the
@@ -855,6 +994,8 @@ positive that blocked a correct diff.
   row trivially.
 
 #### R-COH-VALIDATE-PATTERN-UNGROUNDED — match patterns are grounded in text the plan can demonstrate
+
+**Class:** blocking
 
 **Unconditional — always emitted, never zero-emission.** Like
 `R-COH-VALIDATE-ALWAYS-PASS`, `R-COH-ACTION-VALIDATE-CONTRADICTION`,
@@ -978,21 +1119,21 @@ no `Task` dispatch):
   `{id, passed: false, reason, file, line}`. Empty array `[]` when
   no contradictions exist — **do NOT pad to 5**.
 - **Per-finding `id` taxonomy** (the LLM picks the closest match):
-  - `R-COH-SUMMARY-TASKS-DRIFT` — the plan's `## Summary` (or
+  - `R-COH-SUMMARY-TASKS-DRIFT` (class: advisory) — the plan's `## Summary` (or
     `## Solution Statement`) prose claims approach X but the
     `## Step-by-Step Tasks` deliver approach Y.
-  - `R-COH-AC-TASK-DECOUPLED` — a plan AC-A item references a
+  - `R-COH-AC-TASK-DECOUPLED` (class: blocking) — a plan AC-A item references a
     behavior that no task implements, OR a task delivers behavior
     that no AC-A enforces.
-  - `R-COH-PATTERN-TASK-DRIFT` — a `## Patterns to Mirror` snippet
+  - `R-COH-PATTERN-TASK-DRIFT` (class: blocking) — a `## Patterns to Mirror` snippet
     doesn't match what a referencing task's MIRROR claim describes
     (header resolves but the snippet content diverges from the
     task's claim).
-  - `R-COH-MANDATORY-READING-IRRELEVANT` — a `## Mandatory Reading`
+  - `R-COH-MANDATORY-READING-IRRELEVANT` (class: advisory) — a `## Mandatory Reading`
     row's `Why` column doesn't match what the cited file actually
     discusses (LLM-judged; deterministic version would require Read
     of every file and exceeds budget).
-  - `R-COH-OTHER-INTERNAL-CONTRADICTION` — catchall when none of
+  - `R-COH-OTHER-INTERNAL-CONTRADICTION` (class: advisory) — catchall when none of
     the named classes apply; the LLM picks this only as fallback.
 - **Per-finding `reason` discipline** (Datadog "quote both sides" +
   HD-Eval section-pair anchoring):
@@ -1057,6 +1198,25 @@ JSONL format section below.
 
 When the K=5 pass emits N findings (N < 5), the remaining slots are
 NOT padded with `passed: true` rows — only emitted findings appear.
+
+**Per-class split (baseline, non-Figma case).** The blocking-classed
+rows are the 8 R1–R8 rows plus the 8 blocking-classed baseline
+deterministic R-COH-* rows (`R-COH-TASK-AC-MISSING`,
+`R-COH-FILES-UNTOUCHED`, `R-COH-VALIDATE-FRAMEWORK-MISMATCH`,
+`R-COH-VALIDATE-ALWAYS-PASS`, `R-COH-ACTION-VALIDATE-CONTRADICTION`,
+`R-COH-VALIDATE-SEARCH-AMBIGUOUS`, `R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE`,
+`R-COH-VALIDATE-PATTERN-UNGROUNDED`), plus any escalated rows. The
+advisory-classed rows are the 2 advisory-classed baseline
+deterministic checks (`R-COH-PATTERN-SOURCE-MISSING`,
+`R-COH-MANDATORY-READING-MISSING`) plus whichever of the ≤5 K=5 rows
+carry an advisory-classed id (`R-COH-SUMMARY-TASKS-DRIFT`,
+`R-COH-MANDATORY-READING-IRRELEVANT`,
+`R-COH-OTHER-INTERNAL-CONTRADICTION`). The 4 `figma_track`-conditional
+deterministic rows (`R-COH-DESIGN-SOURCE-MISSING`,
+`R-COH-DESIGN-GROUNDED`, `R-COH-VISUAL-SCOPE-PURITY`,
+`R-COH-SENTINEL-RESOLUTION-MISSING`) are all blocking-classed when
+they emit. Totals are unchanged from the paragraph above — this is a
+per-class partition of the same row counts, not a new count.
 
 ### Anti-pattern (specific to this layer)
 
@@ -1144,6 +1304,53 @@ row to `## Metadata`. Does NOT touch any section body, does NOT change
   Do NOT proceed.
 - Hold the plan content in memory for rubric evaluation.
 
+### Step 1.5 — Prior-verdict ratchet context
+
+- Derive the jsonl path via the canonical `<basename>` derivation
+  (see `## review.jsonl format` below) and `Read` the file (treat
+  absence as no prior entries — the ratchet is INACTIVE).
+- When the file exists and its LAST entry is a `CHANGES_REQUESTED`
+  verdict for this plan, set `previously_cited_ids` to that entry's
+  blocking-classed `passed: false` ids (an advisory-classed failing
+  id on that same entry is never previously-cited for ratchet
+  purposes). Derive `implicated_sections` by mapping each id in
+  `previously_cited_ids` to the plan section(s) it implicates — the
+  same cited-id→sections mapping `plan-writer.md`'s `## Targeted
+  revision mode` item 2 applies from the writer's side ("Map each
+  cited `rubric_id` to the sections it implicates. Correct only
+  those sections. A `rubric_id` you do not recognize is still
+  addressed: read its `reason` and fix what the reason describes."):
+  a `rubric_id` with no obvious section is mapped the same way, by
+  reading its stored `reason` and identifying the section that
+  reason describes.
+- The ratchet is **ACTIVE** only when ALL of the following hold:
+  1. The prior (last) jsonl entry carries a `section_hashes` map.
+  2. This invocation received a `section_hashes` input (see
+     `## Inputs` above).
+  3. Every section OUTSIDE `implicated_sections` has an unchanged
+     hash — string-equality between the prior entry's
+     `section_hashes` map and this invocation's `section_hashes`
+     map, checked for every key not in `implicated_sections`. This
+     is a string comparison only; this agent never computes a hash.
+- Any other state — no prior entry, the prior entry's verdict was
+  `APPROVED`, either hash map is absent, or a non-implicated
+  section's hash differs between the two maps — sets the ratchet
+  **INACTIVE**. When the specific cause is a hash mismatch outside
+  `implicated_sections` (an out-of-contract edit), record
+  `ratchet_void_reason` as a one-sentence explanation naming the
+  changed section (e.g. "out-of-contract edit detected in section
+  '## Summary', outside the implicated set — full blocking scope,
+  fail-safe"). Every other inactive cause (no prior entry, prior
+  APPROVED, either hash map absent) leaves `ratchet_void_reason`
+  unset — inactive-by-absence is the normal, expected state, not a
+  violation to record.
+- **An inactive ratchet means Step 2/3 gate exactly as Phase 1
+  shipped** — full blocking scope, every blocking-classed failing
+  row gates. The ratchet can only narrow what gates approval; it
+  never widens gating, and it never changes WHAT is evaluated or
+  logged — Step 2 still runs the full rubric plus coherence layer
+  every time (AC-10 no-short-circuit, unchanged).
+
 ### Step 2 — Run the rubric (all 8, no short-circuit)
 
 Walk R1 through R8 in order. For each, record:
@@ -1151,6 +1358,8 @@ Walk R1 through R8 in order. For each, record:
 ```json
 { "id": "R3", "passed": false, "reason": "TBD in Patterns to Mirror snippet header" }
 ```
+
+Every emitted row also carries its `class` — the value declared in `## Materiality classes`, or `blocking` with `escalated: true` when the reviewer invokes the escalation valve.
 
 **Do NOT short-circuit.** Even when R1 fails (e.g. Decision Gate
 block missing), continue to R2 and through R8. AC-10 mandates the
@@ -1173,19 +1382,48 @@ After R1–R8 record their outcomes, walk the R-COH-* coherence layer
 (see "## The R-COH-* coherence layer" section above): deterministic
 checks first, then the bounded K=5 LLM pass. Append one row per check
 and one row per K=5 finding to the same outcome array. The combined
-array (R1–R8 + R-COH-*) is what Step 3's branch logic evaluates: any
-`passed: false` row triggers the CHANGES_REQUESTED branch.
+array (R1–R8 + R-COH-*) is what Step 3's branch logic evaluates:
+any blocking-classed `passed: false` row triggers the CHANGES_REQUESTED branch; a run whose only failing rows are advisory-classed proceeds
+to Step 4 as an advisory-carrying APPROVED.
 
 After this step, you hold an array of `8 + N` result objects (N ≥ 0
 from the coherence layer), in evaluation order.
 
+**Blocking-effective (ratchet qualifier).** Under an ACTIVE ratchet
+(Step 1.5), a blocking-classed failing row is blocking-effective
+only when its id is in `previously_cited_ids` OR its finding is
+anchored inside an implicated section; every other blocking-classed
+failing row is emitted with `"class": "advisory"` plus `"ratchet":
+"out-of-scope-new-finding"` and does not gate. Under an INACTIVE
+ratchet, every blocking-classed failing row is blocking-effective —
+Phase 1 semantics verbatim, unchanged. This reclassification happens
+HERE, at Step 2's own row-recording time, so every row Step 3 and
+Step 4 later evaluate already carries its resolved `class` — neither
+step needs a separate blocking-effective check of its own; a
+`"class": "blocking"` row IS a blocking-effective row by
+construction from this point forward. The escalation valve (`##
+Materiality classes` above) remains available on retries: an
+escalated row — `"class": "blocking"` plus `"escalated": true` and
+its mandatory Implementer-impact justification — is always
+blocking-effective regardless of ratchet state; the ratchet narrows
+gating, it never disables the valve.
+
 ### Step 3 — Branch on the result
 
-#### All 8 pass → proceed to Step 4 (autonomous flip)
+#### No blocking-classed failure → proceed to Step 4 (autonomous flip)
 
-No user dialogue. Move directly to Step 4.
+No user dialogue. Move directly to Step 4. A run whose only failing
+rows are advisory-classed also takes this branch — see
+`## Materiality classes`. A run whose blocking-classed failures were
+all ratchet-downgraded to advisory under an ACTIVE ratchet (Step 2's
+blocking-effective qualifier, `### Step 1.5 — Prior-verdict ratchet
+context`) likewise has zero blocking-classed `passed: false` rows by
+the time this branch is evaluated, and takes this branch for the
+same reason. Under an INACTIVE ratchet, blocking-classed and
+blocking-effective are the identical set — Phase 1 semantics
+verbatim.
 
-#### One or more fail → CHANGES_REQUESTED (terminal for this run)
+#### One or more blocking-classed failures → CHANGES_REQUESTED (terminal for this run)
 
 1. Append a CHANGES_REQUESTED entry to
    `<target_root>/PRPs/plans/<basename>.review.jsonl` (see jsonl
@@ -1193,8 +1431,13 @@ No user dialogue. Move directly to Step 4.
    `verdict: "CHANGES_REQUESTED"`; `action: "rubric_fail"`;
    `user_message: ""` (no user dialogue in autonomous flow).
 
-2. Emit a bullet list naming each failing rubric item by ID +
-   reason. Example:
+2. Emit a bullet list naming each blocking-effective failing rubric
+   item by ID + reason. A row Step 2's ratchet qualifier downgraded
+   (`"class": "advisory"` plus `"ratchet":
+   "out-of-scope-new-finding"`) is listed in the existing
+   "Non-blocking advisories" sub-list alongside declared-advisory
+   rows, carrying its ratchet annotation, never as a mandatory fix.
+   Example:
 
    > **Rubric found defects.**
    >
@@ -1204,6 +1447,12 @@ No user dialogue. Move directly to Step 4.
    >   requires at least 3.
    > - **R8** — Plan AC-A2 references PRD AC-99 which does not
    >   exist in `PRPs/prds/<feature>.prd.md`.
+   >
+   > **Non-blocking advisories (recorded, not gating):**
+   >
+   > - **R-COH-MANDATORY-READING-MISSING** — the `## Mandatory
+   >   Reading` row for `docs/example.md` points at a path that no
+   >   longer resolves under `<target_root>`; advisory, not gating.
    >
    > File left at `*Status: DRAFT*`. Resolve the defects and re-run
    > `/relay-plan-review`, or hand back to `plan-writer` for
@@ -1235,10 +1484,22 @@ emitted before the summary) are unchanged.
 
 1. **Re-run R1 through R8** one more time by `Read`-ing the plan
    again from disk and evaluating fresh. If anything changed since
-   Step 2 and a rubric item now fails, return CHANGES_REQUESTED
-   with the new defect list — do NOT flip. Append a
-   CHANGES_REQUESTED jsonl entry with
-   `action: "revalidation_fail"` (Step 4a below) and exit.
+   Step 2 and a blocking-classed item now fails, return
+   CHANGES_REQUESTED with the new defect list — do NOT flip. Append
+   a CHANGES_REQUESTED jsonl entry with
+   `action: "revalidation_fail"` (Step 4a below) and exit. A
+   newly-failing advisory-classed item is recorded on the entry
+   that eventually flips but does not itself block the flip.
+   This re-evaluation applies the SAME ratchet context Step 1.5
+   computed (`previously_cited_ids`, `implicated_sections`, and the
+   ratchet's active/inactive state) — never recomputed here — so a
+   finding that would be ratchet-downgraded in Step 2 is equally
+   downgraded on this re-run: only a blocking-effective newly-failing
+   item (per Step 2's blocking-effective qualifier) aborts the flip
+   via Step 4a below; a ratchet-downgraded newly-failing item is
+   recorded on the flipping entry with its `"ratchet":
+   "out-of-scope-new-finding"` annotation, the same way a
+   newly-failing advisory-classed item already is.
 
 2. **Append the APPROVED jsonl entry FIRST** (before the plan
    flip):
@@ -1246,8 +1507,16 @@ emitted before the summary) are unchanged.
    - Append-only: `Read` existing content if the file exists
      (treat absence as empty string), concatenate existing +
      newline + new JSON line, `Write` the result back.
-   - The entry's `rubric` array MUST contain all 8 items each with
-     `passed: true`. `action: "final_flip"`. `user_message: ""`.
+   - The entry's `rubric` array MUST contain all blocking-classed
+     rows with `passed: true` (this includes all 8 R1–R8 items,
+     since R1–R8 are all blocking-classed); advisory-classed rows
+     MAY be `passed: false` with their `reason` — their presence
+     does not block this APPROVED flip. `action: "final_flip"`.
+     `user_message: ""`.
+   - The entry carries the write-through hash fields (`plan_sha256`,
+     `section_hashes`) per `### Hash discipline` above WHEN supplied
+     by the invoker; when Step 1.5 voided an otherwise-eligible
+     ratchet, the entry also carries `ratchet_void_reason`.
 
 3. **Re-`Read` the plan one more time** (between Step 2's `Write`
    and Step 4's `Edit`) to refresh the harness's read cache. Then
@@ -1262,6 +1531,11 @@ emitted before the summary) are unchanged.
 
    > ✅ Plan **APPROVED** at `PRPs/plans/<basename>.plan.md`.
    > Ready for the Implementer.
+
+   When one or more advisory-classed rows are open (`passed: false`)
+   on this same entry, append a second summary line:
+
+   > Open advisories: <n> (recorded in review.jsonl; not gating).
 
 5. Exit. The orchestrator (or developer) takes over.
 
@@ -1279,20 +1553,32 @@ invocation.
 
 ### Step 4a — Re-validation failure path (CHANGES_REQUESTED after Step 4.1)
 
-When Step 4.1's re-run flips a previously-passing rubric item to
-fail:
+When Step 4.1's re-run flips a previously-passing **blocking-classed**
+rubric item to fail (a previously-passing advisory-classed item
+flipping to fail does NOT trigger this path — it is simply recorded
+on the APPROVED entry per Step 4 item 2):
 
 - Append a CHANGES_REQUESTED jsonl entry with `verdict:
-  "CHANGES_REQUESTED"`, all 8 rubric items recorded (the now-failing
-  one with `passed: false` + `reason`; the rest with `passed: true`),
+  "CHANGES_REQUESTED"`, all evaluated rubric items recorded (the
+  now-failing blocking-classed one with `passed: false` + `reason`;
+  the rest with their current `passed` state and `class`),
   `action: "revalidation_fail"`, `user_message: ""`.
-- Emit a bullet list naming the now-failing rubric item by ID +
-  reason (the same shape as Step 3's CHANGES_REQUESTED branch).
+- Emit a bullet list naming the now-failing blocking-classed rubric
+  item by ID + reason (the same shape as Step 3's CHANGES_REQUESTED
+  branch).
 - Leave the plan at `*Status: DRAFT*`. Exit.
 
 This branch shares the bullet-list shape with Step 3's
 CHANGES_REQUESTED but uses `action: "revalidation_fail"` to
 distinguish in the audit log.
+
+This path uses the SAME ratchet context Step 1.5 computed (never
+recomputed): the "previously-passing **blocking-classed**" rubric
+item referenced above is evaluated as blocking-effective per Step
+2's qualifier — a finding ratchet-downgraded to `"class":
+"advisory"` does not trigger this path, exactly like a
+declared-advisory finding; only a blocking-effective newly-failing
+item triggers Step 4a.
 
 ### Step 5 — DEFERRED (no dialogue loop in autonomous flow)
 
@@ -1360,6 +1646,38 @@ append the verdict anyway — never drop an audit line — and add
 `"timestamp_degraded": true` to that same JSON object so the gap is
 visible in the corpus rather than silent.
 
+### Hash discipline
+
+The optional `plan_sha256` and `section_hashes` fields below are
+written through verbatim onto every verdict entry WHEN supplied by
+the invoker (see `## Inputs` above) — this agent never computes a
+hash (its `tools:` carry no shell) and never fabricates either field
+when absent.
+
+If one or both hash inputs were not supplied by the calling command,
+append the verdict anyway — never drop an audit line — WITHOUT the
+hash fields. Their absence keeps the NEXT re-review's ratchet
+(`### Step 1.5 — Prior-verdict ratchet context`) inactive fail-safe;
+absence is never fabricated into a present-but-fake hash.
+
+Three new OPTIONAL top-level entry fields, additive to the shape
+below: `plan_sha256` (string — whole-plan content hash of the
+reviewed plan), `section_hashes` (object — every `## `-heading
+section mapped to its content hash), `ratchet_void_reason` (string —
+present only when Step 1.5 voided an otherwise-eligible ratchet due
+to a hash mismatch outside the implicated set). One new per-row
+annotation, additive to a rubric row: `"ratchet":
+"out-of-scope-new-finding"` (present only on a row Step 2's
+blocking-effective qualifier downgraded from its declared `blocking`
+class to `advisory`).
+
+Worked jsonl row (ratchet-downgraded, standalone — not part of the
+worked example below):
+
+```json
+{ "id": "R-COH-OTHER-INTERNAL-CONTRADICTION", "passed": false, "class": "advisory", "ratchet": "out-of-scope-new-finding", "reason": "New contradiction found in ## Risks and Mitigations, a section outside implicated_sections (previously_cited_ids = [R3, R4], implicating only ## Step-by-Step Tasks and ## Files to Change); ratchet-downgraded from its declared blocking class." }
+```
+
 One JSON object per line, appended (never truncated). Shape:
 
 ```json
@@ -1367,24 +1685,24 @@ One JSON object per line, appended (never truncated). Shape:
   "timestamp": "2026-04-25T19:33:00Z",
   "verdict": "APPROVED",
   "rubric": [
-    { "id": "R1", "passed": true },
-    { "id": "R2", "passed": true },
-    { "id": "R3", "passed": true },
-    { "id": "R4", "passed": true },
-    { "id": "R5", "passed": true },
-    { "id": "R6", "passed": true },
-    { "id": "R7", "passed": true },
-    { "id": "R8", "passed": true },
-    { "id": "R-COH-TASK-AC-MISSING", "passed": true },
-    { "id": "R-COH-FILES-UNTOUCHED", "passed": true },
-    { "id": "R-COH-VALIDATE-FRAMEWORK-MISMATCH", "passed": true, "reason": "test_frameworks empty in methodology.md; framework-mismatch check skipped" },
-    { "id": "R-COH-PATTERN-SOURCE-MISSING", "passed": true },
-    { "id": "R-COH-MANDATORY-READING-MISSING", "passed": true },
-    { "id": "R-COH-VALIDATE-ALWAYS-PASS", "passed": true },
-    { "id": "R-COH-ACTION-VALIDATE-CONTRADICTION", "passed": true },
-    { "id": "R-COH-VALIDATE-SEARCH-AMBIGUOUS", "passed": true },
-    { "id": "R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE", "passed": true },
-    { "id": "R-COH-VALIDATE-PATTERN-UNGROUNDED", "passed": true }
+    { "id": "R1", "passed": true, "class": "blocking" },
+    { "id": "R2", "passed": true, "class": "blocking" },
+    { "id": "R3", "passed": true, "class": "blocking" },
+    { "id": "R4", "passed": true, "class": "blocking" },
+    { "id": "R5", "passed": true, "class": "blocking" },
+    { "id": "R6", "passed": true, "class": "blocking" },
+    { "id": "R7", "passed": true, "class": "blocking" },
+    { "id": "R8", "passed": true, "class": "blocking" },
+    { "id": "R-COH-TASK-AC-MISSING", "passed": true, "class": "blocking" },
+    { "id": "R-COH-FILES-UNTOUCHED", "passed": true, "class": "blocking" },
+    { "id": "R-COH-VALIDATE-FRAMEWORK-MISMATCH", "passed": true, "reason": "test_frameworks empty in methodology.md; framework-mismatch check skipped", "class": "blocking" },
+    { "id": "R-COH-PATTERN-SOURCE-MISSING", "passed": true, "class": "advisory" },
+    { "id": "R-COH-MANDATORY-READING-MISSING", "passed": true, "class": "advisory" },
+    { "id": "R-COH-VALIDATE-ALWAYS-PASS", "passed": true, "class": "blocking" },
+    { "id": "R-COH-ACTION-VALIDATE-CONTRADICTION", "passed": true, "class": "blocking" },
+    { "id": "R-COH-VALIDATE-SEARCH-AMBIGUOUS", "passed": true, "class": "blocking" },
+    { "id": "R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE", "passed": true, "class": "blocking" },
+    { "id": "R-COH-VALIDATE-PATTERN-UNGROUNDED", "passed": true, "class": "blocking" }
   ],
   "action": "final_flip",
   "user_message": ""
@@ -1395,6 +1713,8 @@ CHANGES_REQUESTED entry — same shape, with `verdict:
 "CHANGES_REQUESTED"`, `passed: false` and a non-empty `reason`
 string on failing items, `action: "rubric_fail"` (or
 `"revalidation_fail"` when Step 4.1 trips), and `user_message: ""`.
+Failing rows also carry their `class`; a row escalated via the valve
+additionally carries `"escalated": true`.
 
 The `rubric` array MUST contain at least 8 objects with `id` values
 `R1`, `R2`, `R3`, `R4`, `R5`, `R6`, `R7`, `R8` — one of each, no
@@ -1403,6 +1723,8 @@ layer may follow. AC-10's no-short-circuit invariant is preserved:
 R1–R8 are always all present and evaluated regardless of whether
 earlier items failed; the relaxation of "no extras" to admit R-COH-*
 rows is recorded as the 2026-04-28 entry in `docs/decisions.md`.
+
+Every row emitted after this section ships carries a `class` field matching the `## Materiality classes` partition, or `"class": "blocking"` plus `"escalated": true` for a row promoted through the escalation valve. Consumers apply the same rule stated above: rows without a `class` field predate this taxonomy and are read as blocking. Hash fields (`plan_sha256`, `section_hashes`) and the `ratchet_void_reason` / per-row `ratchet` annotations are likewise additive and optional; consumers reading entries without them apply pre-ratchet semantics (full blocking scope, Phase 1 behavior).
 
 Append-only discipline:
 

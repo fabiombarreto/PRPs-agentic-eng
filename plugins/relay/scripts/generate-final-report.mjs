@@ -25,7 +25,7 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
-import { resolve, join } from 'node:path';
+import { resolve, join, basename } from 'node:path';
 
 function parseArgs(argv) {
   const positional = [];
@@ -256,6 +256,66 @@ function loadVisualApprovalLine(reportsDir, phase) {
   const textPart = text ? `: "${text}"` : '';
   const timestamp = entry.timestamp ?? '—';
   return `- **${phase}** human visual approval: **${decision}**${textPart} (${timestamp})`;
+}
+
+function loadOpenPlanReviewAdvisories(reportsDir) {
+  // Enumerates this feature's phase-numbered plans across PRPs/plans/ and
+  // PRPs/plans/completed/ -- plansRoot derived exactly as loadPhaseScopes
+  // does, and the same two-directory fallback list findPlanForPhase walks,
+  // but scoped to every phase of one feature rather than one N. For each,
+  // reads PRPs/plans/<basename>.review.jsonl's LAST non-empty line
+  // (mirroring loadVisualApprovalLine's per-line parse + try/catch) and
+  // collects failing, advisory-classed rubric rows (plan-review-materiality
+  // Phase 1, docs/decisions.md 2026-08-06) into {phase, id, reason} items.
+  // Returns [] on any missing file or parse failure; never throws.
+  const feature = basename(reportsDir);
+  const plansRoot = resolve(reportsDir, '..', '..');
+  const escapedFeature = feature.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`^${escapedFeature}-phase-(\\d+)-.+\\.plan\\.md$`);
+  const plansByPhase = new Map();
+  for (const dir of [join(plansRoot, 'plans'), join(plansRoot, 'plans', 'completed')]) {
+    if (!existsSync(dir) || !statSync(dir).isDirectory()) continue;
+    for (const name of readdirSync(dir)) {
+      const match = pattern.exec(name);
+      if (!match) continue;
+      const phase = `phase-${match[1]}`;
+      if (!plansByPhase.has(phase)) plansByPhase.set(phase, name.replace(/\.plan\.md$/, ''));
+    }
+  }
+
+  const advisories = [];
+  for (const [phase, planBasename] of plansByPhase) {
+    const jsonlPath = join(plansRoot, 'plans', `${planBasename}.review.jsonl`);
+    if (!existsSync(jsonlPath)) continue;
+    let content;
+    try {
+      content = readFileSync(jsonlPath, 'utf-8');
+    } catch (err) {
+      process.stderr.write(`warning: could not read ${jsonlPath}: ${err.message}\n`);
+      continue;
+    }
+    const nonEmptyLines = content.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
+    if (nonEmptyLines.length === 0) continue;
+    let entry;
+    try {
+      entry = JSON.parse(nonEmptyLines[nonEmptyLines.length - 1]);
+    } catch (err) {
+      process.stderr.write(`warning: could not parse ${jsonlPath}: ${err.message}\n`);
+      continue;
+    }
+    for (const row of entry.rubric ?? []) {
+      if (row.passed === false && row.class === 'advisory') {
+        // Same truncate + pipe-escape + newline-collapse treatment the
+        // Attempts failures table applies to reviewer/test prose before it
+        // reaches a markdown table cell (redaction-policy.md governs
+        // secret values upstream at capture time; this is the table-safety
+        // pass neighbouring sections already apply).
+        const reason = (row.reason ?? '').slice(0, 120).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+        advisories.push({ phase, id: row.id, reason });
+      }
+    }
+  }
+  return advisories;
 }
 
 function buildFailureHistogram(attempts) {
@@ -497,6 +557,26 @@ function buildMarkdown(reportsDir, runData, reviewData, attempts) {
       for (const approvalLine of approvalLines) lines.push(approvalLine);
       lines.push('');
     }
+  }
+
+  // Open plan-review advisories (plan-review-materiality Phase 4) --
+  // omitted entirely (no heading, no placeholder) when zero open
+  // advisory-classed rubric rows are found for this feature's plans,
+  // mirroring the Visual Fidelity section's own discover-then-guard idiom
+  // immediately above: a run with no advisories produces a byte-identical
+  // PR body to today's.
+  const openAdvisories = loadOpenPlanReviewAdvisories(reportsDir);
+  if (openAdvisories.length > 0) {
+    lines.push('## Open plan-review advisories');
+    lines.push('');
+    lines.push('Recorded by plan-review as advisory-classed (non-gating) findings and delivered to the Implementer; none of these blocked approval.');
+    lines.push('');
+    lines.push('| Phase | Check | Note |');
+    lines.push('|-------|-------|------|');
+    for (const { phase, id, reason } of openAdvisories) {
+      lines.push(`| ${phase} | ${id} | ${reason} |`);
+    }
+    lines.push('');
   }
 
   lines.push('---');

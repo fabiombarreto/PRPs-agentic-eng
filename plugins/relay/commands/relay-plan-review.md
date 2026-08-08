@@ -171,6 +171,16 @@ The Reviewer's two terminal outcomes:
      > ✅ Plan **APPROVED** at `PRPs/plans/<basename>.plan.md`.
      > Ready for the Implementer.
 
+     When one or more advisory-classed rows are open (`passed: false`)
+     on that same APPROVED entry, the summary MAY carry a second
+     line:
+
+     > Open advisories: <n> (recorded in review.jsonl; not gating).
+
+     An advisory-carrying APPROVED is still APPROVED — the flip
+     proceeds and nothing gates; the second line is informational
+     only.
+
 2. **One or more fail** → CHANGES_REQUESTED:
    - Appends a CHANGES_REQUESTED entry to the jsonl log (all 8
      items recorded with `passed`/`reason` fields;
@@ -221,6 +231,11 @@ body change.
 The command appends nothing of its own to the Reviewer's verdict
 text. The jsonl log entry is the audit trail; the verbatim
 verdict text is the user-facing surface.
+
+When the summary carries the second advisory line, it flows through
+verbatim exactly like the rest of the verdict — the command still
+appends nothing of its own, and no sidecar artifact is written;
+standalone `/relay-plan-review` surfacing is console-only by design.
 
 ---
 

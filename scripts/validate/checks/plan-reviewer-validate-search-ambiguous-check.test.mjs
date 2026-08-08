@@ -184,6 +184,29 @@
  * justification recorded in
  * PRPs/reports/rubric-reconciliation/test-suite.diff's Lifecycle ledger.
  *
+ * Lifecycle update (2026-08-07, EXISTING_TEST_UPDATED, performed by the
+ * plan-review-materiality Phase 1 test-writer session, test-after per
+ * docs/context/methodology.md): PRPs/plans/completed/plan-review-materiality-phase-1-class-taxonomy-gating.plan.md
+ * (source PRD PRPs/prds/plan-review-materiality.prd.md) added an additive
+ * `"class": "blocking" | "advisory"` field to every row of the
+ * `## review.jsonl format` worked example in plan-reviewer.md, including
+ * the `R-COH-ACTION-VALIDATE-CONTRADICTION`, `R-COH-VALIDATE-SEARCH-AMBIGUOUS`,
+ * and `R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE` rows this file's own AC-A8 test
+ * pins byte-exactly (all three classed `blocking` in the new
+ * `## Materiality classes` partition table). The two-field shape
+ * (`{ "id": "...", "passed": true }`) AC-A8's four `content.includes(...)`
+ * pins asserted no longer matches the live three-field rows (`{ "id":
+ * "...", "passed": true, "class": "blocking" }`), so all four went stale.
+ * The fifth/sixth assertions in the same test (the regex-derived 10-row
+ * count and the last-row-id check) match on the `"id"` key only and are
+ * UNAFFECTED by the additive field — left untouched. Confirmed by directly
+ * reading the post-implementation plan-reviewer.md content. Anti-weakening
+ * check: the fix below *extends* all four pinned substrings to include the
+ * new `, "class": "blocking"` segment so they again pin the SAME three
+ * rows' SAME adjacencies byte-exactly — no assertion is dropped, no scope
+ * is narrowed. Full justification recorded in
+ * PRPs/reports/plan-review-materiality/test-suite.diff's Lifecycle ledger.
+ *
  * Run: node --test scripts/validate/checks/plan-reviewer-validate-search-ambiguous-check.test.mjs
  */
 
@@ -482,22 +505,25 @@ test('AC-A7 (regression guard — the missing-property delta over EXISTING_TEST_
 test('AC-A8: plan-reviewer.md\'s ## review.jsonl format example JSON block includes a new R-COH-VALIDATE-SEARCH-AMBIGUOUS passed:true row immediately after the existing R-COH-ACTION-VALIDATE-CONTRADICTION row, and the later-added R-COH-VALIDATE-PATTERN-UNGROUNDED row now closes out all 10 fixed deterministic checks with an example row', () => {
   const content = readRepoFile(PLAN_REVIEWER_PATH);
 
-  assert.ok(content.includes('{ "id": "R-COH-VALIDATE-SEARCH-AMBIGUOUS", "passed": true }'), 'expected the new JSONL example row');
   assert.ok(
-    content.includes(
-      '{ "id": "R-COH-ACTION-VALIDATE-CONTRADICTION", "passed": true },\n    { "id": "R-COH-VALIDATE-SEARCH-AMBIGUOUS", "passed": true }'
-    ),
-    'expected the new row positioned immediately after the existing R-COH-ACTION-VALIDATE-CONTRADICTION row, with no other row between them'
-  );
-  assert.ok(
-    content.includes('{ "id": "R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE", "passed": true }'),
-    'expected the merged-in R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE JSONL example row'
+    content.includes('{ "id": "R-COH-VALIDATE-SEARCH-AMBIGUOUS", "passed": true, "class": "blocking" }'),
+    'expected the new JSONL example row (now carrying the additive class field)'
   );
   assert.ok(
     content.includes(
-      '{ "id": "R-COH-VALIDATE-SEARCH-AMBIGUOUS", "passed": true },\n    { "id": "R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE", "passed": true }'
+      '{ "id": "R-COH-ACTION-VALIDATE-CONTRADICTION", "passed": true, "class": "blocking" },\n    { "id": "R-COH-VALIDATE-SEARCH-AMBIGUOUS", "passed": true, "class": "blocking" }'
     ),
-    'expected the merged-in row positioned immediately after the R-COH-VALIDATE-SEARCH-AMBIGUOUS row, with no other row between them'
+    'expected the new row positioned immediately after the existing R-COH-ACTION-VALIDATE-CONTRADICTION row, with no other row between them (both now carrying the additive class field)'
+  );
+  assert.ok(
+    content.includes('{ "id": "R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE", "passed": true, "class": "blocking" }'),
+    'expected the merged-in R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE JSONL example row (now carrying the additive class field)'
+  );
+  assert.ok(
+    content.includes(
+      '{ "id": "R-COH-VALIDATE-SEARCH-AMBIGUOUS", "passed": true, "class": "blocking" },\n    { "id": "R-COH-VALIDATE-FORBIDDEN-GREP-SCOPE", "passed": true, "class": "blocking" }'
+    ),
+    'expected the merged-in row positioned immediately after the R-COH-VALIDATE-SEARCH-AMBIGUOUS row, with no other row between them (both now carrying the additive class field)'
   );
 
   const jsonlBlock = sliceBetween(content, '"rubric": [', '"action": "final_flip"');

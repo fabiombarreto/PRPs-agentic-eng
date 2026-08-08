@@ -669,6 +669,38 @@
         <dt>Supersedes</dt><dd>Any earlier claim resting on runs-per-artifact — most notably the founding diagnosis that named test-write-review the worst stage at 3.50 runs per artifact. Corrected to 1.25 runs per session, it is the best-behaved stage.</dd>
       </div>
 
+      <h3 id="materiality-classes">69. Plan-review gating becomes materiality-aware: blocking vs advisory rubric classes</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-06</dd>
+        <dt>Context</dt><dd>Plan-review's first-attempt <code>CHANGES_REQUESTED</code> rate rose from 0.33 (April 2026) to 0.60 (August 2026) as the rubric grew from 8 to 27 distinct check ids. A cross-project audit of 353 verdicts over 193 plans in 7 repositories, classifying all 280 failing rubric rows individually, found only about 16 percent of them substantive — the gating function rejected a whole plan for any failure, material or not.</dd>
+        <dt>Decision</dt><dd>Every check id carries a statically declared <code>class: blocking | advisory</code> in a new partition table. <code>blocking</code> gates the verdict; <code>advisory</code> is evaluated, recorded and surfaced but never gates on its own. Failing rows carry the class in <code>review.jsonl</code>, an absent field reads as <code>blocking</code>, and a one-way escalation valve lets a single advisory finding be emitted as blocking with a justification. Newly added checks default to advisory.</dd>
+        <dt>Reason</dt><dd>A static per-check partition bounds LLM variance better than per-finding judged severity, mirroring GitHub code scanning's per-rule severity plus per-finding triage. Keeping the verdict binary rather than adding a third state means no orchestrator or state-machine change — advisories live entirely in the payload. The advisory-by-default rule inverts the incident-driven ratchet that grew the rubric while the failure rate climbed.</dd>
+      </div>
+
+      <h3 id="retry-convergence-ratchet">70. Retry convergence ratchet narrows blocking scope on re-review</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-07</dd>
+        <dt>Context</dt><dd>Across consecutive failing plan-review attempts, 33 rubric items newly failed against 31 that repeated — the loop had no fixed point. The three worst measured loops (7, 5 and 5 attempts) were driven by findings that never failed twice on the same text, so a writer that fixed everything cited could still be rejected for something else.</dd>
+        <dt>Decision</dt><dd>A new <code>Step 1.5</code> reads the plan's own <code>review.jsonl</code> before the rubric runs. When the last entry is <code>CHANGES_REQUESTED</code>, only previously cited blocking ids and findings inside the sections those ids implicate may gate; anything else is emitted as advisory with a ratchet annotation. Invoker-supplied whole-plan and per-section hashes void the ratchet fail-safe when a section outside the implicated set changed.</dd>
+        <dt>Reason</dt><dd>A whole-plan hash alone cannot gate a useful ratchet: a legitimate targeted revision changes the plan's bytes by construction, so it would void on every retry and never activate. Per-section hashing applies the void check exactly where the writer's own revision contract promises nothing changed. The hashes are invoker-supplied because the reviewer's tool allowlist is a recorded capability contract, not something a bug fix widens.</dd>
+      </div>
+
+      <h3 id="advisory-pass-through">71. Advisory pass-through carries open advisories to the Implementer</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-07</dd>
+        <dt>Context</dt><dd>An advisory-classed finding that averts a rejection is worthless if it is written to <code>review.jsonl</code> and then read by nobody. Neither <code>/relay-implement</code> nor the implementer agent had any notion of advisories, and <code>/relay-plan-review</code>'s prose still described only the pre-materiality summary.</dd>
+        <dt>Decision</dt><dd><code>/relay-implement</code>'s Phase A.0 reads the approving verdict's last entry and collects open advisories, which Phase A.2 passes into the implementer dispatch — the key omitted entirely when there are none, so a zero-advisory dispatch stays byte-identical. The implementer declares a matching optional input with a consumption rule that treats each as a caveat, never a task. <code>/relay-plan-review</code> surfaces the advisory line verbatim; no sidecar artifact is written.</dd>
+        <dt>Reason</dt><dd>An input an agent is never instructed to consume is a silent no-op however faithfully it is computed and dispatched — the same severed-pipe failure the <code>prior_feedback</code> mechanism was built to close. Declaring the input explicitly, with a mandatory pre-task read, is what makes the pipe real rather than nominal.</dd>
+      </div>
+
+      <h3 id="class-aware-measurement">72. Class-aware measurement and PR-body advisory surfacing</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-07</dd>
+        <dt>Context</dt><dd>The final phase of the materiality work. <code>scripts/efficiency.mjs</code> read only each row's id and pass flag, so an advisory row counted exactly like a blocking one — which would have made the feature's own success metric unreadable. Open advisories were also invisible at merge time.</dd>
+        <dt>Decision</dt><dd><code>readCorpus()</code> captures each failing row's class (absent reads as blocking), <code>aggregate()</code> emits per-stage blocking and advisory counts plus per-class top-failure tallies, and the comparison output gains one conditional line that prints only when advisory rows exist. The PR-body generator gains an "Open plan-review advisories" section built with the established omitted-when-empty idiom.</dd>
+        <dt>Reason</dt><dd>Separating gating failures from non-gating ones is a precondition for testing the hypothesis at all — without it there is no way to tell a real reduction in rework from a reclassification artifact. Existing metrics, session splitting and the degraded-artifact exclusion are untouched, so historic corpora stay comparable.</dd>
+      </div>
+
       <h2 id="how-to-add">Adding a new decision</h2>
 
       <p>When a new stable decision is made (typically during PRD authoring or during a review), follow this protocol:</p>

@@ -60,6 +60,23 @@ lives in `/relay-implement` — not in this agent.
   declared, you had no protocol for it and silently re-ran the whole
   plan instead. When non-empty, follow `## Targeted revision mode`
   below.
+- `advisories` *(optional, default absent)*: open advisory findings
+  from the plan-review verdict that approved this plan, in the
+  canonical `list<{rubric_id, reason}>` shape, explicitly
+  NON-BLOCKING. Sent by `/relay-implement` only when the approving
+  verdict carries advisory-classed failing rows.
+
+---
+
+**Advisory consumption (non-blocking).** Read any `advisories`
+BEFORE executing tasks and treat each as a caveat to absorb during
+normal execution — e.g. a drifted `file:line` cite means locate the
+pattern by content search instead of trusting the number; a flagged
+section means double-check it against the tree while working.
+Advisories NEVER add tasks, never modify the plan, and never gate
+completion; they impose zero obligations when the input is absent.
+This declaration exists so the passed value is consumed rather than
+silently dropped — the 2026-07-30 severed-pipe lesson.
 
 ---
 

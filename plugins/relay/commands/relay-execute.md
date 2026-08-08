@@ -335,6 +335,24 @@ Set `plan_review_attempts = 0`.
 
 #### Step A.3.2 — Adopt /relay-plan-review role
 
+**Hash capture (before each adoption below).** Compute `plan_sha256`
+and per-section `section_hashes` of `current_plan_path` via this
+exact dependency-free node one-liner:
+
+```bash
+node -e "const fs=require('fs'),c=require('crypto');const t=fs.readFileSync(process.argv[1],'utf8');const h=s=>c.createHash('sha256').update(s).digest('hex');const out={plan_sha256:h(t),section_hashes:{}};for(const m of t.split(/^(?=## )/m))if(m.startsWith('## '))out.section_hashes[m.split('\n')[0]]=h(m);console.log(JSON.stringify(out))" <current_plan_path>
+```
+
+Parse the resulting `{ plan_sha256, section_hashes }` JSON from
+stdout and pass both values into the reviewer adoption's execution
+context below, alongside `review_started_at` (already supplied per
+`relay-plan-review.md`'s own Phase A) — matching the plan-reviewer
+agent's optional `plan_sha256` / `section_hashes` inputs (its `##
+Inputs` section). Re-run this hash capture on every loop iteration
+(each retry re-adopts this Step against the current
+`current_plan_path` content), never reusing a stale hash from an
+earlier attempt.
+
 Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-plan-review.md` and execute its full protocol inline against `current_plan_path`.
 
 **On APPROVED:**
@@ -348,15 +366,16 @@ Proceed to Phase A.3.3.
 
 **On CHANGES_REQUESTED:**
 
-Capture the rubric defect bullet-list output (format documented at `plugins/relay/agents/plan-reviewer.md:459-483`). This is the structured list of failing rubric item IDs + reasons.
+Capture the rubric defect bullet-list output (format documented at `plugins/relay/agents/plan-reviewer.md`, Step 3 "One or more blocking-classed failures" branch). This is the structured list of blocking-effective failing rubric item IDs + reasons: `prior_feedback` carries only blocking-effective rows' `{rubric_id, reason}` — advisory rows never gate a retry, since an advisory-only verdict is `APPROVED` and never reaches this CHANGES_REQUESTED branch at all.
 
 Increment `plan_review_attempts`.
 
 **Stuck-loop detection (before budget check):**
 
-Extract the set of failing rubric item IDs from the current verdict
-(the `id` values of all `passed: false` rows in the JSONL entry just
-appended). Call this `current_failing_ids`.
+Extract the set of blocking-effective failing rubric item IDs from
+the current verdict (the `id` values of all `passed: false` rows
+whose class is blocking — a row without a class field reads as
+blocking). Call this `current_failing_ids`.
 
 If `last_plan_review_failing_ids` is **not null** AND
 `current_failing_ids` is identical to `last_plan_review_failing_ids`
