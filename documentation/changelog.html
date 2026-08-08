@@ -30,8 +30,61 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <h3 id="unreleased-changed">Changed</h3>
+      <p><em>No changes queued yet.</em></p>
+
+      <h2 id="v0-31-0">0.31.0 &#8212; 2026-08-08</h2>
+      <p>Stops plan-review from rejecting a plan for defects that would never have misled the Implementer. A cross-project audit of 353 verdicts over 193 plans in 7 repositories classified all 280 failing rubric rows individually and found only about 16 percent substantive, while the first-attempt rejection rate had climbed from 0.33 in April to 0.60 in August as the rubric grew from 8 to 27 check ids. Every check now declares a <code>blocking</code> or <code>advisory</code> class, and only a blocking-classed failure gates approval.</p>
+
+      <p>Evaluation is unchanged: every rubric item still runs and is recorded on every attempt. Only the gating function moved.</p>
+
+      <h3 id="v0-31-0-added">Added</h3>
       <ul>
+        <li><strong>Materiality classes on every plan-review check</strong>
+          &mdash; a partition table in <code>plan-reviewer.md</code> declares
+          each of the 27 check ids <code>blocking</code> or <code>advisory</code>
+          (five are advisory). An advisory-only run approves and flips, carrying
+          an <code>Open advisories: &lt;n&gt;</code> summary line; every
+          <code>review.jsonl</code> row gains a <code>class</code> field, with an
+          absent field read as <code>blocking</code> so historic corpora keep
+          their tallies. A one-way escalation valve lets a single advisory
+          finding be emitted as blocking with a justification naming the
+          concrete Implementer impact; the reverse never happens. Newly added
+          checks default to advisory, inverting the incident-driven ratchet that
+          grew the rubric while the rejection rate rose.</li>
+        <li><strong>Retry convergence ratchet</strong>
+          &mdash; on a re-review, only previously cited blocking ids and
+          findings inside the sections the writer was allowed to touch may gate;
+          anything else is recorded as advisory. Invoker-supplied whole-plan and
+          per-section hashes void the ratchet fail-safe when a section outside
+          that set changed. Addresses the measured absence of a fixed point: 33
+          rubric items newly failed across consecutive attempts against 31 that
+          repeated.</li>
+        <li><strong>Advisory pass-through to the Implementer</strong>
+          &mdash; <code>/relay-implement</code> reads the approving verdict and
+          passes open advisories into the implementer dispatch as a declared,
+          explicitly non-blocking input; the key is omitted entirely when there
+          are none, so a zero-advisory dispatch stays byte-identical.
+          <code>/relay-plan-review</code> surfaces the advisory line to the
+          operator. A recorded finding nobody reads is a silent no-op &mdash;
+          the same severed-pipe failure <code>prior_feedback</code> was built to
+          close.</li>
+        <li><strong>Class-aware measurement and PR-body advisory surfacing</strong>
+          &mdash; <code>scripts/efficiency.mjs</code> captures each failing row's
+          class, emits per-stage blocking and advisory counts plus per-class
+          top-failure tallies, and prints one conditional comparison line that
+          appears only when advisory rows exist. The PR-body generator gains an
+          "Open plan-review advisories" section using the established
+          omitted-when-empty idiom. Separating gating from non-gating failures is
+          what makes the feature's own hypothesis testable.</li>
+      </ul>
+
+      <h3 id="v0-31-0-changed">Changed</h3>
+      <ul>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.30.0</code> &rarr; <code>0.31.0</code> to
+          match this release; users running <code>/plugin</code> after pulling
+          this version will get a fresh <code>relay/0.31.0/</code> cache directory
+          with all newly-shipped commands and agents registered.</li>
         <li><strong>Plan-review gating documentation corrected for the materiality threshold</strong>
           &mdash; <code>docs/api-reference.md</code>,
           <code>documentation/reference/commands.html</code> and
