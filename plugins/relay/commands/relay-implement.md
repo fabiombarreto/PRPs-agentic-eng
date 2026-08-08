@@ -212,10 +212,13 @@ Set the budget caps and counters:
 - `deadline_ts = now() + max_implement_minutes minutes`
 - `files_changed_by_attempt: dict<int, set<str>> = {}` — populated from each attempt's diff.patch
 - `last_reviewer_feedback: list<{rubric_id, reason}> = []` — carried into the next attempt's implementer prompt
+- `open_advisories: list<{rubric_id, reason}> = []` — read from the plan's latest `review.jsonl` entry in Phase A.0 (see the Advisory-context read paragraph below); carried unmodified into the Phase A.2 implementer dispatch
 
 Read `<target_root>/docs/context/methodology.md` frontmatter and extract the `docs_sync` key, recording `docs_sync_enabled` (boolean). Default `true` when the key is absent, mirroring the `tdd` absence-handling precedent and `docs-updater.md`'s own default-true-when-absent handling of the same key (`docs/context/methodology.md:45-65`). Precedence rule, evaluated by Phase A.3.5's gate: `no_docs_flag` (set in `## Parse arguments`) always wins over `docs_sync_enabled` — either one alone is sufficient to skip the docs-sync sub-phase.
 
 Also read the same `docs/context/methodology.md` frontmatter for the `figma_track` key, recording `figma_track_declared = (figma_track == true)` (boolean; default `false` when the key is absent — mirrors the non-heuristic `figma_track` contract, `docs/anti-patterns.md`, "Flipping `figma_track` (or any future opt-in gating key) by heuristic"). Then `Read` the plan at `<plan_path>` and check its `## Metadata` table's `design_source` row (present only when `figma_track_declared == true` at plan-authoring time, per `plan-writer.md` Step 4.4 item 5); derive `visual_verification_enabled = figma_track_declared AND this plan's design_source == "figma"`. Both derivations reuse existing declarations verbatim — never a new methodology.md key (`docs/decisions.md`, "Flipping `figma_track` ... by heuristic" entry). Precedence rule, evaluated by Phase A.3.4's gate: `no_visual_flag` (set in `## Parse arguments`) always wins over `visual_verification_enabled` — either one alone is sufficient to skip the visual-verification sub-phase.
+
+**Advisory-context read (plan-review pass-through).** Derive `review_jsonl_path = PRPs/plans/<basename>.review.jsonl` using the `<basename>` already computed in `## Parse arguments` (both PRD-mode and PRD-less filenames apply the same derivation; the jsonl is basename-keyed and does NOT move when D8 later relocates the plan to `completed/`). If `review_jsonl_path` does not exist, leave `open_advisories` empty and continue — no halt, no warning; a pre-materiality or reviewer-less plan simply has no advisories. If it exists, parse its LAST line (the verdict that approved the current plan state) and set `open_advisories` to that entry's `rubric` rows having BOTH `"class": "advisory"` AND `passed: false`, mapped to the canonical shape `{rubric_id: <row id>, reason: <row reason>}`. Compatibility rule: a row without a `class` field reads as blocking (the Phase-1 rule), so `review.jsonl` entries written before the materiality taxonomy shipped can never contribute an advisory.
 
 Soft-fail concurrency diagnostic per source PRD D18: `Glob` `<artifact_root>*/diff.patch` for any in-flight attempt (heuristic: a `diff.patch` whose corresponding `<basename>.code-review.jsonl` line shows neither APPROVED nor a final HALT). If found, emit warning `"concurrent /relay-implement detected for <feature> (is_prd_less=<is_prd_less>); orchestrator must serialize"` and **continue** (do not block). Robust file-lock semantics deferred until `/relay-execute` is designed.
 
@@ -277,11 +280,14 @@ Task(subagent_type="implementer",
        target_root: <target_root>,
        attempt: <attempt>,
        prior_feedback: <last_reviewer_feedback when non-empty; null otherwise>,
+       advisories: <open_advisories when non-empty; key omitted entirely otherwise>,
        base_commit: <base_commit>,
      })
 ```
 
 `prior_feedback`'s condition reads `last_reviewer_feedback` non-emptiness directly rather than `attempt > 1` — a deliberately narrow generalization (Figma Visual-First Track Phase 6, `docs/decisions.md`): in every pre-Phase-6 code path `last_reviewer_feedback` is populated only together with an `attempt` increment (Phase A.3's `CHANGES_REQUESTED` branch, and the arbitration mode's `DISPUTE_REJECTED` branch), so the two conditions are equivalent for every existing invocation shape; the new condition additionally lets `/relay-execute`'s resume-from-rejected-visual-approval path (`relay-execute.md` Phase A.2.5) seed feedback for a genuine `attempt == 1` dispatch, which the old condition would have silently discarded.
+
+When open_advisories is empty, the advisories key is OMITTED from the payload entirely — not passed as null — so a zero-advisory dispatch is byte-identical to the pre-Phase-3 dispatch. Advisories are non-blocking caveats: they are never a retry trigger, are never counted by any budget (`max_implement_retries`, `max_implement_minutes`, `max_disputes_per_session`), and are identical on every attempt of the same plan state — `open_advisories` is computed ONCE in Phase A.0 and carried unmodified into every attempt's dispatch of this invocation (the approving verdict does not change mid-invocation; a fresh `/relay-implement` invocation recomputes it), never accumulated or mutated by the loop.
 
 The implementer reads the plan, executes its Step-by-Step Tasks via `Edit`/`Write` directly in the working tree, runs the plan's Validation Commands Levels 1–3 after all tasks complete (D6 — aggregate validation), and returns one of two verdicts:
 

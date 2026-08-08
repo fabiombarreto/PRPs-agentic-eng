@@ -60,7 +60,7 @@ const PASSING = new Set(['APPROVED', 'RUBRIC_PASSED']);
 
 /**
  * Read every verdict in the corpus, grouped per artifact.
- * @returns {Array<{stage: string, file: string, entries: Array<{timestamp: string, verdict: string, action: string, fails: string[], degraded: boolean}>}>}
+ * @returns {Array<{stage: string, file: string, entries: Array<{timestamp: string, verdict: string, action: string, fails: string[], failClasses: Array<{id: string, class: string}>, degraded: boolean}>}>}
  */
 export function readCorpus() {
   if (!existsSync(PLANS_DIR)) return [];
@@ -82,6 +82,12 @@ export function readCorpus() {
         verdict: j.verdict ?? '',
         action: j.action ?? '',
         fails: (j.rubric ?? []).filter((r) => r.passed === false).map((r) => r.id),
+        // Rows without a `class` field predate the plan-review-materiality
+        // taxonomy (Phase 1, docs/decisions.md 2026-08-06) and are read as
+        // `blocking` -- the compatibility rule that keeps historic corpora
+        // comparable. The ternary IS the rule: any value that is not
+        // exactly the string 'advisory' counts as blocking.
+        failClasses: (j.rubric ?? []).filter((r) => r.passed === false).map((r) => ({ id: r.id, class: r.class === 'advisory' ? 'advisory' : 'blocking' })),
         // Parsed off the JSON object, never by substring: one file in the
         // corpus mentions this literal token inside a reviewer's prose
         // `reason` string with no such field, which a grep would wrongly match.
@@ -146,6 +152,22 @@ export function aggregate(artifacts) {
     /** @type {Record<string, number>} */
     const fails = {};
     for (const a of group) for (const e of a.entries) for (const id of e.fails) fails[id] = (fails[id] ?? 0) + 1;
+    // firstAttemptFailureRate above is deliberately unchanged: it is
+    // verdict-based, so an advisory-carrying APPROVED already counts as a
+    // first-attempt pass. Historic entries with no `class` field on a row
+    // (or, for a synthetic/legacy entry shape, no `failClasses` at all)
+    // contribute entirely to the blocking side, by the Task-1
+    // compatibility rule (docs/decisions.md 2026-08-06).
+    /** @type {{blocking: Record<string, number>, advisory: Record<string, number>}} */
+    const failsByClass = { blocking: {}, advisory: {} };
+    for (const a of group) for (const e of a.entries) for (const f of e.failClasses ?? []) failsByClass[f.class][f.id] = (failsByClass[f.class][f.id] ?? 0) + 1;
+    const blockingFailRows = Object.values(failsByClass.blocking).reduce((n, c) => n + c, 0);
+    const advisoryFailRows = Object.values(failsByClass.advisory).reduce((n, c) => n + c, 0);
+    const topOfClass = (m) =>
+      Object.entries(m)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([id, n]) => ({ id, n }));
     out[stage] = {
       artifacts: group.length,
       sessions: sessions.length,
@@ -158,6 +180,9 @@ export function aggregate(artifacts) {
         .sort((a, b) => b[1] - a[1])
         .slice(0, 8)
         .map(([id, n]) => ({ id, n })),
+      blockingFailRows,
+      advisoryFailRows,
+      topFailuresByClass: { blocking: topOfClass(failsByClass.blocking), advisory: topOfClass(failsByClass.advisory) },
     };
   }
   return out;
@@ -327,6 +352,15 @@ function doCompare() {
     }
     if (a.topFailures.length) {
       process.stdout.write(`    top failures after   ${a.topFailures.slice(0, 4).map((f) => `${f.id} x${f.n}`).join(', ')}\n`);
+    }
+    // Per-class split (plan-review-materiality Phase 4): emitted only when
+    // this stage's after-set actually carries an advisory-classed failing
+    // row, so a corpus with none -- including every pre-materiality corpus
+    // -- prints byte-identically to today.
+    if (a.advisoryFailRows > 0) {
+      process.stdout.write(
+        `    blocking/advisory    ${a.blockingFailRows} blocking, ${a.advisoryFailRows} advisory; top advisory ${a.topFailuresByClass.advisory.slice(0, 4).map((f) => `${f.id} x${f.n}`).join(', ')}\n`,
+      );
     }
     process.stdout.write('\n');
   }

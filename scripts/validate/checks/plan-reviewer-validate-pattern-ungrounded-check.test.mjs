@@ -36,6 +36,26 @@
  * them here (one more numeral snapshot is precisely what that file exists
  * to stop accumulating).
  *
+ * Lifecycle update (2026-08-07, EXISTING_TEST_UPDATED, performed by the
+ * plan-review-materiality Phase 1 test-writer session, test-after per
+ * docs/context/methodology.md): PRPs/plans/completed/plan-review-materiality-phase-1-class-taxonomy-gating.plan.md
+ * (source PRD PRPs/prds/plan-review-materiality.prd.md) added an additive
+ * `"class": "blocking" | "advisory"` field to every row of the
+ * `## review.jsonl format` worked example in plan-reviewer.md, including
+ * this check's own `R-COH-VALIDATE-PATTERN-UNGROUNDED` row (classed
+ * `blocking` in the new `## Materiality classes` partition table). The
+ * two-field shape (`{ "id": "...", "passed": true }`) the test below split
+ * on no longer matches the live three-field row (`{ "id": "...", "passed":
+ * true, "class": "blocking" }`), so the exactly-once row-count assertion
+ * went stale (it now finds zero occurrences of the old two-field shape).
+ * Confirmed by directly reading the post-implementation plan-reviewer.md
+ * content. Anti-weakening check: the fix below *extends* the split pattern
+ * to include the new `, "class": "blocking"` segment so it again pins the
+ * SAME row's SAME exactly-once-occurrence property byte-exactly — no
+ * assertion is dropped, no scope is narrowed. Full justification recorded
+ * in PRPs/reports/plan-review-materiality/test-suite.diff's Lifecycle
+ * ledger.
+ *
  * Run: node --test "scripts/validate/checks/plan-reviewer-validate-pattern-ungrounded-check.test.mjs"
  */
 
@@ -254,8 +274,8 @@ test(`${CHECK_ID}: plan-reviewer.md's ## review.jsonl format worked example carr
   const jsonlBlock = sliceBetween(content, '"rubric": [', '"action": "final_flip"');
   assert.ok(jsonlBlock, 'expected an extractable worked-example rubric[] JSON block');
 
-  const rowOccurrences = (/** @type {string} */ (jsonlBlock)).split(`{ "id": "${CHECK_ID}", "passed": true }`).length - 1;
-  assert.equal(rowOccurrences, 1, `expected exactly one worked-example row for ${CHECK_ID}, found ${rowOccurrences}`);
+  const rowOccurrences = (/** @type {string} */ (jsonlBlock)).split(`{ "id": "${CHECK_ID}", "passed": true, "class": "blocking" }`).length - 1;
+  assert.equal(rowOccurrences, 1, `expected exactly one worked-example row for ${CHECK_ID} (now carrying the additive class field), found ${rowOccurrences}`);
 });
 
 // ---------------------------------------------------------------------------
