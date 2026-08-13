@@ -30,7 +30,47 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <p><em>No changes queued yet.</em></p>
+      <h3 id="unreleased-added">Added</h3>
+      <ul>
+        <li><strong>Roadmap: planning-document track</strong>
+          &mdash; a new "Planned" section on
+          <a href="roadmap/status.html#planned-planning-track">Phase status</a>
+          registers an authoring stage upstream of <code>/relay-prd</code>:
+          write a multi-feature planning document, review it against a rubric,
+          then decompose it into per-feature PRDs, with its own commands and
+          agents. Planning is currently the one stage with no writer/reviewer
+          pair, no rubric, and no status lifecycle &mdash; this repository's own
+          <code>docs/planning/</code> documents were hand-authored. The section
+          lists the six questions the capability's PRD must answer, including
+          whether its reviewer joins the three human-confirmed surfaces or flips
+          status autonomously. Registered, not scheduled: recorded in
+          <code>docs/decisions.md</code> (2026-08-13) and not implemented.</li>
+        <li><strong>Roadmap: plugin-usage metrics artifacts</strong>
+          &mdash; a second "Planned" section on
+          <a href="roadmap/status.html#planned-usage-metrics">Phase status</a>
+          registers a versioned, portable metrics artifact that projects using
+          relay accumulate over time, reviewed periodically and fed back into
+          improving the plugin. The existing <code>PRPs/reports/</code> trail is
+          per-run and repo-local, which is why the 2026-08 cross-project
+          measurement over roughly 370 artifacts from 6 repositories was
+          assembled by hand. Fixes the privacy posture at registration time:
+          local files only, manual human-initiated aggregation, no telemetry,
+          upload, or network call. Registered, not scheduled: recorded in
+          <code>docs/decisions.md</code> (2026-08-13) and not implemented.</li>
+        <li><strong>Two entries on <a href="governance/decisions.html">Decisions</a></strong>
+          &mdash; entries 73 and 74 carry the two registrations above onto the
+          governance page in the standard date / context / decision / reason
+          shape.</li>
+      </ul>
+
+      <h3 id="unreleased-fixed">Fixed</h3>
+      <ul>
+        <li><strong>Decisions index was four entries behind</strong>
+          &mdash; the index on <a href="governance/decisions.html#decision-index">Decisions</a>
+          stopped at entry 68, so the four <code>plan-review-materiality</code>
+          decisions carried onto the page in v0.31.0 (entries 69&ndash;72) were
+          reachable only by scrolling. All six current entries are now listed.</li>
+      </ul>
 
       <h2 id="v0-31-0">0.31.0 &#8212; 2026-08-08</h2>
       <p>Stops plan-review from rejecting a plan for defects that would never have misled the Implementer. A cross-project audit of 353 verdicts over 193 plans in 7 repositories classified all 280 failing rubric rows individually and found only about 16 percent substantive, while the first-attempt rejection rate had climbed from 0.33 in April to 0.60 in August as the rubric grew from 8 to 27 check ids. Every check now declares a <code>blocking</code> or <code>advisory</code> class, and only a blocking-classed failure gates approval.</p>

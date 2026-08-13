@@ -245,6 +245,46 @@
         <p>Recorded in <code>docs/decisions.md</code> (2026-05-15, "Runnable worktree environments"). Not implemented and not yet placed in a numbered project phase. No agent builds any of the six strategies ahead of a dedicated PRD authored via <code>/relay-prd</code> and approved; until then the project-owned bootstrap-script delegation (D6, 2026-05-11) remains the only operative contract.</p>
       </div>
 
+      <h3 id="planned-planning-track">Planned: planning-document track <span class="badge badge--pending">planned</span></h3>
+
+      <p>relay's interactive entry point, <code>/relay-prd</code>, authors one feature at a time. Everything upstream of a single feature — the multi-feature planning documents that decide which features exist and in what order — sits outside the pipeline. This repository's own <code>docs/planning/</code> documents were hand-authored, are cited by the 2026-04-19 phased-rollout decision as the source of the five project-level phases above, and have no writer/reviewer pair, no rubric, no status lifecycle, and no mechanical path from a planning statement to a PRD. Every other authoring stage in relay has all four.</p>
+
+      <p>A registered future capability closes that gap: a planning-document track covering three steps — write the planning document, review it against a rubric, then decompose it into per-feature PRDs — with its own commands and agents, following the writer/reviewer shape every other stage already uses.</p>
+
+      <p>The capability's PRD must decide six things, none of them settled by the registration:</p>
+
+      <div class="kv">
+        <dt>Artifact shape</dt><dd>A canonical Markdown artifact and its location, mirroring <code>PRPs/prds/</code> and <code>PRPs/plans/</code>, plus the trailing <code>*Status: DRAFT|APPROVED*</code> block every relay artifact carries.</dd>
+        <dt>Interactivity boundary</dt><dd>Whether the writer is interactive like <code>prd-writer</code> or autonomous like <code>plan-writer</code>, and correspondingly whether the reviewer flips status autonomously or requires explicit human confirmation. relay admits exactly three human-confirmed surfaces today; a fourth is a conscious decision, not an inherited default.</dd>
+        <dt>Rubric</dt><dd>The review check ids and their <code>blocking</code> / <code>advisory</code> materiality classes. Every rubric added after 2026-08-06 inherits that taxonomy, where new checks default to advisory.</dd>
+        <dt>Decomposition contract</dt><dd>How one approved planning document yields N PRDs: whether it carries its own feature table acting as a state machine, how a generated PRD links back to its originating row, and whether decomposition is a third command or a mode of the reviewer's approval.</dd>
+        <dt>Orchestration reach</dt><dd>Whether an orchestrator may ever drive planning through to implementation end to end, or whether the human gate at the planning/PRD seam is permanent.</dd>
+        <dt>Existing documents</dt><dd>Whether the current <code>docs/planning/</code> files are migrated, kept as historical artifacts, or treated as the informal predecessor of the new format.</dd>
+      </div>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Registered, not scheduled</div>
+        <p>Recorded in <code>docs/decisions.md</code> (2026-08-13, "Planning-document track"). Not implemented and not yet placed in a numbered project phase. No agent builds any part of it — and in particular no "planning mode" branch is added to <code>/relay-prd</code> or <code>/relay-plan</code> — ahead of a dedicated PRD authored via <code>/relay-prd</code> and approved.</p>
+      </div>
+
+      <h3 id="planned-usage-metrics">Planned: plugin-usage metrics artifacts <span class="badge badge--pending">planned</span></h3>
+
+      <p>relay already emits a per-run audit trail inside every target project: <code>orchestrator-run.json</code>, <code>run.json</code>, <code>test-review.json</code>, per-attempt <code>diff.patch</code> files, and the verdict logs <code>*.review.jsonl</code>, <code>*.code-review.jsonl</code>, and <code>*.test-write-review.jsonl</code>. Two instruments read them — <code>scripts/efficiency.mjs</code> and the <code>efficiency-report</code> skill — but both are repo-local and run-scoped. No portable artifact exists that a target project accumulates for the express purpose of being reviewed later.</p>
+
+      <p>The cost of that gap is on the record. The 2026-08 cross-project measurement over roughly 370 artifacts from 6 repositories, and the 353-verdict audit across 7 repositories behind the materiality work, were both assembled by hand from scattered logs. The 2026-07-31 degraded-timestamp fix is the same gap in another form: the trail was designed for per-run debugging, so its measurement-critical fields were never contractual, and 45 percent of verdicts carried a placeholder timestamp before the fix landed.</p>
+
+      <p>A registered future capability defines a versioned, portable metrics artifact that projects using relay accumulate over time, reviewed periodically and fed back into improving the plugin. Its PRD must decide the schema and its version field, the emission point and format, the location and retention lifecycle, the opt-in and redaction posture, backward compatibility with corpora already accumulated, which instrument consumes the artifact, and which fields are contractual so a future agent-definition change cannot silently degrade them.</p>
+
+      <div class="callout callout--warn">
+        <div class="callout__title">Local files, no telemetry</div>
+        <p>Nothing in this capability transmits data anywhere. Metrics artifacts sit inside other people's repositories, so any aggregation across projects is a manual, human-initiated act of collecting files. No automatic telemetry, upload, or network call is authorized, and none may be introduced without its own explicit decision entry.</p>
+      </div>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Registered, not scheduled</div>
+        <p>Recorded in <code>docs/decisions.md</code> (2026-08-13, "Per-project plugin-usage metrics artifacts"). Not implemented. Until a dedicated PRD is approved, the existing <code>PRPs/reports/</code> trail plus <code>scripts/efficiency.mjs</code> and the <code>efficiency-report</code> skill remain the only operative measurement contract, and no command or agent gains metrics emission.</p>
+      </div>
+
       <h2 id="dogfood-status">Dogfood status</h2>
 
       <p>The <strong>phoenix</strong> project (Django + React SaaS for MEC higher-education assessments) is relay's first target. Status as of 2026-05-10:</p>

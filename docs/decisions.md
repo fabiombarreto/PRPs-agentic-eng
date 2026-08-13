@@ -1908,6 +1908,59 @@ non-determinism item, corrected in the same change on separate evidence).
 
 ---
 
+## [2026-08-13] Planning-document track (write → review → decompose into features) is a registered future capability
+
+**Context:** relay's interactive entry point is `/relay-prd`, which authors ONE feature's PRD. Everything upstream of a single feature — the multi-feature planning documents that decide *which* features exist and in what order — lives outside the pipeline entirely: this repo's own `docs/planning/dev_process_improvement_plan.html` and `docs/planning/planejamento_fase_2.docx` were hand-authored, are referenced by the [2026-04-19] phased-rollout decision as the source of the five project-level phases, and have no writer/reviewer pair, no rubric, no status lifecycle, and no mechanical path from a planning statement to a PRD. Every other authoring stage in relay (PRD, plan, implementation, test suite, docs) is a writer/reviewer pair with a rubric, a `DRAFT`/`APPROVED` status flip owned by the reviewer, and a jsonl verdict log; the planning layer is the one stage that has none of that. The operator's stated intent (2026-08-13) is a flow to "write, review, and turn planning into features, with the proper commands and agents."
+
+**Decision:** A **planning-document track** — an authoring stage upstream of `/relay-prd` covering (1) writing a planning document, (2) reviewing it against a rubric, and (3) decomposing it into per-feature PRDs — is a **registered future capability**. It is NOT implemented. No agent may build, approximate, or partially ship any part of it before a dedicated PRD has been authored via `/relay-prd` and approved. The eventual PRD MUST decide, explicitly, each of the following; none of them is settled by this entry:
+
+1. **Artifact shape and location** — canonical Markdown under a new `PRPs/planning/<slug>.planning.md` (mirroring `PRPs/prds/` and `PRPs/plans/`) versus reusing an existing directory; and the trailing `*Status: DRAFT|APPROVED*` block every relay artifact already carries.
+2. **Interactivity boundary** — whether the planning writer is interactive like `prd-writer` (dialogue with the user in the main session) or autonomous like `plan-writer`, and correspondingly whether the reviewer flips status autonomously (`plan-reviewer` model) or requires explicit human confirmation (`prd-reviewer` main-mode model). relay's interactivity boundary currently admits exactly three human-confirmed surfaces (`/relay-prd`, `/relay-design-spec`, `/relay-visual-approve`); a fourth requires a conscious decision, not an inherited default.
+3. **Rubric** — the review check ids, and their `blocking`/`advisory` materiality classes per the [2026-08-06] taxonomy, which every rubric added after that entry inherits (new checks default to `advisory`).
+4. **Decomposition contract** — how one APPROVED planning document yields N PRDs: whether the planning document carries its own phase/feature table serving as a state machine (the [2026-06-01] D6 model, where the source PRD's Implementation Phases table is the orchestrator's state), how a generated PRD links back to its originating planning row, and whether decomposition is a third command or a mode of the reviewer's approval.
+5. **Orchestration reach** — whether `/relay-execute` (or a new higher-order orchestrator) may ever drive planning → PRD → plan → implement end to end, or whether the human approval gate at the planning/PRD seam is permanent.
+6. **Relationship to `docs/planning/`** — whether the existing hand-authored documents are migrated, left as historical artifacts, or treated as the informal predecessor of the new format.
+
+**Reason:** Recording the intention prevents premature implementation (agents must not add ad-hoc "planning mode" branches to `/relay-prd` or `/relay-plan` without a formal design pass), and names the full decision surface so the future PRD starts from a scoped problem rather than rediscovering it. This mirrors the registration pattern already used for the [2026-05-15] PRD-less `/relay-plan` entry and the [2026-05-15] runnable-worktree-environments entry — record the intention so the roadmap is shared, and block ad-hoc construction until a PRD decides the open questions. The interactivity-boundary question is called out explicitly because a planning document is by definition a higher-leverage, harder-to-reverse artifact than a single feature's PRD: getting it wrong misdirects every downstream feature, which argues for a human gate, but that argument must be made in the PRD rather than assumed here.
+
+**Out of scope until a dedicated PRD is approved:**
+- Any `planning-writer` / `planning-reviewer` agent, or any `/relay-planning`-style command.
+- A "planning mode" flag, alternative precondition branch, or free-text bypass added to `/relay-prd`.
+- Automatic generation of PRDs from any document in `docs/planning/`.
+- Changing the format, status, or location of the existing `docs/planning/` files.
+- Extending `/relay-execute`'s state machine above the single-PRD level.
+
+**Areas affected (when eventually shipped):** a new writer/reviewer agent pair and its command(s) under `plugins/relay/`; `plugins/relay/resources/` (a planning-document template alongside `prd-template.md`); `/relay-prd` (accepting an originating planning row as input); `docs/api-reference.md` (command-surface count and the new stage); `docs/context/architecture.md` (pipeline diagram gains a stage above PRD); `documentation/` (concepts/pipeline, reference/commands, roadmap/status, changelog); `npm run validate` (a consistency check for the new artifact type).
+
+---
+
+## [2026-08-13] Per-project plugin-usage metrics artifacts are a registered future capability
+
+**Context:** relay already emits a rich per-run audit trail inside each target project — `PRPs/reports/<feature>/orchestrator-run.json`, `run.json`, `test-review.json`, per-attempt `diff.patch` files, and the per-artifact verdict logs `PRPs/plans/<basename>.review.jsonl`, `.code-review.jsonl`, `.test-write-review.jsonl`. Those artifacts are the raw material for measuring the plugin's own behavior, and two instruments already read them: `scripts/efficiency.mjs` plus the `efficiency-report` skill (before/after rework comparison), extended to per-class tallies by the [2026-08-07] `plan-review-materiality` Phase 4 entry. But both instruments are **relay-repo-local and run-scoped**: they read one checkout's corpus, on demand, with no defined portable artifact a *target* project emits for the express purpose of being reviewed later. The consequence is recorded in this repo's own history — the 2026-08 cross-project measurement over roughly 370 artifacts from 6 repositories, and the 353-verdict / 7-repo audit cited by the [2026-08-06] entry, were both assembled by hand from scattered logs. The [2026-07-31] degraded-timestamp fix (reviewers with no clock in `tools:` stamping `T00:00:00Z`) is a second symptom of the same gap: the audit trail was designed for per-run debugging, not for longitudinal measurement, so its measurement-critical fields were never contractual.
+
+**Decision:** A **plugin-usage metrics artifact** — a defined, versioned, portable file (or file set) that any project using relay accumulates over time as a first-class measurement input, intended to be reviewed periodically and fed back into improving the plugin — is a **registered future capability**. It is NOT implemented. The existing `PRPs/reports/` audit trail, `scripts/efficiency.mjs`, and the `efficiency-report` skill remain the only operative measurement contract. No agent may create, write to, or read a new metrics file, nor add metrics emission to any existing command or agent, before a dedicated PRD has been authored via `/relay-prd` and approved. The eventual PRD MUST decide, explicitly, each of the following:
+
+1. **Schema and versioning** — the metric set and its canonical shape, plus a schema version field, following the precedent of `plugins/relay/resources/test-output-schema.md`.
+2. **Emission point and format** — which commands write it, whether it is append-only JSONL (the shape every existing verdict log uses) or a rolled-up JSON/Markdown report, and whether emission is derived on demand from the existing artifacts rather than written as a new side effect.
+3. **Location and lifecycle** — where it lives in a target project, whether it is committed to that project's repository, and how it is retained, rotated, or pruned.
+4. **Opt-in and privacy posture** — whether emission is default-on or opt-in via `docs/context/methodology.md` (the `figma_track` / `tdd` precedent), and how `plugins/relay/resources/redaction-policy.md` applies, given that metrics derived from prompts, file paths, and failure reasons can carry proprietary content. Nothing in this capability transmits data anywhere: any aggregation across projects is a manual, human-initiated act of collecting files, and no automatic telemetry, upload, or network call is authorized by this entry or may be introduced by the PRD without its own explicit decision.
+5. **Backward compatibility with existing corpora** — how the artifact relates to the verdict jsonl logs already accumulated, and whether historic runs are back-filled (the [2026-07-31] precedent says no: degraded historic entries were excluded, never rewritten).
+6. **The consumer side** — which instrument reads the artifact, and whether `scripts/efficiency.mjs` and the `efficiency-report` skill are extended or joined by a new cross-project reader; the existing `CONSUMERS` registry established 2026-07-31 is the reference for keeping producers and consumers in sync.
+7. **Field integrity** — which fields are measurement-critical and therefore contractual, so a future agent-definition change cannot silently degrade them the way missing clock access degraded 45% of verdict timestamps.
+
+**Reason:** Registering the capability prevents ad-hoc metrics files from appearing in target projects with inconsistent schemas — the exact failure that made the 2026-08 cross-project analysis a manual reconstruction. Naming the seven decision points up front means the future PRD starts from the known failure modes (degraded fields, unrecoverable history, producer/consumer drift) rather than rediscovering them. The privacy posture is fixed here rather than deferred because it is the one dimension where a wrong default is not merely inefficient: metrics artifacts sit inside other people's repositories, so local-only, human-initiated aggregation is the floor, not a design option.
+
+**Out of scope until a dedicated PRD is approved:**
+- Writing any new metrics file, in this repository or any target project.
+- Adding metrics emission to any existing command, agent, or hook.
+- Any telemetry, upload, network call, or cross-project auto-collection.
+- Changing the schema of `orchestrator-run.json`, `run.json`, or any `*.jsonl` verdict log for measurement purposes.
+- Extending `scripts/efficiency.mjs` or the `efficiency-report` skill to read an artifact that does not yet exist.
+
+**Areas affected (when eventually shipped):** a new schema document under `plugins/relay/resources/`; the emitting command(s) under `plugins/relay/commands/`; `docs/context/methodology.md` (if opt-in); `plugins/relay/resources/redaction-policy.md`; `scripts/efficiency.mjs` and the `efficiency-report` skill (consumer side, plus the `CONSUMERS` registry); `context-builder` (if the artifact's location must be scaffolded into a target project); `docs/api-reference.md`; `documentation/` (reference, roadmap/status, changelog); `npm run validate` (a producer/consumer consistency check).
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision
