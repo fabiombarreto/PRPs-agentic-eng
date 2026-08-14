@@ -40,7 +40,12 @@ const NA = '-';
 const COLUMNS = {
   verdict: ['proj', 'ts', 'deg', 'stage', 'art', 'seq', 'feat', 'phase', 'verdict', 'action', 'nrub', 'nfail', 'nblk', 'nadv', 'nesc'],
   rubric: ['proj', 'ts', 'deg', 'stage', 'art', 'seq', 'rid', 'pass', 'cls', 'esc', 'rat'],
-  run: ['proj', 'ts', 'feat', 'phase', 'stage', 'outcome', 'halt', 'bud_prr', 'bud_min', 'natt'],
+  // ms/suite_ms/corr_ms appended 2026-08-14. Additive per the codebook's
+  // versioning rule: new columns go at the END of the row and do not bump the
+  // schema version. A reader that does not know them ignores them; a reader
+  // that does finds them absent on older shards and reads that as "not
+  // recorded", never as zero.
+  run: ['proj', 'ts', 'feat', 'phase', 'stage', 'outcome', 'halt', 'bud_prr', 'bud_min', 'natt', 'ms', 'suite_ms', 'corr_ms'],
   scan: ['proj', 'ts', 'pv', 'tool_v', 'nsrc', 'nverdict', 'nrubric', 'nrun', 'ndeg'],
 };
 
@@ -288,6 +293,12 @@ export function projectRuns(proj, dir) {
         bud_prr: budPrr,
         bud_min: budMin,
         natt: toCell(e.attempts),
+        // orchestrator-run.json records no per-stage duration. Deriving one
+        // from consecutive completion timestamps would be inference presented
+        // as measurement, so these stay unset.
+        ms: NA,
+        suite_ms: NA,
+        corr_ms: NA,
       });
     }
   }
@@ -303,6 +314,17 @@ export function projectRuns(proj, dir) {
         if (m) { phase = m[1]; break; }
       }
     }
+    // Duration is present on some run.json files and absent on others (two of
+    // four real samples carry neither field). Absent stays absent — the
+    // sentinel, never a zero, which would read as "ran instantly".
+    const bd = run.time_breakdown && typeof run.time_breakdown === 'object' ? run.time_breakdown : {};
+    const sumBy = (suffix) => {
+      const vals = Object.keys(bd)
+        .filter((k) => k.endsWith(suffix))
+        .map((k) => bd[k])
+        .filter((v) => typeof v === 'number' && Number.isInteger(v) && v >= 0);
+      return vals.length ? vals.reduce((a, b) => a + b, 0) : null;
+    };
     out.push({
       proj,
       ts: toInstant(run.ended_at || run.started_at),
@@ -314,6 +336,9 @@ export function projectRuns(proj, dir) {
       bud_prr: NA,
       bud_min: NA,
       natt: Array.isArray(run.attempts) ? String(run.attempts.length) : NA,
+      ms: toCell(run.elapsed_ms),
+      suite_ms: toCell(sumBy('_suite_ms')),
+      corr_ms: toCell(sumBy('_correction_ms')),
     });
   }
   return out;

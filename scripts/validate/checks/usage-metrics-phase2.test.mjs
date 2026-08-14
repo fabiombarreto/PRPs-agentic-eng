@@ -200,6 +200,50 @@ test('AC-A2 (PRD AC-3): the three real phases[] entry shapes each project to exa
   assert.equal(stageRow.natt, '-', 'and every other entry writes the sentinel rather than zero');
 });
 
+test('AC-A2 (PRD AC-3): duration is captured where run.json records it, and stays the sentinel where it does not — never zero', () => {
+  const dir = tempDir('durations');
+
+  const withTiming = join(dir, 'timed-feature');
+  mkdirSync(withTiming, { recursive: true });
+  writeFileSync(join(withTiming, 'run.json'), JSON.stringify({
+    outcome: 'GREEN',
+    ended_at: '2026-08-01T00:08:00Z',
+    elapsed_ms: 480000,
+    time_breakdown: { attempt_1_suite_ms: 377446, attempt_1_correction_ms: 0, attempt_2_suite_ms: 1000, attempt_2_correction_ms: 250 },
+    attempts: [{ n: 1, record: 'phase-4/attempts/1/record.json' }],
+  }));
+  const timed = projectRuns('p', withTiming).find((r) => r.stage === 'test');
+  assert.ok(timed);
+  assert.equal(timed.ms, '480000');
+  assert.equal(timed.suite_ms, '378446', 'suite milliseconds are summed across attempts');
+  assert.equal(timed.corr_ms, '250', 'correction milliseconds are summed separately — the split is what distinguishes a slow suite from a churning loop');
+
+  // Two of four real run.json files on disk carry no timing fields at all.
+  const untimed = join(dir, 'untimed-feature');
+  mkdirSync(untimed, { recursive: true });
+  writeFileSync(join(untimed, 'run.json'), JSON.stringify({ outcome: 'GREEN', started_at: '2026-08-01T00:00:01Z' }));
+  const plain = projectRuns('p', untimed).find((r) => r.stage === 'test');
+  assert.ok(plain);
+  assert.equal(plain.ms, '-', 'absent duration must be the sentinel, not zero — a zero reads as "ran instantly" and drags every average toward it');
+  assert.equal(plain.suite_ms, '-');
+  assert.equal(plain.corr_ms, '-');
+});
+
+test('AC-A2 (PRD AC-3): orchestrator stage entries carry no duration rather than an inferred one', () => {
+  const dir = tempDir('nostagems');
+  const feat = join(dir, 'f');
+  mkdirSync(feat, { recursive: true });
+  writeFileSync(join(feat, 'orchestrator-run.json'), JSON.stringify({
+    phases: [
+      { phase: 1, stage: 'plan', outcome: 'APPROVED' },
+      { phase: 1, status: 'complete', timestamp: '2026-08-07T14:15:00Z' },
+    ],
+  }));
+  for (const row of projectRuns('p', feat)) {
+    assert.equal(row.ms, '-', 'deriving a stage duration from consecutive completion timestamps would be inference presented as measurement');
+  }
+});
+
 test('AC-A2 (PRD AC-3): run.json phase identity falls back to a record-path match when phase_context is absent', () => {
   const dir = tempDir('runjson');
   const feat = join(dir, 'other-feature');

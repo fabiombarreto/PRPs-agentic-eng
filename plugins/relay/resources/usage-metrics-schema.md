@@ -90,6 +90,13 @@ version marker is reserved for breaking changes.
   each series on its own terms; there is no in-place migration step to get
   wrong.
 
+**Worked example of an additive change.** On 2026-08-14 the `run` relation
+gained `ms`, `suite_ms` and `corr_ms`, appended at the end of the row. No
+version bump, no rewrite of existing shards: shards written before that date
+carry ten columns, shards written after carry thirteen, and each shard's own
+header row is what tells a reader which it has. That is the rule above working
+as intended rather than an exception to it.
+
 **Scope of the byte-identity guarantee.** The three fact relations —
 `verdict`, `rubric`, `run` — are regenerated in full on every materialization
 and are byte-identical when the corpus has not changed. The `scan` relation is
@@ -205,6 +212,16 @@ relay	-	usage-metrics	1	plan	APPROVED	-	2	240	1
 | `bud_prr` | non-negative integer \| `-` | `max_plan_review_retries` in force for the run. | no |
 | `bud_min` | non-negative integer \| `-` | `max_orchestrator_minutes` in force for the run. | no |
 | `natt` | non-negative integer \| `-` | Attempts recorded for the stage, when the source carries them. | no |
+| `ms` | non-negative integer \| `-` | Wall-clock milliseconds for the stage, from `run.json`'s `elapsed_ms`. Absent on stage entries from `orchestrator-run.json`, which records no per-stage duration — and deliberately NOT derived from consecutive completion timestamps, which would be inference presented as measurement. | no |
+| `suite_ms` | non-negative integer \| `-` | Milliseconds spent executing the test suite, summed across attempts from `run.json`'s `time_breakdown`. | no |
+| `corr_ms` | non-negative integer \| `-` | Milliseconds spent in auto-correction between attempts, summed the same way. Together with `suite_ms` this separates "the suite is slow" from "the loop kept correcting". | no |
+
+**Duration is recorded where it exists and absent elsewhere — never zero.**
+Two of the four real `run.json` files on disk at the time of writing carry no
+timing fields at all. Those rows get `-`, not `0`: a zero would read as "ran
+instantly" and would silently drag any average toward it. This is also why
+these three columns are marked non-contractual — a consumer must handle their
+absence, and a phase that predates them is not defective for lacking them.
 
 **Reading rule — two record shapes in one source.** `orchestrator-run.json`'s
 `phases[]` array holds per-stage entries keyed `stage` and `outcome`, but the

@@ -1,7 +1,7 @@
-proj	ts	feat	phase	stage	outcome	halt	bud_prr	bud_min	natt
-PRPs-agentic-eng	2026-06-19T15:07:48Z	relay-approve-command	1	complete	complete	-	2	240	-
-PRPs-agentic-eng	2026-06-19T15:39:49Z	relay-approve-command	2	complete	complete	-	2	240	-
-PRPs-agentic-eng	2026-06-19T16:00:35Z	relay-approve-command	3	complete	complete	-	2	240	-
-PRPs-agentic-eng	2026-06-19T16:22:08Z	relay-approve-command	4	complete	complete	-	2	240	-
-PRPs-agentic-eng	2026-06-17T00:00:00Z	relay-pr-command	1	complete	complete	-	2	240	-
-PRPs-agentic-eng	2026-06-17T00:00:00Z	relay-pr-command	2	complete	complete	-	2	240	-
+proj	ts	feat	phase	stage	outcome	halt	bud_prr	bud_min	natt	ms	suite_ms	corr_ms
+PRPs-agentic-eng	2026-06-19T15:07:48Z	relay-approve-command	1	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-06-19T15:39:49Z	relay-approve-command	2	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-06-19T16:00:35Z	relay-approve-command	3	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-06-19T16:22:08Z	relay-approve-command	4	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-06-17T00:00:00Z	relay-pr-command	1	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-06-17T00:00:00Z	relay-pr-command	2	complete	complete	-	2	240	-	-	-	-

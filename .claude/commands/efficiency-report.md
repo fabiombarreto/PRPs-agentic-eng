@@ -109,6 +109,28 @@ This writes `PRPs/reports/efficiency/<label>.json` — the UTC timestamp plus th
 metrics as they stood. Commit it with the release so the marker is part of the
 history it describes.
 
+**Materialize the usage-metrics shards in the same act:**
+
+```bash
+node plugins/relay/scripts/usage-metrics.mjs materialize
+```
+
+This is not optional bookkeeping — it is what makes the usage-metrics version
+axis work at all. No relay artifact records the plugin version, so the `scan`
+relation bounds rows between the versions observed at consecutive
+materializations. Materialize once a quarter and those bounds are a quarter
+wide and useless for before/after; materialize at every release cut and they
+are exactly release-wide, which is the comparison anyone actually wants.
+
+The two instruments are complementary, not redundant. The efficiency snapshot
+freezes a computed summary of this repository at a moment. The metrics shards
+are the raw per-row corpus, carry a project column, and are portable — they are
+what a cross-project reading is assembled from. Committing both with the
+release keeps the summary and the evidence it came from in the same commit.
+
+See `${CLAUDE_PLUGIN_ROOT}/resources/usage-metrics-schema.md` for the shard
+layout and the scope of the byte-identity guarantee.
+
 ---
 
 ## Constraints

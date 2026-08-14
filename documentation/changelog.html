@@ -61,6 +61,14 @@
           &mdash; entries 73 and 74 carry the two registrations above onto the
           governance page in the standard date / context / decision / reason
           shape.</li>
+        <li><strong>Decision 75: a 1 percent token budget for usage-metrics collection</strong>
+          &mdash; entry 75 on <a href="governance/decisions.html#usage-metrics-token-budget">Decisions</a>
+          replaces the hard zero-token constraint with a bounded budget, and
+          fixes the rule that survives it: an agent may trigger a deterministic
+          write but is never the source of a measured value, because a
+          model-authored field degrades silently. Writes go into artifacts a
+          command already produces, so the anti-Goodhart isolation check keeps
+          no exceptions. Amends the usage-metrics PRD's Success Metrics row.</li>
       </ul>
 
       <h3 id="unreleased-fixed">Fixed</h3>
