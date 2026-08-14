@@ -30,7 +30,12 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <h3 id="unreleased-2-added">Added</h3>
+      <p><em>No changes queued yet.</em></p>
+
+      <h2 id="v0-33-0">0.33.0 &#8212; 2026-08-14</h2>
+      <p>Governance-record sync, and a check so it stays synced. The plugin tree is byte-identical to 0.32.0 &mdash; nothing under <code>plugins/relay/</code> changed. The manifest bumps anyway, because a minor release bumps it unconditionally (<a href="AGENTS.md">AGENTS.md</a> &sect;7.5) so Claude Code&rsquo;s version-keyed plugin cache stays aligned with the published contract.</p>
+
+      <h3 id="v0-33-0-added">Added</h3>
       <ul>
         <li><strong>Eleven decisions mirrored onto <a href="governance/decisions.html">Decisions</a></strong>
           &mdash; entries 76&ndash;86: the ten <code>figma-quota-resilience</code>
@@ -51,7 +56,16 @@
           which is the invariant that broke.</li>
       </ul>
 
-      <h3 id="unreleased-2-fixed">Fixed</h3>
+            <h3 id="v0-33-0-changed">Changed</h3>
+      <ul>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.32.0</code> &rarr; <code>0.33.0</code> to
+          match this release. The shipped plugin tree is unchanged; the bump exists
+          so an installed copy&rsquo;s version tracks the published changelog, which is
+          what the <code>version-parity</code> check enforces.</li>
+      </ul>
+
+      <h3 id="v0-33-0-fixed">Fixed</h3>
       <ul>
         <li><strong>The governance page was eleven decisions behind</strong>
           &mdash; and nothing was keeping it in step. The Decision Gate reads
