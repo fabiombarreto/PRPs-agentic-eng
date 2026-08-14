@@ -1,0 +1,16 @@
+proj	ts	deg	stage	art	seq	feat	phase	verdict	action	nrub	nfail	nblk	nadv	nesc
+PRPs-agentic-eng	2026-04-30T19:59:47Z	0	code-review	implementation-authoring-phase-3-relay-implement-command	1	implementation-authoring	3	APPROVED	final_flip	8	0	0	0	0
+PRPs-agentic-eng	2026-04-30T20:36:46Z	0	code-review	implementation-authoring-phase-4-relay-code-review-command	1	implementation-authoring	4	APPROVED	final_flip	8	0	0	0	0
+PRPs-agentic-eng	2026-04-30T21:43:22Z	0	code-review	implementation-authoring-phase-5-docs-updates	1	implementation-authoring	5	APPROVED	final_flip	8	0	0	0	0
+PRPs-agentic-eng	2026-04-28T00:00:00Z	0	plan-review	implementation-authoring-phase-1-implementer-agent	1	implementation-authoring	1	APPROVED	final_flip	8	0	0	0	0
+PRPs-agentic-eng	2026-04-28T00:00:00Z	0	plan-review	implementation-authoring-phase-2-code-reviewer-agent	1	implementation-authoring	2	APPROVED	final_flip	8	0	0	0	0
+PRPs-agentic-eng	2026-04-30T19:50:25Z	0	plan-review	implementation-authoring-phase-3-relay-implement-command	1	implementation-authoring	3	APPROVED	final_flip	8	0	0	0	0
+PRPs-agentic-eng	2026-04-30T20:11:55Z	0	plan-review	implementation-authoring-phase-4-relay-code-review-command	1	implementation-authoring	4	APPROVED	final_flip	8	0	0	0	0
+PRPs-agentic-eng	2026-04-30T21:30:39Z	0	plan-review	implementation-authoring-phase-5-docs-updates	1	implementation-authoring	5	APPROVED	final_flip	8	0	0	0	0
+PRPs-agentic-eng	2026-04-28T00:00:00Z	0	plan-review	reviewer-coherence-layer-phase-1-prd-reviewer-coherence	1	reviewer-coherence-layer	1	CHANGES_REQUESTED	rubric_fail	8	1	1	0	0
+PRPs-agentic-eng	2026-04-28T00:00:00Z	0	plan-review	reviewer-coherence-layer-phase-1-prd-reviewer-coherence	2	reviewer-coherence-layer	1	APPROVED	final_flip	8	0	0	0	0
+PRPs-agentic-eng	2026-04-28T00:00:00Z	0	plan-review	reviewer-coherence-layer-phase-2-plan-reviewer-coherence	1	reviewer-coherence-layer	2	CHANGES_REQUESTED	rubric_fail	8	1	1	0	0
+PRPs-agentic-eng	2026-04-28T00:00:00Z	0	plan-review	reviewer-coherence-layer-phase-2-plan-reviewer-coherence	2	reviewer-coherence-layer	2	APPROVED	final_flip	8	0	0	0	0
+PRPs-agentic-eng	2026-04-28T00:00:00Z	0	plan-review	reviewer-coherence-layer-phase-3-code-reviewer-coherence-sub-agent	1	reviewer-coherence-layer	3	APPROVED	final_flip	8	0	0	0	0
+PRPs-agentic-eng	2026-04-28T00:00:00Z	0	plan-review	reviewer-coherence-layer-phase-4-dogfood-validation-cement	1	reviewer-coherence-layer	4	CHANGES_REQUESTED	rubric_fail	8	1	1	0	0
+PRPs-agentic-eng	2026-04-28T00:00:00Z	0	plan-review	reviewer-coherence-layer-phase-4-dogfood-validation-cement	2	reviewer-coherence-layer	4	APPROVED	final_flip	8	0	0	0	0

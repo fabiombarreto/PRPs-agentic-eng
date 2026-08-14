@@ -124,7 +124,7 @@ const COMMANDS = [
  *
  * @type {string[]}
  */
-const CONSUMERS = ['scripts/efficiency.mjs'];
+const CONSUMERS = ['scripts/efficiency.mjs', 'plugins/relay/scripts/usage-metrics.mjs'];
 
 /** Every file this check reads. @type {string[]} */
 export const WATCHED_FILES = [...new Set([...REVIEWERS, ...COMMANDS, ...CONSUMERS])];
