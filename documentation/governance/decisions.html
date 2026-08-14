@@ -106,6 +106,17 @@
         <li><a href="#planning-document-track">Planning-document track: registered future capability</a></li>
         <li><a href="#usage-metrics-artifacts">Per-project plugin-usage metrics artifacts: registered future capability</a></li>
         <li><a href="#usage-metrics-token-budget">Usage-metrics collection gets a 1% token budget</a></li>
+        <li><a href="#figma-scoped-scan">Scoped Figma scan: a command-side pre-match, recall-oriented and non-authoritative</a></li>
+        <li><a href="#figma-call-budgets">Figma call budgets: 40 library searches, 150 metadata calls</a></li>
+        <li><a href="#figma-quota-code">Quota exhaustion is detected by error class, never by HTTP status</a></li>
+        <li><a href="#figma-abort-and-record">Response to quota exhaustion is abort-and-record; retry and backoff are rejected</a></li>
+        <li><a href="#figma-cost-preflight">Cost preflight declares and asks; it never auto-refuses</a></li>
+        <li><a href="#figma-evidence-additive">The evidence bundle is additive; only a complete scan may retire an entry</a></li>
+        <li><a href="#figma-checkpoint-location">The run checkpoint lives outside the evidence directory</a></li>
+        <li><a href="#figma-confidence-downgrade">Confidence downgrade under degraded enrichment is surgical, never wholesale</a></li>
+        <li><a href="#figma-rubric-count">Rubric-count assertions are re-derived from live headings, never hardcoded</a></li>
+        <li><a href="#plugin-owned-resources">Plugin-owned resources live in the plugin tree, not in docs/context</a></li>
+        <li><a href="#usage-metrics-shipped">Usage metrics ships phases 1&ndash;4; phase 5 is deferred, not dropped</a></li>
       </ol>
 
       <h2 id="entries">Entries</h2>
@@ -731,6 +742,86 @@
         <dt>Decision</dt><dd>Collection may spend tokens, bounded at 1 percent of one full pipeline run, with three rules on how. The agent triggers, the clock supplies: an agent may cause a deterministic write but is never the source of a measured value. Writes go into artifacts the command already produces, never into the metrics directory, so the anti-Goodhart isolation check keeps a build invariant with no exceptions. And the budget needs a measured denominator before it can be spent, since nothing records per-run cost today.</dd>
         <dt>Reason</dt><dd>The distinction that matters is bounded-and-deterministic versus unbounded-or-model-authored, not zero versus nonzero. The first rule is stated as independent of cost on purpose: the reliability argument against model-authored fields survives any budget, and the degraded-timestamp incident is what it rests on. The third rule records a real circularity honestly rather than letting a plausible percentage become unfalsifiable.</dd>
         <dt>Amends</dt><dd>The usage-metrics PRD's Success Metrics row, recorded in its review log as a human-authorized amendment. Reopens per-phase cost attribution, which had been excluded for lack of a join key a command may now afford to write. Leaves the local-only floor, the no-agent-reads rule, and the exclusion of per-person measurement untouched — none of them rested on cost.</dd>
+      </div>
+
+      <h3 id="figma-scoped-scan">76. Scoped Figma scan: a command-side pre-match, recall-oriented and non-authoritative</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-05</dd>
+        <dt>Context</dt><dd>Enriching every enumerated library component with a metadata call produced a 7,090-call blowout against the Figma MCP.</dd>
+        <dt>Decision</dt><dd>The scan inverts from enumerate-then-enrich-everything to enumerate, pre-match, then enrich only the candidates. The pre-match is a deterministic name and slug comparison the command performs itself with <code>Glob</code> and <code>Grep</code> against the design-system clone already on disk.</dd>
+        <dt>Reason</dt><dd>The pre-match is deliberately recall-oriented and carries no classification authority: it over-includes rather than under-includes, and the design-map-writer stays free to map anything in the evidence bundle regardless of candidate-set membership. Narrowing the expensive call is not the same as deciding what counts.</dd>
+      </div>
+
+      <h3 id="figma-call-budgets">77. Figma call budgets: 40 library searches, 150 metadata calls</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-05</dd>
+        <dt>Decision</dt><dd>Both budgets are relay-level constants hardcoded in <code>/relay-design-map</code> and declared twice &mdash; in the command body and in the frontmatter description &mdash; following the restatement convention the design commands already use.</dd>
+        <dt>Reason</dt><dd>A budget declared only in prose is invisible to anyone reading the command's contract; declaring it in both places is what makes exhaustion behavior predictable rather than surprising. Metadata exhaustion is explicitly non-fatal: it records a truncation flag and continues.</dd>
+      </div>
+
+      <h3 id="figma-quota-code">78. Quota exhaustion is detected by error class, never by HTTP status</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-05</dd>
+        <dt>Decision</dt><dd>A terminal halt code <code>FAILED_FIGMA_QUOTA_EXHAUSTED</code>, distinct from the MCP-unavailable code. Detection is by error class and error string, never by HTTP status code.</dd>
+        <dt>Reason</dt><dd>Figma's MCP documentation names neither a 429 status nor a Retry-After header, so a status-code check would be guessing at a contract that does not exist. The observed exhaustion string is what the pipeline actually receives.</dd>
+      </div>
+
+      <h3 id="figma-abort-and-record">79. Response to quota exhaustion is abort-and-record; retry and backoff are rejected</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-05</dd>
+        <dt>Decision</dt><dd>On a quota-class error relay aborts and records. No sleep, no backoff, no retry rung. The partial call log is captured and the run halts with the named code.</dd>
+        <dt>Reason</dt><dd>A retry against an exhausted quota cannot succeed and spends the operator's remaining budget discovering that. Recording the partial log makes the next run cheaper; retrying makes it more expensive.</dd>
+      </div>
+
+      <h3 id="figma-cost-preflight">80. Cost preflight declares and asks; it never auto-refuses</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-05</dd>
+        <dt>Decision</dt><dd>Before any data call, the command probes <code>whoami</code>, reads seat and tier where exposed, and when the estimated cost exceeds the documented ceiling it declares the estimate and the ceiling and requires an explicit affirmative reply.</dd>
+        <dt>Reason</dt><dd>Declaring and asking keeps the human in the decision. Auto-refusing would substitute relay's estimate for the operator's judgment about their own quota, on data (seat and tier) the response does not always expose.</dd>
+      </div>
+
+      <h3 id="figma-evidence-additive">81. The evidence bundle is additive; only a complete scan may retire an entry</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-05</dd>
+        <dt>Decision</dt><dd>Evidence writes are additive &mdash; a partial run merges into the bundle rather than replacing it, and the call log is cumulative across runs. Each entry carries a last-seen scan generation, and only a scan reporting an untruncated inventory may retire one.</dd>
+        <dt>Reason</dt><dd>A partial run that replaced the bundle would silently destroy evidence a complete earlier run had gathered. Constraining retirement to complete scans keeps absence meaningful: an entry disappears because it is gone, not because the scan ran out of budget.</dd>
+      </div>
+
+      <h3 id="figma-checkpoint-location">82. The run checkpoint lives outside the evidence directory</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-05</dd>
+        <dt>Decision</dt><dd>The checkpoint is written to a state directory deliberately outside the evidence directory, and exclusion from the agents' read surface is enforced by path rather than by a dotfile naming convention.</dd>
+        <dt>Reason</dt><dd>Both design-map agents are instructed to read every file under the evidence directory. A checkpoint inside it would be read as evidence. Enforcing by path rather than by a leading dot means the guarantee does not depend on every future reader honoring a naming habit.</dd>
+      </div>
+
+      <h3 id="figma-confidence-downgrade">83. Confidence downgrade under degraded enrichment is surgical, never wholesale</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-05</dd>
+        <dt>Decision</dt><dd>When a scan completes without enrichment, the confidence downgrade applies only to the mappings that enrichment would have informed &mdash; not to the map as a whole.</dd>
+        <dt>Reason</dt><dd>A wholesale downgrade discards verified mappings that had nothing to do with the degraded step, which both loses real information and trains the reader to ignore the confidence column.</dd>
+      </div>
+
+      <h3 id="figma-rubric-count">84. Rubric-count assertions are re-derived from live headings, never hardcoded</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-05</dd>
+        <dt>Decision</dt><dd>The design-map and design-spec rubric-count assertions re-derive the count from a live grep of the rubric headings and fail loudly on drift, rather than asserting against a hardcoded literal.</dd>
+        <dt>Reason</dt><dd>A hardcoded count silently stops describing the rubric the moment a check is added, and the test keeps passing while the assertion has become meaningless. Deriving it makes the drift the failure.</dd>
+      </div>
+
+      <h3 id="plugin-owned-resources">85. Plugin-owned resources live in the plugin tree, not in docs/context</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-05</dd>
+        <dt>Decision</dt><dd>The plugin-owned resource templates live at <code>plugins/relay/resources/</code>, moved with <code>git mv</code> and leaving no stubs behind. Every citation uses the plugin-root placeholder form.</dd>
+        <dt>Reason</dt><dd>Plugin installation is a verbatim copy of the plugin directory with no include or exclude field, so a resource outside that tree reaches no installed user &mdash; the templates were unreachable for every install. Two validate checks now enforce the citation form and the resource's existence.</dd>
+      </div>
+
+      <h3 id="usage-metrics-shipped">86. Usage metrics ships phases 1&ndash;4; phase 5 is deferred, not dropped</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-14</dd>
+        <dt>Context</dt><dd>The 2026-08-13 entry registered per-project usage metrics as a future capability and blocked implementation pending an approved PRD. That PRD was approved and driven through the orchestrator; four of its five phases are complete.</dd>
+        <dt>Decision</dt><dd>Records what exists: the codebook resource, a dependency-free materializer with a query subcommand, a tracked metrics directory with its two git control files, and the metrics-isolation check. The no-agent-reads rule is enforced twice, because it has two channels &mdash; a check over prompt text, and a <code>-diff</code> attribute over git plumbing, which no grep can see.</dd>
+        <dt>Reason</dt><dd>A registration entry never followed by a shipped entry leaves the repository claiming a capability is unbuilt long after it is in use. Recording the deferral reason is load-bearing rather than tidy: the orchestrator's halt artifact is gitignored, so without this entry the only durable statement of why phase 5 stopped would be a note inside the PRD.</dd>
+        <dt>Known gaps</dt><dd>The corpus holds one project, so the cross-project value proposition is untested against real data. The version axis was nominal until the 0.32.0 release cut gave it its first real transition.</dd>
       </div>
 
       <h2 id="how-to-add">Adding a new decision</h2>

@@ -30,7 +30,38 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <p><em>No changes queued yet.</em></p>
+      <h3 id="unreleased-2-added">Added</h3>
+      <ul>
+        <li><strong>Eleven decisions mirrored onto <a href="governance/decisions.html">Decisions</a></strong>
+          &mdash; entries 76&ndash;86: the ten <code>figma-quota-resilience</code>
+          decisions (scoped scan, call budgets, quota-exhaustion detection and
+          the abort-and-record response, cost preflight, additive evidence, the
+          checkpoint's location, surgical confidence downgrade, derived
+          rubric counts, and the plugin-owned resource location) plus the
+          usage-metrics shipped entry. The ten had been written months ago and
+          never merged; they reached <code>docs/decisions.md</code> only when
+          the branch holding them was recovered.</li>
+        <li><strong><code>decisions-mirror</code>, the 14th validate check</strong>
+          &mdash; compares the entry count in <code>docs/decisions.md</code>
+          against the governance page, and the page's own index against its
+          body. Deliberately a count comparison rather than a title match: the
+          page paraphrases every title on purpose, so a content rule would
+          either fail on legitimate rewording or pass on a stub. Counts cannot
+          say "the summary is faithful", but they do say "an entry exists",
+          which is the invariant that broke.</li>
+      </ul>
+
+      <h3 id="unreleased-2-fixed">Fixed</h3>
+      <ul>
+        <li><strong>The governance page was eleven decisions behind</strong>
+          &mdash; and nothing was keeping it in step. The Decision Gate reads
+          <code>docs/decisions.md</code>, so a decision missing from the site is
+          binding on agents while invisible to the humans reading the
+          documentation &mdash; exactly the asymmetry the site exists to remove.
+          The drift recurred twice in one day, which is the signature of an
+          invariant maintained by discipline alone; it is now a build
+          invariant.</li>
+      </ul>
 
       <h2 id="v0-32-0">0.32.0 &#8212; 2026-08-14</h2>
       <p>Per-project usage metrics. Every project using relay accumulates a terse, versioned, portable record of how the pipeline actually behaved, so a human, an AI, or a script can decide later which part of relay to improve. Local files only &mdash; no telemetry, no upload, no network call, and cross-project aggregation is a person copying directories.</p>
