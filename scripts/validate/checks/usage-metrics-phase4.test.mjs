@@ -19,6 +19,24 @@ import { resolve } from 'node:path';
 
 import { checkMetricsIsolation, runMetricsIsolationCheck } from './metrics-isolation.mjs';
 
+/**
+ * Read a repository file with line endings normalized to LF.
+ *
+ * This repo is developed on Windows and carries no repo-wide
+ * `.gitattributes`, so git's autocrlf converts markdown and source to CRLF
+ * on checkout. Assertions here test CONTENT, not bytes, so a test that
+ * depends on the checkout's line endings is testing the wrong thing — and
+ * would pass in a working tree the author never round-tripped through git
+ * while failing in every fresh clone. Normalizing on read is the fix; the
+ * one place bytes genuinely matter (the raw-control-byte check) reads the
+ * Buffer directly and is deliberately left alone.
+ * @param {string} relPath @returns {string}
+ */
+function readText(relPath) {
+  return readFileSync(resolve(relPath), 'utf8').split('\r\n').join('\n');
+}
+
+
 // ---------------------------------------------------------------------------
 // AC-A1 (PRD AC-5) — the isolation check fails on a planted reference.
 // ---------------------------------------------------------------------------
@@ -73,7 +91,7 @@ test('AC-A1 (PRD AC-5): the real tree passes — the guard holds against the shi
 // ---------------------------------------------------------------------------
 
 test('AC-A2 (PRD AC-8): the materializer is registered in the CONSUMERS array', () => {
-  const src = readFileSync(resolve('scripts/validate/checks/timestamp-contract.mjs'), 'utf8');
+  const src = readText('scripts/validate/checks/timestamp-contract.mjs');
   assert.match(
     src,
     /const CONSUMERS = \[[^\]]*'plugins\/relay\/scripts\/usage-metrics\.mjs'/,
@@ -82,7 +100,7 @@ test('AC-A2 (PRD AC-8): the materializer is registered in the CONSUMERS array', 
 });
 
 test('AC-A2 (PRD AC-8): the materializer actually references timestamp_degraded in executable code', () => {
-  const src = readFileSync(resolve('plugins/relay/scripts/usage-metrics.mjs'), 'utf8');
+  const src = readText('plugins/relay/scripts/usage-metrics.mjs');
   const withoutComments = src
     .split('\n')
     .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
@@ -99,7 +117,7 @@ test('AC-A2 (PRD AC-8): the materializer actually references timestamp_degraded 
 // ---------------------------------------------------------------------------
 
 test('AC-A3: the codebook basename is registered in OWNED_RESOURCES', () => {
-  const src = readFileSync(resolve('scripts/validate/checks/plugin-root-resolvable.mjs'), 'utf8');
+  const src = readText('scripts/validate/checks/plugin-root-resolvable.mjs');
   assert.match(
     src,
     /'usage-metrics-schema\.md'/,
@@ -117,17 +135,17 @@ test('AC-A3: the codebook basename is registered in OWNED_RESOURCES', () => {
 // ---------------------------------------------------------------------------
 
 test('AC-A4: shard-content sanity is reported by the reader, never by the pre-commit gate', () => {
-  const indexSrc = readFileSync(resolve('scripts/validate/index.mjs'), 'utf8');
+  const indexSrc = readText('scripts/validate/index.mjs');
   assert.match(indexSrc, /runMetricsIsolationCheck/, 'the isolation check IS registered — it inspects prompts, not data');
 
-  const isolationSrc = readFileSync(resolve('scripts/validate/checks/metrics-isolation.mjs'), 'utf8');
+  const isolationSrc = readText('scripts/validate/checks/metrics-isolation.mjs');
   assert.doesNotMatch(
     isolationSrc,
     /\.tsv['"]\s*\)/,
     'no validate check may parse shard contents: npm run validate is the pre-commit gate, and a corrupted measurement artifact must never block a commit'
   );
 
-  const readerSrc = readFileSync(resolve('plugins/relay/scripts/usage-metrics.mjs'), 'utf8');
+  const readerSrc = readText('plugins/relay/scripts/usage-metrics.mjs');
   assert.match(
     readerSrc,
     /must never be able to block a commit/,
