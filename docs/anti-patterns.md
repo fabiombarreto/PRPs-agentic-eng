@@ -104,6 +104,24 @@ because the enforcement code does not yet exist.
 
 ---
 
+## Sleeping, retrying, or backing off against a Figma MCP quota error
+
+**What it is:** Responding to a Figma MCP quota-exhaustion error with a sleep-and-retry loop, capped exponential backoff, or any "try again" rung in a degradation ladder — instead of aborting immediately and recording how far the run got.
+**Why it's forbidden:** Backoff is the correct response to a **per-minute** bucket and useless against Figma's MCP limits, which are **per-day** (200 on Starter/Professional, 600 on Organization) and **per-month** (6 on every View/Collab seat). An observed hand-written REST script slept through five attempts against a monthly bucket and enriched zero nodes — it converted a fast, legible failure into a slow, opaque one. A ladder whose only recovery rung is "try again" reproduces the original defect while appearing to handle it. Figma's MCP documentation also defines neither `429` nor `Retry-After`, so there is no reset signal to back off *toward*: any wait interval would be invented. See `docs/decisions.md` [2026-08-05] Response to Figma quota exhaustion is abort-and-record.
+**What to do instead:** Abort and record. HALT with `FAILED_FIGMA_QUOTA_EXHAUSTED` (detected by error class/string, never by HTTP status), capture the partial `call_log` and the named rung into the evidence bundle, and leave a checkpoint so the next invocation costs only the delta. Promise no reset time — the MCP reset window is undocumented in every source consulted. The narrow exception is `get_code_connect_map`, whose pre-existing non-fatal path is unchanged: a quota error there records `code_connect: unavailable(quota-exhausted)` and the run continues, because the bundle is already as complete as that run intended.
+**Areas affected:** `/relay-design-map` command Phase B, the Figma degradation ladder, any future Figma MCP consumer
+
+---
+
+## Wholesale confidence downgrade on a degraded Figma rung
+
+**What it is:** Reacting to a degraded rung (`DEGRADED_NO_ENRICHMENT` and friends) by downgrading every row of `docs/design/component-map.md` at once — or by overwriting a row that carries a human `verified_at`.
+**Why it's forbidden:** A degraded rung means *some* evidence is missing, not that all of it is worthless. Variant axes remain recoverable from the Figma component's own `Prop=Value` name without any node enrichment, which is exactly how 17 rows were legitimately `CONFIRMED` in an observed zero-enrichment bundle; a wholesale rule would have destroyed them and turned an honest partial result into a useless one. Silently overriding a human `verified_at` is the same failure as flipping a gating key by heuristic — machine degradation must not quietly erase a human judgment. See `docs/decisions.md` [2026-08-05] Confidence downgrade under `DEGRADED_NO_ENRICHMENT` is surgical.
+**What to do instead:** Downgrade surgically. Rows whose `Props/variant mapping` relies only on name-derivable variant axes may remain `CONFIRMED`; rows depending on non-variant properties (booleans, `TEXT`, `INSTANCE_SWAP`, or anything not derivable from the name) may not. A row carrying a human `verified_at` is never downgraded by the rule — flag it for re-verification instead. `R-DM7` fails a map whose declared completeness contradicts its bundle, or whose `CONFIRMED` rows depend on property data the bundle marks unenriched.
+**Areas affected:** `design-map-writer` agent, `component-map-template.md`, `design-map-reviewer` agent (`R-DM7`)
+
+---
+
 <!-- Template for future entries:
 
 ## [pattern name]
