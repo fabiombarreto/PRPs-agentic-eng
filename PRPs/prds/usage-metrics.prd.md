@@ -165,7 +165,23 @@ Current value of `tdd` in `docs/context/methodology.md`: **false**. Test-after o
 | 2 | Materializer + backfill | `plugins/relay/scripts/usage-metrics.mjs` (no deps): full-rescan regeneration from `PRPs/plans/*.jsonl` and `PRPs/reports/**`, `--dry-run` printing only row counts and shard paths, backfill of the tracked verdict corpus | complete | - | 1 | PRPs/plans/completed/usage-metrics-phase-2-materializer-backfill.plan.md |
 | 3 | Layout scaffolding + reader | `PRPs/metrics/` creation with `.gitattributes` (`-diff`, `text eol=lf`) and `.gitignore` re-include; the read/query subcommand shipped in the same script | complete | - | 2 | PRPs/plans/completed/usage-metrics-phase-3-layout-scaffolding-reader.plan.md |
 | 4 | Validation + registry | Metrics-isolation grep check in `scripts/validate/`, reader registered in the `CONSUMERS` array, warn-only shard sanity check outside the pre-commit gate | complete | - | 3 | PRPs/plans/completed/usage-metrics-phase-4-validation-registry.plan.md |
-| 5 | Automated emission (deferred) | Only if and when a hook-based supplement is justified: `plugins/relay/hooks/hooks.json` restricted to `type: command` + `async: true`, a consent key in `methodology.md`, and a standing check asserting both | pending | - | 4 | - |
+| 5 | Automated emission (deferred) | Only if and when a hook-based supplement is justified: `plugins/relay/hooks/hooks.json` restricted to `type: command` + `async: true`, a consent key in `methodology.md`, and a standing check asserting both | deferred | - | 4 | - |
+
+**Note on row 5's `deferred` status.** `deferred` is not one of the five
+canonical lifecycle states (`pending` → `in-progress` → `implemented` →
+`tested` → `complete`). It is used here deliberately, as a local value in this
+PRD only, and it is safe by the pipeline's own operative rules: a row is
+actionable only when its `Status` cell equals `pending` exactly, and a row is
+dependency-satisfying only from `implemented` onward — no row depends on row 5,
+so nothing is blocked by it. The effect is that `/relay-execute` treats row 5
+as out of scope instead of halting on it every run, which is what the
+`FAILED_PHASE_SCOPE_UNPLANNABLE` halt (2026-08-14) recommended.
+
+`deferred` reads as "consciously not scheduled", which `pending` cannot
+express: `pending` means "no plan yet, actionable now", and this phase is
+explicitly gated on evidence that does not exist. To enter the phase later,
+hand-edit the cell back to `pending` — the same documented escape hatch that
+governs re-running any phase.
 
 ### Phase Details
 
