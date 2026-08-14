@@ -24,11 +24,29 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+/**
+ * Read a repository file with line endings normalized to LF.
+ *
+ * This repo is developed on Windows and carries no repo-wide
+ * `.gitattributes`, so git's autocrlf converts markdown and source to CRLF
+ * on checkout. Assertions here test CONTENT, not bytes, so a test that
+ * depends on the checkout's line endings is testing the wrong thing — and
+ * would pass in a working tree the author never round-tripped through git
+ * while failing in every fresh clone. Normalizing on read is the fix; the
+ * one place bytes genuinely matter (the raw-control-byte check) reads the
+ * Buffer directly and is deliberately left alone.
+ * @param {string} relPath @returns {string}
+ */
+function readText(relPath) {
+  return readFileSync(resolve(relPath), 'utf8').split('\r\n').join('\n');
+}
+
+
 const SCHEMA_PATH = 'plugins/relay/resources/usage-metrics-schema.md';
 
 /** @param {string} relPath @returns {string} */
 function readRepoFile(relPath) {
-  return readFileSync(resolve(relPath), 'utf8');
+  return readText(relPath);
 }
 
 /**

@@ -19,7 +19,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdtempSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import {
@@ -32,6 +32,24 @@ import {
   renderShard,
   shardName,
 } from '../../../plugins/relay/scripts/usage-metrics.mjs';
+
+/**
+ * Read a repository file with line endings normalized to LF.
+ *
+ * This repo is developed on Windows and carries no repo-wide
+ * `.gitattributes`, so git's autocrlf converts markdown and source to CRLF
+ * on checkout. Assertions here test CONTENT, not bytes, so a test that
+ * depends on the checkout's line endings is testing the wrong thing — and
+ * would pass in a working tree the author never round-tripped through git
+ * while failing in every fresh clone. Normalizing on read is the fix; the
+ * one place bytes genuinely matter (the raw-control-byte check) reads the
+ * Buffer directly and is deliberately left alone.
+ * @param {string} relPath @returns {string}
+ */
+function readText(relPath) {
+  return readFileSync(resolve(relPath), 'utf8').split('\r\n').join('\n');
+}
+
 
 const SCRIPT_PATH = 'plugins/relay/scripts/usage-metrics.mjs';
 
@@ -284,7 +302,7 @@ test('AC-A4 (PRD AC-1): rendering the same rows twice produces byte-identical ou
 });
 
 test('AC-A4 (PRD AC-1): the source uses neither localeCompare nor os.EOL, whose results are platform- or engine-dependent', () => {
-  const src = readFileSync(SCRIPT_PATH, 'utf8');
+  const src = readText(SCRIPT_PATH);
   assert.doesNotMatch(src, /\.localeCompare\(/, 'localeCompare is documented as implementation-dependent');
   assert.doesNotMatch(src, /from 'node:os'/, 'os.EOL is CRLF on Windows and would break cross-platform byte-identity');
   assert.match(src, /import\.meta\.url/, 'main() must be guarded so the module can be imported by this test');
@@ -296,7 +314,7 @@ test('AC-A4 (PRD AC-1): the scan relation is a history that grows, not a snapsho
   // shard including `scan` reports byte-identity only when both runs land in
   // the same second. The scan relation is one row per materialization by
   // contract, so it MUST grow; the guarantee belongs to the fact tables.
-  const src = readFileSync(SCRIPT_PATH, 'utf8');
+  const src = readText(SCRIPT_PATH);
   assert.match(
     src,
     /The scan relation is a HISTORY/,
@@ -308,7 +326,7 @@ test('AC-A4 (PRD AC-1): the scan relation is a history that grows, not a snapsho
     'a re-run inside the same second must be idempotent rather than duplicated'
   );
 
-  const codebook = readFileSync('plugins/relay/resources/usage-metrics-schema.md', 'utf8');
+  const codebook = readText('plugins/relay/resources/usage-metrics-schema.md');
   assert.match(
     codebook,
     /Scope of the byte-identity guarantee/,
