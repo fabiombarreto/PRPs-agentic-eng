@@ -33,6 +33,12 @@ User-facing intro: see `README.md` at the repository root.
 → plugins/relay/resources/component-map-template.md — canonical shape of `docs/design/component-map.md`, the versioned Figma-to-code component map that `design-map-writer`/`design-map-reviewer` reference as authoritative (Figma Implementation Track Phase 3)
 → plugins/relay/resources/design-spec-template.md — canonical shape of `PRPs/designs/<feature>/design-spec.md`, the per-feature, human-approved Design Spec that `design-spec-writer`/`design-spec-reviewer` reference as authoritative (Figma Implementation Track Phase 4)
 → plugins/relay/resources/mock-sentinels.md — the [RELAY-MOCK-DATA]/[RELAY-MOCK-BEHAVIOR] inline sentinel convention for phase_scope: visual plans (Figma Visual-First Track)
+→ plugins/relay/resources/usage-metrics-schema.md — codebook for the per-project usage-metrics artifact: four TSV relations, the closed field contract, and which enum domains are closed vs resolved against the reviewer agent files
+
+## Usage Metrics
+
+→ plugins/relay/scripts/usage-metrics.mjs — operator-invoked materializer (`materialize`, `--dry-run`, `query`); derives the shards from artifacts relay already writes, so nothing in the pipeline emits and no agent may read them
+→ PRPs/metrics/ — the materialized shards in a target project, plus a `.gitattributes` marking them `-diff` so their values never reach a diff an agent reads
 
 ## Design System (Figma Track)
 

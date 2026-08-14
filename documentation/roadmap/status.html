@@ -267,7 +267,17 @@
         <p>Recorded in <code>docs/decisions.md</code> (2026-08-13, "Planning-document track"). Not implemented and not yet placed in a numbered project phase. No agent builds any part of it — and in particular no "planning mode" branch is added to <code>/relay-prd</code> or <code>/relay-plan</code> — ahead of a dedicated PRD authored via <code>/relay-prd</code> and approved.</p>
       </div>
 
-      <h3 id="planned-usage-metrics">Planned: plugin-usage metrics artifacts <span class="badge badge--pending">planned</span></h3>
+      <h3 id="planned-usage-metrics">Plugin-usage metrics artifacts <span class="badge badge--done">phases 1&ndash;4 shipped</span> <span class="badge badge--pending">phase 5 deferred</span></h3>
+
+      <div class="callout callout--success">
+        <div class="callout__title">Shipped 2026-08-14 &mdash; four of five phases</div>
+        <p>
+          What exists: <code>plugins/relay/resources/usage-metrics-schema.md</code> (the codebook &mdash; four relations, a closed field contract, an explicit closed-versus-open enum split), <code>plugins/relay/scripts/usage-metrics.mjs</code> (a dependency-free materializer plus a <code>query</code> subcommand), a tracked <code>PRPs/metrics/</code> directory with its <code>.gitattributes</code> and <code>.gitignore</code>, and <code>metrics-isolation</code> as the 13th <code>npm run validate</code> check. Backfilled against this repository's own corpus on first run: 15 shards, roughly 5,600 rows.
+        </p>
+        <p>
+          Phase 5 (automated emission) is <strong>deferred, not dropped</strong> &mdash; see the note at the end of this section. The prose below describes the problem the feature was built to solve and remains accurate; it is kept because the reasoning still explains why the artifact has the shape it does.
+        </p>
+      </div>
 
       <p>relay already emits a per-run audit trail inside every target project: <code>orchestrator-run.json</code>, <code>run.json</code>, <code>test-review.json</code>, per-attempt <code>diff.patch</code> files, and the verdict logs <code>*.review.jsonl</code>, <code>*.code-review.jsonl</code>, and <code>*.test-write-review.jsonl</code>. Two instruments read them — <code>scripts/efficiency.mjs</code> and the <code>efficiency-report</code> skill — but both are repo-local and run-scoped. No portable artifact exists that a target project accumulates for the express purpose of being reviewed later.</p>
 
@@ -281,8 +291,23 @@
       </div>
 
       <div class="callout callout--note">
-        <div class="callout__title">Registered, not scheduled</div>
-        <p>Recorded in <code>docs/decisions.md</code> (2026-08-13, "Per-project plugin-usage metrics artifacts"). Not implemented. Until a dedicated PRD is approved, the existing <code>PRPs/reports/</code> trail plus <code>scripts/efficiency.mjs</code> and the <code>efficiency-report</code> skill remain the only operative measurement contract, and no command or agent gains metrics emission.</p>
+        <div class="callout__title">Phase 5 &mdash; deferred, and why</div>
+        <p>
+          The fifth phase (automated emission via hooks) is marked <code>deferred</code> in the source PRD's Implementation Phases table rather than left <code>pending</code>. It is not blocked by cost or difficulty &mdash; it is gated on evidence that does not yet exist. The PRD's own Phase Details say its scope is "deliberately unspecified until Phases 1&ndash;4 have run in practice" and that entering it "requires evidence that the manual cadence is insufficient", and its content is classified MoSCoW <em>Won't</em>. The orchestrator halted with <code>FAILED_PHASE_SCOPE_UNPLANNABLE</code> rather than invent scope the PRD deliberately withheld.
+        </p>
+        <p>
+          What remains for it has narrowed twice since. The 2026-08-14 token-budget decision replaced the hard zero-token constraint with a 1 percent budget, which makes a command writing into an artifact it already produces both cheaper and structurally safer than a hook. And duration columns added the same day captured test and correction timing by pure derivation. Only per-agent wall-clock and unterminated sessions still require the phase.
+        </p>
+        <p>
+          To enter it later, hand-edit the row's <code>Status</code> cell back to <code>pending</code> &mdash; the same escape hatch that governs re-running any phase. Recorded in <code>docs/decisions.md</code> (2026-08-13 registration; 2026-08-14 shipped entry and token budget).
+        </p>
+      </div>
+
+      <div class="callout callout--warn">
+        <div class="callout__title">Known gaps</div>
+        <p>
+          The corpus holds exactly one project, so the cross-project value proposition &mdash; the founding motivation, given the 2026-08 six-repository measurement was assembled by hand &mdash; is untested against real data. The mechanism has tests, but on synthetic input. And the <code>scan</code> relation's version axis is nominal so far: every row is from one day at one plugin version, so it bounds nothing yet. Materializing at each release cut, now part of the <code>efficiency-report</code> ritual, is what starts making it real.
+        </p>
       </div>
 
       <h2 id="dogfood-status">Dogfood status</h2>
