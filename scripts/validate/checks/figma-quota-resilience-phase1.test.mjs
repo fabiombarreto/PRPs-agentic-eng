@@ -157,6 +157,10 @@ test('AC-A3: `node scripts/validate/index.mjs` (the real npm run validate entry 
   // unlocked first version of this test intermittently failed for exactly
   // this reason; locking it fixed the race.
   const { stdout, status } = await withScanRootLock(() => {
+    // Labelled below: this is the slowest critical section in the suite
+    // (~6.6s — it spawns the whole validate entry point, whose own
+    // native-validate check shells out to `claude plugin validate`), so a
+    // timeout elsewhere most often names this one as the holder.
     let out = '';
     let st = 0;
     try {
@@ -169,7 +173,7 @@ test('AC-A3: `node scripts/validate/index.mjs` (the real npm run validate entry 
       out = e.stdout || '';
     }
     return { stdout: out, status: st };
-  });
+  }, 'validate entry-point spawn');
 
   assert.equal(status, 0, `expected npm run validate to exit 0, got ${status}. Output:\n${stdout}`);
   assert.ok(!/\[FAIL\]/.test(stdout), `expected zero [FAIL] lines in npm run validate output:\n${stdout}`);

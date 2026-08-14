@@ -34,3 +34,8 @@ PRPs/reports/*
 # comparison depends on; an ignored one is useless the moment the tree is
 # re-cloned. Per-feature run reports under PRPs/reports/<feature>/ stay ignored.
 !PRPs/reports/efficiency/
+
+# Test-suite advisory lock (scripts/validate/checks/scan-root-lock.mjs). It now
+# holds a holder.json for diagnostics, so a run killed mid-section would leave a
+# git-visible directory behind; the lock is machine-local state, never content.
+.scan-root.lock/
