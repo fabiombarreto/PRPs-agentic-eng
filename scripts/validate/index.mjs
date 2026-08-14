@@ -29,6 +29,7 @@ import { runFeedbackChainCheck } from './checks/feedback-chain.mjs';
 import { runTimestampContractCheck } from './checks/timestamp-contract.mjs';
 import { runPluginRootResolvableCheck } from './checks/plugin-root-resolvable.mjs';
 import { runMetricsIsolationCheck } from './checks/metrics-isolation.mjs';
+import { runDecisionsMirrorCheck } from './checks/decisions-mirror.mjs';
 
 function die(code, msg) {
   process.stderr.write(msg + '\n');
@@ -52,6 +53,7 @@ const CHECKS = [
   runTimestampContractCheck,
   runPluginRootResolvableCheck,
   runMetricsIsolationCheck,
+  runDecisionsMirrorCheck,
 ];
 
 function runChecks(checks) {

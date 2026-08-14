@@ -143,7 +143,7 @@ test('AC-A2: runPluginRootResolvableCheck() returns ok:true with zero findings a
 // including the newly-registered plugin-root-resolvable check.
 // ---------------------------------------------------------------------------
 
-test('AC-A3: `node scripts/validate/index.mjs` (the real npm run validate entry point) reports exactly 12 checks run, all passing, including [PASS] plugin-root-resolvable', async () => {
+test('AC-A3: `node scripts/validate/index.mjs` (the real npm run validate entry point) reports exactly 14 checks run, all passing, including [PASS] plugin-root-resolvable', async () => {
   assert.ok(existsSync(resolve(VALIDATE_INDEX_PATH)), 'expected scripts/validate/index.mjs to exist');
 
   // Locked: this subprocess's own native-validate check shells out to
@@ -173,14 +173,14 @@ test('AC-A3: `node scripts/validate/index.mjs` (the real npm run validate entry 
 
   assert.equal(status, 0, `expected npm run validate to exit 0, got ${status}. Output:\n${stdout}`);
   assert.ok(!/\[FAIL\]/.test(stdout), `expected zero [FAIL] lines in npm run validate output:\n${stdout}`);
-  // Count updated 12 -> 13 by usage-metrics Phase 4, which registers the
+  // Count updated 12 -> 13 (usage-metrics Phase 4, metrics-isolation) -> 14 (decisions-mirror). Each bump tracks one deliberately registered
   // metrics-isolation check. The assertion is deliberately kept exact rather
   // than loosened to ">= 12": a hardcoded count is what makes an accidentally
   // unregistered (or silently dropped) check visible, which is the property
   // this test exists for. Bumping the number is the correct maintenance
   // response to a legitimately added check; relaxing the assertion would
   // retire the guarantee.
-  assert.match(stdout, /\n13 passed, 0 failed \(13 checks run\)\n/);
+  assert.match(stdout, /\n14 passed, 0 failed \(14 checks run\)\n/);
   assert.match(stdout, /\[PASS\] plugin-root-resolvable/, 'expected the newly-registered plugin-root-resolvable check to run and pass');
 });
 
