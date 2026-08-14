@@ -75,7 +75,7 @@ const PLUGIN_ROOT = 'plugins/relay';
 const SCANNED_EXTENSIONS = new Set(['.md', '.mjs', '.js']);
 const SKIP_DIR_NAMES = new Set(['node_modules', '.git']);
 
-// The eight resource basenames plugins/relay/resources/ packages. Any
+// The nine resource basenames plugins/relay/resources/ packages. Any
 // citation of one of these anywhere under plugins/relay/ that is not
 // exactly OWNED_RESOURCE_PREFIX + basename is an R1 finding.
 const OWNED_RESOURCES = [
@@ -87,6 +87,7 @@ const OWNED_RESOURCES = [
   'settings-allowlist.md',
   'test-output-schema.md',
   'mock-sentinels.md',
+  'usage-metrics-schema.md',
 ];
 const OWNED_RESOURCE_PREFIX = '${CLAUDE_PLUGIN_ROOT}/resources/';
 

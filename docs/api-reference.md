@@ -182,6 +182,16 @@ The test pair (`test-writer` + `test-reviewer`, formerly `tdd-writer`/`tdd-revie
 The Pillar 3 commands shipped v0.14.0–v0.17.0; the Docs Updater + Docs
 Reviewer agents shipped in v0.17.0 completing Phase 4.
 
+## Shared scripts
+
+Node, no npm dependencies. Invoked as `node ${CLAUDE_PLUGIN_ROOT}/scripts/<name>.mjs`.
+
+| Script | Invoked by | Purpose |
+|--------|-----------|---------|
+| `normalize-test-output.mjs` | `test-runner` agent | Parses JUnit XML into the canonical test-output schema |
+| `generate-final-report.mjs` | `/relay-pr` | Assembles `final-report.md` for the PR body, applying the redaction policy |
+| `usage-metrics.mjs` ✅ | **an operator, never the pipeline** | `materialize` regenerates the per-project usage-metrics shards by full rescan of artifacts relay already writes; `--dry-run` reports row counts and destinations without writing; `query` prints per-stage counts, first-attempt failure rates and top failing rubric ids. Output is a pure function of input, so re-runs converge rather than duplicate. No agent, command, or skill may reference `PRPs/metrics` — enforced by the `metrics-isolation` check, because a reviewer aware of its own pass rate has an incentive to approve leniently. Schema: `plugins/relay/resources/usage-metrics-schema.md`. |
+
 ## Hooks (planned)
 
 No hooks are declared yet (no `plugins/relay/hooks/hooks.json`). Planned

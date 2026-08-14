@@ -1,0 +1,15 @@
+proj	ts	feat	phase	stage	outcome	halt	bud_prr	bud_min	natt	ms	suite_ms	corr_ms
+PRPs-agentic-eng	2026-08-03T19:20:00Z	figma-quota-resilience	1	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-08-04T18:22:00Z	figma-quota-resilience	3	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-08-04T21:47:00Z	figma-quota-resilience	4	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-08-05T00:05:00Z	figma-quota-resilience	5	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-08-07T14:15:00Z	plan-review-materiality	1	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-08-07T16:28:00Z	plan-review-materiality	2	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-08-07T18:58:00Z	plan-review-materiality	3	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-08-08T02:42:00Z	plan-review-materiality	4	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-08-08T02:33:00Z	plan-review-materiality	4	test	GREEN	-	-	-	1	480000	377446	0
+PRPs-agentic-eng	2026-08-13T22:12:00Z	usage-metrics	1	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-08-13T22:09:06Z	usage-metrics	1	test	GREEN	-	-	-	1	4763	4763	0
+PRPs-agentic-eng	2026-08-13T23:00:00Z	usage-metrics	2	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-08-13T23:30:00Z	usage-metrics	3	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-08-13T23:55:00Z	usage-metrics	4	complete	complete	-	2	240	-	-	-	-

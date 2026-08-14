@@ -99,6 +99,13 @@
         <li><a href="#five-state-lifecycle">Five-state phase-status lifecycle</a></li>
         <li><a href="#self-check-tightening">Two plan-writer self-check items tightened on measured evidence</a></li>
         <li><a href="#per-session-rework">Rework is counted per review session, not per jsonl file</a></li>
+        <li><a href="#materiality-classes">Plan-review gating becomes materiality-aware: blocking vs advisory rubric classes</a></li>
+        <li><a href="#retry-convergence-ratchet">Retry convergence ratchet narrows blocking scope on re-review</a></li>
+        <li><a href="#advisory-pass-through">Advisory pass-through carries open advisories to the Implementer</a></li>
+        <li><a href="#class-aware-measurement">Class-aware measurement and PR-body advisory surfacing</a></li>
+        <li><a href="#planning-document-track">Planning-document track: registered future capability</a></li>
+        <li><a href="#usage-metrics-artifacts">Per-project plugin-usage metrics artifacts: registered future capability</a></li>
+        <li><a href="#usage-metrics-token-budget">Usage-metrics collection gets a 1% token budget</a></li>
       </ol>
 
       <h2 id="entries">Entries</h2>
@@ -699,6 +706,31 @@
         <dt>Context</dt><dd>The final phase of the materiality work. <code>scripts/efficiency.mjs</code> read only each row's id and pass flag, so an advisory row counted exactly like a blocking one — which would have made the feature's own success metric unreadable. Open advisories were also invisible at merge time.</dd>
         <dt>Decision</dt><dd><code>readCorpus()</code> captures each failing row's class (absent reads as blocking), <code>aggregate()</code> emits per-stage blocking and advisory counts plus per-class top-failure tallies, and the comparison output gains one conditional line that prints only when advisory rows exist. The PR-body generator gains an "Open plan-review advisories" section built with the established omitted-when-empty idiom.</dd>
         <dt>Reason</dt><dd>Separating gating failures from non-gating ones is a precondition for testing the hypothesis at all — without it there is no way to tell a real reduction in rework from a reclassification artifact. Existing metrics, session splitting and the degraded-artifact exclusion are untouched, so historic corpora stay comparable.</dd>
+      </div>
+
+      <h3 id="planning-document-track">73. Planning-document track: registered future capability</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-13</dd>
+        <dt>Context</dt><dd><code>/relay-prd</code> authors one feature at a time. The multi-feature planning documents that decide which features exist, and in what order, sit outside the pipeline entirely — this repository's own <code>docs/planning/</code> files were hand-authored and are cited by the phased-rollout decision as the source of the five project-level phases. Planning is the one authoring stage with no writer/reviewer pair, no rubric, no status lifecycle, and no mechanical path to a PRD.</dd>
+        <dt>Decision</dt><dd>A planning-document track — write, review against a rubric, then decompose into per-feature PRDs, with its own commands and agents — is registered as a future capability and is not implemented. No agent builds any part of it, and in particular no "planning mode" branch is added to <code>/relay-prd</code> or <code>/relay-plan</code>, before a dedicated PRD is authored and approved. That PRD must decide the artifact shape and location, the interactivity boundary on both writer and reviewer, the rubric and its materiality classes, the decomposition contract from one document to N PRDs, how far orchestration may reach, and what happens to the existing <code>docs/planning/</code> files.</dd>
+        <dt>Reason</dt><dd>Registration blocks ad-hoc construction while naming the full decision surface, so the eventual PRD starts from a scoped problem rather than rediscovering it — the same pattern used for the PRD-less <code>/relay-plan</code> and runnable-worktree registrations. The interactivity question is called out explicitly because a planning document misdirects every downstream feature when it is wrong, which argues for a human gate; that argument belongs in the PRD, not in an inherited default.</dd>
+      </div>
+
+      <h3 id="usage-metrics-artifacts">74. Per-project plugin-usage metrics artifacts: registered future capability</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-13</dd>
+        <dt>Context</dt><dd>relay already emits a per-run audit trail in every target project, and two instruments read it — <code>scripts/efficiency.mjs</code> and the <code>efficiency-report</code> skill — but both are repo-local and run-scoped. No portable artifact exists that a project accumulates for the express purpose of being reviewed later, which is why the 2026-08 measurement over roughly 370 artifacts from 6 repositories was assembled by hand. The degraded-timestamp fix is the same gap in another form: the trail was built for per-run debugging, so its measurement-critical fields were never contractual.</dd>
+        <dt>Decision</dt><dd>A versioned, portable metrics artifact that projects using relay accumulate over time is registered as a future capability and is not implemented. Until a dedicated PRD is approved, the existing reports trail plus <code>efficiency.mjs</code> and the <code>efficiency-report</code> skill remain the only operative measurement contract, and no command or agent gains metrics emission. The PRD must decide the schema and its version field, the emission point and format, the location and retention lifecycle, the opt-in and redaction posture, backward compatibility with corpora already accumulated, which instrument consumes the artifact, and which fields are contractual. Nothing in the capability transmits data anywhere: aggregation across projects is a manual, human-initiated act of collecting files, and no telemetry, upload, or network call is authorized.</dd>
+        <dt>Reason</dt><dd>Registration prevents ad-hoc metrics files with inconsistent schemas appearing in target projects — the exact failure that made the cross-project analysis a manual reconstruction. Naming the decision points up front means the PRD starts from the known failure modes: degraded fields, unrecoverable history, producer and consumer drift. The privacy posture is fixed at registration rather than deferred because these artifacts sit inside other people's repositories, where a wrong default is not merely inefficient.</dd>
+      </div>
+
+      <h3 id="usage-metrics-token-budget">75. Usage-metrics collection gets a 1% token budget</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-14</dd>
+        <dt>Context</dt><dd>The usage-metrics PRD carried a Success Metric of zero LLM tokens in the collection path, and the whole architecture was chosen to honor it. Phases 1 through 4 shipped on that basis and do spend zero. But the hard zero also forbade mechanisms cheaper and safer than the ones it left standing: adding a few instruction lines to a command so it records a duration into an artifact it already writes was rejected as a per-invocation tax, which pushed the design toward hook-based emission — where a three-lens review then found the feature's two worst failure modes. A constraint meant to keep collection cheap was steering the design toward its most dangerous option.</dd>
+        <dt>Decision</dt><dd>Collection may spend tokens, bounded at 1 percent of one full pipeline run, with three rules on how. The agent triggers, the clock supplies: an agent may cause a deterministic write but is never the source of a measured value. Writes go into artifacts the command already produces, never into the metrics directory, so the anti-Goodhart isolation check keeps a build invariant with no exceptions. And the budget needs a measured denominator before it can be spent, since nothing records per-run cost today.</dd>
+        <dt>Reason</dt><dd>The distinction that matters is bounded-and-deterministic versus unbounded-or-model-authored, not zero versus nonzero. The first rule is stated as independent of cost on purpose: the reliability argument against model-authored fields survives any budget, and the degraded-timestamp incident is what it rests on. The third rule records a real circularity honestly rather than letting a plausible percentage become unfalsifiable.</dd>
+        <dt>Amends</dt><dd>The usage-metrics PRD's Success Metrics row, recorded in its review log as a human-authorized amendment. Reopens per-phase cost attribution, which had been excluded for lack of a join key a command may now afford to write. Leaves the local-only floor, the no-agent-reads rule, and the exclusion of per-person measurement untouched — none of them rested on cost.</dd>
       </div>
 
       <h2 id="how-to-add">Adding a new decision</h2>

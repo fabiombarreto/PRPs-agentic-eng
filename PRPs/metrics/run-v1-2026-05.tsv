@@ -1,0 +1,11 @@
+proj	ts	feat	phase	stage	outcome	halt	bud_prr	bud_min	natt	ms	suite_ms	corr_ms
+PRPs-agentic-eng	2026-05-01T00:15:00Z	relay-execute-dogfood	1	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-05-01T00:30:00Z	relay-execute-dogfood	2	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-05-06T00:00:00Z	tdd-writer-reviewer	1	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-05-06T00:00:00Z	tdd-writer-reviewer	2	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-05-06T00:00:00Z	tdd-writer-reviewer	3	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-05-06T00:00:00Z	tdd-writer-reviewer	4	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-05-12T00:00:00Z	test-frameworks-empty-self-skip	1	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-05-12T00:00:00Z	test-frameworks-empty-self-skip	2	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-05-12T00:00:00Z	test-frameworks-empty-self-skip	3	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-05-12T00:00:00Z	test-frameworks-empty-self-skip	4	complete	complete	-	2	240	-	-	-	-
