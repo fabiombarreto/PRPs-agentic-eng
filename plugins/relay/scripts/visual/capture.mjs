@@ -8,7 +8,10 @@
 // then drives a headless Chromium browser through each frame's
 // route/viewport, reusing a Playwright storage-state file when the
 // frame's `auth_mode` names one — this script never performs its own
-// login flow.
+// login flow. Every browser context is created with `baseURL` set to the
+// resolved dev-server URL, so a frame's `route` may be a relative path
+// (`/checkout/confirmation`) — the form Design Spec `## Visual Acceptance
+// Criteria` tables naturally use — or an absolute URL. Both resolve.
 //
 // Usage:
 //   node capture.mjs <manifest.json> <outputDir> [devServerUrl]
@@ -17,7 +20,7 @@
 //   [
 //     {
 //       "node_id": "123:456",
-//       "route": "http://localhost:3000/checkout/confirmation",
+//       "route": "/checkout/confirmation",
 //       "preconditions": "cart has 1 item",
 //       "auth_mode": "storage-state:PRPs/designs/<feature>/auth/session.json" | "none",
 //       "viewport": { "width": 1440, "height": 900 },
@@ -34,7 +37,11 @@ import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 import { waitForDevServer } from './provision.mjs';
 
-const DEFAULT_DEV_SERVER_URL = 'http://localhost:3000';
+// `127.0.0.1`, never `localhost`: on hosts where `localhost` resolves to
+// IPv6 first, a dev server listening only on IPv4 answers
+// `http://127.0.0.1:3000/` while `http://[::1]:3000/` never responds —
+// which surfaces as an unexplained capture timeout.
+const DEFAULT_DEV_SERVER_URL = 'http://127.0.0.1:3000';
 const DEV_SERVER_TIMEOUT_MS = 30_000;
 
 function parseAuthMode(authMode) {
@@ -98,10 +105,14 @@ export async function executeInteractionSteps(page, steps) {
   }
 }
 
-async function captureFrame(browser, frame, outputDir) {
+async function captureFrame(browser, frame, outputDir, baseURL) {
   const storageStatePath = parseAuthMode(frame.auth_mode);
   const contextOptions = {
     viewport: frame.viewport ?? { width: 1440, height: 900 },
+    // Relative `route` values resolve against the dev server; absolute
+    // URLs in a manifest keep working unchanged (Playwright ignores
+    // `baseURL` when `goto` receives an absolute URL).
+    baseURL,
   };
   if (storageStatePath) {
     contextOptions.storageState = storageStatePath;
@@ -131,7 +142,8 @@ async function captureFrame(browser, frame, outputDir) {
 
 /**
  * Boots (waits for) the dev server, then captures one PNG per frame in
- * `manifestPath` into `outputDir`. Returns `{ ok, results, reason? }`;
+ * `manifestPath` into `outputDir`. `devServerUrl` doubles as the browser
+ * context's `baseURL`, so relative `route` values resolve against it. Returns `{ ok, results, reason? }`;
  * `reason: "DEV_SERVER_TIMEOUT"` signals the trigger for the caller's
  * DEGRADED_STATIC_ONLY rung — no browser is launched in that case.
  */
@@ -154,7 +166,7 @@ export async function capture(manifestPath, outputDir, devServerUrl = DEFAULT_DE
       // Sequential on purpose — keeps dev-server load predictable and
       // per-frame failures independently attributable.
       // eslint-disable-next-line no-await-in-loop
-      const result = await captureFrame(browser, frame, outputDir);
+      const result = await captureFrame(browser, frame, outputDir, devServerUrl);
       results.push(result);
     }
   } finally {

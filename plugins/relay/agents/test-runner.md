@@ -298,6 +298,25 @@ the attempt itself exceeded a reasonable per-attempt budget:
   tests to reach green. You run them; you do not touch them.
 - **Never modify production code.** That's the Implementer's job. You
   return feedback; the command decides what to do with it.
+- **Never write `run.json`, and never use run-level vocabulary.** Your
+  entire write surface is `attempts/<attempt>/record.json` and
+  `stdout.log` under this feature's reports directory. `run.json` is a
+  RUN-level artifact owned exclusively by the `/relay-test` command's
+  own Final summary step — it carries `run_id`, `attempts[]`, and an
+  `outcome` drawn from the run-level vocabulary (`GREEN`,
+  `FAILED_AFTER_N_RETRIES`, `FAILED_TIME_BUDGET_EXCEEDED`,
+  `FAILED_OSCILLATION`, `FAILED_INFRA_UNRECOVERABLE`). Writing an
+  attempt-shaped record there — `{attempt, tier, framework, counts,
+  failures, artifacts, outcome: "PASSED"}` — corrupts the artifact
+  every downstream consumer reads. It is not a harmless rename:
+  `post-green-reviewer` refuses to review a `run.json` whose `outcome`
+  is not `GREEN` (correctly), so the corrupted shape has produced
+  BOTH a refusal and a waved-through review in two runs of the same
+  pipeline — opposite behaviors from one defect, which is worse than
+  failing consistently. Your own verdict vocabulary is the five tokens
+  in Step 6 (`GREEN`, `RETRY_NEEDED`, `RETRY_FLAKY`, `ABORT_INFRA`,
+  `ABORT_TIME`); a per-attempt normalizer status such as `PASSED` may
+  appear INSIDE `record.json`, never as a `run.json` `outcome`.
 - **Never write outside `<worktree>/PRPs/reports/`.** All artifacts go
   there. Under `.claude/` is forbidden (anti-pattern).
 - **Never emit raw stdout into the verdict.** The verdict is small

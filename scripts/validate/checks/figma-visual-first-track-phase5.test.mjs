@@ -303,9 +303,15 @@ test('AC-A1 (PRD AC-4): under visual_first_approval: auto, Phase A.3.5 is reache
   );
   assert.ok(
     /** @type {string} */ (block).includes(
-      'Write `<artifact_root>../halt.json` with `{outcome: "VISUAL_GATE_BLOCKED", phase_scope: "visual", final_visual_verdict: "<VISUAL_DEGRADED|VISUAL_MISMATCH>", fidelity_report_path, attempt_history, actionable_recommendation: "Fix the visual implementation or its mocks and re-run /relay-implement, or set visual_first_approval: human in docs/context/methodology.md to route through human review instead."}`.'
+      'Write `<artifact_root>../halt.json` with `{outcome: "VISUAL_GATE_BLOCKED", phase_scope: "visual", final_visual_verdict: "<VISUAL_DEGRADED|VISUAL_MISMATCH>", fidelity_report_path, attempt_history, actionable_recommendation: "Fix the visual implementation or its mocks and re-run /relay-implement, or set visual_first_approval: human in docs/context/methodology.md to route through human review instead.'
     ),
     'expected the VISUAL_GATE_BLOCKED halt.json shape'
+  );
+  assert.ok(
+    /** @type {string} */ (block).includes(
+      'When final_visual_verdict is VISUAL_DEGRADED with rung DEGRADED_NO_BASELINE, no fix is implied at all: the frame has simply never been approved, and only a human approval via /relay-visual-approve can establish the baseline that makes this gate meaningful — auto mode cannot self-baseline.'
+    ),
+    'expected the DEGRADED_NO_BASELINE carve-out in the same actionable_recommendation — an unbaselined frame is unverified, not broken, and auto mode cannot self-baseline'
   );
   assert.ok(
     /** @type {string} */ (block).includes("VISUAL_GATE_BLOCKED. The visual-scoped blocking gate's final"),

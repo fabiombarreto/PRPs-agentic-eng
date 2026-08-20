@@ -86,8 +86,10 @@ phases.
 
 - **Purpose:** headless-browser screenshot capture and AA-tolerant pixel
   diffing so `/relay-implement`'s Phase A.3.4 can automatically verify an
-  implementation attempt's visual fidelity against a Design Spec's
-  reference PNGs, closing the fidelity loop without a human eyeballing
+  implementation attempt's visual fidelity against that frame's own
+  last human-approved capture (falling back, advisory-only, to the
+  Design Spec's Figma reference PNGs when no approval exists yet),
+  closing the fidelity loop without a human eyeballing
   every frame.
 - **Auth type:** none — local Chromium instance provisioned on demand.
 - **Used by:** the `visual-verifier` agent only, via the self-contained

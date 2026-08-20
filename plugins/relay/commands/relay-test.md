@@ -191,7 +191,7 @@ treat it as oscillation.
 
 After the loop exits (any outcome), produce:
 
-1. **A run-level file** at `<worktree>/PRPs/reports/<feature>/run.json`:
+1. **A run-level file** at `<worktree>/PRPs/reports/<feature>/run.json`, **written by this command, never by the `test-runner` agent** (the agent's write surface is `attempts/<attempt>/record.json` only, and its own five verdict tokens are attempt-level; an attempt-shaped record with `outcome: "PASSED"` in this path is a defect, not an alias for `GREEN`). If the file already exists carrying an attempt-level shape, overwrite it wholesale with the run-level shape below rather than merging:
    ```json
    {
      "run_id": "...",
@@ -206,6 +206,7 @@ After the loop exits (any outcome), produce:
        { "n": 2, "verdict": "GREEN", "record": "attempts/2/record.json" }
      ],
      "outcome": "GREEN | FAILED_AFTER_N_RETRIES | FAILED_TIME_BUDGET_EXCEEDED | FAILED_OSCILLATION | FAILED_INFRA_UNRECOVERABLE",
+     "phase": <N | null>,
      "time_breakdown": {
        "attempt_1_suite_ms": ...,
        "attempt_1_correction_ms": ...,
@@ -226,6 +227,19 @@ Do NOT write the final pretty report (`final-report.md`) here — that's
 the `/relay-pr` command's job (Phase 8, B6). `run.json` is
 machine-readable state that downstream consumers (test-review,
 report-generator) read.
+
+**Per-phase archive.** `run.json` sits at the FEATURE level and is
+overwritten by every run, which is what `/relay-pr`'s gate wants (the
+latest run's review state) but silently destroys the previous phase's
+record in a multi-phase `/relay-execute`. So whenever a phase number is
+known — the invoking plan's `-phase-<N>-` filename segment, or the
+orchestrator's current row — ALSO write a byte-identical copy to
+`<worktree>/PRPs/reports/<feature>/phase-<N>/run.json`, and record that
+same `<N>` in the `phase` field of both. The feature-level file keeps
+its existing meaning and every existing consumer keeps working
+unchanged; the archive is additive. When no phase number is derivable
+(a hand-invoked `/relay-test` against a PRD-less plan), write `"phase":
+null` and skip the copy — never guess a number.
 
 ---
 

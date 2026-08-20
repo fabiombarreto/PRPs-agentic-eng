@@ -117,6 +117,8 @@
         <li><a href="#figma-rubric-count">Rubric-count assertions are re-derived from live headings, never hardcoded</a></li>
         <li><a href="#plugin-owned-resources">Plugin-owned resources live in the plugin tree, not in docs/context</a></li>
         <li><a href="#usage-metrics-shipped">Usage metrics ships phases 1&ndash;4; phase 5 is deferred, not dropped</a></li>
+        <li><a href="#visual-baseline">The visual gate measures drift from the last approved capture, not distance from the Figma export</a></li>
+        <li><a href="#field-findings-2026-08">Six field-reported pipeline defects fixed at the surface that produced them</a></li>
       </ol>
 
       <h2 id="entries">Entries</h2>
@@ -822,6 +824,23 @@
         <dt>Decision</dt><dd>Records what exists: the codebook resource, a dependency-free materializer with a query subcommand, a tracked metrics directory with its two git control files, and the metrics-isolation check. The no-agent-reads rule is enforced twice, because it has two channels &mdash; a check over prompt text, and a <code>-diff</code> attribute over git plumbing, which no grep can see.</dd>
         <dt>Reason</dt><dd>A registration entry never followed by a shipped entry leaves the repository claiming a capability is unbuilt long after it is in use. Recording the deferral reason is load-bearing rather than tidy: the orchestrator's halt artifact is gitignored, so without this entry the only durable statement of why phase 5 stopped would be a note inside the PRD.</dd>
         <dt>Known gaps</dt><dd>The corpus holds one project, so the cross-project value proposition is untested against real data. The version axis was nominal until the 0.32.0 release cut gave it its first real transition.</dd>
+      </div>
+
+      <h3 id="visual-baseline">87. The visual gate measures drift from the last approved capture, not distance from the Figma export</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-20</dd>
+        <dt>Context</dt><dd>Measured on a real project rather than reasoned about: three captures of one screen diffed against the same Figma reference scored 2.6035% and 2.4614% for two genuinely broken layouts and 2.5139% for the correct one &mdash; a negative separation no threshold can order, and unmoved by two masking strategies. Against a previous capture of the same frame the same three separated cleanly, over a 0.0000% noise floor.</dd>
+        <dt>Decision</dt><dd>A frame is diffed against its own last human-approved capture whenever one exists; that is the only basis whose number gates. With no approved capture the diff still runs against the Figma export but the frame is <code>NO_BASELINE</code> &mdash; advisory, never a pass &mdash; and degrades through the existing ladder as <code>DEGRADED_NO_BASELINE</code>. <code>/relay-visual-approve</code> promotes an approved capture to baseline through a feature-level registry of pointers. The <code>pixelmatch</code> tolerance becomes basis-dependent, and every diffed frame now writes an inspectable diff overlay that was previously computed and discarded.</dd>
+        <dt>Reason</dt><dd>The gate stops claiming to measure fidelity-to-design and starts measuring regression-since-approval, which is the only automatic number the mock-data reality supports; the human comparison against the design is what the human approval tier already provides. Re-tuning the threshold on the old basis was rejected on the measurement: with a negative separation, no value admits the correct render and rejects the broken ones.</dd>
+        <dt>Accepted cost</dt><dd>On a frame's first render the automatic gate contributes nothing, which is why an unbaselined frame degrades loudly instead of quietly passing.</dd>
+      </div>
+
+      <h3 id="field-findings-2026-08">88. Six field-reported pipeline defects fixed at the surface that produced them</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-20</dd>
+        <dt>Context</dt><dd>The same field session recorded six defects outside the visual gate: a capture script with no <code>baseURL</code> against Design Specs that write relative routes; an attempt-shaped record written into the run-level <code>run.json</code>, which one reviewer refused and another waved through; a plan rubric that checks an acceptance criterion exists but not that it is pertinent, and can deadlock against the coherence layer; a missing default paragraph that cost three retries per occurrence; a purity gate tripped by the sentinel comments naming the endpoint it hunts for; and a validation that matched a string in a manifest while the dependency was never installed.</dd>
+        <dt>Decision</dt><dd>Each fix lands at the surface that produced the defect, not the one that noticed it &mdash; the writer emits the paragraph by default, the runner is forbidden the artifact it corrupted, the rubric names the PRD as the cause of an impasse the plan cannot resolve locally, and the halt message names the shipped test pair it had been calling unshipped.</dd>
+        <dt>Reason</dt><dd>Each absence cost multiple autonomous retry cycles, which is the expensive kind of cheap bug. The rubric additions deliberately add no new check id: this repository derives rubric counts from live headings, so a new id would ripple through the arithmetic for a diagnostic better attached to the row it qualifies.</dd>
       </div>
 
       <h2 id="how-to-add">Adding a new decision</h2>

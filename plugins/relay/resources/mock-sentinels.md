@@ -60,6 +60,34 @@ Both classes are plain inline comments — no special syntax, no
 required tooling, no runtime dependency. Any language or framework
 that supports comments can carry them.
 
+### Naming the real source without tripping the purity gate
+
+A `phase_scope: visual` plan normally carries a Level 3 purity gate
+that greps the touched component directory for HTTP-verb patterns
+(`POST /`, `PUT /`, `PATCH /`, `DELETE /`, …) to prove the visual phase
+performs no side effect. A `[RELAY-MOCK-BEHAVIOR]` sentinel that spells
+its real source as `PUT /api/v2/practice-exams/1` therefore makes a
+CORRECT, side-effect-free implementation fail its own plan's gate — the
+comment matches the pattern the gate hunts for.
+
+Write the `real source:` clause with an **elided path** so it names the
+endpoint without reproducing the literal verb-plus-slash token:
+
+```js
+// [RELAY-MOCK-BEHAVIOR] save settings — real source: PUT .../practice-exams/{id}
+```
+
+```js
+// [RELAY-MOCK-DATA] exam list — real source: GET .../practice-exams
+```
+
+The elision is a writing convention, not a tooling rule: the sentinel
+still names the real source unambiguously for the logic phase that must
+resolve it, and the purity gate still catches a genuine `fetch`/`axios`
+call, which is what it exists to catch. The alternative — teaching every
+generated gate to skip comment lines — is more machinery for the same
+outcome, and every visual plan would have to get it right independently.
+
 ---
 
 ## Zero side effects in the visual phase (binding)

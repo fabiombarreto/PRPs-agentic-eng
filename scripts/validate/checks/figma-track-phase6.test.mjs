@@ -326,7 +326,7 @@ test('AC-A1 (figma-implementation-track.prd.md; scope narrowed 2026-07-27 by fig
   );
   assert.ok(
     collapsed.includes(
-      '**`VISUAL_DEGRADED`** → record the named rung (e.g. `DEGRADED_STATIC_ONLY`); log a warning; proceed to Phase A.3.5 (subject to the Terminal-routing rule below) WITHOUT halting (this is the AC-5 non-blocking guarantee).'
+      '**`VISUAL_DEGRADED`** → record the named rung (e.g. `DEGRADED_STATIC_ONLY`, `DEGRADED_PROVISION_FAILED`, or `DEGRADED_NO_BASELINE`); log a warning; proceed to Phase A.3.5 (subject to the Terminal-routing rule below) WITHOUT halting (this is the AC-5 non-blocking guarantee).'
     )
   );
   assert.ok(
@@ -475,10 +475,22 @@ test('AC-A3: compare.mjs\'s compare() writes one fidelity-report.json entry per 
   const content = readRepoFile(COMPARE_PATH);
   const collapsed = collapseWs(content);
 
-  assert.ok(collapsed.includes("const status = diffPercent <= frame.diff_threshold ? 'PASS' : 'FAIL';"));
+  // Status derivation is now basis-dependent (see the comparison-basis
+  // tests below): only an approved-baseline diff yields PASS/FAIL; a
+  // figma-reference diff yields the advisory NO_BASELINE status.
   assert.ok(
     collapsed.includes(
-      'return { node_id: frame.node_id, route: frame.route, diff_percent: Number(diffPercent.toFixed(4)), threshold: frame.diff_threshold, status, masked_regions: frame.masks ?? [], };'
+      "const status = basis === 'figma-reference' ? 'NO_BASELINE' : (diffPercent <= frame.diff_threshold ? 'PASS' : 'FAIL');"
+    )
+  );
+  assert.ok(
+    collapsed.includes(
+      'const entry = { ...base, diff_percent: Number(diffPercent.toFixed(4)), pixelmatch_threshold: pixelmatchThreshold, diff_png: writtenDiffPath, status, };'
+    )
+  );
+  assert.ok(
+    collapsed.includes(
+      'const base = { node_id: frame.node_id, route: frame.route, comparison_basis: basis, comparison_png: comparisonPath ?? null, threshold: frame.diff_threshold, masked_regions: frame.masks ?? [], };'
     )
   );
   // Note: the shape/derivation is asserted at the CODE level above (the
@@ -490,7 +502,11 @@ test('AC-A3: compare.mjs\'s compare() writes one fidelity-report.json entry per 
   // unlike this feature's markdown-file assertions elsewhere in this suite.
 
   const writeFileCalls = [...content.matchAll(/writeFile\(([^,]+),/g)].map((m) => m[1].trim());
-  assert.deepEqual(writeFileCalls, ['reportPath'], 'expected the ONLY writeFile() call in compare.mjs to target reportPath');
+  assert.deepEqual(
+    writeFileCalls.slice().sort(),
+    ['outPath', 'reportPath'],
+    'expected exactly two writeFile() calls in compare.mjs: the fidelity report and the per-frame diff overlay — never the reference, baseline or captured PNG'
+  );
 });
 
 test('AC-A3: compare.mjs runs an antialiasing-aware (AA-tolerant) pixelmatch diff — antialiased pixels excluded from the diff count — rather than a naive hard pixel-count threshold', () => {
@@ -499,7 +515,7 @@ test('AC-A3: compare.mjs runs an antialiasing-aware (AA-tolerant) pixelmatch dif
 
   assert.ok(
     collapsed.includes(
-      '{ threshold: 0.1, includeAA: false } // AA-tolerant: antialiased pixels are excluded from the diff count'
+      '{ threshold: pixelmatchThreshold, includeAA: false } // AA-tolerant: antialiased pixels are excluded from the diff count'
     )
   );
 });
@@ -508,10 +524,10 @@ test('AC-A3 (anti-pattern guard): compare.mjs never mutates a reference PNG — 
   const content = readRepoFile(COMPARE_PATH);
   const collapsed = collapseWs(content);
 
-  assert.ok(collapsed.includes('the reference PNG on disk is never mutated'));
+  assert.ok(collapsed.includes('neither image on disk is ever mutated'));
   assert.ok(
     collapsed.includes(
-      'const maskedCaptured = applyMasks(clonePng(captured), frame.masks); const maskedReference = applyMasks(clonePng(reference), frame.masks);'
+      'const maskedCaptured = applyMasks(clonePng(captured), frame.masks); const maskedComparison = applyMasks(clonePng(comparison), frame.masks);'
     )
   );
 });
@@ -551,7 +567,7 @@ test('AC-A3: visual-verifier.md\'s Step 2 (FULL rung) runs compare.mjs to write 
 
   assert.ok(
     collapsed.includes(
-      'This writes `fidelity-report.json` directly — you do not write it yourself on this rung.'
+      'This writes `fidelity-report.json` directly — you do not write it yourself on this rung — plus one diff overlay PNG per diffed frame'
     )
   );
   assert.ok(
