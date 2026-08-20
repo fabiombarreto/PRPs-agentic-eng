@@ -362,16 +362,21 @@ The code-reviewer arbitrates the dispute. It appends one verdict line to `code-r
 
 - **`DISPUTE_REJECTED`** → next attempt mandates code (the implementer cannot dispute the same tests again). Carry `last_reviewer_feedback = [{rubric_id: "arbitration", reason: "dispute rejected: <reason>; produce code addressing the disputed tests"}]`. Increment `attempt`. Restart pre-flight checks.
 
-- **`DISPUTE_UPHELD_TEST_WRONG`** → the disputed tests are wrong. B7/B8 bounce-back is deferred per source PRD D14 (placeholder protocol reserved). Write `<artifact_root>../halt.json` with `{outcome: "DISPUTE_UPHELD_TEST_WRONG", dispute_payload, arbitration_verdict, attempt_history, dispute_history, actionable_recommendation: "Surface dispute to user; user decides whether to update tests or re-author the PRD. When B7/B8 ship, re-invoke via Task(subagent_type='test-writer', prompt={attempt_history, dispute_evidence})."}`. HALT with verbatim message:
+- **`DISPUTE_UPHELD_TEST_WRONG`** → the disputed tests are wrong. The test pair (B7/B8) HAS shipped — `test-writer` and `test-reviewer` are live agents, and `/relay-write-test` + `/relay-test-write-review` are their commands — so the sanctioned recovery is to route the dispute through that pair, which owns every test-file mutation (R-X is a blanket straight-fail on a test glob in the Implementer's own diff; never hand-edit the test to close a dispute inside this command). Automatic in-loop bounce-back remains deferred (it would need its own retry budget and oscillation detection, neither of which this command holds for the test pair), so the routing is human-triggered but fully specified. Write `<artifact_root>../halt.json` with `{outcome: "DISPUTE_UPHELD_TEST_WRONG", dispute_payload, arbitration_verdict, attempt_history, dispute_history, actionable_recommendation: "Route the dispute to the shipped test pair: run /relay-write-test <plan_path> with the halt.json dispute_evidence as the correction input, then /relay-test-write-review <plan_path> to re-approve the suite, then re-run /relay-implement <plan_path>. Only if the arbitration turns out to hinge on the PRD itself, re-author the PRD instead."}`. HALT with verbatim message:
   > DISPUTE_UPHELD_TEST_WRONG. The code-reviewer agreed the
-  > disputed tests contradict the PRD. B7/B8 bounce-back is
-  > deferred in MVP per source PRD D14 (placeholder protocol
-  > reserved). Manual recovery: review the dispute evidence at
-  > PRPs/reports/<feature>/phase-<N>/halt.json; either update the
-  > tests by hand or surface the dispute to the user for decision.
-  > When TDD Writer (B7) ships, the Task dispatch contract will
-  > be: Task(subagent_type='test-writer',
-  > prompt={attempt_history, dispute_evidence}).
+  > disputed tests contradict the PRD. The test pair owns every
+  > test-file change (R-X forbids the Implementer touching a test
+  > glob), so recovery routes through it rather than through a
+  > hand-edit. Sanctioned recovery: (1) review the dispute
+  > evidence at PRPs/reports/<feature>/phase-<N>/halt.json;
+  > (2) run /relay-write-test <plan_path>, passing that
+  > dispute_evidence as the correction input, so `test-writer`
+  > records the fix as an EXISTING_TEST_UPDATED lifecycle-ledger
+  > entry; (3) run /relay-test-write-review <plan_path> to
+  > re-approve the suite; (4) re-run /relay-implement <plan_path>.
+  > Automatic in-loop bounce-back to the pair is still deferred —
+  > it would need its own retry budget and oscillation detection —
+  > so this hand-off is deliberate, not a missing feature.
 
 - **`DISPUTE_UPHELD_PRD_AMBIGUOUS`** → the PRD itself is ambiguous; tests and proposed code both have legitimate readings. Write `<artifact_root>../halt.json` with the same shape, `actionable_recommendation: "Hand-edit the PRD to disambiguate; flip its status back to DRAFT; re-run /relay-prd."`. HALT with verbatim message:
   > DISPUTE_UPHELD_PRD_AMBIGUOUS. The code-reviewer agreed the
@@ -406,7 +411,7 @@ Triggered exactly once when Phase A.3 standard-mode returns APPROVED — never o
 
 5. **Step B — branch on the returned verdict:**
    - **`VISUAL_VERIFIED`** → `visual_outcome = "APPROVED"`; proceed to Phase A.3.5 (subject to the Terminal-routing rule below).
-   - **`VISUAL_DEGRADED`** → record the named rung (e.g. `DEGRADED_STATIC_ONLY`); log a warning; proceed to Phase A.3.5 (subject to the Terminal-routing rule below) WITHOUT halting (this is the AC-5 non-blocking guarantee).
+   - **`VISUAL_DEGRADED`** → record the named rung (e.g. `DEGRADED_STATIC_ONLY`, `DEGRADED_PROVISION_FAILED`, or `DEGRADED_NO_BASELINE`); log a warning; proceed to Phase A.3.5 (subject to the Terminal-routing rule below) WITHOUT halting (this is the AC-5 non-blocking guarantee). `DEGRADED_NO_BASELINE` means at least one frame had no human-approved baseline and was therefore diffed against the Figma export, whose number is advisory only (`compare.mjs`'s own contract) — it is a genuinely unverified frame, never a quiet pass, which is why it lands on the degraded rung rather than `VISUAL_VERIFIED`.
    - **`VISUAL_MISMATCH`** → increment `visual_review_attempts`.
      - If `visual_review_attempts <= max_visual_retries`: dispatch one post-visual fix round — re-invoke `implementer` via `Task` with the `fidelity-report.json`'s failing frames as `prior_feedback`, then `code-reviewer` via `Task` in standard mode to re-approve the code change, then re-dispatch `visual-verifier` via `Task`.
        - If that round's `code-reviewer` step itself returns `CHANGES_REQUESTED`, OR the re-dispatched `visual-verifier` still returns `VISUAL_MISMATCH`: perform a **deterministic revert** — `git checkout <last code-reviewer-APPROVED commit/diff> -- <files touched by the fix attempt>` (using the same `files_changed_by_attempt` bookkeeping Phase A.2 already maintains, mirroring the oscillation-detection precedent at `plugins/relay/commands/relay-implement.md:239-250`) so the worktree returns to exactly the last APPROVED state; set `visual_outcome = "BUDGET_EXCEEDED_REVERTED"`; proceed to Phase A.3.5 (subject to the Terminal-routing rule below) WITHOUT halting.
@@ -427,7 +432,7 @@ Triggered exactly once when Phase A.3 standard-mode returns APPROVED — never o
   > at `<artifact_root>../halt.json`. No commit has been made and no
   > D8 mutation has occurred — the plan remains `APPROVED`, the source
   > PRD row remains `in-progress`.
-- When `phase_scope_value == "visual"` AND `visual_approval_mode == "auto"` (or absent, defaulting to `auto`): proceed to Phase A.3.5 ONLY when the point reached is a genuine `VISUAL_VERIFIED` result — `visual_outcome = "APPROVED"`, D8 continues normally, exactly as step 5 already says — whether that is step 5's own `VISUAL_VERIFIED` bullet, or the `VISUAL_MISMATCH` bullet's fix-round-succeeds sub-case when its re-dispatched verdict is itself `VISUAL_VERIFIED`. For every OTHER point step 5's mechanics can reach — `VISUAL_DEGRADED` (step 5's own bullet, OR the fix-round-succeeds sub-case's re-dispatched verdict coming back `VISUAL_DEGRADED` instead of `VISUAL_VERIFIED` — the case a plain branch enumeration can miss), the deterministic-revert sub-case (`BUDGET_EXCEEDED_REVERTED`), or the budget-exhausted-without-a-fix-round sub-case (`BUDGET_EXCEEDED`) — do NOT proceed to Phase A.3.5. Write `<artifact_root>../halt.json` with `{outcome: "VISUAL_GATE_BLOCKED", phase_scope: "visual", final_visual_verdict: "<VISUAL_DEGRADED|VISUAL_MISMATCH>", fidelity_report_path, attempt_history, actionable_recommendation: "Fix the visual implementation or its mocks and re-run /relay-implement, or set visual_first_approval: human in docs/context/methodology.md to route through human review instead."}`. HALT with the verbatim message:
+- When `phase_scope_value == "visual"` AND `visual_approval_mode == "auto"` (or absent, defaulting to `auto`): proceed to Phase A.3.5 ONLY when the point reached is a genuine `VISUAL_VERIFIED` result — `visual_outcome = "APPROVED"`, D8 continues normally, exactly as step 5 already says — whether that is step 5's own `VISUAL_VERIFIED` bullet, or the `VISUAL_MISMATCH` bullet's fix-round-succeeds sub-case when its re-dispatched verdict is itself `VISUAL_VERIFIED`. For every OTHER point step 5's mechanics can reach — `VISUAL_DEGRADED` (step 5's own bullet, OR the fix-round-succeeds sub-case's re-dispatched verdict coming back `VISUAL_DEGRADED` instead of `VISUAL_VERIFIED` — the case a plain branch enumeration can miss), the deterministic-revert sub-case (`BUDGET_EXCEEDED_REVERTED`), or the budget-exhausted-without-a-fix-round sub-case (`BUDGET_EXCEEDED`) — do NOT proceed to Phase A.3.5. Write `<artifact_root>../halt.json` with `{outcome: "VISUAL_GATE_BLOCKED", phase_scope: "visual", final_visual_verdict: "<VISUAL_DEGRADED|VISUAL_MISMATCH>", fidelity_report_path, attempt_history, actionable_recommendation: "Fix the visual implementation or its mocks and re-run /relay-implement, or set visual_first_approval: human in docs/context/methodology.md to route through human review instead. When final_visual_verdict is VISUAL_DEGRADED with rung DEGRADED_NO_BASELINE, no fix is implied at all: the frame has simply never been approved, and only a human approval via /relay-visual-approve can establish the baseline that makes this gate meaningful — auto mode cannot self-baseline."}`. HALT with the verbatim message:
   > VISUAL_GATE_BLOCKED. The visual-scoped blocking gate's final
   > result was `<final_visual_verdict>`, not `VISUAL_VERIFIED`.
   > `visual_first_approval: auto` requires a clean `VISUAL_VERIFIED`

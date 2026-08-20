@@ -30,7 +30,91 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <p><em>No changes queued yet.</em></p>
+      <p>Eleven defects reported from a real field run of the visual-first track (an 8-phase <code>visual_first_approval: human</code> PRD on an external React project, 2026-08-18/19), fixed at the surface that produced each one. The headline change is a semantic one: the visual gate now measures drift from the last human-approved capture instead of distance from the Figma export.</p>
+
+      <h3 id="unreleased-changed">Changed</h3>
+      <ul>
+        <li><strong>The visual gate's comparison basis</strong> &mdash; a frame
+          is now diffed against its own last human-approved capture whenever one
+          exists, and only that basis produces a <code>PASS</code>/<code>FAIL</code>.
+          The measurement that forced it: against the Figma export, two genuinely
+          broken layouts scored 2.6035% and 2.4614% while the correct layout
+          scored 2.5139% &mdash; a negative separation no threshold can order, and
+          unmoved by two masking strategies. The same captures against a prior
+          capture separated cleanly over a 0.0000% noise floor. A frame with no
+          approved capture is now <code>NO_BASELINE</code> &mdash; advisory, never
+          a pass &mdash; and degrades through the existing ladder as the new
+          <code>DEGRADED_NO_BASELINE</code> rung. See
+          <a href="governance/decisions.html#visual-baseline">decision 87</a>.</li>
+        <li><strong><code>pixelmatch</code> tolerance is now basis-dependent</strong>
+          &mdash; 0.02 against a deterministic baseline, the previous 0.1 against a
+          Figma export, per-frame overridable. The blanket 0.1 was blind to
+          low-contrast difference: adding a banner ornament changed 24.6% of
+          unmasked pixels and did not move <code>diff_percent</code> in the fourth
+          decimal, which sent two correction rounds chasing a number that could
+          not move.</li>
+        <li><strong>The <code>DISPUTE_UPHELD_TEST_WRONG</code> halt no longer
+          claims the test pair is unshipped</strong> &mdash; it names the concrete
+          four-step routing through <code>/relay-write-test</code> and
+          <code>/relay-test-write-review</code>, which is what worked by hand in
+          the field. Automatic in-loop bounce-back stays deferred, and now says so
+          honestly rather than describing a future dispatch contract for agents
+          that already exist.</li>
+        <li><strong><code>run.json</code> ownership and shape</strong> &mdash; the
+          <code>/relay-test</code> command owns the run-level artifact;
+          <code>test-runner</code> is explicitly forbidden from writing it or using
+          run-level vocabulary. One phase's <code>post-green-reviewer</code>
+          refused an attempt-shaped <code>run.json</code> and another waved the same
+          divergence through, which is worse than failing consistently. A per-phase
+          archive copy is now written alongside, so a multi-phase run stops
+          overwriting its own history.</li>
+      </ul>
+
+      <h3 id="unreleased-added">Added</h3>
+      <ul>
+        <li><strong>Diff overlay PNGs</strong> &mdash; every diffed frame writes an
+          inspectable overlay beside <code>fidelity-report.json</code>. The buffer
+          was already being computed and discarded, which left every failure an
+          uninspectable percentage; triage in the field required hand-writing a
+          <code>pixelmatch</code> script, and that is how an "implementation
+          failure" turned out to be an undersized mask.</li>
+        <li><strong>Baseline promotion in <code>/relay-visual-approve</code></strong>
+          &mdash; approving a capture records it as that frame's baseline in a
+          feature-level registry of pointers, so a frame approved in phase 3 still
+          baselines its re-render in phase 5. Rejection never promotes.</li>
+        <li><strong>Proactive test-pair deferral note</strong> &mdash;
+          <code>plan-writer</code> now emits the paragraph <code>plan-reviewer</code>'s
+          exemption branch requires whenever a framework is declared and no task
+          touches a test file, which is the normal case. Its absence cost three
+          retry attempts in one phase and nearly three in another, once via a
+          writer trying to satisfy the check by having the Implementer author spec
+          files &mdash; a direct R-X violation.</li>
+        <li><strong>Impasse detection in <code>R8b</code></strong> &mdash; when a
+          phase delivers behavior no PRD acceptance criterion describes,
+          <code>R8b</code> and <code>R-COH-AC-TASK-DECOUPLED</code> are mutually
+          unsatisfiable and no re-authoring can fix it. The verdict now says so and
+          names the PRD as the fix site. A recorded, non-blocking
+          <code>PERTINENCE_DOUBT</code> marker flags a citation whose subject does
+          not match its statement. Neither adds a rubric row. See
+          <a href="governance/decisions.html#field-findings-2026-08">decision 88</a>.</li>
+        <li><strong>Two plan-authoring rules</strong> &mdash; a
+          <code>VALIDATE</code> must exercise the effect rather than match a
+          declaration (a <code>grep</code> for a dependency in
+          <code>package.json</code> passed while the package was never installed,
+          and the phase was recorded implemented), and mock sentinels name their
+          real source with an elided path so they stop tripping the visual phase's
+          own purity gate.</li>
+      </ul>
+
+      <h3 id="unreleased-fixed">Fixed</h3>
+      <ul>
+        <li><strong><code>capture.mjs</code> sets <code>baseURL</code></strong>
+          &mdash; Design Spec acceptance-criteria tables naturally write routes as
+          relative paths, which previously failed as an unexplained capture
+          timeout. The dev-server default is now <code>127.0.0.1</code> rather than
+          <code>localhost</code>, which resolves to IPv6 first on some hosts while
+          the dev server listens only on IPv4.</li>
+      </ul>
 
       <h2 id="v0-33-0">0.33.0 &#8212; 2026-08-14</h2>
       <p>Governance-record sync, and a check so it stays synced. The plugin tree is byte-identical to 0.32.0 &mdash; nothing under <code>plugins/relay/</code> changed. The manifest bumps anyway, because a minor release bumps it unconditionally (<a href="AGENTS.md">AGENTS.md</a> &sect;7.5) so Claude Code&rsquo;s version-keyed plugin cache stays aligned with the published contract.</p>

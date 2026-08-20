@@ -1147,6 +1147,69 @@ If you need to update these strings, do so at
 `plugins/relay/agents/prd-writer.md` Step 7.4 — that is the single
 source of truth — and not here.
 
+### Step 4.4.quinquies — VALIDATE exercises the effect
+
+Every per-task `**VALIDATE**` you author must exercise the effect the
+task claims, never merely confirm that the task's own text reached a
+file (`${CLAUDE_PLUGIN_ROOT}/resources/plan-template.md` extension 8).
+A dependency task validates with `node -e "require.resolve('<pkg>')"`
+or the binary's own `--version`, never `grep '"<pkg>"' package.json`; a
+config task validates by running the thing the config feeds, never by
+matching the key. A text match is legitimate only when the deliverable
+IS the text.
+
+This binds hardest on a plan carrying the Step 4.4.quater deferral
+note: those tasks have no test coverage by scope decision, so the
+`**VALIDATE**` is the only thing standing between a declared change and
+a broken one.
+
+### Step 4.4.quater — Test-pair deferral note (emit by default)
+
+`plan-reviewer`'s `R-COH-VALIDATE-FRAMEWORK-MISMATCH` requires every
+`**VALIDATE**` in a `phase_type: feature` plan to invoke the declared
+test framework, UNLESS the plan qualifies for the test-pair-deferral
+exemption branch, which needs BOTH:
+
+(a) `## Notes` or `## NOT Building` documents that this phase's
+    test-file updates are routed through the `test-writer`/
+    `test-reviewer` pair's lifecycle ledger rather than authored by
+    the Implementer; and
+(b) no task and no `## Files to Change` row touches a test file.
+
+Condition (b) is one you can check on your own assembled body, before
+writing. **When `test_frameworks` is non-empty AND condition (b) holds,
+emit the paragraph for (a) — always, by default.** It is the normal
+case, not an exception: the test pair is the only component authorized
+to create or modify test files (R-X is a blanket straight-fail on a
+test glob in the Implementer's diff), so an Implementer-scoped plan
+that touches no spec is exactly what the branch describes.
+
+Emit it inside `## Notes` as a single bullet:
+
+```
+**Test-file routing:** this phase's test-file creation and updates are
+routed through the `test-writer`/`test-reviewer` pair's lifecycle
+ledger (`/relay-write-test` → `/relay-test-write-review`), not authored
+by the Implementer — R-X is a blanket straight-fail on any test glob in
+the Implementer's diff. No task below and no `## Files to Change` row
+targets a test file, so this plan's `**VALIDATE**` commands exercise the
+change directly rather than invoking the test framework.
+```
+
+Do NOT emit it when any task or `## Files to Change` row does touch a
+test file: the deferral claim would then be false, and `plan-reviewer`
+correctly holds such a plan to the framework requirement anyway.
+Condition (b) is what makes the claim verifiable rather than
+self-asserted — never "fix" a framework-mismatch failure by having the
+Implementer author spec files, which contradicts R-X and gets caught as
+`R-COH-OTHER-INTERNAL-CONTRADICTION`.
+
+Prose that merely argues a framework invocation is unnecessary is NOT a
+fourth branch. `plan-reviewer` recognizes exactly three coded branches;
+a self-declared justification is correctly rejected. Emitting this
+paragraph up front is what keeps that rejection from costing two or
+three retry cycles — the failure mode this step exists to remove.
+
 ### Step 4.4.ter — Pre-emission self-check
 
 Before Step 4.5 writes, run the **pre-emission self-check** on the
@@ -1173,6 +1236,13 @@ its full rubric independently regardless; it does not replace it.
 4. **Every `## Mandatory Reading` row is a file this phase's
    implementer must open**, and each cited line range matches what
    is actually there.
+5. **The test-pair deferral note is present whenever it applies** —
+   `test_frameworks` non-empty, `phase_type: feature`, and no task or
+   `## Files to Change` row touching a test file means Step
+   4.4.quater's paragraph must be in `## Notes`. Its absence is the
+   single most common cause of an avoidable
+   `R-COH-VALIDATE-FRAMEWORK-MISMATCH` rejection. Conversely, if any
+   task does touch a test file, the paragraph must NOT be there.
 
 ### Step 4.5 — Write the file
 

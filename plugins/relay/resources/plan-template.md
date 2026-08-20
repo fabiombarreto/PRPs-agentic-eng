@@ -96,6 +96,26 @@ command-surface decision).
    always-fail. plan-reviewer's R-COH-VALIDATE-PATTERN-UNGROUNDED
    check enforces both halves.
 
+8. **Effect over declaration.** A `VALIDATE:` command MUST exercise the
+   effect the task claims to produce, not merely assert that the task's
+   own text landed in a file. Matching a string in a manifest, config
+   or source file proves an edit happened; it does not prove the edit
+   works. The canonical failure: a task added `"playwright": "^1.62.1"`
+   to `package.json` and validated with
+   `grep -q '"playwright"' package.json`. The grep passed, the plan was
+   approved, code review passed, the phase was recorded as implemented
+   — and the package was never in `node_modules`, surfacing only when
+   the script depending on it crashed with `ERR_MODULE_NOT_FOUND`.
+   Prefer, in order: the tool's own exit code
+   (`node -e "require.resolve('playwright')"`, `<binary> --version`,
+   the build/typecheck command itself); then a command that consumes
+   the artifact end-to-end; and only as a last resort a text match,
+   which is acceptable ONLY when the task's whole deliverable IS the
+   text (documentation prose, a template string, a generated message).
+   This matters most under the test-pair-deferral branch, where by
+   scope decision there is no test covering the task and `VALIDATE:` is
+   the only net.
+
 ---
 
 ## Output path

@@ -129,12 +129,15 @@ If any is missing, HALT with the byte-exact pattern shared by every relay comman
 
 - When `status` is `PASS`/`FAIL` (FULL rung — `masked_regions` field present): derive the captured PNG path as `<dirname of fidelity_report_path>/captured/<node_id with [:/\\] replaced by '-'>.png` (mirroring `compare.mjs`'s own `frameFilename()`), and the reference PNG path by reading `plan_path`'s `## Design Source` table (or, if absent, the Design Spec it references) for that `node_id`'s own declared ref-PNG column — never re-derived independently of that authoritative source.
 - When `status` is `DEGRADED_STATIC_ONLY`/`DEGRADED_PROVISION_FAILED` (degraded rung — `token_conformant` field present, no `masked_regions`): no captured PNG exists at all; surface this explicitly ("no capture — degraded rung, pixel comparison did not run") rather than asserting a path.
+- When `status` is `NO_BASELINE`: a capture exists and was diffed, but against the Figma export rather than an approved baseline, because this frame has never been approved. Surface the entry's own `advisory_reason` verbatim and state plainly that its `diff_percent` is advisory — it does not order defects and must not be read as a pass. Your approval is what creates this frame's baseline (Phase C), which makes every subsequent run of it a real gate.
+
+For every entry, also surface the entry's `diff_png` path when present — the per-frame diff overlay `compare.mjs` writes. It is the artifact that shows WHERE the images differ; a percentage alone is not reviewable.
 
 Print a structured summary: feature, phase `<N>` and its `Phase` name (read from the source PRD row), `final_visual_verdict`, the per-frame status list with capture/ref paths (or the degraded no-capture note), and `halt_state.actionable_recommendation`.
 
 ## Phase B — Explicit confirmation
 
-Mirror `/relay-design-map`'s Phase E precisely: print the exact effect that will occur (which `halt.json` fields will flip, and that an audit `jsonl` line will be appended), then ask for an explicit, quoted, affirmative or negative reply. Distinguish three outcomes:
+Mirror `/relay-design-map`'s Phase E precisely: print the exact effect that will occur (which `halt.json` fields will flip, that an audit `jsonl` line will be appended, and — on approval — that each surfaced capture becomes this frame's approved baseline for future runs), then ask for an explicit, quoted, affirmative or negative reply. Distinguish three outcomes:
 
 - An unambiguous affirmative reply (e.g. the user typing "yes", "approve", "confirm", or an equivalent unambiguous affirmative in their own words) → approve.
 - An unambiguous negative reply (e.g. "no", "reject" — with optional accompanying feedback text explaining what needs to change) → reject.
@@ -155,6 +158,23 @@ Append one line to `PRPs/reports/<feature>/phase-<N>/visual-approval.jsonl`:
 {"timestamp": "<ISO timestamp>", "feature": "<feature>", "phase_N": <N>, "decision": "approved", "confirmation_text": "<verbatim reply>", "fidelity_report_path": "<path>"}
 ```
 
+Then **promote the approved captures to baselines** — this is what turns the visual gate into a real regression gate on every later run of these frames. Write `PRPs/reports/<feature>/visual-baseline/index.json` (create the directory and the file if absent; otherwise `Read` it, merge, and `Write` it back whole):
+
+```json
+{
+  "<node_id>": {
+    "png": "PRPs/reports/<feature>/phase-<N>/visual/<attempt>/captured/<node-id>.png",
+    "approved_at": "<ISO timestamp>",
+    "phase": <N>,
+    "approved_by_confirmation": "<verbatim user reply>"
+  }
+}
+```
+
+One entry per frame whose `status` in this fidelity report is `PASS` or `NO_BASELINE` — never a `FAIL` frame, and never a degraded-rung entry (no capture exists for those). An existing entry for the same `node_id` is REPLACED: the newest human approval is the baseline. The registry stores POINTERS, not copies — this command is `Bash`-free by constraint 5 and cannot copy a binary, and the captures it names are durable report artifacts. `compare.mjs` reads this registry (`readBaselineRegistry`) and falls back to the Figma export, marking the frame `NO_BASELINE`, for any node it does not name or whose file has since disappeared.
+
+The registry is FEATURE-level, never phase-level, so a frame approved in phase 3 still baselines the same frame's re-render in phase 5.
+
 Emit success plus: "Next: re-run `/relay-execute PRPs/prds/<feature>.prd.md` to resume — it will pick up this exact phase via Phase A.1's resumable visual-approval check."
 
 **On rejection:** perform a single `Edit` on the same `halt.json` adding:
@@ -167,7 +187,7 @@ Append one line to the same `visual-approval.jsonl` with `"decision": "rejected"
 
 Emit success plus: "Next: re-run `/relay-execute PRPs/prds/<feature>.prd.md` — your feedback will be passed to the implementer's next attempt automatically via Phase A.2.5's resume short-circuit."
 
-Both branches mutate `halt.json` exactly once and append exactly one `visual-approval.jsonl` line — never more, never independently, never any other field.
+Both branches mutate `halt.json` exactly once and append exactly one `visual-approval.jsonl` line — never more, never independently, never any other field. The approval branch additionally writes the baseline registry described above; the rejection branch never touches it (a rejected capture must never become the baseline that later runs are measured against).
 
 ---
 
@@ -178,6 +198,9 @@ Both branches mutate `halt.json` exactly once and append exactly one `visual-app
 > ✅ Phase `<N>` (`<Phase name>`) visual approval recorded: **approved**.
 > `halt.json` updated at `PRPs/reports/<feature>/phase-<N>/halt.json`.
 > Audit entry appended to `PRPs/reports/<feature>/phase-<N>/visual-approval.jsonl`.
+> Baseline registry updated at `PRPs/reports/<feature>/visual-baseline/index.json`
+> (`<K>` frame(s)) — later runs of these frames are diffed against these
+> captures, not against the Figma export.
 > Next: re-run `/relay-execute PRPs/prds/<feature>.prd.md` to resume — it
 > will pick up this exact phase via Phase A.1's resumable visual-approval
 > check.
@@ -207,7 +230,7 @@ Both branches mutate `halt.json` exactly once and append exactly one `visual-app
 ## Constraints (hard rules)
 
 1. **Never write anything under `.claude/`.** All artifacts (`halt.json` edit, `visual-approval.jsonl` append) go under `PRPs/reports/<feature>/phase-<N>/`.
-2. **Never mutate any `halt.json` field other than the four additions.** `resolution`, `resolved_at`, `resolver_confirmation`, and (on rejection only) `rejection_feedback` are the only fields this command ever adds. Every field `/relay-implement` originally wrote (`outcome`, `phase_scope`, `final_visual_verdict`, `fidelity_report_path`, `attempt_history`, `actionable_recommendation`) is read-only from this command's perspective.
+2. **The baseline registry is the only artifact outside the phase directory this command writes.** `PRPs/reports/<feature>/visual-baseline/index.json`, on the approval branch only. **Never mutate any `halt.json` field other than the four additions.** `resolution`, `resolved_at`, `resolver_confirmation`, and (on rejection only) `rejection_feedback` are the only fields this command ever adds. Every field `/relay-implement` originally wrote (`outcome`, `phase_scope`, `final_visual_verdict`, `fidelity_report_path`, `attempt_history`, `actionable_recommendation`) is read-only from this command's perspective.
 3. **Never flip on inferred consent, silence, or a generic "continue".** Mirrors `relay-design-map.md`'s own confirmation discipline verbatim in spirit — an ambiguous or non-affirmative, non-negative reply always means "do not flip".
 4. **Never invoked by `/relay-execute`.** This command is exclusively human-triggered, exactly like `/relay-design-map` and `/relay-design-spec`.
 5. **No `Bash` dependency.** `Read`/`Glob`/`Edit`/`Write` only — no new `.claude/settings.json` allowlist entry is required (confirmed against `${CLAUDE_PLUGIN_ROOT}/resources/settings-allowlist.md`).

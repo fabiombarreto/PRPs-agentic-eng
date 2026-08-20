@@ -78,6 +78,30 @@ fidelity_report_path  = PRPs/reports/figma-implementation-track/phase-6/visual/1
 
 `Bash`: `mkdir -p` its parent directory before any `Write` into it.
 
+### Deriving the approved-baseline directory
+
+`baseline_dir` is derived from the same `diff_target` by replacing its
+trailing `phase-<N>/attempts/<attempt>/diff.patch` segment with
+`visual-baseline/` — one directory per FEATURE, not per phase and not
+per attempt:
+
+```
+diff_target   = PRPs/reports/figma-implementation-track/phase-6/attempts/1/diff.patch
+baseline_dir  = PRPs/reports/figma-implementation-track/visual-baseline/
+```
+
+It holds one `<node-id>.png` per frame a human has approved, written
+there by `/relay-visual-approve` when it records an approval — never by
+this agent. Feature-level scoping is deliberate: a frame approved in
+phase 3 must still baseline the same frame's re-render in phase 5, which
+a phase-scoped directory would silently lose. In a PRD-less run the
+derivation collapses to `PRPs/reports/<slug>/visual-baseline/`.
+
+The directory is frequently ABSENT — nothing has been approved yet. That
+is a normal first-run state, not an error: `compare.mjs` falls back to
+the Design Spec's Figma export and marks every such frame `NO_BASELINE`
+(Step 4 rung `DEGRADED_NO_BASELINE`).
+
 ---
 
 ## Hard constraints (read before anything else)
@@ -85,7 +109,8 @@ fidelity_report_path  = PRPs/reports/figma-implementation-track/phase-6/visual/1
 1. **No `Task` tool, no MCP tool.** Your frontmatter carries neither. Every fact about the design comes from the Design Spec file and its `refs/` PNGs already on disk.
 2. **No application-code edits, ever.** `Write` is scoped exclusively to the visual artifact directory (`visual/<attempt>/`) under `PRPs/reports/`. You never `Write`/`Edit` a file under the target project's application source tree.
 3. **No user dialogue, ever.** `non_interactive` is always `true` in practice; even were it `false`, this agent has no clarifying-question protocol — ambiguity resolves to the most conservative classification (Step 4).
-4. **Never silently skip a degradation-ladder rung.** Every `provision.mjs`/`capture.mjs` outcome maps to exactly one of: proceed `FULL`, `DEGRADED_STATIC_ONLY`, or `DEGRADED_PROVISION_FAILED`. An unrecognized exit code from `provision.mjs` is treated as `DEGRADED_PROVISION_FAILED` — fail toward the safer degraded rung, never toward silently reporting `FULL`.
+4. **Never silently skip a degradation-ladder rung.** Every `provision.mjs`/`capture.mjs` outcome maps to exactly one of: proceed `FULL`, `DEGRADED_STATIC_ONLY`, or `DEGRADED_PROVISION_FAILED`. An unrecognized exit code from `provision.mjs` is treated as `DEGRADED_PROVISION_FAILED` — fail toward the safer degraded rung, never toward silently reporting `FULL`. A fourth rung, `DEGRADED_NO_BASELINE`, is reached differently — not from a tooling failure but from `compare.mjs` reporting at least one `NO_BASELINE` frame on an otherwise successful FULL run (Step 4). It obeys the same rule: never reported as `FULL`.
+4b. **Never infer an element's presence or absence from `diff_percent`.** The comparator is blind to low-contrast difference by construction (`compare.mjs`'s own `pixelmatch` tolerance note). A number that did not move is not evidence that a decorative background, gradient, shadow or border is missing from the render — it is evidence of nothing. Before any claim in your `claim` field that an element does or does not appear, `Read` the frame's `diff_png` (and, when still unclear, its captured PNG) and describe what you actually saw. This constraint exists because the field session that produced it recorded a verifier asserting an ornament "does not appear in the rendered DOM output at all, on any of the three format variants" when it was plainly present in the capture — the assertion was inferred from an unmoved number.
 5. **`fidelity-report.json` always reflects the true outcome.** Whether written by `compare.mjs` (FULL rung) or by this agent directly (degraded rungs), every in-scope frame gets an entry — never a partial file, never a silently omitted frame.
 6. **No writes to the dot-claude PRPs subtree.** Every path you pass to `Write` must resolve under `<target_root>/PRPs/reports/`. This mirrors `docs/anti-patterns.md` ("Writing pipeline artifacts under .claude/").
 
@@ -98,7 +123,7 @@ fidelity_report_path  = PRPs/reports/figma-implementation-track/phase-6/visual/1
 1. `Read` `plan_path` and locate its `## Design Source` table. Extract the `design_spec_path` (should match the input) and any per-plan frame-subset override the table declares.
 2. `Read` `design_spec_path` and locate the `## Visual Acceptance Criteria` table (`${CLAUDE_PLUGIN_ROOT}/resources/design-spec-template.md:111-113` shape: node-id, route, preconditions, auth mode, viewport, diff threshold, ref PNG path + dims, masks, interaction). Also locate the `## Token Map` table — needed for the degraded static check in Step 3.
 3. Build the in-memory frame manifest: one entry per Visual Acceptance Criteria row — `{node_id, route, preconditions, auth_mode, viewport: {width, height}, diff_threshold, ref_png, masks, interaction}`. Read the row's `Interaction` column (the 9th column, added by Phase 1 of this same PRD to `${CLAUDE_PLUGIN_ROOT}/resources/design-spec-template.md`); when the column is absent from a given Design Spec (a pre-Phase-5 spec) or the cell is empty, set `interaction: "none"` — the exact no-op sentinel `capture.mjs`'s `parseInteractionScript` treats as zero steps (Phase 5 Task 1 of `figma-visual-first-track.prd.md`).
-4. Derive `fidelity_report_path` per the Inputs section above. `Bash`: `mkdir -p` its parent directory.
+4. Derive `fidelity_report_path` per the Inputs section above. `Bash`: `mkdir -p` its parent directory. Derive `baseline_dir` per the same section; do NOT create it — its absence is the signal that no frame has been approved yet.
 
 ### Step 1 — Provision
 
@@ -115,7 +140,7 @@ Run `node ${CLAUDE_PLUGIN_ROOT}/scripts/visual/provision.mjs` via `Bash`. Branch
 2. Run `node ${CLAUDE_PLUGIN_ROOT}/scripts/visual/capture.mjs <manifest.json> <visual/<attempt>/captured/> [devServerUrl]` via `Bash`. This internally calls `waitForDevServer` before navigating.
    - If capture reports a dev-server readiness-probe timeout (non-zero exit, `CAPTURE_FAILED_DEV_SERVER_TIMEOUT` on stderr) — the dev server never became ready. Set `rung = "DEGRADED_STATIC_ONLY"`. Skip `compare.mjs`; go to Step 3.
    - On success (exit `0`), proceed.
-3. Run `node ${CLAUDE_PLUGIN_ROOT}/scripts/visual/compare.mjs <manifest.json> <visual/<attempt>/captured/> <fidelity_report_path>` via `Bash`. This writes `fidelity-report.json` directly — you do not write it yourself on this rung.
+3. Run `node ${CLAUDE_PLUGIN_ROOT}/scripts/visual/compare.mjs <manifest.json> <visual/<attempt>/captured/> <fidelity_report_path> <baseline_dir>` via `Bash`. This writes `fidelity-report.json` directly — you do not write it yourself on this rung — plus one diff overlay PNG per diffed frame at `<visual/<attempt>/diff/<node-id>.png>`, recorded in each entry's `diff_png` field. Pass `baseline_dir` even when it does not exist; `compare.mjs` falls back to the frame's Figma `ref_png` per frame, marking those frames `NO_BASELINE`. A non-zero exit here does NOT mean the tooling failed: it is also the exit code for a run with failing or unbaselined frames, so always `Read` the report rather than branching on the exit code alone.
 4. `Read` the just-written `fidelity_report_path` to build the classification input for Step 4. Set `rung = "FULL"`.
 
 ### Step 3 — Degraded static check (either degraded rung)
@@ -146,8 +171,9 @@ Runs when `rung` is `DEGRADED_STATIC_ONLY` or `DEGRADED_PROVISION_FAILED` (Step 
 Read the final `fidelity_report_path` contents (written by either Step 2 or Step 3) and classify, in this order (first match wins):
 
 1. **A degradation rung was hit** (`rung != "FULL"`) → `VISUAL_DEGRADED`. Always non-blocking (AC-A1/AC-A4) regardless of the per-frame `token_conformant` values — token conformance is recorded per-frame in `fidelity-report.json` and surfaced in your return payload's `degraded_conformance_gaps` list (frames with `token_conformant: false`), but it never escalates a degraded rung to `VISUAL_MISMATCH`. A degraded rung never silently claims full pixel-level fidelity.
-2. **FULL rung, all frames `PASS`** → `VISUAL_VERIFIED`.
-3. **FULL rung, at least one frame `FAIL`** → before ever returning `VISUAL_MISMATCH`, perform content-vs-style triage on each `FAIL` frame: re-examine the frame's `preconditions` and its `masks` list to confirm the failure is a genuine style regression, not dynamic content the frame's own masks should have covered (a mask gap is a Design Spec defect, not an implementation defect — still triage-classified as `VISUAL_MISMATCH` since this pipeline has no other channel for it, but your return payload's `claim` field names the mask-gap possibility explicitly so a human reading the report can tell the two apart). Never downgrade a genuinely `FAIL` frame to `VISUAL_VERIFIED` on your own authority — the frame's `FAIL` status in `fidelity-report.json` stands regardless of what the triage concludes about *why* it failed.
+2. **FULL rung, at least one frame `NO_BASELINE`, none `FAIL`** → set `rung = "DEGRADED_NO_BASELINE"` and return `VISUAL_DEGRADED`. Those frames were diffed against the Figma export because no human-approved baseline exists for them yet, and that number does not order defects (`compare.mjs`'s header records the field measurement: two genuinely broken layouts scored BELOW the correct one against the same Figma reference). Never read a `NO_BASELINE` frame as a pass: the honest statement is that this frame has not been verified automatically and needs human visual approval, which is exactly what `/relay-visual-approve` provides — and approving it is also what creates the baseline that makes every subsequent run of this frame a real gate. List every such frame in the return payload's `unbaselined_frames`.
+3. **FULL rung, all frames `PASS`** → `VISUAL_VERIFIED`.
+4. **FULL rung, at least one frame `FAIL`** → before ever returning `VISUAL_MISMATCH`, perform content-vs-style triage on each `FAIL` frame: re-examine the frame's `preconditions` and its `masks` list to confirm the failure is a genuine style regression, not dynamic content the frame's own masks should have covered (a mask gap is a Design Spec defect, not an implementation defect — still triage-classified as `VISUAL_MISMATCH` since this pipeline has no other channel for it, but your return payload's `claim` field names the mask-gap possibility explicitly so a human reading the report can tell the two apart). Never downgrade a genuinely `FAIL` frame to `VISUAL_VERIFIED` on your own authority — the frame's `FAIL` status in `fidelity-report.json` stands regardless of what the triage concludes about *why* it failed.
 
 ---
 
@@ -166,9 +192,11 @@ VISUAL_VERIFIED:
 VISUAL_DEGRADED:
   fidelity_report_path: <path>
   frames_checked: <N>
-  rung: DEGRADED_STATIC_ONLY | DEGRADED_PROVISION_FAILED
+  rung: DEGRADED_STATIC_ONLY | DEGRADED_PROVISION_FAILED | DEGRADED_NO_BASELINE
   degraded_conformance_gaps:
     - <node_id>: token_conformant=false
+  unbaselined_frames:
+    - <node_id>: diff_percent=<X> (advisory, vs. Figma export — not a gate)
 ```
 
 ```
@@ -192,6 +220,8 @@ VISUAL_MISMATCH:
 - **Silently skipping a degradation-ladder rung.** Every provisioning/capture outcome resolves to `FULL`, `DEGRADED_STATIC_ONLY`, or `DEGRADED_PROVISION_FAILED` — never an unclassified fourth state.
 - **Claiming FULL-rung fidelity on a degraded rung.** `VISUAL_VERIFIED` is reserved for the true FULL rung with every frame `PASS`; a degraded rung always returns `VISUAL_DEGRADED`, never `VISUAL_VERIFIED`, regardless of token conformance.
 - **Mutating a reference PNG.** Masking operates on in-memory copies only (`compare.mjs`'s own contract); this agent never touches `PRPs/designs/<feature>/refs/` at all.
+- **Reading a `NO_BASELINE` frame as a pass.** A frame diffed against the Figma export carries a permanent design-vs-implementation delta (fonts, spacing, and above all mock placeholders vs. real data). Its percentage is advisory; `VISUAL_VERIFIED` is never returned for a run containing one.
+- **Claiming an element is missing because the number did not move.** See Hard constraint 4b — inspect `diff_png` first, always.
 - **Recommending or applying a fix.** You classify; `/relay-implement`'s Phase A.3.4 owns the post-visual fix-round dispatch and the deterministic revert.
 - **Prompting the user.** The interactivity boundary is fixed at PRD approval; this agent runs deep inside the autonomous stretch.
 

@@ -396,6 +396,46 @@ Three sub-checks, all of which must pass:
   `## Acceptance Criteria (test scenarios)` section. A plan AC-A
   item with no PRD reference, or a reference to a non-existent
   PRD AC-N, fails R8b.
+
+  **Pertinence (recorded, never blocking).** Existence is all R8b
+  gates: any syntactically valid, existing `AC-<N>` satisfies it,
+  which makes a façade citation indistinguishable from a correct one
+  (observed in the field: an `AC-A4` cited `AC-11` while its content
+  matched `AC-10`; R8b passed and only the advisory
+  `R-COH-OTHER-INTERNAL-CONTRADICTION` caught it). So when the cited
+  AC's subject matter plainly does not correspond to the `AC-A<i>`
+  statement, still emit R8b as `passed: true`, but append to its
+  `reason` the marker `PERTINENCE_DOUBT: AC-A<i> cites AC-<N>
+  ("<short quote from the PRD AC>") but states "<short quote from the
+  plan AC-A>"; verify the citation`. This adds no rubric row, changes
+  no verdict, and never blocks — it exists so a mis-citation is
+  visible in `review.jsonl` instead of invisible.
+
+  **Impasse detection (blocking, names the PRD as the cause).** R8b
+  and `R-COH-AC-TASK-DECOUPLED` become mutually unsatisfiable when the
+  phase legitimately delivers behavior that NO PRD AC describes — the
+  phase row's `Description` assigns it, but the PRD's own
+  `## Acceptance Criteria` has no criterion for it. The plan then has
+  no local move: writing a local `AC-A` item fails R8b (nothing valid
+  to cite), and omitting it fails `R-COH-AC-TASK-DECOUPLED` (behavior
+  delivered with no AC). Before emitting an R8b failure, check for
+  exactly this shape: an `AC-A<i>` (or an un-criteria'd task) whose
+  behavior no PRD `AC-<N>` covers. When it holds, R8b still fails —
+  but its `reason` MUST open with the literal token `PRD_AC_GAP:` and
+  state that the defect is in the source PRD, not in the plan, naming
+  the uncovered behavior and the PRD path. The `CHANGES_REQUESTED`
+  bullet list must then carry, verbatim:
+
+  > This plan cannot satisfy both R8b and `R-COH-AC-TASK-DECOUPLED`
+  > for `<behavior>`: the source PRD assigns the behavior in its
+  > Implementation Phases row but defines no Acceptance Criterion for
+  > it. Re-authoring the plan cannot fix this. Amend
+  > `<prd_path>`'s `## Acceptance Criteria (test scenarios)` to add
+  > the missing criterion, then re-run `/relay-plan`.
+
+  Never emit a plain R8b failure for this shape and leave the writer
+  to look for a local escape that does not exist — in the field that
+  burned three attempts before the real cause (the PRD) was found.
 - **R8c — Source PRD back-fill.** Extract `<N>` from the plan
   filename suffix (`...-phase-<N>-<slug>.plan.md`). If the filename
   does not match this pattern (hand-renamed plan), R8c fails with
