@@ -88,6 +88,29 @@
  * already applies to AC-A2/AC-A3's own EXISTING_TEST_COVERS mappings above.
  * Properties (2) and (4) remain live, in-scope, and untouched below.
  *
+ * FOLLOW-UP (2026-08-27b, see PRPs/reports/line-endings-root-cause/
+ * test-suite.diff's "Follow-up: over-specified changelog assertion" section
+ * for the full lifecycle ledger): the release-cut test below was originally
+ * authored as "...with exactly one, genuinely empty, fresh Unreleased block
+ * above it" — a snapshot of the instant the 0.35.0 release was cut, when
+ * Unreleased had just been emptied, pinned as though it were a permanent
+ * invariant. Unreleased exists to accumulate entries between releases (see
+ * the changelog's own "How to read" callout), so the "genuinely empty"
+ * clause forbade the very next legitimate entry — and did, the moment the
+ * post-release line-endings root-cause fix added mandatory Added/Fixed
+ * entries under Unreleased per documentation/AGENTS.md. This is a
+ * correction of an over-specified assertion, not an accommodation of a
+ * failing change: EXISTING_TEST_UPDATED, not OBSOLETE_TEST_REMOVED, because
+ * the real, permanent invariant it also pinned — the 0.35.0 heading exists,
+ * well-formed, with exactly one Unreleased heading positioned above it — is
+ * still live and still worth catching a regression in (a duplicate or
+ * misplaced Unreleased block is a real defect). Retargeted to assert only
+ * that permanent shape; the emptiness clause is dropped, and the title no
+ * longer claims it. A companion test proves the narrowed assertion is still
+ * discriminative against three concrete violations, using in-memory mutated
+ * copies of the real content — it never mutates documentation/changelog.html
+ * itself.
+ *
  * Every section-range extraction below asserts the extraction itself
  * succeeded (a defined, discoverable boundary) BEFORE any content
  * comparison — an empty-vs-empty comparison is never allowed to pass
@@ -417,7 +440,15 @@ test('AC-8: decisions.html mirrors both new entries as numbered entries 90-91 (k
 
 // ---------------------------------------------------------------------------
 // AC-8 (release cut) — documentation/changelog.html carries the 0.35.0
-// release heading and a genuinely fresh, empty Unreleased block above it.
+// release heading, well-formed, with exactly one Unreleased heading
+// positioned above it. Deliberately does NOT assert anything about what
+// currently sits between the two headings — Unreleased exists precisely to
+// accumulate Added/Fixed/Changed entries between releases (see the
+// changelog's own "How to read" callout), so a genuinely-empty-between-
+// headings assertion is only ever true for the single instant a release is
+// cut and is guaranteed to go red the moment the very next entry is
+// legitimately recorded there. See the file's FOLLOW-UP (2026-08-27b)
+// docstring note above for the full correction rationale.
 // Deliberately does NOT read plugin.json's LIVE version field — mirroring
 // docs-sync-phase4.test.mjs's 2026-07-29 EXISTING_TEST_UPDATED lifecycle
 // lesson, a literal live-version equality is release-cut-fragile (it goes
@@ -427,33 +458,102 @@ test('AC-8: decisions.html mirrors both new entries as numbered entries 90-91 (k
 // PERMANENT, DATED historical bump prose, which never changes once written.
 // ---------------------------------------------------------------------------
 
-test('AC-8: changelog.html cuts the 0.35.0 release heading with exactly one, genuinely empty, fresh Unreleased block above it', () => {
-  const content = readRepoFile(CHANGELOG_PATH);
-
+/**
+ * Asserts the changelog's permanent release-cut shape invariant: the 0.35.0
+ * release heading exists verbatim, and there is exactly one
+ * `id="unreleased"` heading positioned above it. Deliberately silent on
+ * what accumulates BETWEEN the two headings (see the comment block above).
+ * Throws a node:assert AssertionError on violation, so the same check can be
+ * exercised both against the real file and against in-memory mutated copies
+ * to prove it remains discriminative.
+ * @param {string} content
+ */
+function assertReleaseCutInvariant(content) {
   assert.ok(
     content.includes('<h2 id="v0-35-0">0.35.0 &#8212; 2026-08-27</h2>'),
     'expected the 0.35.0 release heading'
   );
 
   const unreleasedCount = (content.match(/<h2 id="unreleased">/g) || []).length;
-  assert.equal(unreleasedCount, 1, `expected exactly one fresh Unreleased heading, found ${unreleasedCount}`);
+  assert.equal(unreleasedCount, 1, `expected exactly one Unreleased heading, found ${unreleasedCount}`);
 
-  const between = linesBetween(
-    content,
-    /^\s*<h2 id="unreleased">Unreleased<\/h2>/,
-    /^\s*<h2 id="v0-35-0">/
-  );
-  // Extraction must succeed (both boundaries found) BEFORE checking the
-  // captured region is empty — a missing boundary must never be silently
-  // read as "zero content", which would let a deleted heading pass too.
+  const unreleasedIdx = content.indexOf('<h2 id="unreleased">');
+  const releaseIdx = content.indexOf('<h2 id="v0-35-0">0.35.0 &#8212; 2026-08-27</h2>');
   assert.ok(
-    between !== undefined,
-    'expected an extractable region between the Unreleased heading and the 0.35.0 release heading'
+    unreleasedIdx !== -1 && releaseIdx !== -1,
+    'expected both the Unreleased heading and the 0.35.0 release heading to be present before comparing position'
   );
-  assert.equal(
-    between.trim(),
-    '',
-    'expected zero accumulated content between the freshly-cut Unreleased heading and the new 0.35.0 release heading'
+  assert.ok(
+    unreleasedIdx < releaseIdx,
+    `expected the Unreleased heading (index ${unreleasedIdx}) to be positioned above the 0.35.0 release heading (index ${releaseIdx})`
+  );
+}
+
+test('AC-8: changelog.html cuts the 0.35.0 release heading with exactly one Unreleased heading positioned above it', () => {
+  const content = readRepoFile(CHANGELOG_PATH);
+  assertReleaseCutInvariant(content);
+});
+
+test('AC-8: the release-cut shape invariant is discriminative, not vacuous — it still fails against in-memory mutated copies missing the heading, carrying a duplicate Unreleased heading, or with Unreleased repositioned below the release heading', () => {
+  const content = readRepoFile(CHANGELOG_PATH);
+  const unreleasedHeading = '<h2 id="unreleased">Unreleased</h2>';
+  const releaseHeading = '<h2 id="v0-35-0">0.35.0 &#8212; 2026-08-27</h2>';
+
+  // Mutation 1: the 0.35.0 release heading is removed.
+  const withoutReleaseHeading = content.replace(releaseHeading, '');
+  assert.notEqual(
+    withoutReleaseHeading,
+    content,
+    'expected this mutation to actually remove the release heading it targets'
+  );
+  assert.throws(
+    () => assertReleaseCutInvariant(withoutReleaseHeading),
+    /0\.35\.0 release heading/,
+    'expected the invariant to fail when the 0.35.0 release heading is removed'
+  );
+
+  // Mutation 2: a second Unreleased heading is injected.
+  const withDuplicateUnreleased = content.replace(
+    unreleasedHeading,
+    `${unreleasedHeading}\n      ${unreleasedHeading}`
+  );
+  assert.notEqual(
+    withDuplicateUnreleased,
+    content,
+    'expected this mutation to actually inject a duplicate Unreleased heading'
+  );
+  assert.throws(
+    () => assertReleaseCutInvariant(withDuplicateUnreleased),
+    /exactly one Unreleased heading/,
+    'expected the invariant to fail when a second Unreleased heading is present'
+  );
+
+  // Mutation 3: Unreleased is repositioned BELOW the 0.35.0 release heading
+  // (strip the one true occurrence, then reinsert it immediately after the
+  // release heading's own line).
+  const withoutUnreleased = content.replace(unreleasedHeading, '');
+  assert.notEqual(
+    withoutUnreleased,
+    content,
+    'expected this mutation to actually remove the Unreleased heading before reinserting it lower'
+  );
+  const releaseIdxInStripped = withoutUnreleased.indexOf(releaseHeading);
+  assert.ok(releaseIdxInStripped !== -1, 'expected the release heading to survive the strip step');
+  const insertionPoint = withoutUnreleased.indexOf('\n', releaseIdxInStripped) + 1;
+  assert.ok(insertionPoint > 0, 'expected a newline after the release heading to insert after');
+  const withUnreleasedBelow =
+    withoutUnreleased.slice(0, insertionPoint) +
+    unreleasedHeading + '\n' +
+    withoutUnreleased.slice(insertionPoint);
+  assert.notEqual(
+    withUnreleasedBelow,
+    content,
+    'expected this mutation to actually reposition the Unreleased heading'
+  );
+  assert.throws(
+    () => assertReleaseCutInvariant(withUnreleasedBelow),
+    /positioned above/,
+    'expected the invariant to fail when Unreleased is positioned below the 0.35.0 release heading'
   );
 });
 

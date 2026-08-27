@@ -30,6 +30,38 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
+      <h3 id="unreleased-added">Added</h3>
+      <ul>
+        <li><strong><code>npm run validate</code> &mdash; new <code>line-endings</code> check</strong>
+          (the 16th). Asserts that a root <code>.gitattributes</code> declares repo-wide
+          <code>eol=lf</code> and that no tracked text file carries CRLF, reporting executable
+          scripts separately because a CRLF shebang fails outright on Unix. See
+          <a href="reference/validation-checks.html#line-endings">Validation checks</a>.</li>
+      </ul>
+
+      <h3 id="unreleased-fixed">Fixed</h3>
+      <ul>
+        <li><strong>Line endings are now repository policy</strong> &mdash; a root
+          <code>.gitattributes</code> (<code>* text=auto eol=lf</code>) replaces reliance on each
+          developer's local <code>core.autocrlf</code>, which does not travel with a clone. 424 of 705
+          tracked text files were CRLF in a Windows working tree. Two real defects followed:
+          <code>.githooks/pre-commit</code> and both <code>plugins/prp-core/hooks/*.sh</code> carried a
+          <code>#!/bin/bash&#92;r</code> shebang, which fails on Unix with
+          <code>bad interpreter: ^M</code>; and content-invariant tests slicing on a literal
+          <code>&quot;&#92;n&quot;</code> changed meaning between platforms. The blobs were already stored
+          with LF, so declaring the policy changed no versioned content &mdash; verified with
+          <code>git add --renormalize .</code>, which staged zero files beyond
+          <code>.gitattributes</code> itself.</li>
+        <li><strong><code>relay-field-findings-2026-08.test.mjs</code></strong> &mdash; the corpus's only
+          failing test. It sliced a function body with <code>indexOf('&#92;n}&#92;n')</code>, which returns
+          <code>-1</code> on a CRLF checkout, collapsing the slice to a two-character string; the
+          assertions then ran against that instead of the function, failing a correct implementation.
+          Green on CI, red on Windows. Normalized in the file's shared reader; no assertion was weakened.</li>
+        <li><strong><a href="reference/validation-checks.html">Validation checks</a></strong> and
+          <code>CLAUDE.md</code> &mdash; check counts corrected to 16, and the new check documented with a
+          summary row and a section.</li>
+      </ul>
+
       <h2 id="v0-35-0">0.35.0 &#8212; 2026-08-27</h2>
 
       <p>Ships <code>test-formatting-prevention-preflight</code>: the <code>formatter_cmd</code> contract (deterministic frontmatter/<code>scripts.format</code> discovery, never heuristic), command-layer Prevention in <code>/relay-write-test</code> (suites born formatter-clean), Preflight normalization in <code>/relay-implement</code> before the R-X inspection window opens, and the R-SEM prose clarification (a reviewer finding is never self-executing test-edit authorization) &mdash; zero R-X/D17 carve-outs throughout. Plugin manifest bumped <code>0.34.0</code> &rarr; <code>0.35.0</code> per <a href="AGENTS.md">AGENTS.md</a> &sect;7.5.</p>

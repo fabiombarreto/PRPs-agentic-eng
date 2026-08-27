@@ -31,6 +31,7 @@ import { runPluginRootResolvableCheck } from './checks/plugin-root-resolvable.mj
 import { runMetricsIsolationCheck } from './checks/metrics-isolation.mjs';
 import { runDecisionsMirrorCheck } from './checks/decisions-mirror.mjs';
 import { runAntiPatternsMirrorCheck } from './checks/anti-patterns-mirror.mjs';
+import { runLineEndingsCheck } from './checks/line-endings.mjs';
 
 function die(code, msg) {
   process.stderr.write(msg + '\n');
@@ -56,6 +57,7 @@ const CHECKS = [
   runMetricsIsolationCheck,
   runDecisionsMirrorCheck,
   runAntiPatternsMirrorCheck,
+  runLineEndingsCheck,
 ];
 
 function runChecks(checks) {

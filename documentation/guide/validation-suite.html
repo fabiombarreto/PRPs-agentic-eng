@@ -109,7 +109,7 @@ npm run setup-hooks         # one-time: install the pre-commit gate</code></pre>
 [FAIL] registration-parity
   documentation/assets/data/search-index.json — command "relay-worktree" is registered under plugins/relay/commands/ but is not referenced in the search index
 ...
-8 passed, 7 failed (15 checks run)</code></pre>
+9 passed, 7 failed (16 checks run)</code></pre>
 
       <p>After <code>npm run setup-hooks</code>, the same command runs automatically on every <code>git commit</code> and blocks the commit on any violation. The hook is committed under <code>.githooks/</code>; <code>setup-hooks</code> points git's <code>core.hooksPath</code> at it (a per-clone git-config step, not auto-applied on clone).</p>
 
