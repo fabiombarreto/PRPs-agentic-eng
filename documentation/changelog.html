@@ -30,7 +30,82 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <p><em>No changes queued yet.</em></p>
+      <h2 id="v0-35-0">0.35.0 &#8212; 2026-08-27</h2>
+
+      <p>Ships <code>test-formatting-prevention-preflight</code>: the <code>formatter_cmd</code> contract (deterministic frontmatter/<code>scripts.format</code> discovery, never heuristic), command-layer Prevention in <code>/relay-write-test</code> (suites born formatter-clean), Preflight normalization in <code>/relay-implement</code> before the R-X inspection window opens, and the R-SEM prose clarification (a reviewer finding is never self-executing test-edit authorization) &mdash; zero R-X/D17 carve-outs throughout. Plugin manifest bumped <code>0.34.0</code> &rarr; <code>0.35.0</code> per <a href="AGENTS.md">AGENTS.md</a> &sect;7.5.</p>
+
+      <h3 id="v0-35-0-changed">Changed</h3>
+      <ul>
+        <li><strong><a href="governance/decisions.html">Decisions</a></strong>
+          &mdash; entry 89 mirrors the new <code>docs/decisions.md</code>
+          (2026-08-26) decision
+          "<a href="governance/decisions.html#test-formatting-command-layer">Test-formatting
+          prevention runs at the command layer, never inside
+          <code>test-writer</code></a>", restoring the decisions-mirror
+          invariant that <code>npm run validate</code>'s
+          <code>decisions-mirror</code> check enforces (index row plus a new
+          entry 89 with date / context / decision / reason).</li>
+        <li><strong><a href="governance/decisions.html">Decisions</a></strong>
+          &mdash; entry 90 mirrors the new <code>docs/decisions.md</code>
+          (2026-08-27) decision
+          "<a href="governance/decisions.html#preflight-baseline-normalization">Test-file
+          formatting is normalized before <code>base_commit</code>/<code>diff_target</code>
+          capture</a>", the Preflight half of the fix.</li>
+        <li><strong><a href="governance/decisions.html">Decisions</a></strong>
+          &mdash; entry 91 mirrors the new <code>docs/decisions.md</code>
+          (2026-08-27) decision
+          "<a href="governance/decisions.html#r-sem-prose-clarification">Reviewer
+          findings are never self-executing test-edit authorization</a>".</li>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.34.0</code> &rarr; <code>0.35.0</code> to
+          match this release; users running <code>/plugin</code> after pulling
+          this version will get a fresh <code>relay/0.35.0/</code> cache directory
+          with all newly-shipped commands and agents registered.</li>
+        <li><strong>Stale check counts corrected</strong> &mdash; <code>CLAUDE.md</code>
+          advertised "12 static consistency checks" and
+          <a href="reference/validation-checks.html">Validation checks</a> totalled 12; the
+          suite had actually grown to 14 and now runs 15. Both now read 15, and the
+          <a href="guide/validation-suite.html">Validation suite</a> guide's sample output
+          totals 15 rather than 12.</li>
+        <li><strong><a href="reference/validation-checks.html">Validation checks</a></strong>
+          &mdash; <code>metrics-isolation</code> and <code>decisions-mirror</code> were
+          registered checks this page had never documented; both now carry a summary row and
+          a section, alongside the new <code>anti-patterns-mirror</code>. The page's inventory
+          and its totals line now agree with the suite.</li>
+      </ul>
+
+      <h3 id="v0-35-0-added">Added</h3>
+      <ul>
+        <li><strong><a href="governance/anti-patterns.html">Anti-patterns</a></strong>
+          &mdash; three new entries mirrored from <code>docs/anti-patterns.md</code>:
+          "<a href="governance/anti-patterns.html#formatter-cmd-heuristic-inference">Inferring
+          <code>formatter_cmd</code>'s value or invocation source outside its
+          declared discovery chain</a>",
+          "<a href="governance/anti-patterns.html#r-sem-not-authorization">Treating
+          an R-SEM finding as self-executing test-edit authorization</a>", and
+          "<a href="governance/anti-patterns.html#dispute-for-formatting">Opening
+          <code>TEST_CONTRACT_DISPUTE</code> for formatting</a>".</li>
+        <li><strong><code>npm run validate</code> &mdash; new
+          <code>anti-patterns-mirror</code> check</strong> (the 15th), sibling of
+          <code>decisions-mirror</code>: it compares <code>docs/anti-patterns.md</code>'s entry
+          headings against <code>governance/anti-patterns.html</code>'s numbered
+          <code>&lt;h2&gt;</code> entries and index rows, and asserts the numbering runs 1..N
+          with no gap or duplicate. Anti-patterns had no mechanical parity guard and drifted
+          twice on the record &mdash; most recently to 10 site entries against 15 in the
+          markdown, with nothing failing. The Decision Gate reads the markdown, so a forbidden
+          pattern missing from the site is binding on agents while invisible to readers; that
+          asymmetry is now a build failure rather than a silent gap. See
+          <a href="reference/validation-checks.html#anti-patterns-mirror">Validation
+          checks</a>.</li>
+        <li><strong><a href="governance/anti-patterns.html">Anti-patterns</a></strong>
+          &mdash; the two remaining unmirrored entries were closed at the same time, so the new
+          check passes on a genuinely complete page:
+          "<a href="governance/anti-patterns.html#figma-quota-backoff">Sleeping, retrying, or
+          backing off against a Figma MCP quota error</a>" (14) and
+          "<a href="governance/anti-patterns.html#wholesale-confidence-downgrade">Wholesale
+          confidence downgrade on a degraded Figma rung</a>" (15). Both date from the
+          <code>figma-quota-resilience</code> work and had been missing from the site since.</li>
+      </ul>
 
       <h2 id="v0-34-0">0.34.0 &#8212; 2026-08-20</h2>
 

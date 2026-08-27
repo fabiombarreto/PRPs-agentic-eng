@@ -597,6 +597,7 @@ test_frameworks: []       # array of frameworks detected in the scan (informativ
 docs_sync: true           # true | false — per-project master switch for automated docs/ sync (docs-updater/docs-reviewer)
 figma_track: false        # true | false — opt-in switch for the Figma implementation track (design-to-code); default off, never heuristically flipped
 visual_first_approval: auto  # auto | human — default approval mode for the Figma Visual-First Track's visual-first blocking gate; only meaningful when figma_track: true
+formatter_cmd: null   # null | "<command string>" — project formatter command; null means undeclared; never heuristically inferred
 ---
 
 # Methodology
@@ -659,6 +660,14 @@ in CONTRIBUTING.md / README.md. None of these activate TDD on their own.]
   (`/relay-visual-approve` records a per-phase approval decision on
   that phase's `halt.json`; it never edits this file) — and never by
   heuristic detection. Only meaningful when `figma_track: true`.
+- Always emit `formatter_cmd: null` — the per-project declared formatter
+  command defaults to undeclared, mirroring the `tdd_evidence: null`
+  default-emission precedent verbatim. Never heuristically inferred from
+  `package.json` `scripts.format`, installed devDependencies, or config
+  files — that fallback is a later phase's own runtime discovery at
+  formatting time, never a value written back into this file; always
+  emitted deterministically on every `*init` run. Flips away from `null`
+  only via a human edit to this file.
 
 **Update behavior:**
 
@@ -697,6 +706,13 @@ in CONTRIBUTING.md / README.md. None of these activate TDD on their own.]
     `*update` adds this key; never remove or flip an existing value.
     Heuristics MUST NOT flip this value — only a human edit can
     (no command flips it).
+  - **`formatter_cmd` preservation**: if `formatter_cmd` is already
+    present in the frontmatter (including an explicit `null`), preserve
+    its value untouched — same treatment as `tdd`/`docs_sync`. If the
+    key is entirely absent, backfill `formatter_cmd: null` — the ONLY
+    case `*update` adds this key; never remove or flip an existing
+    non-null value, and never infer one from `package.json`
+    `scripts.format` or any other project file.
 - If the file is missing: run Init behavior.
 
 **Reporting (both modes):**

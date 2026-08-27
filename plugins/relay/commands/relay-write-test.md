@@ -219,6 +219,83 @@ The Writer's Phase 3.2 confirmation (`DRAFT TDD suite written
 to ...`) is the terminal signal. Surface it verbatim to the user
 and exit.
 
+## Phase A.4 — Command-layer formatting (Prevention)
+
+This step runs only when the Writer's Phase 3.2 confirmation
+reports `SUITE_DRAFT_WRITTEN` or `EXISTING_COVERAGE_SUFFICIENT` —
+never on an `AMBIGUOUS` halt.
+
+### A.4.1 — Collect the suite's touched test-file paths
+
+Read the just-written `test-suite.diff` manifest. The touched-file
+set = every path under "## Test files written this session" UNION
+every UPDATE-classified lifecycle-ledger row's file component.
+DELETE rows name a file that no longer exists, so they are
+excluded; `EXISTING_TEST_COVERS` mappings are excluded — that file
+was not touched this session.
+
+If the touched-file set is empty, skip straight to A.4.4 and
+record: "no test files touched this session — formatter not
+invoked (nothing to format)".
+
+### A.4.2 — Deterministic formatter discovery chain
+
+Three branches, tried in order — never heuristic:
+
+- (a) Read `<target_root>/docs/context/methodology.md` frontmatter
+  and extract `formatter_cmd`. If present, non-null, non-empty:
+  `formatter_cmd = <value>`, `discovery_source = "methodology.md
+  formatter_cmd"`. Proceed to A.4.3.
+- (b) Else read `<target_root>/package.json`. If `scripts.format`
+  is a non-empty string: `formatter_cmd = "npm run format --"`
+  (npm's documented `--` pass-through convention routes appended
+  file-path arguments into the underlying script),
+  `discovery_source = "package.json scripts.format"`. Proceed to
+  A.4.3.
+- (c) Else `formatter_cmd = null`, `discovery_source = "none — no
+  formatter_cmd in methodology.md frontmatter and no package.json
+  scripts.format"`. Record this **omission** explicitly at A.4.4 —
+  never silently.
+
+### A.4.3 — Invoke, scoped to the touched-file set ONLY
+
+When `formatter_cmd` is non-null, run
+`Bash("<formatter_cmd> <touched_file_1> <touched_file_2> ...")` —
+the literal touched-file paths from A.4.1 appended as trailing
+arguments, never a glob and never the whole repo (PRD Risk R1).
+Capture stdout, stderr, and exit code via `BashOutput`.
+
+- Exit code 0 → outcome = "formatted" (best-effort capture of
+  which files the tool itself reports changed, falling back to the
+  touched-file list if the tool is silent on this).
+- Non-zero exit → outcome = "formatter invocation failed"; this is
+  recorded but does **not** halt the command.
+
+### A.4.4 — Record the outcome on the suite manifest
+
+`Edit` `<target_root>/PRPs/reports/<feature>/test-suite.diff` with:
+
+- `old_string`: `"\n## Status\n\n*Status: DRAFT*"`
+- `new_string`: `"\n## Formatting Outcome\n\n<rendered outcome
+  block>\n\n## Status\n\n*Status: DRAFT*"`
+- `replace_all`: `false`
+
+`<rendered outcome block>` is one of four shapes:
+
+- **formatted** — command used, discovery source, files touched.
+- **formatter invocation failed** — command attempted, discovery
+  source, exit code, and a note that the DRAFT suite is still
+  surfaced unmodified in outcome.
+- **nothing to format** — the A.4.1 empty-set note.
+- **omitted** — the A.4.2 branch-(c) discovery-chain-attempted
+  note.
+
+If the `Edit` fails (the trailing block text did not match
+exactly): this is a **soft-fail** — surface a warning in the
+command's own narration (not a HALT), proceed to Final output
+surface with `*Status: DRAFT*` intact and the formatting outcome
+explicitly noted as unrecorded in that surfaced warning.
+
 **There is no Phase B.** Reviewer adoption is the
 `/relay-test-write-review` command's job. This command is single-role by
 design — the writer/reviewer split is the canonical post-PRD
@@ -251,7 +328,14 @@ On success, the last user-facing message is `test-writer`'s Phase
 > Test files written: <count> (paths in the .diff manifest).
 > Run /relay:relay-test-write-review PRPs/reports/<feature>/test-suite.diff to validate.
 
-Surface it verbatim. Do not append anything.
+Followed by one command-owned line summarizing the Phase A.4
+outcome:
+
+> Formatting: <formatted <n> files via <source> | formatter
+> invocation failed (exit <code>) — DRAFT suite surfaced unmodified
+> | omitted — no formatter discoverable | nothing to format>.
+
+Surface both lines verbatim. Do not append anything else.
 
 On halt or self-skip exit, the user-facing message is the
 P4 / P5 / Writer halt message verbatim and the command exits without
@@ -293,10 +377,23 @@ NOT invoked in any halt or self-skip case.
 - **Never activate by heuristic.** The only signal is `tdd: true`
   in `methodology.md`. Existence of test folders, CI jobs, high
   coverage, etc., MUST NOT activate this command.
+- **Never invoke the formatter unscoped.** The `Bash` command Phase
+  A.4.3 runs is built by appending the explicit touched-file-path
+  list from A.4.1; never a bare `formatter_cmd` call, never `.`,
+  never a glob.
+- **A failing or unconfigured formatter never blocks suite
+  authoring.** A.4.3's non-zero-exit branch and A.4.2's omission
+  branch both record and continue; the Writer's DRAFT suite is
+  always surfaced.
 
 ---
 
 ## What you do NOT do
+
+- **Never add `Bash` to `test-writer`'s tools allowlist.**
+  Prevention ownership is the command layer (this file); the
+  agent's allowlist stays `Task, Read, Write, Edit, Glob`
+  (DECIDED constraint).
 
 - **Reviewing the suite** — `/relay-test-write-review` owns the rubric
   run + DRAFT→APPROVED flip + JSONL append.

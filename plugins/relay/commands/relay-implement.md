@@ -1,5 +1,5 @@
 ---
-description: 'Autonomous code generation from an APPROVED plan. Validates the plan path, runs preconditions, then adopts the implementer/code-reviewer pair via an internal writer↔reviewer loop with bounded retries (max_implement_retries=3), wall-clock budget (max_implement_minutes=45), oscillation detection always-on, dispute cap (max_disputes_per_session=2), per-attempt diff capture at PRPs/reports/<feature>/phase-<N>/attempts/<i>/diff.patch, and on APPROVED rubric dispatches a docs-sync sub-phase (Phase A.3.5 — docs-updater/docs-reviewer pair, non-interactive, own max_docs_review_retries=2 budget, gated by docs_sync/--no-docs, graceful degradation on budget exhaustion, docs pair grounded via explicit feature/prd_path inputs rather than orchestrator-run.json which does not exist yet at implement time) before performing all three D8 post-approval mutations atomically (plan trailing-block flip to *Status: IMPLEMENTED*, plan move to PRPs/plans/completed/, source PRD row N flip from in-progress to implemented — the later tested/complete transitions belong to /relay-execute). Reviewer adoption is single-shot via Task per attempt — there is no Phase B; the loop lives entirely inside Phase A.'
+description: 'Autonomous code generation from an APPROVED plan. Validates the plan path, runs preconditions — including a P5 formatting-preflight precondition ahead of base_commit (P6) — then adopts the implementer/code-reviewer pair via an internal writer↔reviewer loop with bounded retries (max_implement_retries=3), wall-clock budget (max_implement_minutes=45), oscillation detection always-on, dispute cap (max_disputes_per_session=2), per-attempt diff capture at PRPs/reports/<feature>/phase-<N>/attempts/<i>/diff.patch, and on APPROVED rubric dispatches a docs-sync sub-phase (Phase A.3.5 — docs-updater/docs-reviewer pair, non-interactive, own max_docs_review_retries=2 budget, gated by docs_sync/--no-docs, graceful degradation on budget exhaustion, docs pair grounded via explicit feature/prd_path inputs rather than orchestrator-run.json which does not exist yet at implement time) before performing all three D8 post-approval mutations atomically (plan trailing-block flip to *Status: IMPLEMENTED*, plan move to PRPs/plans/completed/, source PRD row N flip from in-progress to implemented — the later tested/complete transitions belong to /relay-execute). Reviewer adoption is single-shot via Task per attempt — there is no Phase B; the loop lives entirely inside Phase A.'
 argument-hint: <plan-path>
 ---
 
@@ -11,7 +11,7 @@ argument-hint: <plan-path>
 
 ## Your mission
 
-Validate the plan path argument, run the preconditions check, then run an internal writer↔reviewer loop that dispatches the `implementer` agent (Phase 1 of `implementation-authoring`, color: green) and the `code-reviewer` agent (Phase 2, color: magenta) once per attempt. Capture `git diff <base-commit>` to a per-attempt artifact after every attempt regardless of verdict. Enforce four orthogonal stop conditions (retry budget, wall-clock budget, oscillation detection, dispute cap) with distinct outcome codes. On APPROVED rubric, run a docs-sync dispatch (Phase A.3.5) that invokes the `docs-updater`/`docs-reviewer` pair non-interactively to sync `docs/` in the worktree — gated by `docs_sync` (`docs/context/methodology.md`) and a per-invocation `--no-docs` flag, with its own bounded retry budget that degrades gracefully (never blocks D8) on exhaustion, grounding the pair via explicit `feature`/`prd_path` inputs rather than `orchestrator-run.json` (which does not exist yet at implement time) — then perform all three D8 post-approval mutations atomically (best-effort) with rollback note on partial failure.
+Validate the plan path argument, run the preconditions check — including a P5 test-file formatting preflight that normalizes any not-yet-formatter-clean test files in the working tree before base_commit (P6) is computed — then run an internal writer↔reviewer loop that dispatches the `implementer` agent (Phase 1 of `implementation-authoring`, color: green) and the `code-reviewer` agent (Phase 2, color: magenta) once per attempt. Capture `git diff <base-commit>` to a per-attempt artifact after every attempt regardless of verdict. Enforce four orthogonal stop conditions (retry budget, wall-clock budget, oscillation detection, dispute cap) with distinct outcome codes. On APPROVED rubric, run a docs-sync dispatch (Phase A.3.5) that invokes the `docs-updater`/`docs-reviewer` pair non-interactively to sync `docs/` in the worktree — gated by `docs_sync` (`docs/context/methodology.md`) and a per-invocation `--no-docs` flag, with its own bounded retry budget that degrades gracefully (never blocks D8) on exhaustion, grounding the pair via explicit `feature`/`prd_path` inputs rather than `orchestrator-run.json` (which does not exist yet at implement time) — then perform all three D8 post-approval mutations atomically (best-effort) with rollback note on partial failure.
 
 You are autonomous. You do not prompt the user. You do not loop the writer↔reviewer pair across `/relay-implement` invocations — that is `/relay-execute`'s job. A single `/relay-implement` invocation produces zero or one APPROVED implementation; the loop is internal.
 
@@ -174,7 +174,86 @@ If any is missing, HALT with the source PRD AC-14 message verbatim:
 > (or /relay-code-review). No code has been changed and no review
 > has been run.
 
-### P5 — Base-commit derivable
+### P5 — Test-file formatting preflight
+
+Runs once per `/relay-implement` invocation, BEFORE `base_commit` is
+computed (P6 below) — so any formatting normalization this step
+performs is already present in the working tree by the time Phase
+A.2 captures its first `diff.patch`, rather than landing inside the
+window the code-reviewer's R-X rule and the plan's Level 1
+STATIC_ANALYSIS gate later inspect. Never HALTs: every branch below
+is a soft, recorded outcome.
+
+1. **Discover `formatter_cmd`.** Reuse the identical three-branch
+   discovery chain `/relay-write-test`'s Phase A.4.2 already ships
+   (`plugins/relay/commands/relay-write-test.md:241-258`) — do not
+   reimplement it:
+   - (a) Read `<target_root>/docs/context/methodology.md`
+     frontmatter and extract `formatter_cmd`. If present, non-null,
+     non-empty: `formatter_cmd = <value>`, `discovery_source =
+     "methodology.md formatter_cmd"`. Proceed to step 2.
+   - (b) Else read `<target_root>/package.json`. If `scripts.format`
+     is a non-empty string: `formatter_cmd = "npm run format --"`,
+     `discovery_source = "package.json scripts.format"`. Proceed to
+     step 2.
+   - (c) Else `formatter_cmd = null`, `discovery_source = "none — no
+     formatter_cmd in methodology.md frontmatter and no package.json
+     scripts.format"`. Record the omission at step 4 and skip to
+     step 5 — never silently, never a HALT.
+
+2. **Collect the canonical test-glob file set currently in the
+   working tree.** Run, via `Bash`:
+   `git ls-files --cached --others --exclude-standard -- '**/test_*.py' '**/tests/**/*.py' '**/*.test.ts' '**/*.test.tsx' '**/*.spec.ts' '**/*.spec.tsx' '**/*.test.js' '**/*.spec.js' '**/*_test.go' '**/tests/**/*.rb' '**/*_spec.rb' '**/__tests__/**' '**/*.test.rs' '**/*_test.rs' '**/*.test.jsx' '**/*.test.mjs' '**/*.test.cjs' '**/spec/**'`
+   — the SAME pathspec set `code-reviewer.md`'s R-X rule itself
+   inspects (`plugins/relay/agents/code-reviewer.md:377-383`),
+   deliberately, so this step normalizes exactly the files whose
+   formatting could later trip R-X or Level 1 (not `implementer.md`'s
+   separate, narrower Step 2.3 set — the two sets diverge; binding to
+   R-X's own set is what makes this step effective). This lists every
+   tracked-or-untracked matching file present in the working tree
+   right now, regardless of which prior phase added it — an
+   already-approved suite from an earlier phase, sitting uncommitted,
+   is exactly the AC-3 target, not only files this attempt is about
+   to touch.
+
+3. **Invoke, scoped to that file set ONLY.** When `formatter_cmd` is
+   non-null and step 2's file set is non-empty, run
+   `Bash("<formatter_cmd> <file_1> <file_2> ...")` — the literal
+   paths from step 2 appended as trailing arguments, never a glob and
+   never the whole repo (mirrors `/relay-write-test`'s A.4.3 scoped-
+   invocation discipline, `relay-write-test.md:260-272`, PRD Risk R1).
+   Capture the exit code.
+   - Exit 0 → outcome = "formatted".
+   - Non-zero → outcome = "formatter invocation failed" — record it,
+     do NOT halt; Level 1 will surface any residual issue on its own
+     terms.
+   - Step 2's file set was empty → outcome = "nothing to format".
+   - `formatter_cmd` is null (branch c) → outcome = "omitted — <the
+     discovery_source detail from step 1c>".
+
+4. **Record the outcome.** `Write` a JSON side-record at
+   `<artifact_root>../preflight-formatting.json` (i.e.
+   `PRPs/reports/<feature>/phase-<N>/preflight-formatting.json` in
+   PRD mode, `PRPs/reports/<slug>/preflight-formatting.json` in
+   PRD-less mode) with `{formatter_cmd, discovery_source,
+   files_scoped: [...], outcome, exit_code_or_null}`. This is a
+   command-owned record — distinct from any test-suite manifest, and
+   it never masquerades as a `test-writer` lifecycle-ledger entry.
+
+5. **No commit issued, ever.** All edits from step 3 land directly in
+   the working tree, uncommitted — the same as every other
+   `/relay-implement` mutation. This is the only sanctioned placement:
+   relay's Pillar 2 "never commit" invariant (`docs/decisions.md`
+   2026-05-18; restated at this file's own Phase A.3.4 step 6 and
+   Phase A.3.5 step 7 above) is architectural and permanent, so a
+   dedicated, labeled normalization commit — the alternative named in
+   the source PRD's Open Questions / Risk R2 — is not available to
+   this step: it would be the first commit `/relay-implement` ever
+   makes. Formatting the working tree in place, before any
+   `diff.patch` is captured, is the mechanism consistent with that
+   invariant.
+
+### P6 — Base-commit derivable
 
 Detect the base branch in priority order:
 

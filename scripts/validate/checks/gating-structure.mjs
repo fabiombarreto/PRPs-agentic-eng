@@ -29,6 +29,14 @@
  * of creating a new check module — mirroring the R-COH-* additive-rubric
  * precedent already established in `plugins/relay/agents/code-reviewer.md`.
  *
+ * `formatter_cmd` (introduced by `test-formatting-prevention-preflight`
+ * Phase 1) was evaluated against this registry and intentionally
+ * excluded — it is a declared command-STRING value key (default `null`),
+ * not a boolean opt-in track-gate like `figma_track`/
+ * `visual_first_approval`; it follows the same non-heuristic
+ * emit/preserve/backfill discipline via `docs_sync`/`tdd_evidence`'s
+ * precedent, neither of which is a `SITES` entry either.
+ *
  * Runtime: Node.js >= 18. No npm dependencies.
  */
 

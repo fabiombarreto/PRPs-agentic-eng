@@ -119,6 +119,9 @@
         <li><a href="#usage-metrics-shipped">Usage metrics ships phases 1&ndash;4; phase 5 is deferred, not dropped</a></li>
         <li><a href="#visual-baseline">The visual gate measures drift from the last approved capture, not distance from the Figma export</a></li>
         <li><a href="#field-findings-2026-08">Six field-reported pipeline defects fixed at the surface that produced them</a></li>
+        <li><a href="#test-formatting-command-layer">Test-formatting prevention runs at the command layer, never inside <code>test-writer</code></a></li>
+        <li><a href="#preflight-baseline-normalization">Test-file formatting is normalized before base_commit/diff_target capture</a></li>
+        <li><a href="#r-sem-prose-clarification">Reviewer findings are never self-executing test-edit authorization</a></li>
       </ol>
 
       <h2 id="entries">Entries</h2>
@@ -841,6 +844,30 @@
         <dt>Context</dt><dd>The same field session recorded six defects outside the visual gate: a capture script with no <code>baseURL</code> against Design Specs that write relative routes; an attempt-shaped record written into the run-level <code>run.json</code>, which one reviewer refused and another waved through; a plan rubric that checks an acceptance criterion exists but not that it is pertinent, and can deadlock against the coherence layer; a missing default paragraph that cost three retries per occurrence; a purity gate tripped by the sentinel comments naming the endpoint it hunts for; and a validation that matched a string in a manifest while the dependency was never installed.</dd>
         <dt>Decision</dt><dd>Each fix lands at the surface that produced the defect, not the one that noticed it &mdash; the writer emits the paragraph by default, the runner is forbidden the artifact it corrupted, the rubric names the PRD as the cause of an impasse the plan cannot resolve locally, and the halt message names the shipped test pair it had been calling unshipped.</dd>
         <dt>Reason</dt><dd>Each absence cost multiple autonomous retry cycles, which is the expensive kind of cheap bug. The rubric additions deliberately add no new check id: this repository derives rubric counts from live headings, so a new id would ripple through the arithmetic for a diagnostic better attached to the row it qualifies.</dd>
+      </div>
+
+      <h3 id="test-formatting-command-layer">89. Test-formatting prevention runs at the command layer, never inside <code>test-writer</code></h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-26</dd>
+        <dt>Context</dt><dd>The <code>test-formatting-prevention-preflight</code> PRD (approved 2026-08-26) diagnosed a structural conflict: <code>code-reviewer</code>'s R-X guard fails any test-glob match in the implementer's diff window outright, no grace period, while a formatter-enforcing project's mandatory Level 1 gate routinely finds an approved suite not formatter-clean &mdash; the test pair has never had a formatting step. A field arbitration burned a full <code>TEST_CONTRACT_DISPUTE</code> round (~100k tokens) to authorize a change later verified as semantically empty. Phase 2 of that PRD ("Prevention") ships the fix's first half: formatting on write.</dd>
+        <dt>Decision</dt><dd>Formatting ownership sits at the command layer (<code>/relay-write-test</code>), never inside the <code>test-writer</code> agent, whose tools allowlist stays <code>Bash</code>-free. The command's new Phase A.4 collects the suite's touched-file set from the just-written test manifest, discovers a formatter through a deterministic three-branch chain (<code>formatter_cmd:</code> in <code>docs/context/methodology.md</code> frontmatter &rarr; <code>package.json</code>'s <code>scripts.format</code> &rarr; an explicitly recorded skip, never a fourth heuristic branch), and when found invokes it scoped to that exact touched-file list &mdash; never a glob, never the whole repo. The outcome is appended to the suite manifest as a <code>## Formatting Outcome</code> section and surfaced as a second command-owned confirmation line; a failing or unconfigured formatter records and continues rather than halting. <code>test-reviewer</code> reads the section for informational awareness only &mdash; never a rubric input.</dd>
+        <dt>Reason</dt><dd>Granting <code>Bash</code> to <code>test-writer</code> so it could format its own output was rejected as widening the one deliberately <code>Bash</code>-free agent in the pipeline, mirroring why <code>code-reviewer</code> stays read-only. The command layer already owns dispatch sequencing between the Writer and <code>test-reviewer</code>, so it is the natural owner of a step that runs between them. Scoping the invocation to the explicit touched-file list is the direct mitigation for the PRD's formatter-over-reach risk. This entry covers Prevention only &mdash; the PRD's Phase 3 ("Preflight", normalizing test-file formatting before <code>base_commit</code>/<code>diff_target</code> capture) is separate, not-yet-shipped scope.</dd>
+      </div>
+
+      <h3 id="preflight-baseline-normalization">90. Test-file formatting is normalized before <code>base_commit</code>/<code>diff_target</code> capture</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-27</dd>
+        <dt>Context</dt><dd>Entry 89 (Prevention) covers suites born inside <code>/relay-write-test</code> but explicitly leaves two gaps: a suite already approved before Prevention shipped, and a suite whose test files are re-touched by a later formatter-config change. Both leave the <code>&lt;diff_target&gt;..HEAD</code> window R-X inspects containing formatting-only content.</dd>
+        <dt>Decision</dt><dd><code>/relay-implement</code>'s Phase A.1 preflight runs the same three-branch formatter-discovery chain as Prevention, scoped to the canonical test globs, and normalizes any unclean test file before <code>base_commit</code>/<code>diff_target</code> is captured. <code>git diff --name-only &lt;diff_target&gt;..HEAD -- &lt;test-globs&gt;</code> is empty for formatting-only content regardless of suite provenance, and formatting is never treated as <code>TEST_CONTRACT_DISPUTE</code> subject matter.</dd>
+        <dt>Reason</dt><dd>Prevention alone cannot reach a suite approved before it shipped or one that drifts from a later formatter-config change &mdash; only a baseline-time normalization closes both gaps without an R-X carve-out; running preflight before <code>base_commit</code> capture keeps R-X's text and enforcement byte-identical.</dd>
+      </div>
+
+      <h3 id="r-sem-prose-clarification">91. Reviewer findings are never self-executing test-edit authorization</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-27</dd>
+        <dt>Context</dt><dd>The 2026-08-26 arbitration on <code>assistente-pessoal</code> ruled that a code-review finding requesting a test change does not itself authorize the implementer to make that change &mdash; a ruling that, before this entry, lived only in the arbitration transcript.</dd>
+        <dt>Decision</dt><dd><code>code-reviewer.md</code>'s R-SEM section and <code>implementer.md</code>'s dispute guidance both now state explicitly that a reviewer finding requesting a test-file change is not self-executing authorization to edit that test. <code>TEST_CONTRACT_DISPUTE</code> remains the sole channel for a genuine semantic contradiction with the PRD, even when the reviewer's own finding identified the need for a test change.</dd>
+        <dt>Reason</dt><dd>R-X strict already forbids the implementer from editing a test file directly; without this prose, an R-SEM row could be misread as an implicit exception because it comes from the reviewer rather than from the implementer's own judgment.</dd>
       </div>
 
       <h2 id="how-to-add">Adding a new decision</h2>

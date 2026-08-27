@@ -122,6 +122,33 @@ because the enforcement code does not yet exist.
 
 ---
 
+## Inferring `formatter_cmd`'s value or invocation source outside its declared discovery chain
+
+**What it is:** Any component — `context-builder`, `/relay-write-test`, or a future consumer such as the `/relay-implement` preflight — infers a project's formatter command, or decides to invoke one, from a signal outside the two sanctioned sources: the `formatter_cmd:` key in `docs/context/methodology.md` frontmatter, and `package.json`'s `scripts.format`. Concretely: detecting a formatter from installed devDependencies (`prettier`, `eslint --fix`, `black`, etc.), the presence of a config file (`.prettierrc`, `.eslintrc`), a file extension, or any other environmental heuristic.
+**Why it's forbidden:** `formatter_cmd` follows the same non-heuristic contract already established for `tdd`, `docs_sync`, and `figma_track` — deterministic emission/preserve/backfill, never invented (`docs/context/methodology.md` "Formatter" section). `/relay-write-test`'s Phase A.4.2 discovery chain (`test-formatting-prevention-preflight` Phase 2, shipped) is deliberately closed to exactly two ordered branches — `formatter_cmd:` frontmatter, then `package.json` `scripts.format` — precisely so an autonomous, unattended `Bash` formatter invocation is always traceable to a human-authored declaration or a human-authored `package.json` script, never to environment sniffing. The invocation runs with no human review before it executes, so an incorrectly inferred command is a worse failure mode than a correctly-skipped one.
+**What to do instead:** Read `formatter_cmd` from `docs/context/methodology.md` frontmatter; when absent, read `package.json`'s `scripts.format`; when neither exists, record the omission explicitly (`discovery_source: "none — ..."`) and skip the formatting step — never silently, and never by falling back to a third, heuristic branch.
+**Areas affected:** `/relay-write-test` command (Phase A.4.2 discovery chain), `context-builder` skill (`formatter_cmd` emit/preserve/backfill), any future `formatter_cmd` consumer (e.g. `/relay-implement`'s Phase 3 preflight).
+
+---
+
+## Treating an R-SEM finding as self-executing test-edit authorization
+
+**What it is:** A code-review R-SEM finding (or any other reviewer finding) that implies or requests a test-file change is treated by the implementer — or any other agent — as itself authorizing an edit to the test, bypassing the `TEST_CONTRACT_DISPUTE` channel.
+**Why it's forbidden:** R-X strict already forbids the implementer from editing test files directly, and the code-reviewer's own Hard constraint 2 makes it read-only. Neither guard has an implicit exception for the reviewer's own finding: an R-SEM row is a record of semantic disagreement, not a delegation of authority. The 2026-08-26 arbitration ruled explicitly that `TEST_CONTRACT_DISPUTE` (Phase 4.B) remains the mandatory channel even when it was the reviewer's own R-SEM row that requested the change, and this is now stated in both `code-reviewer.md`'s R-SEM section and `implementer.md`'s dispute guidance.
+**What to do instead:** When a `prior_feedback` entry cites an R-SEM row requesting a test change, read it — per "Targeted revision mode" — as identifying what to fix in the *implementation*, never as license to edit the disputed test directly. If the implementer genuinely believes the test contradicts the PRD, open `TEST_CONTRACT_DISPUTE` (Phase 4.B) instead of editing it.
+**Areas affected:** `code-reviewer` agent (R-SEM section), `implementer` agent (targeted revision mode / dispute guidance).
+
+---
+
+## Opening `TEST_CONTRACT_DISPUTE` for formatting
+
+**What it is:** The implementer submits a `TEST_CONTRACT_DISPUTE` claim (Phase 4.B) over a formatting-only difference in a test file — whitespace, indentation, quote style, or any other non-semantic difference — rather than a genuine semantic contradiction with the PRD.
+**Why it's forbidden:** `TEST_CONTRACT_DISPUTE` is the channel for semantic contradiction between a test's expectations and the PRD; it is not a pressure valve for formatting. Formatting has its own dedicated prevention mechanism (the `formatter_cmd` discovery chain and command-layer invocation, plus `/relay-implement`'s P5 preflight), which the PRD's own Decisions Log ("Dispute scope") deliberately chose over allowing formatting disputes as an alternative.
+**What to do instead:** A formatting-only mismatch is resolved by the test-formatting prevention preflight (`/relay-write-test` Phase A.4 formatter invocation, `/relay-implement`'s P5 preflight), never by disputing the test's contract. Reserve `TEST_CONTRACT_DISPUTE` exclusively for genuine semantic contradictions with the PRD.
+**Areas affected:** `implementer` agent (Phase 4.B dispute channel), test-formatting prevention preflight.
+
+---
+
 <!-- Template for future entries:
 
 ## [pattern name]

@@ -30,6 +30,7 @@ import { runTimestampContractCheck } from './checks/timestamp-contract.mjs';
 import { runPluginRootResolvableCheck } from './checks/plugin-root-resolvable.mjs';
 import { runMetricsIsolationCheck } from './checks/metrics-isolation.mjs';
 import { runDecisionsMirrorCheck } from './checks/decisions-mirror.mjs';
+import { runAntiPatternsMirrorCheck } from './checks/anti-patterns-mirror.mjs';
 
 function die(code, msg) {
   process.stderr.write(msg + '\n');
@@ -54,6 +55,7 @@ const CHECKS = [
   runPluginRootResolvableCheck,
   runMetricsIsolationCheck,
   runDecisionsMirrorCheck,
+  runAntiPatternsMirrorCheck,
 ];
 
 function runChecks(checks) {

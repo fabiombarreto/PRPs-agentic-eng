@@ -41,6 +41,11 @@
         <li><a href="#prp-core-active">Treating <code>plugins/prp-core/</code> as active relay code</a></li>
         <li><a href="#heuristic-gating-keys">Flipping <code>figma_track</code> (or any opt-in gating key) by heuristic</a></li>
         <li><a href="#mcp-from-subagent">Querying the Figma MCP from a dispatched writer/reviewer agent</a></li>
+        <li><a href="#formatter-cmd-heuristic-inference">Inferring <code>formatter_cmd</code>'s value or invocation source outside its declared discovery chain</a></li>
+        <li><a href="#r-sem-not-authorization">Treating an R-SEM finding as self-executing test-edit authorization</a></li>
+        <li><a href="#dispute-for-formatting">Opening <code>TEST_CONTRACT_DISPUTE</code> for formatting</a></li>
+        <li><a href="#figma-quota-backoff">Sleeping, retrying, or backing off against a Figma MCP quota error</a></li>
+        <li><a href="#wholesale-confidence-downgrade">Wholesale confidence downgrade on a degraded Figma rung</a></li>
       </ol>
 
       <h2 id="weakening-tests">1. Weakening or deleting tests to make the loop turn green</h2>
@@ -149,6 +154,56 @@
         <p><strong>What to do instead:</strong> Dispatched agents read Figma facts exclusively from the persisted evidence bundle the calling command writes before dispatch. This is enforced structurally, not just by instruction: those agents carry no Figma-MCP tool and no <code>Bash</code> or <code>WebFetch</code> in their allowlists.</p>
         <p><strong>Scope note:</strong> The rule targets <em>Task-dispatched</em> agents. <code>design-spec-writer</code> is inline-adopted by <code>/relay-design-spec</code> and never dispatched, so it queries the Figma MCP directly in its own session by design — the premise does not apply to an inline-adopted role.</p>
         <p><strong>Areas affected:</strong> <code>design-map-writer</code>, <code>design-map-reviewer</code>, <code>research-design</code>, <code>visual-verifier</code>, <code>/relay-design-map</code>.</p>
+      </div>
+
+      <h2 id="formatter-cmd-heuristic-inference">11. Inferring <code>formatter_cmd</code>'s value or invocation source outside its declared discovery chain</h2>
+
+      <div class="callout callout--error">
+        <div class="callout__title">Anti-pattern</div>
+        <p><strong>What it is:</strong> Any component &mdash; <code>context-builder</code>, <code>/relay-write-test</code>, or a future consumer such as the <code>/relay-implement</code> preflight &mdash; infers a project's formatter command, or decides to invoke one, from a signal outside the two sanctioned sources: the <code>formatter_cmd:</code> key in <code>docs/context/methodology.md</code> frontmatter, and <code>package.json</code>'s <code>scripts.format</code>. Concretely: detecting a formatter from installed devDependencies (<code>prettier</code>, <code>eslint --fix</code>, <code>black</code>, etc.), the presence of a config file (<code>.prettierrc</code>, <code>.eslintrc</code>), a file extension, or any other environmental heuristic.</p>
+        <p><strong>Why it's forbidden:</strong> <code>formatter_cmd</code> follows the same non-heuristic contract already established for <code>tdd</code>, <code>docs_sync</code>, and <code>figma_track</code> &mdash; deterministic emission/preserve/backfill, never invented. <code>/relay-write-test</code>'s discovery chain is deliberately closed to exactly two ordered branches so an autonomous, unattended <code>Bash</code> formatter invocation is always traceable to a human-authored declaration, never to environment sniffing. The invocation runs with no human review before it executes, so an incorrectly inferred command is a worse failure mode than a correctly-skipped one.</p>
+        <p><strong>What to do instead:</strong> Read <code>formatter_cmd</code> from <code>docs/context/methodology.md</code> frontmatter; when absent, read <code>package.json</code>'s <code>scripts.format</code>; when neither exists, record the omission explicitly and skip the formatting step &mdash; never silently, and never by falling back to a third, heuristic branch.</p>
+        <p><strong>Areas affected:</strong> <code>/relay-write-test</code> command (formatter discovery chain), <code>context-builder</code> skill (<code>formatter_cmd</code> emit/preserve/backfill), any future <code>formatter_cmd</code> consumer (e.g. <code>/relay-implement</code>'s preflight).</p>
+      </div>
+
+      <h2 id="r-sem-not-authorization">12. Treating an R-SEM finding as self-executing test-edit authorization</h2>
+
+      <div class="callout callout--error">
+        <div class="callout__title">Anti-pattern</div>
+        <p><strong>What it is:</strong> A code-review R-SEM finding (or any other reviewer finding) that implies or requests a test-file change is treated by the implementer &mdash; or any other agent &mdash; as itself authorizing an edit to the test, bypassing the <code>TEST_CONTRACT_DISPUTE</code> channel.</p>
+        <p><strong>Why it's forbidden:</strong> R-X strict already forbids the implementer from editing test files directly, and the code-reviewer's own read-only charter reinforces it. Neither guard has an implicit exception for the reviewer's own finding: an R-SEM row is a record of semantic disagreement, not a delegation of authority. The 2026-08-26 arbitration ruled explicitly that <code>TEST_CONTRACT_DISPUTE</code> remains the mandatory channel even when it was the reviewer's own R-SEM row that requested the change.</p>
+        <p><strong>What to do instead:</strong> When a <code>prior_feedback</code> entry cites an R-SEM row requesting a test change, read it as identifying what to fix in the implementation, never as license to edit the disputed test directly. If the implementer genuinely believes the test contradicts the PRD, open <code>TEST_CONTRACT_DISPUTE</code> instead of editing it.</p>
+        <p><strong>Areas affected:</strong> <code>code-reviewer</code> agent (R-SEM section), <code>implementer</code> agent (targeted revision mode / dispute guidance).</p>
+      </div>
+
+      <h2 id="dispute-for-formatting">13. Opening <code>TEST_CONTRACT_DISPUTE</code> for formatting</h2>
+
+      <div class="callout callout--error">
+        <div class="callout__title">Anti-pattern</div>
+        <p><strong>What it is:</strong> The implementer submits a <code>TEST_CONTRACT_DISPUTE</code> claim over a formatting-only difference in a test file &mdash; whitespace, indentation, quote style, or any other non-semantic difference &mdash; rather than a genuine semantic contradiction with the PRD.</p>
+        <p><strong>Why it's forbidden:</strong> <code>TEST_CONTRACT_DISPUTE</code> is the channel for semantic contradiction between a test's expectations and the PRD; it is not a pressure valve for formatting. Formatting has its own dedicated prevention mechanism (the <code>formatter_cmd</code> discovery chain and command-layer invocation, plus <code>/relay-implement</code>'s preflight), which was deliberately chosen over allowing formatting disputes as an alternative.</p>
+        <p><strong>What to do instead:</strong> A formatting-only mismatch is resolved by the test-formatting prevention preflight (<code>/relay-write-test</code>'s formatter invocation, <code>/relay-implement</code>'s preflight), never by disputing the test's contract. Reserve <code>TEST_CONTRACT_DISPUTE</code> exclusively for genuine semantic contradictions with the PRD.</p>
+        <p><strong>Areas affected:</strong> <code>implementer</code> agent (dispute channel), test-formatting prevention preflight.</p>
+      </div>
+
+      <h2 id="figma-quota-backoff">14. Sleeping, retrying, or backing off against a Figma MCP quota error</h2>
+
+      <div class="callout callout--error">
+        <div class="callout__title">Anti-pattern</div>
+        <p><strong>What it is:</strong> Responding to a Figma MCP quota-exhaustion error with a sleep-and-retry loop, capped exponential backoff, or any "try again" rung in a degradation ladder &mdash; instead of aborting immediately and recording how far the run got.</p>
+        <p><strong>Why it's forbidden:</strong> Backoff is the correct response to a <strong>per-minute</strong> bucket and useless against Figma's MCP limits, which are <strong>per-day</strong> (200 on Starter/Professional, 600 on Organization) and <strong>per-month</strong> (6 on every View/Collab seat). An observed hand-written REST script slept through five attempts against a monthly bucket and enriched zero nodes &mdash; it converted a fast, legible failure into a slow, opaque one. A ladder whose only recovery rung is "try again" reproduces the original defect while appearing to handle it. Figma's MCP documentation also defines neither <code>429</code> nor <code>Retry-After</code>, so there is no reset signal to back off <em>toward</em>: any wait interval would be invented.</p>
+        <p><strong>What to do instead:</strong> Abort and record. HALT with <code>FAILED_FIGMA_QUOTA_EXHAUSTED</code> (detected by error class/string, never by HTTP status), capture the partial <code>call_log</code> and the named rung into the evidence bundle, and leave a checkpoint so the next invocation costs only the delta. Promise no reset time &mdash; the MCP reset window is undocumented in every source consulted. The narrow exception is <code>get_code_connect_map</code>, whose pre-existing non-fatal path is unchanged: a quota error there records <code>code_connect: unavailable(quota-exhausted)</code> and the run continues, because the bundle is already as complete as that run intended.</p>
+        <p><strong>Areas affected:</strong> <code>/relay-design-map</code> command Phase B, the Figma degradation ladder, any future Figma MCP consumer.</p>
+      </div>
+
+      <h2 id="wholesale-confidence-downgrade">15. Wholesale confidence downgrade on a degraded Figma rung</h2>
+
+      <div class="callout callout--error">
+        <div class="callout__title">Anti-pattern</div>
+        <p><strong>What it is:</strong> Reacting to a degraded rung (<code>DEGRADED_NO_ENRICHMENT</code> and friends) by downgrading every row of <code>docs/design/component-map.md</code> at once &mdash; or by overwriting a row that carries a human <code>verified_at</code>.</p>
+        <p><strong>Why it's forbidden:</strong> A degraded rung means <em>some</em> evidence is missing, not that all of it is worthless. Variant axes remain recoverable from the Figma component's own <code>Prop=Value</code> name without any node enrichment, which is exactly how 17 rows were legitimately <code>CONFIRMED</code> in an observed zero-enrichment bundle; a wholesale rule would have destroyed them and turned an honest partial result into a useless one. Silently overriding a human <code>verified_at</code> is the same failure as flipping a gating key by heuristic &mdash; machine degradation must not quietly erase a human judgment.</p>
+        <p><strong>What to do instead:</strong> Downgrade surgically. Rows whose <code>Props/variant mapping</code> relies only on name-derivable variant axes may remain <code>CONFIRMED</code>; rows depending on non-variant properties (booleans, <code>TEXT</code>, <code>INSTANCE_SWAP</code>, or anything not derivable from the name) may not. A row carrying a human <code>verified_at</code> is never downgraded by the rule &mdash; flag it for re-verification instead. <code>R-DM7</code> fails a map whose declared completeness contradicts its bundle, or whose <code>CONFIRMED</code> rows depend on property data the bundle marks unenriched.</p>
+        <p><strong>Areas affected:</strong> <code>design-map-writer</code> agent, <code>component-map-template.md</code>, <code>design-map-reviewer</code> agent (<code>R-DM7</code>).</p>
       </div>
 
       <h2 id="how-to-add">Adding a new anti-pattern</h2>

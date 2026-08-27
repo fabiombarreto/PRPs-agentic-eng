@@ -3,6 +3,7 @@ tdd: false
 tdd_evidence: null
 test_frameworks: ["node:test"]
 docs_sync: true
+formatter_cmd: null
 ---
 
 # Methodology
@@ -74,6 +75,29 @@ persisted project-level default.
    `docs_sync: true` only when the key is entirely absent — never
    flipping a set value to `false`, mirroring the `tdd` preservation
    precedent above.
+
+## Formatter
+
+Current state: **not declared** (default) — `formatter_cmd: null` in the
+frontmatter above means no project formatter command has been declared.
+Later phases of `test-formatting-prevention-preflight` (2 Prevention in
+`/relay-write-test`, 3 Preflight in `/relay-implement`) read this key to
+scope a formatter invocation to test files before the R-X inspection
+window opens.
+
+### How to override
+
+1. Change `formatter_cmd: null` to `formatter_cmd: "<command string>"`
+   above to declare the project's formatter command. This is a manual
+   human edit to this file — `context-builder` never produces a non-null
+   value itself.
+2. Heuristics MUST NOT flip this value — only a human edit can.
+   `context-builder` `*init` always emits the deterministic default
+   `formatter_cmd: null` (never heuristically inferred from
+   `package.json` `scripts.format`, installed devDependencies, or config
+   files); `*update` preserves an existing value untouched and backfills
+   `formatter_cmd: null` only when the key is entirely absent — never
+   flipping a set value.
 
 ## Other methodologies
 
