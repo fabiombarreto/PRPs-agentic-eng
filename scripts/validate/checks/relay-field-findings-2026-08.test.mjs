@@ -35,7 +35,20 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
+// Normalizes CRLF -> LF once, here, so every assertion below (including the
+// literal `\n}\n` function-boundary slice in the "never-throwing reader"
+// test) is checkout-line-ending-agnostic. Without this, a CRLF checkout
+// (this repo has `core.autocrlf=true` and no `.gitattributes`, so a Windows
+// checkout materializes tracked LF source as CRLF) makes `indexOf('\n}\n')`
+// return -1, degenerating the sliced function body to a 2-character string
+// and failing assertions that should pass. Verified safe for every OTHER
+// assertion in this file: all but one route through `collapseWs` (which
+// already collapses \r\n to a single space) or match a single-line
+// substring with no embedded newline; the one raw-content regex
+// (`/^#### R-COH-/gm`) is unaffected because `^` in multiline mode matches
+// immediately after any line-terminator character, `\r` included, so
+// normalizing away the `\r` does not shift which positions satisfy `^`.
+const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8').replace(/\r\n/g, '\n');
 const collapseWs = (s) => s.replace(/\s+/g, ' ').trim();
 
 const COMPARE = 'plugins/relay/scripts/visual/compare.mjs';
