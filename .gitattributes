@@ -1,0 +1,24 @@
+# Line endings are repository policy, not per-developer configuration.
+#
+# `core.autocrlf` is a local git setting: it does not travel with a clone, so
+# without this file every working tree diverged by platform. Two things broke
+# as a result, both found on 2026-08-27:
+#
+#   1. Shell scripts checked out with CRLF, making the shebang `#!/bin/bash\r`,
+#      which fails on Unix with `bad interpreter: ^M`. This affected
+#      `.githooks/pre-commit` and the `plugins/prp-core/hooks/*.sh` scripts.
+#   2. Content-invariant tests that slice source on a literal "\n" silently
+#      changed meaning. `relay-field-findings-2026-08.test.mjs` sliced with
+#      indexOf('\n}\n'), which returns -1 on a CRLF checkout, collapsing the
+#      sliced function body to a 2-character string — so the test passed on
+#      CI (LF) and failed on Windows (CRLF) against a correct implementation.
+#
+# The blobs in this repository are already stored with LF, so declaring the
+# policy here changes no committed content; it only makes every checkout
+# deterministic. Enforced mechanically by the `line-endings` check in
+# `npm run validate`.
+
+* text=auto eol=lf
+
+# The single tracked binary.
+*.docx binary
