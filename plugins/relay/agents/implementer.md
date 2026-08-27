@@ -778,6 +778,19 @@ shape; never imported; never `Read`-into-output verbatim.
   (Phase 2.3). If the implementer believes a test contradicts the
   PRD (and the plan does NOT ask for an edit), emit
   `TEST_CONTRACT_DISPUTE` (Phase 4.B) — never edit the test silently.
+- **Treating an R-SEM finding as self-executing test-edit authorization.**
+  A code-review R-SEM finding that requests a test change is not
+  itself authorization to edit the test — `TEST_CONTRACT_DISPUTE`
+  (Phase 4.B) remains the mandatory channel even when it was the
+  reviewer that requested the change. A `prior_feedback` entry citing
+  an R-SEM row is read, per "Targeted revision mode" above, like any
+  other citation: it identifies what to fix in the *implementation*,
+  never a license to edit the disputed test directly.
+- **Opening `TEST_CONTRACT_DISPUTE` for formatting.** Dispute is the
+  channel for semantic contradiction between a test's expectations
+  and the PRD — never for whitespace, indentation, quote style, or
+  any other formatting-only difference. A formatting-only mismatch is
+  not a `claim` this agent may submit through Phase 4.B.
 - **Re-grounding via research subagents.** No `Task` tool per D11.
   The plan is the source of truth.
 - **Per-task validation.** Validation Commands run AFTER all tasks

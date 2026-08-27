@@ -2164,6 +2164,42 @@ non-determinism item, corrected in the same change on separate evidence).
 
 ---
 
+## [2026-08-26] Test-formatting prevention runs at the command layer, never inside `test-writer`
+
+**Context:** `test-formatting-prevention-preflight.prd.md` (approved 2026-08-26) diagnosed a structural conflict: the code-reviewer's R-X guard (D17) immediately FAILs any test-glob match in the implementer's diff window, no grace period, while a formatter-enforcing project's mandatory Level 1 gate frequently finds approved test suites not formatter-clean — because the test pair has never had a formatting step. A field arbitration on `assistente-pessoal` burned a full `TEST_CONTRACT_DISPUTE` round (~100k tokens) to authorize a change later verified as semantically empty. Phase 2 of that PRD ("Prevention") ships the fix's first half: `/relay-write-test` runs the project's formatter over the suite's touched test files after the Writer returns and before `test-reviewer` dispatch, so approved suites are born formatter-clean.
+
+**Decision:** Formatting ownership sits at the command layer (`/relay-write-test`), never inside the `test-writer` agent. Concretely: (1) `test-writer`'s tools allowlist stays `Task, Read, Write, Edit, Glob` — `Bash` is never added to it; (2) `/relay-write-test`'s new Phase A.4 collects the suite's touched-file set from the just-written `test-suite.diff` manifest, runs a deterministic three-branch discovery chain (`formatter_cmd:` in `docs/context/methodology.md` frontmatter → `package.json` `scripts.format` → omit with an explicitly recorded skip — never a fourth, heuristic branch), and when a command is found, invokes it scoped to the explicit touched-file-path list only (never a glob, never the whole repo); (3) the outcome — formatted / formatter invocation failed / omitted / nothing to format — is `Edit`-appended to the suite manifest as a `## Formatting Outcome` section and surfaced as a second command-owned line after the Writer's terminal confirmation; (4) a failing or unconfigured formatter never blocks suite authoring — both the non-zero-exit and the omission branches record and continue, and even an `Edit` failure on the manifest is a soft-fail, never a HALT; (5) `test-reviewer` reads the new section for informational awareness only — it is explicitly NOT a rubric input, and reading it never produces or removes a rubric row.
+
+**Reason:** Least-privilege: granting `Bash` to `test-writer` so it could format its own output was the rejected alternative — it would have widened the one agent in the pipeline deliberately kept `Bash`-free, mirroring why `code-reviewer` stays read-only. The command layer already owns dispatch sequencing between the Writer and `test-reviewer`, so it is the natural owner of a step that runs *between* them. Scoping the invocation to the explicit touched-file list (never a glob) is the direct mitigation for the PRD's Risk R1 (formatter over-reach touching non-test files). This entry documents Prevention only; the PRD's Phase 3 ("Preflight" — normalizing test-file formatting in `/relay-implement` before `base_commit`/`diff_target` capture, so the R-X inspection window is born clean regardless of suite provenance) is separate, not-yet-shipped scope and is not covered here.
+
+**Areas affected:** `plugins/relay/commands/relay-write-test.md` (Phase A.4, Constraints, "What you do NOT do", Final output surface), `plugins/relay/agents/test-reviewer.md` (Phase 0 informational read of `## Formatting Outcome`), `plugins/relay/agents/test-writer.md` (tools allowlist unchanged — cited, not edited, by this phase).
+
+---
+
+## [2026-08-27] Test-file formatting is normalized before base_commit/diff_target capture
+
+**Context:** `test-formatting-prevention-preflight`'s Phase 2 (Prevention, `docs/decisions.md` entry 89, 2026-08-26) covers suites born inside `/relay-write-test`, but explicitly leaves two gaps uncovered: a suite already APPROVED before Prevention shipped, and a suite whose test files are re-touched by a formatter-config change after approval. Both leave the `<diff_target>..HEAD` window R-X inspects containing formatting-only content — the exact deadlock this PRD exists to close (`code-reviewer.md:373-401`, immediate FAIL on any test-glob match, no grace period).
+
+**Decision:** `/relay-implement`'s Phase A.1 preflight runs the identical three-branch formatter-discovery chain Prevention uses (`formatter_cmd:` in `docs/context/methodology.md` frontmatter → `package.json` `scripts.format` → skip with a recorded omission), scoped to the canonical test globs only, and normalizes any unclean test file BEFORE `base_commit`/`diff_target` is captured (`relay-implement.md:195`). Because normalization happens outside the window R-X inspects, `git diff --name-only <diff_target>..HEAD -- <test-globs>` is empty for formatting-only content regardless of whether the suite came from a Prevention-covered write or an older approval. Formatting is never treated as `TEST_CONTRACT_DISPUTE` subject matter — that channel stays reserved for semantic contradiction with the PRD.
+
+**Reason:** Prevention alone can't reach a suite approved before it shipped, or a suite whose files acquire drift from a later formatter-config change — only a baseline-time normalization closes both gaps without opening an R-X carve-out. Running preflight before `base_commit` capture, rather than after or as a reviewer-side exception, keeps R-X's text and enforcement byte-identical: the window it inspects is simply born clean by construction.
+
+**Areas affected:** `plugins/relay/commands/relay-implement.md` (Phase A.1 preflight), `docs/context/methodology.md` (`formatter_cmd` discovery chain, shared with Prevention).
+
+---
+
+## [2026-08-27] Reviewer findings are never self-executing test-edit authorization
+
+**Context:** The 2026-08-26 arbitration on `assistente-pessoal` (Praesto Sum) ruled twice: first, that the formatting-only diff under dispute was semantically empty; second — the ruling this entry codifies — that a code-review finding requesting a test change does not itself authorize the implementer to make that change. Before this phase, the second ruling lived only in the arbitration transcript, not in either agent's prose.
+
+**Decision:** `code-reviewer.md`'s R-SEM section and `implementer.md`'s dispute guidance both now state explicitly that an R-SEM finding (or any other reviewer finding) requesting a test-file change is not self-executing authorization to edit that test. `TEST_CONTRACT_DISPUTE` (Phase 4.B) remains the sole channel for a genuine semantic contradiction with the PRD, even when it was the reviewer's own finding that identified the need for a test change. Formatting is never a dispute subject regardless of who raised it.
+
+**Reason:** R-X strict already forbids the implementer from editing a test file directly; without this prose, an R-SEM row could be misread as an implicit exception to that guard, precisely because it comes from the reviewer rather than from the implementer's own judgment. Making the non-authorization explicit in both agents closes that reading without adding a second authorization channel or weakening R-X.
+
+**Areas affected:** `plugins/relay/agents/code-reviewer.md` (R-SEM section), `plugins/relay/agents/implementer.md` (dispute guidance / "never edit the test silently").
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision

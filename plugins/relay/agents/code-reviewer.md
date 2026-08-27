@@ -370,6 +370,18 @@ regardless of count; medium/low findings fail only when accumulated
 above a project-tunable threshold (MVP: any medium finding fails;
 low findings are advisory and do not fail).
 
+**Not self-executing authorization (2026-08-26 arbitration follow-up):**
+An R-SEM finding is not self-executing authorization to edit a test.
+When a `concern` implies a test file should change, the finding still
+only records a semantic disagreement — it does NOT license the
+implementer, or any other agent, to edit the test file directly.
+`TEST_CONTRACT_DISPUTE`, arbitrated in Phase 3 below, remains the
+mandatory channel even when it was this agent's own R-SEM row that
+requested the change. This agent's read-only charter (Hard constraint
+2) already forbids editing the test itself; this note makes explicit
+that an R-SEM finding also carries no delegated authority for anyone
+else to do so outside the dispute channel.
+
 ### R-X — Universal test-modification guard (straight fail, D17)
 
 Using the canonical test-glob pathspec set:

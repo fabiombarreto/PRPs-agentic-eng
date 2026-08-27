@@ -100,6 +100,10 @@ Read these files from `<target_root>`:
   - The list of new test files written this session.
   - The list of `EXISTING_TEST_COVERS` mappings (`AC-N →
     path:line`).
+  - A `## Formatting Outcome` section, when present (informational
+    only — the command-layer record of `/relay-write-test` Phase
+    A.4's discovery/format step; **NOT a rubric input**, and
+    reading it never produces or removes a rubric row).
 - `<source_plan_path>` (from the manifest header) — Read its
   `## Files to Change` table and capture the set of symbols/paths
   marked `CREATE` or `UPDATE`. This is the *seam set*: the
