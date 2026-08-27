@@ -494,18 +494,66 @@ try { Get-Content documentation/assets/data/search-index.json -Raw | ConvertFrom
 ```
 
 No-emoji guard on every touched `documentation/` file (AGENTS.md §2.5) — the grep
-matches the common emoji ranges; an empty result is a pass:
+flags any character in the Unicode "Other Symbol" category; an empty result is a pass.
+
+**Post-hoc correction (2026-08-27).** The bash and PowerShell variants
+originally shipped here were both non-functional, and this plan was cited as a
+structural template by a later one, which inherited the defect. Corrected in
+place so the next plan that copies this block gets a working guard; the rest of
+this plan is unchanged, and its `*Status: IMPLEMENTED*` outcome stands.
+
+What was wrong:
+
+- The bash variant used `grep -rlP`, which aborts on Git for Windows with
+  `grep: -P supports only unibyte and UTF-8 locales` — it never evaluated.
+- The PowerShell variant's character class had been corrupted: the bash line's
+  `\x{1F300}` and `\x{1FAFF}` escapes were resolved to characters and truncated,
+  so `\x{1F300}` became U+1F30 followed by a literal `0`, and `\x{1FAFF}` became
+  U+1FAF followed by a literal `F`. The surviving class therefore contained the
+  range `'0'`–U+1FAF, which spans every ASCII digit and letter (`a` is U+0061,
+  `Z` is U+005A) — so it did not merely fail to detect emoji, it matched
+  virtually any alphanumeric text and reported every file as a hit. Written into
+  a `.ps1` file rather than passed inline it fares worse still: PowerShell 5.1
+  reads the file as ANSI, mangles the literals, throws `range in reverse order`,
+  and returns exit 0 for every input — a silent always-pass.
+
+Replaced with a Python guard over the two emoji ranges the original bash line
+named. Python is
+already a dependency of this repository's tooling, and this avoids both the
+git-bash `grep -P` locale limitation and .NET's `\p{So}` quirk (which matches
+U+00A7 SECTION SIGN, a character this repository uses in its own AGENTS.md
+section references).
 
 ```bash
-# bash
-! grep -rlP "[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}]" documentation/reference/commands.html documentation/reference/agents.html documentation/roadmap/status.html documentation/changelog.html && echo "no-emoji OK"
+python - documentation/reference/commands.html documentation/reference/agents.html documentation/roadmap/status.html documentation/changelog.html <<'GUARD'
+import sys
+# The two ranges the original bash line named: astral emoji, plus misc symbols
+# and dingbats. Deliberately NOT `unicodedata.category(ch) == "So"`, which is
+# broader than "emoji" and flags the box-drawing characters (U+2500-U+257F)
+# this documentation legitimately uses to render directory trees.
+RANGES = ((0x1F300, 0x1FAFF), (0x2600, 0x27BF))
+bad = []
+for path in sys.argv[1:]:
+    with open(path, encoding="utf-8") as fh:
+        for n, line in enumerate(fh, 1):
+            for ch in line:
+                cp = ord(ch)
+                if any(lo <= cp <= hi for lo, hi in RANGES):
+                    bad.append("%s:%d: U+%04X" % (path, n, cp))
+if bad:
+    print("FAIL: emoji found")
+    for b in bad:
+        print(" ", b)
+    sys.exit(1)
+print("no-emoji OK")
+sys.exit(0)
+GUARD
 ```
-```powershell
-# PowerShell
-$files = 'documentation/reference/commands.html','documentation/reference/agents.html','documentation/roadmap/status.html','documentation/changelog.html'
-$hit = $files | Where-Object { (Get-Content $_ -Raw) -match '[ἰ0-ᾯF☀-➿]' }
-if (-not $hit) { 'no-emoji OK' } else { "emoji in $hit" }
-```
+
+Verified in both directions against scratch files in a temp directory, never
+against repository files: U+00A7 SECTION SIGN, U+2192 RIGHTWARDS ARROW
+(category Sm) and plain ASCII all exit 0; U+2600, U+27BF and an astral emoji
+U+1F4CA each exit 1.
 
 ### Level 2 CONTENT_INVARIANTS (per-deliverable grep checks)
 
