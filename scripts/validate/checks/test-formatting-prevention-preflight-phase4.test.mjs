@@ -119,7 +119,7 @@ function sliceBetween(content, startNeedle, endNeedle) {
 // pre-phase HEAD baseline at implementation time; this test pins that same
 // text as a standing regression guard, independent of git history).
 const EXPECTED_RX_SECTION =
-  "### R-X — Universal test-modification guard (straight fail, D17)\n\nUsing the canonical test-glob pathspec set:\n\n```\n'**/test_*.py' '**/tests/**/*.py' '**/*.test.ts' '**/*.test.tsx'\n'**/*.spec.ts' '**/*.spec.tsx' '**/*.test.js' '**/*.spec.js'\n'**/*_test.go' '**/tests/**/*.rb' '**/*_spec.rb'\n'**/__tests__/**' '**/*.test.rs' '**/*_test.rs'\n'**/*.test.jsx' '**/*.test.mjs' '**/*.test.cjs' '**/spec/**'\n```\n\nRun via `Bash`:\n\n```\ngit diff --name-only <diff_target>..HEAD -- <pathspec-set>\n```\n\nIf the result is empty: PASS.\n\nIf the result is non-empty AND the input `mode` is `\"standard\"`\n(NOT post-arbitration-upheld): straight FAIL with the file paths\nlisted verbatim. D17 of the source PRD: no \"first warning\" grace\nperiod — any test-glob match in standard mode without an upheld\ndispute is an immediate R-X failure with the file paths recorded\nin the jsonl `reason` field.\n\nR-X fires regardless of whether `docs/context/methodology.md` has\n`tdd: true` or `tdd: false` (D9 Layer 0 universality). The R-X\nrationale string SHOULD name the universality explicitly so the\nCOMMAND's CHANGES_REQUESTED feedback to the implementer is\nunambiguous.\n\n---\n\n";
+  "### R-X — Universal test-modification guard (straight fail, D17)\n\nUsing the canonical test-glob pathspec set:\n\n```\n'**/test_*.py' '**/tests/**/*.py' '**/*.test.ts' '**/*.test.tsx'\n'**/*.spec.ts' '**/*.spec.tsx' '**/*.test.js' '**/*.spec.js'\n'**/*_test.go' '**/tests/**/*.rb' '**/*_spec.rb'\n'**/__tests__/**' '**/*.test.rs' '**/*_test.rs'\n'**/*.test.jsx' '**/*.test.mjs' '**/*.test.cjs' '**/spec/**'\n```\n\nRun via `Bash`:\n\n```\ngit diff --name-only <diff_target>..HEAD -- <pathspec-set>\n```\n\nIf the result is empty: PASS.\n\nIf the result is non-empty AND the input `mode` is `\"standard\"`\n(NOT post-arbitration-upheld), every matched path is a candidate\nR-X failure. Exactly one thing can clear a candidate path: the\ncomputed equivalence step below. Run it before recording the\nverdict; no other consideration — not the implementer's claim, not\nthis reviewer's own reading of the diff, not the sympathy of the\nchange — may clear a path.\n\n#### Step X.2 — Executable-content equivalence (computed, never asserted)\n\nRun via `Bash`, over exactly the matched paths:\n\n```\nnode ${CLAUDE_PLUGIN_ROOT}/scripts/executable-content-hash.mjs --repo <target_root> --base <diff_target> --head HEAD -- <matched-path> [<matched-path> ...]\n```\n\nThe script normalizes both versions of each path — dropping\ncomments, Python docstrings, and the test-title string literal of a\n`describe` / `it` / `test` / `context` / `suite` call — and hashes\nwhat remains. Every other string literal, including every expected\nvalue, survives into the hash; so does the callee, so `it(` and\n`it.skip(` are different executable content.\n\nA path is CLEARED if and only if its report row carries\n`cleared: true`. Every other row is NOT cleared — `supported:\nfalse` (unlisted extension), a path absent on either side (a\ncreated or deleted test file), an ambiguous or unterminated source,\nor differing hashes. The script is fail-closed by construction, and\nso is this step: if the command cannot run at all (node missing,\nscript path unresolvable, non-zero exit), NO path is cleared and\nthe `reason` string says which command failed and how.\n\nRecord verbatim in the jsonl `reason`, for every path this step\nclears, its `base_hash` and `head_hash`. The carve-out is\nlegitimate only because it is reproducible: anyone can re-run that\nexact command against those two revisions and obtain the same two\nhashes, or refute the clearance.\n\n#### Step X.3 — Verdict\n\n- Every matched path cleared → PASS, with the per-path hashes in\n  the `reason` field.\n- Any matched path not cleared → straight FAIL, listing ONLY the\n  not-cleared paths verbatim. D17: no \"first warning\" grace period.\n  A test-glob match whose executable content changed, in standard\n  mode and without an upheld dispute, is an immediate R-X failure\n  with the file paths recorded in the jsonl `reason` field.\n\nWhat Step X.2 is NOT:\n\n- **Not a formatting carve-out.** Formatting is prevented upstream —\n  `/relay-write-test`'s formatting step and `/relay-implement`'s P5\n  preflight — and formatting is never a `TEST_CONTRACT_DISPUTE`\n  subject. A formatting-only diff that reaches R-X anyway clears\n  here as a consequence of being executable-content-identical, never\n  by a rule about whitespace.\n- **Not a self-certification.** The implementer's assertion that an\n  edit was harmless carries exactly the weight it carried before\n  this step existed: none. Only the script's report clears a path.\n- **Not available for ADDED test content.** A new `it()` block\n  changes executable content and can never clear here. Purely\n  additive, PRD-grounded coverage is arbitrated under\n  `DISPUTE_UPHELD_NEW_COVERAGE` (Phase 3) — a different channel with\n  its own, separately verified precondition.\n- **Not a reason to soften the reported failure.** A path that fails\n  to clear is reported exactly as it was before: named verbatim, no\n  hedging about how small the diff looked.\n\nR-X fires regardless of whether `docs/context/methodology.md` has\n`tdd: true` or `tdd: false` (D9 Layer 0 universality). The R-X\nrationale string SHOULD name the universality explicitly so the\nCOMMAND's CHANGES_REQUESTED feedback to the implementer is\nunambiguous.\n\n---\n\n";
 
 // The canonical, pinned R-SEM clarifying-paragraph text — from its own
 // bold lead-in through, but excluding, the following `### R-X` heading.
@@ -130,7 +130,7 @@ const EXPECTED_SEM_PARAGRAPH =
 // Anti-patterns bullets, from the AC-5 bullet's lead-in through, but
 // excluding, the following "Re-grounding via research subagents" bullet.
 const EXPECTED_ANTIPATTERN_BLOCK =
-  "- **Treating an R-SEM finding as self-executing test-edit authorization.**\n  A code-review R-SEM finding that requests a test change is not\n  itself authorization to edit the test — `TEST_CONTRACT_DISPUTE`\n  (Phase 4.B) remains the mandatory channel even when it was the\n  reviewer that requested the change. A `prior_feedback` entry citing\n  an R-SEM row is read, per \"Targeted revision mode\" above, like any\n  other citation: it identifies what to fix in the *implementation*,\n  never a license to edit the disputed test directly.\n- **Opening `TEST_CONTRACT_DISPUTE` for formatting.** Dispute is the\n  channel for semantic contradiction between a test's expectations\n  and the PRD — never for whitespace, indentation, quote style, or\n  any other formatting-only difference. A formatting-only mismatch is\n  not a `claim` this agent may submit through Phase 4.B.\n";
+  "- **Treating an R-SEM finding as self-executing test-edit authorization.**\n  A code-review R-SEM finding that requests a test change is not\n  itself authorization to edit the test — `TEST_CONTRACT_DISPUTE`\n  (Phase 4.B) remains the mandatory channel even when it was the\n  reviewer that requested the change. A `prior_feedback` entry citing\n  an R-SEM row is read, per \"Targeted revision mode\" above, like any\n  other citation: it identifies what to fix in the *implementation*,\n  never a license to edit the disputed test directly.\n- **Editing a test file's comments or its `describe`/`it` titles.**\n  R-X's Step X.2 equivalence check exists so that such an edit, when\n  it reaches the reviewer from an authorized author, does not\n  deadlock the phase. It is not permission for THIS agent to make\n  one: the implementer authors zero test-file changes of any kind,\n  prose included. A docstring that has gone stale is the test pair's\n  work, or a follow-up — never a quiet edit inside an implementation\n  diff.\n- **Opening `TEST_CONTRACT_DISPUTE` for formatting.** Dispute is the\n  channel for semantic contradiction between a test's expectations\n  and the PRD — never for whitespace, indentation, quote style, or\n  any other formatting-only difference. A formatting-only mismatch is\n  not a `claim` this agent may submit through Phase 4.B.\n";
 
 // ---------------------------------------------------------------------------
 // AC-A3 (PRD AC-4) — code-reviewer.md's `### R-X` section is byte-identical
@@ -162,7 +162,7 @@ test('AC-A3 (PRD AC-4): code-reviewer.md\'s ### R-X section is exactly byte-iden
   assert.equal(section, EXPECTED_RX_SECTION);
 });
 
-test('AC-A3 (PRD AC-4): code-reviewer.md\'s ### R-X section carries no carve-out/exception vocabulary — the guard\'s entire value is having zero exceptions', () => {
+test('AC-A3 (PRD AC-4) + the 2026-08-28 R-X equivalence entry: the ### R-X section carries no FORMATTING-specific exception, and its only clearance path is the script-computed one', () => {
   const content = readRepoFile(CODE_REVIEWER_PATH);
   const section = sliceBetween(
     content,
@@ -171,10 +171,38 @@ test('AC-A3 (PRD AC-4): code-reviewer.md\'s ### R-X section carries no carve-out
   );
   assert.ok(section, 'expected an extractable ### R-X section');
 
+  // Still forbidden, and for the original reason: formatting has its own
+  // prevention mechanism (the formatter_cmd chain + the P5 preflight), and a
+  // whitespace-shaped hole in R-X is exactly what this feature ruled out.
   assert.doesNotMatch(
-    section,
-    /except formatting|carve-out|exception clause|formatting exception/i,
-    'no carve-out/exception vocabulary may exist inside the ### R-X section — a formatting carve-out is exactly the anti-pattern this feature forbids'
+    /** @type {string} */ (section),
+    /except formatting|formatting exception|whitespace-only|prettier/i,
+    'no formatting-shaped exception may exist inside the ### R-X section — formatting is prevented upstream, never excused here'
+  );
+
+  // The equivalence step that DOES clear a path must be mechanical: named
+  // script, hashes recorded, fail-closed. If any of these three disappear the
+  // carve-out has quietly become self-certification, which is the failure
+  // mode R-X exists to prevent.
+  assert.match(
+    /** @type {string} */ (section),
+    /scripts\/executable-content-hash\.mjs/,
+    'the clearance path must name the shipped script that computes it'
+  );
+  assert.match(
+    /** @type {string} */ (section),
+    /base_hash[\s\S]{0,80}head_hash/,
+    'both hashes must be recorded in the verdict so the clearance is reproducible'
+  );
+  assert.match(
+    /** @type {string} */ (section),
+    /fail-closed/,
+    'the equivalence step must state its fail-closed default'
+  );
+  assert.match(
+    /** @type {string} */ (section),
+    /Not a self-certification/,
+    'the section must state that the implementer cannot clear its own edit'
   );
 });
 

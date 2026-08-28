@@ -330,7 +330,7 @@ validate against the closed set; consumers parse with the open one.
 
 | Column | Values |
 |--------|--------|
-| `verdict` | `APPROVED`, `CHANGES_REQUESTED`, `RUBRIC_PASSED`, and the arbitration values `DISPUTE_REJECTED`, `DISPUTE_UPHELD_TEST_WRONG`, `DISPUTE_UPHELD_PRD_AMBIGUOUS` |
+| `verdict` | `APPROVED`, `CHANGES_REQUESTED`, `RUBRIC_PASSED`, and the arbitration values `DISPUTE_REJECTED`, `DISPUTE_UPHELD_TEST_WRONG`, `DISPUTE_UPHELD_NEW_COVERAGE`, `DISPUTE_UPHELD_PRD_AMBIGUOUS` |
 | `action` | `final_flip`, `rubric_fail`, `revalidation_fail`, `rubric_evaluation`, `rubric_pass_delegated`, `human_authorized_ac_amendment` |
 | `cls` | `blocking`, `advisory` |
 | `deg`, `pass`, `esc` | `0`, `1` (and `-` for `pass` only) |

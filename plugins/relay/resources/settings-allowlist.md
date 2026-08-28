@@ -62,8 +62,13 @@ not emitted.
 - `Bash(git fetch*)`
 - `Bash(git push origin feature/*)` — never `main`, never `--force`
 - `Bash(git push origin --delete feature/*)` — post-merge remote branch delete (relay-approve Phase 2)
-- `Bash(git stash*)` — stash/pop acceptable
 - `Bash(git rev-parse*)`, `Bash(git show*)`, `Bash(git ls-files*)`
+- `Bash(git stash*)` is deliberately NOT allowlisted. Relay agents run
+  against trees that may hold a developer's uncommitted work, and a stash
+  that is never popped — interrupted run, failed command, later halt —
+  destroys it. A reviewer that needs a different tree state degrades and
+  says so (`test-reviewer` Hard constraint 2b, `post-green-reviewer`
+  working-tree rule); it does not manufacture the state.
 - `Bash(git branch -d *)` — safe delete of fully-merged branches (relay-approve Phase 2; force-delete `git branch -D*` remains denied)
 
 ### GitHub CLI (always, read + restricted write)

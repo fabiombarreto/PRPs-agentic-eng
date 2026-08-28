@@ -122,6 +122,8 @@
         <li><a href="#test-formatting-command-layer">Test-formatting prevention runs at the command layer, never inside <code>test-writer</code></a></li>
         <li><a href="#preflight-baseline-normalization">Test-file formatting is normalized before base_commit/diff_target capture</a></li>
         <li><a href="#r-sem-prose-clarification">Reviewer findings are never self-executing test-edit authorization</a></li>
+        <li><a href="#rx-executable-content-equivalence">R-X clears a matched test path only through a script-computed executable-content hash</a></li>
+        <li><a href="#reviewers-never-mutate-worktree">Review agents never mutate the target working tree</a></li>
       </ol>
 
       <h2 id="entries">Entries</h2>
@@ -868,6 +870,22 @@
         <dt>Context</dt><dd>The 2026-08-26 arbitration on <code>assistente-pessoal</code> ruled that a code-review finding requesting a test change does not itself authorize the implementer to make that change &mdash; a ruling that, before this entry, lived only in the arbitration transcript.</dd>
         <dt>Decision</dt><dd><code>code-reviewer.md</code>'s R-SEM section and <code>implementer.md</code>'s dispute guidance both now state explicitly that a reviewer finding requesting a test-file change is not self-executing authorization to edit that test. <code>TEST_CONTRACT_DISPUTE</code> remains the sole channel for a genuine semantic contradiction with the PRD, even when the reviewer's own finding identified the need for a test change.</dd>
         <dt>Reason</dt><dd>R-X strict already forbids the implementer from editing a test file directly; without this prose, an R-SEM row could be misread as an implicit exception because it comes from the reviewer rather than from the implementer's own judgment.</dd>
+      </div>
+
+      <h3 id="rx-executable-content-equivalence">92. R-X clears a matched test path only through a script-computed executable-content hash</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-28</dd>
+        <dt>Context</dt><dd>A field review on <code>assistente-pessoal</code> hit both structural gaps in D17's guard at once. New tests written to evidence a review's own findings trip R-X and force an arbitration round whose outcome nobody contests, and <code>DISPUTE_UPHELD_TEST_WRONG</code> &mdash; which presumes an existing wrong assertion &mdash; had to be recorded as a &quot;closest available fit&quot;. Worse, an edit that changed only a docstring and one <code>describe()</code> title, with every <code>it()</code> and <code>expect()</code> verified byte-identical, was flagged by R-X and then correctly REJECTED in arbitration, because with no assertion changed there is no test-vs-AC contradiction to arbitrate: the flag was simultaneously raised and unclearable.</dd>
+        <dt>Decision</dt><dd>R-X gains a <strong>Step X.2 executable-content equivalence check</strong>. After the unchanged file-level match, <code>plugins/relay/scripts/executable-content-hash.mjs</code> normalizes both revisions of each matched path &mdash; dropping comments, Python docstrings, and the test-title string literal of a <code>describe</code>/<code>it</code>/<code>test</code>/<code>context</code>/<code>suite</code> call &mdash; and hashes what remains; the path clears if and only if the hashes match, and both hashes are recorded verbatim in the verdict. Every other string literal and the callee survive into the hash, so a changed expected value or an added <code>.skip</code> never clears. Fail-closed throughout. Separately, arbitration gains a fourth outcome, <code>DISPUTE_UPHELD_NEW_COVERAGE</code>, for additions whose <code>git diff --numstat</code> shows zero deletions on every cited path.</dd>
+        <dt>Reason</dt><dd>R-X's content-blindness exists so that &quot;my edit was harmless&quot; is never self-certified, so the fix replaces self-certification with computation rather than relaxing the rule &mdash; the same shape as the 2026-08-03 <code>R-COH-VALIDATE-FRAMEWORK-MISMATCH</code> exemption, whose second condition makes the claim verifiable. Additive content is deliberately NOT cleared mechanically: a purely additive diff can still neuter existing tests through a new global hook, so it stays a judged outcome with a bounded precondition. Composes with entries 89 and 90 &mdash; formatting is still prevented upstream and is still never a dispute subject; Step X.2 is not a formatting carve-out.</dd>
+      </div>
+
+      <h3 id="reviewers-never-mutate-worktree">93. Review agents never mutate the target working tree</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-08-28</dd>
+        <dt>Context</dt><dd><code>test-reviewer</code> (B8) ran <code>git stash</code> on a live working tree to isolate a state for its RED legitimacy check. The intent is sound, but the tree held a developer's uncommitted work and an open phase, and a stash that is never popped &mdash; interrupted run, failed command, later halt &mdash; destroys it. Nothing in either reviewer's prose forbade it, and the recommended allowlist actively pre-authorized <code>Bash(git stash*)</code>.</dd>
+        <dt>Decision</dt><dd><code>test-reviewer</code> gains Hard constraint 2b and <code>post-green-reviewer</code> a working-tree rule: <code>git stash</code>, <code>git stash pop</code>, <code>git checkout</code>, <code>git restore</code>, <code>git reset</code> and <code>git clean</code> are forbidden, with no &quot;temporarily&quot; exception. A check that would need a tree state the agent cannot have degrades explicitly to <code>passed: null</code> with a reason naming what could not be re-verified. <code>Bash(git stash*)</code> is removed from <code>resources/settings-allowlist.md</code>, with its absence documented in place.</dd>
+        <dt>Reason</dt><dd>These agents are pointed at trees they do not own and cannot tell a live tree from a disposable one. The degraded path already exists and is designed for exactly this, so the fix costs no capability. Provisioning a dedicated worktree was rejected: it makes the stash safe where provisioned but leaves the unsafe behavior legal everywhere else, and the allowlist entry would still invite it.</dd>
       </div>
 
       <h2 id="how-to-add">Adding a new decision</h2>

@@ -58,6 +58,27 @@ universe.
    `methodology.md` `test_frameworks[0]`) and reading its exit
    code + structured output. No file mutations via shell. No
    network calls beyond what the test command itself initiates.
+2b. **Never change the target's working-tree state.** `git stash`,
+   `git stash pop`, `git checkout`, `git restore`, `git reset` and
+   `git clean` are FORBIDDEN, with no exception for "I will put it
+   back afterwards". The tree you are reviewing is frequently a
+   developer's live tree with uncommitted work in it, and a stash
+   that is not popped — because the run was interrupted, the
+   command failed, or a later step halted — destroys work this
+   agent was never asked to touch. The legitimacy check is a
+   read of the tree AS IT IS.
+
+   When the check would need a different tree state to be
+   conclusive (most often: verifying a RED state in test-first
+   mode when the production code is already present), do NOT
+   manufacture that state. Degrade explicitly instead — emit the
+   mode-selected legitimacy row with `passed: null` and
+   `reason: "degraded — cannot independently re-verify <RED|GREEN>
+   without mutating the target working tree, which is forbidden:
+   <what was observed instead>"` — and let Step 1.6.c's static
+   fallback carry what it can. A `passed: null` the reviewer can
+   explain is worth more than a verdict bought with someone
+   else's uncommitted work.
 3. **JSONL is append-only.** Read the existing
    `PRPs/plans/<basename>.test-write-review.jsonl` (or treat absence as
    empty), append one new line, Write back. Never truncate.

@@ -149,6 +149,24 @@ because the enforcement code does not yet exist.
 
 ---
 
+## Clearing an R-X match on anything other than the computed equivalence report
+
+**What it is:** A `code-reviewer` marks an R-X-matched test path as cleared on its own reading of the diff — "only comments changed", "the assertions look the same", "this one is obviously harmless" — or stretches an arbitration outcome to manufacture a clearance the schema does not offer, instead of running `plugins/relay/scripts/executable-content-hash.mjs` and honouring its report. The mirror-image failure is an implementer asserting the same thing in a `TEST_CONTRACT_DISPUTE` claim and expecting it to clear the row.
+**Why it's forbidden:** R-X exists so that "my edit was harmless" is never self-certified, and that property is what the 2026-08-28 equivalence step preserves: the clearance is legitimate ONLY because a third-party script computed it and both hashes are in the verdict for anyone to re-run. A reviewer's eyeball equivalence is exactly the self-certification R-X was built to refuse — with the extra hazard that comment-stripping done by eye is unreliable in precisely the way the Praesto Sum guard's own defect (a) demonstrated: its comment strip silently consumed the tail of every `https://` line, blinding the check to the lines it existed to read.
+**What to do instead:** Run the script over exactly the matched paths and treat `cleared: false`, an unsupported extension, an ambiguous source, or a script that cannot run as a plain R-X match. Record the failing paths verbatim. If the change is purely additive and AC-grounded, that is `DISPUTE_UPHELD_NEW_COVERAGE` in arbitration — with its numstat precondition verified, not claimed — not a clearance invented in standard mode.
+**Areas affected:** `code-reviewer` agent (R-X Steps X.2/X.3, arbitration Phase 3), `implementer` agent (Phase 4.B dispute discipline), `/relay-implement` (hard rule 9).
+
+---
+
+## Mutating a target project's working tree from a review agent
+
+**What it is:** A review agent — `test-reviewer` (B8), `post-green-reviewer` (B5), or any future reviewer holding `Bash` — runs `git stash`, `git stash pop`, `git checkout`, `git restore`, `git reset` or `git clean` against the project under review, typically to isolate a clean state so a RED/GREEN legitimacy check is more conclusive.
+**Why it's forbidden:** These agents are routinely pointed at a developer's live tree with uncommitted work in it, and they cannot tell that tree from a disposable one. A stash that is never popped — interrupted run, failed command, a later step halting — destroys work the agent was never asked to touch. This happened on `assistente-pessoal` on 2026-08-28 and nearly cost a full phase. The reviewers already have a designed degraded path for an inconclusive check; using it costs a `passed: null`, while the stash risks the user's work.
+**What to do instead:** Read the tree as it is (`git diff`, `git show`, the files on disk). When a check genuinely needs a state you cannot have, emit the mode-selected legitimacy row with `passed: null` and a reason naming what could not be independently re-verified and what was observed instead. `Bash(git stash*)` is deliberately absent from `resources/settings-allowlist.md`; do not re-add it.
+**Areas affected:** `test-reviewer` agent (Hard constraint 2b), `post-green-reviewer` agent (working-tree rule), `resources/settings-allowlist.md`.
+
+---
+
 <!-- Template for future entries:
 
 ## [pattern name]

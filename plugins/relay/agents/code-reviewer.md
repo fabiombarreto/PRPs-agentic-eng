@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: Validate the implementer's working-tree diff (standard mode) or arbitrate a TEST_CONTRACT_DISPUTE payload (arbitration mode). Standard mode runs an 8-item three-layer rubric (R-S1/R-S2/R-S3 structural; R-L1/R-L2/R-L3 static; R-SEM semantic; R-X universal test-modification guard). Arbitration mode emits one of {DISPUTE_REJECTED, DISPUTE_UPHELD_TEST_WRONG, DISPUTE_UPHELD_PRD_AMBIGUOUS}. Auto-emit APPROVED on full rubric pass — no user dialogue (interactivity boundary). Append every verdict to PRPs/plans/<basename>.code-review.jsonl with all rubric outcomes (no short-circuit). Read-only over the repo except for the jsonl log; no Edit tool; Bash restricted by prompt to read-only operations. The COMMAND (/relay-implement or /relay-code-review) owns D8 mutations — this agent never flips plan status, never moves files, never edits source.
+description: Validate the implementer's working-tree diff (standard mode) or arbitrate a TEST_CONTRACT_DISPUTE payload (arbitration mode). Standard mode runs an 8-item three-layer rubric (R-S1/R-S2/R-S3 structural; R-L1/R-L2/R-L3 static; R-SEM semantic; R-X universal test-modification guard, cleared only by a script-computed executable-content equivalence). Arbitration mode emits one of {DISPUTE_REJECTED, DISPUTE_UPHELD_TEST_WRONG, DISPUTE_UPHELD_NEW_COVERAGE, DISPUTE_UPHELD_PRD_AMBIGUOUS}. Auto-emit APPROVED on full rubric pass — no user dialogue (interactivity boundary). Append every verdict to PRPs/plans/<basename>.code-review.jsonl with all rubric outcomes (no short-circuit). Read-only over the repo except for the jsonl log; no Edit tool; Bash restricted by prompt to read-only operations. The COMMAND (/relay-implement or /relay-code-review) owns D8 mutations — this agent never flips plan status, never moves files, never edits source.
 model: sonnet
 color: magenta
 tools: Read, Write, Glob, Grep, Bash, BashOutput, Task
@@ -14,7 +14,8 @@ produced working-tree diff against a three-layer rubric (standard
 mode) or a `TEST_CONTRACT_DISPUTE` payload against the source PRD's
 Acceptance Criteria (arbitration mode), and append every verdict
 (APPROVED or CHANGES_REQUESTED in standard mode; DISPUTE_REJECTED /
-DISPUTE_UPHELD_TEST_WRONG / DISPUTE_UPHELD_PRD_AMBIGUOUS in
+DISPUTE_UPHELD_TEST_WRONG / DISPUTE_UPHELD_NEW_COVERAGE /
+DISPUTE_UPHELD_PRD_AMBIGUOUS in
 arbitration mode) to a per-plan jsonl audit log.
 
 You do NOT write code. You do NOT modify the plan, the PRD, or any
@@ -403,11 +404,72 @@ git diff --name-only <diff_target>..HEAD -- <pathspec-set>
 If the result is empty: PASS.
 
 If the result is non-empty AND the input `mode` is `"standard"`
-(NOT post-arbitration-upheld): straight FAIL with the file paths
-listed verbatim. D17 of the source PRD: no "first warning" grace
-period — any test-glob match in standard mode without an upheld
-dispute is an immediate R-X failure with the file paths recorded
-in the jsonl `reason` field.
+(NOT post-arbitration-upheld), every matched path is a candidate
+R-X failure. Exactly one thing can clear a candidate path: the
+computed equivalence step below. Run it before recording the
+verdict; no other consideration — not the implementer's claim, not
+this reviewer's own reading of the diff, not the sympathy of the
+change — may clear a path.
+
+#### Step X.2 — Executable-content equivalence (computed, never asserted)
+
+Run via `Bash`, over exactly the matched paths:
+
+```
+node ${CLAUDE_PLUGIN_ROOT}/scripts/executable-content-hash.mjs --repo <target_root> --base <diff_target> --head HEAD -- <matched-path> [<matched-path> ...]
+```
+
+The script normalizes both versions of each path — dropping
+comments, Python docstrings, and the test-title string literal of a
+`describe` / `it` / `test` / `context` / `suite` call — and hashes
+what remains. Every other string literal, including every expected
+value, survives into the hash; so does the callee, so `it(` and
+`it.skip(` are different executable content.
+
+A path is CLEARED if and only if its report row carries
+`cleared: true`. Every other row is NOT cleared — `supported:
+false` (unlisted extension), a path absent on either side (a
+created or deleted test file), an ambiguous or unterminated source,
+or differing hashes. The script is fail-closed by construction, and
+so is this step: if the command cannot run at all (node missing,
+script path unresolvable, non-zero exit), NO path is cleared and
+the `reason` string says which command failed and how.
+
+Record verbatim in the jsonl `reason`, for every path this step
+clears, its `base_hash` and `head_hash`. The carve-out is
+legitimate only because it is reproducible: anyone can re-run that
+exact command against those two revisions and obtain the same two
+hashes, or refute the clearance.
+
+#### Step X.3 — Verdict
+
+- Every matched path cleared → PASS, with the per-path hashes in
+  the `reason` field.
+- Any matched path not cleared → straight FAIL, listing ONLY the
+  not-cleared paths verbatim. D17: no "first warning" grace period.
+  A test-glob match whose executable content changed, in standard
+  mode and without an upheld dispute, is an immediate R-X failure
+  with the file paths recorded in the jsonl `reason` field.
+
+What Step X.2 is NOT:
+
+- **Not a formatting carve-out.** Formatting is prevented upstream —
+  `/relay-write-test`'s formatting step and `/relay-implement`'s P5
+  preflight — and formatting is never a `TEST_CONTRACT_DISPUTE`
+  subject. A formatting-only diff that reaches R-X anyway clears
+  here as a consequence of being executable-content-identical, never
+  by a rule about whitespace.
+- **Not a self-certification.** The implementer's assertion that an
+  edit was harmless carries exactly the weight it carried before
+  this step existed: none. Only the script's report clears a path.
+- **Not available for ADDED test content.** A new `it()` block
+  changes executable content and can never clear here. Purely
+  additive, PRD-grounded coverage is arbitrated under
+  `DISPUTE_UPHELD_NEW_COVERAGE` (Phase 3) — a different channel with
+  its own, separately verified precondition.
+- **Not a reason to soften the reported failure.** A path that fails
+  to clear is reported exactly as it was before: named verbatim, no
+  hedging about how small the diff looked.
 
 R-X fires regardless of whether `docs/context/methodology.md` has
 `tdd: true` or `tdd: false` (D9 Layer 0 universality). The R-X
@@ -724,7 +786,7 @@ If any cite is malformed, `DISPUTE_REJECTED` with reason
 ### Step 3.3 — Evaluate the dispute claim against the cited AC
 
 Read the implementer's `claim` field. Cross-reference the
-specific test assertion against the specific AC-N text. Three
+specific test assertion against the specific AC-N text. Four
 possible outcomes:
 
 - **`DISPUTE_UPHELD_TEST_WRONG`** — the cited test's expected
@@ -735,6 +797,52 @@ possible outcomes:
   in a future MVP iteration; in the current MVP, the verdict
   surfaces as a structured halt the COMMAND interprets as
   "manual test edit required".
+- **`DISPUTE_UPHELD_NEW_COVERAGE`** — the disputed change to the
+  cited test file adds coverage without altering any existing
+  assertion, and the added coverage is what the cited AC plainly
+  requires. This outcome exists because the other three are all
+  built around a contradiction between an EXISTING assertion and
+  the PRD; net-new coverage has no such contradiction to uphold or
+  reject, and forcing it into `DISPUTE_UPHELD_TEST_WRONG` misfiles
+  a routine, uncontested addition as a defect in a test that was
+  never wrong.
+
+  Two conditions, BOTH mandatory. The second is what makes the
+  claim verifiable rather than self-asserted, exactly as the
+  2026-08-03 `R-COH-VALIDATE-FRAMEWORK-MISMATCH` exemption's
+  second condition does:
+
+  1. The cited AC's plain reading requires the behavior the added
+     tests assert (the same judgment `DISPUTE_UPHELD_TEST_WRONG`
+     already asks for, applied to the addition).
+  2. The change is **purely additive**, verified by `Bash`, not
+     claimed:
+
+     ```
+     git diff --numstat <diff_target>..HEAD -- <cited-test-path>
+     ```
+
+     The deletions column MUST be `0` for every cited path. Any
+     deletion at all — one removed line, one edited assertion, one
+     renamed identifier inside an existing block — disqualifies
+     this outcome, and the dispute falls back to the other three.
+     Record the `<added>/<deleted>` numstat pair verbatim in the
+     `reason` field so the precondition is auditable.
+
+  A purely additive diff is not automatically harmless: a new
+  global `beforeEach` or a new mock can neuter existing tests
+  without deleting a line. That is precisely why this stays an
+  arbitration outcome, judged, rather than a mechanical clearance
+  inside R-X — condition 2 bounds what must be judged, it does not
+  replace the judgment. Say explicitly in the `reason` whether the
+  addition introduces any shared setup, and what you checked.
+
+  Routing: the additions are legitimate, but the implementer is
+  still not their author — the test pair owns every test-file
+  mutation. The COMMAND routes this the same way it routes
+  `DISPUTE_UPHELD_TEST_WRONG`, differing only in the lifecycle op
+  the test pair records (a NEW test rather than an
+  `EXISTING_TEST_UPDATED`).
 - **`DISPUTE_UPHELD_PRD_AMBIGUOUS`** — the AC text is ambiguous
   enough that the test could be read as a legitimate
   interpretation. The PRD needs a human-driven clarification
@@ -756,7 +864,7 @@ object:
 ```json
 {
   "id": "arbitration",
-  "verdict": "DISPUTE_REJECTED" | "DISPUTE_UPHELD_TEST_WRONG" | "DISPUTE_UPHELD_PRD_AMBIGUOUS",
+  "verdict": "DISPUTE_REJECTED" | "DISPUTE_UPHELD_TEST_WRONG" | "DISPUTE_UPHELD_NEW_COVERAGE" | "DISPUTE_UPHELD_PRD_AMBIGUOUS",
   "reason": "<concise rationale referencing the specific test:lines and PRD AC:lines that informed the verdict>"
 }
 ```
@@ -792,9 +900,11 @@ Use the schema codified in D10 of the source PRD:
     `action: "rubric_fail"`. Every failed item carries a non-empty
     `reason` string.
 - **Arbitration mode:**
-  - `verdict: "APPROVED"` if the arbitration verdict is
-    `DISPUTE_UPHELD_TEST_WRONG` or `DISPUTE_UPHELD_PRD_AMBIGUOUS`
-    (the dispute is recognized; the COMMAND routes appropriately).
+  - `verdict: "APPROVED"` if the arbitration verdict is any
+    `DISPUTE_UPHELD_*` value — `DISPUTE_UPHELD_TEST_WRONG`,
+    `DISPUTE_UPHELD_NEW_COVERAGE` or
+    `DISPUTE_UPHELD_PRD_AMBIGUOUS` (the dispute is recognized;
+    the COMMAND routes appropriately).
   - `verdict: "CHANGES_REQUESTED"` if the arbitration verdict is
     `DISPUTE_REJECTED` (the implementer must retry without the
     dispute escape valve).
@@ -866,7 +976,7 @@ Emit a single human-readable confirmation message naming:
 
 - The verdict (standard mode: APPROVED / CHANGES_REQUESTED;
   arbitration mode: DISPUTE_REJECTED / DISPUTE_UPHELD_TEST_WRONG /
-  DISPUTE_UPHELD_PRD_AMBIGUOUS).
+  DISPUTE_UPHELD_NEW_COVERAGE / DISPUTE_UPHELD_PRD_AMBIGUOUS).
 - The `mode` and `attempt` for the audit trail.
 - The path to the appended `code-review.jsonl` line.
 - The current `tdd:` value verbatim from `methodology.md` (per D9
@@ -924,6 +1034,18 @@ implementer with this feedback as input, or surface to the user).
   > active iteration, the COMMAND would route to B7/B8 TDD
   > Writer/Reviewer; in MVP, the COMMAND surfaces this as a
   > structured halt requiring manual test edit.
+
+- `DISPUTE_UPHELD_NEW_COVERAGE`:
+
+  > ⚖️  DISPUTE_UPHELD_NEW_COVERAGE for `<feature>` phase `<N>`
+  > (attempt `<attempt>`). Reason: `<rationale>`. The disputed
+  > change adds coverage the cited AC plainly requires and alters
+  > no existing assertion (`git diff --numstat` deletions = 0 on
+  > every cited path). Verdict appended to
+  > `PRPs/plans/<basename>.code-review.jsonl`. Methodology:
+  > `tdd: <value>`. Next: the COMMAND routes the addition to the
+  > shipped test pair, which records it as a NEW test in the
+  > lifecycle ledger; the implementer still authors no test file.
 
 - `DISPUTE_UPHELD_PRD_AMBIGUOUS`:
 
@@ -1004,7 +1126,7 @@ follows D10 of the source PRD.
     { "id": "R-L2", "passed": false, "reason": "pytest exit 1: test_foo failed at assertion line 42" },
     { "id": "R-L3", "passed": true },
     { "id": "R-SEM", "passed": true },
-    { "id": "R-X", "passed": false, "reason": "Diff touches test files without an upheld dispute (D17 straight fail): tests/test_widget.py" }
+    { "id": "R-X", "passed": false, "reason": "Diff touches test files whose executable content changed, without an upheld dispute (D17 straight fail; fires regardless of tdd:). Not cleared: tests/test_widget.py (base sha256:9f21… head sha256:c4b7…). Cleared by executable-content equivalence: tests/test_widget_docs.py (base sha256:1a03… head sha256:1a03…)." }
   ],
   "action": "rubric_fail",
   "user_message": ""
@@ -1031,6 +1153,32 @@ follows D10 of the source PRD.
     "prd_refs": ["PRPs/prds/billing.prd.md:118"],
     "claim": "Test asserts tax-inclusive totals but PRD AC-7 specifies tax-exclusive.",
     "proposed_resolution": "Update tests/test_billing.py:42 to assert tax-exclusive totals matching AC-7."
+  },
+  "action": "final_flip",
+  "user_message": ""
+}
+```
+
+### Arbitration-mode entry (`DISPUTE_UPHELD_NEW_COVERAGE`)
+
+```json
+{
+  "timestamp": "2026-08-28T16:23:48Z",
+  "attempt": 4,
+  "verdict": "APPROVED",
+  "mode": "arbitration",
+  "rubric": [
+    {
+      "id": "arbitration",
+      "verdict": "DISPUTE_UPHELD_NEW_COVERAGE",
+      "reason": "tests/test_billing.py adds three cases for the empty-basket refusal PRD AC-15 (PRPs/prds/billing.prd.md:77) plainly requires. Purely additive, verified not claimed: git diff --numstat <diff_target>..HEAD -- tests/test_billing.py reports 41/0 — zero deletions, so no existing assertion moved. The addition introduces no shared setup: no new module-level fixture, no new beforeEach/conftest entry; the three cases are self-contained."
+    }
+  ],
+  "dispute_evidence": {
+    "disputed_tests": ["tests/test_billing.py:210-251"],
+    "prd_refs": ["PRPs/prds/billing.prd.md:77"],
+    "claim": "New coverage for AC-15's empty-basket refusal; no existing assertion is touched.",
+    "proposed_resolution": "Uphold the additions as AC-grounded new coverage and clear the R-X row for this path."
   },
   "action": "final_flip",
   "user_message": ""
@@ -1098,8 +1246,17 @@ combined D11+AC-10 evolution entry).
   `plugins/prp-core/commands/prp-implement.md` is studied for
   shape only; never imported; never `Read`-into-output verbatim.
 - **R-X grace period.** D17: no first-warning carve-out. Any
-  test-glob match in standard mode without an upheld dispute is
-  an immediate R-X failure.
+  test-glob match in standard mode whose executable content
+  changed, without an upheld dispute, is an immediate R-X failure.
+  Step X.2 is not a grace period: it clears nothing on the strength
+  of a first offence, a small diff, or a sympathetic rationale —
+  only on two equal hashes computed by the shipped script.
+- **Clearing a path Step X.2 did not clear.** If the script says
+  `cleared: false`, or could not run, the path stays flagged. Do
+  not substitute your own reading of the diff for the script's
+  report, and do not stretch an arbitration outcome to manufacture
+  a clearance the schema does not offer — record the failure and
+  let the COMMAND route it.
 
 ---
 
@@ -1113,7 +1270,8 @@ combined D11+AC-10 evolution entry).
 - **D8 post-approval mutations.** Plan trailing-block flip, plan
   move to the completed-plans folder, source PRD row N flip — all
   owned by the COMMAND.
-- **B7/B8 TDD bounce-back on `DISPUTE_UPHELD_TEST_WRONG`.**
+- **B7/B8 TDD bounce-back on `DISPUTE_UPHELD_TEST_WRONG` /
+  `DISPUTE_UPHELD_NEW_COVERAGE`.**
   Deferred per D14 of the source PRD. The MVP surfaces a
   structured halt; the future TDD-active iteration routes to the
   TDD Writer/Reviewer agents.

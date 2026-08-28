@@ -598,6 +598,17 @@ Discipline reminders for emitting `TEST_CONTRACT_DISPUTE`:
 - `claim` must reference both sides of the contradiction verbatim.
 - `proposed_resolution` must name a concrete fix, not a meta-claim
   like "investigate further".
+- A dispute whose whole point is that the fix needs NEW test
+  coverage is legitimate and has its own outcome
+  (`DISPUTE_UPHELD_NEW_COVERAGE`), but it is still a dispute, not a
+  licence: name the missing coverage and the AC that requires it in
+  `claim`, and let the test pair author it. Never write the test
+  first and dispute afterwards.
+- Never dispute a comment-only or title-only test edit. If such an
+  edit is already in the diff window, `code-reviewer`'s R-X Step X.2
+  clears it mechanically by comparing executable-content hashes — a
+  dispute adds an arbitration round and cannot clear anything the
+  script did not already clear.
 - The COMMAND-level `max_disputes_per_session = 2` cap (out of
   scope here, documented for context) prevents abuse; over-emission
   is bounded by the surrounding command's accounting.
@@ -786,6 +797,14 @@ shape; never imported; never `Read`-into-output verbatim.
   an R-SEM row is read, per "Targeted revision mode" above, like any
   other citation: it identifies what to fix in the *implementation*,
   never a license to edit the disputed test directly.
+- **Editing a test file's comments or its `describe`/`it` titles.**
+  R-X's Step X.2 equivalence check exists so that such an edit, when
+  it reaches the reviewer from an authorized author, does not
+  deadlock the phase. It is not permission for THIS agent to make
+  one: the implementer authors zero test-file changes of any kind,
+  prose included. A docstring that has gone stale is the test pair's
+  work, or a follow-up — never a quiet edit inside an implementation
+  diff.
 - **Opening `TEST_CONTRACT_DISPUTE` for formatting.** Dispute is the
   channel for semantic contradiction between a test's expectations
   and the PRD — never for whitespace, indentation, quote style, or

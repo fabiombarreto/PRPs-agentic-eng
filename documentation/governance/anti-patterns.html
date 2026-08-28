@@ -46,6 +46,8 @@
         <li><a href="#dispute-for-formatting">Opening <code>TEST_CONTRACT_DISPUTE</code> for formatting</a></li>
         <li><a href="#figma-quota-backoff">Sleeping, retrying, or backing off against a Figma MCP quota error</a></li>
         <li><a href="#wholesale-confidence-downgrade">Wholesale confidence downgrade on a degraded Figma rung</a></li>
+        <li><a href="#rx-eyeball-clearance">Clearing an R-X match on anything other than the computed equivalence report</a></li>
+        <li><a href="#reviewer-mutates-worktree">Mutating a target project's working tree from a review agent</a></li>
       </ol>
 
       <h2 id="weakening-tests">1. Weakening or deleting tests to make the loop turn green</h2>
@@ -204,6 +206,26 @@
         <p><strong>Why it's forbidden:</strong> A degraded rung means <em>some</em> evidence is missing, not that all of it is worthless. Variant axes remain recoverable from the Figma component's own <code>Prop=Value</code> name without any node enrichment, which is exactly how 17 rows were legitimately <code>CONFIRMED</code> in an observed zero-enrichment bundle; a wholesale rule would have destroyed them and turned an honest partial result into a useless one. Silently overriding a human <code>verified_at</code> is the same failure as flipping a gating key by heuristic &mdash; machine degradation must not quietly erase a human judgment.</p>
         <p><strong>What to do instead:</strong> Downgrade surgically. Rows whose <code>Props/variant mapping</code> relies only on name-derivable variant axes may remain <code>CONFIRMED</code>; rows depending on non-variant properties (booleans, <code>TEXT</code>, <code>INSTANCE_SWAP</code>, or anything not derivable from the name) may not. A row carrying a human <code>verified_at</code> is never downgraded by the rule &mdash; flag it for re-verification instead. <code>R-DM7</code> fails a map whose declared completeness contradicts its bundle, or whose <code>CONFIRMED</code> rows depend on property data the bundle marks unenriched.</p>
         <p><strong>Areas affected:</strong> <code>design-map-writer</code> agent, <code>component-map-template.md</code>, <code>design-map-reviewer</code> agent (<code>R-DM7</code>).</p>
+      </div>
+
+      <h2 id="rx-eyeball-clearance">16. Clearing an R-X match on anything other than the computed equivalence report</h2>
+
+      <div class="callout callout--error">
+        <div class="callout__title">Anti-pattern</div>
+        <p><strong>What it is:</strong> A <code>code-reviewer</code> marks an R-X-matched test path as cleared on its own reading of the diff &mdash; &quot;only comments changed&quot;, &quot;the assertions look the same&quot; &mdash; or stretches an arbitration outcome to manufacture a clearance the schema does not offer, instead of running <code>executable-content-hash.mjs</code> and honouring its report. The mirror image is an implementer asserting the same thing in a dispute claim.</p>
+        <p><strong>Why it's forbidden:</strong> R-X exists so that &quot;my edit was harmless&quot; is never self-certified, and that is exactly what the equivalence step preserves: the clearance is legitimate ONLY because a third-party script computed it and both hashes are in the verdict for anyone to re-run. Comment-stripping done by eye is also unreliable in precisely the way the field guard's own defect demonstrated &mdash; its comment strip silently consumed the tail of every <code>https://</code> line, blinding the check to the lines it existed to read.</p>
+        <p><strong>What to do instead:</strong> Run the script over exactly the matched paths and treat <code>cleared: false</code>, an unsupported extension, an ambiguous source, or a script that cannot run as a plain R-X match. Record the failing paths verbatim. Purely additive, AC-grounded change is <code>DISPUTE_UPHELD_NEW_COVERAGE</code> in arbitration &mdash; with its numstat precondition verified, not claimed &mdash; never a clearance invented in standard mode.</p>
+        <p><strong>Areas affected:</strong> <code>code-reviewer</code> agent (R-X Steps X.2/X.3, arbitration), <code>implementer</code> agent (dispute discipline), <code>/relay-implement</code> (hard rule 9).</p>
+      </div>
+
+      <h2 id="reviewer-mutates-worktree">17. Mutating a target project's working tree from a review agent</h2>
+
+      <div class="callout callout--error">
+        <div class="callout__title">Anti-pattern</div>
+        <p><strong>What it is:</strong> A review agent &mdash; <code>test-reviewer</code>, <code>post-green-reviewer</code>, or any future reviewer holding <code>Bash</code> &mdash; runs <code>git stash</code>, <code>git checkout</code>, <code>git restore</code>, <code>git reset</code> or <code>git clean</code> against the project under review, typically to isolate a clean state so a RED/GREEN legitimacy check is more conclusive.</p>
+        <p><strong>Why it's forbidden:</strong> These agents are routinely pointed at a developer's live tree with uncommitted work in it, and cannot tell it from a disposable one. A stash that is never popped &mdash; interrupted run, failed command, a later halt &mdash; destroys work the agent was never asked to touch. This happened in the field on 2026-08-28 and nearly cost a full phase.</p>
+        <p><strong>What to do instead:</strong> Read the tree as it is (<code>git diff</code>, <code>git show</code>, the files on disk). When a check genuinely needs a state you cannot have, emit the legitimacy row with <code>passed: null</code> and a reason naming what could not be independently re-verified. <code>Bash(git stash*)</code> is deliberately absent from the recommended allowlist; do not re-add it.</p>
+        <p><strong>Areas affected:</strong> <code>test-reviewer</code> agent, <code>post-green-reviewer</code> agent, <code>resources/settings-allowlist.md</code>.</p>
       </div>
 
       <h2 id="how-to-add">Adding a new anti-pattern</h2>

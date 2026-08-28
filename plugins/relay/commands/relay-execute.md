@@ -673,7 +673,7 @@ Note the `outcome` value carries NO `FAILED_` prefix — this HALT is a delibera
 > exact phase via the resumable visual-approval check (Phase A.1) rather
 > than restarting the plan/implement loop from scratch.
 
-**On any OTHER HALT from /relay-implement** (`FAILED_AFTER_N_RETRIES`, `FAILED_TIME_BUDGET_EXCEEDED`, `FAILED_OSCILLATION_DETECTED`, `FAILED_DISPUTE_CAP_EXCEEDED`, `DISPUTE_UPHELD_TEST_WRONG`, `DISPUTE_UPHELD_PRD_AMBIGUOUS`, `PARTIAL_D8_FAILURE`, `VISUAL_GATE_BLOCKED`):
+**On any OTHER HALT from /relay-implement** (`FAILED_AFTER_N_RETRIES`, `FAILED_TIME_BUDGET_EXCEEDED`, `FAILED_OSCILLATION_DETECTED`, `FAILED_DISPUTE_CAP_EXCEEDED`, `DISPUTE_UPHELD_TEST_WRONG`, `DISPUTE_UPHELD_NEW_COVERAGE`, `DISPUTE_UPHELD_PRD_AMBIGUOUS`, `PARTIAL_D8_FAILURE`, `VISUAL_GATE_BLOCKED`):
 
 Append to `orchestrator_run_log`:
 ```json

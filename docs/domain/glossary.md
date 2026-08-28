@@ -340,6 +340,20 @@ Code Review, `tdd: false`). Owns the full test lifecycle (create / update /
 delete) via a manifest lifecycle ledger; the Implementer never touches test
 files (R-X strict).
 
+## R-X executable-content equivalence (Step X.2)
+
+The only way an R-X-matched test path can be cleared in standard mode. After
+the file-level `git diff --name-only` match, `code-reviewer` runs
+`plugins/relay/scripts/executable-content-hash.mjs`, which strips comments,
+Python docstrings and test-title strings from both revisions of the path and
+hashes what remains; the path clears if and only if the two hashes are equal,
+and both are recorded in the verdict so the clearance is reproducible. Every
+other string literal and the callee survive into the hash, so a changed
+expected value or an added `.skip` never clears. Fail-closed: an unsupported
+extension, an ambiguous source or a script that cannot run clears nothing.
+Added test content is out of scope by construction — that is
+`DISPUTE_UPHELD_NEW_COVERAGE`'s territory (2026-08-28).
+
 ## Test Runner
 
 Specialized agent that executes the test suite, interprets results,

@@ -457,6 +457,20 @@ The code-reviewer arbitrates the dispute. It appends one verdict line to `code-r
   > it would need its own retry budget and oscillation detection —
   > so this hand-off is deliberate, not a missing feature.
 
+- **`DISPUTE_UPHELD_NEW_COVERAGE`** → the disputed change is net-new, AC-grounded coverage that alters no existing assertion (the code-reviewer verified `git diff --numstat` deletions = 0 on every cited path before emitting this outcome). Routing is identical in shape to `DISPUTE_UPHELD_TEST_WRONG` — the test pair owns every test-file mutation, so the implementer never authors the addition — and differs only in the lifecycle op the pair records: a NEW test rather than an `EXISTING_TEST_UPDATED`. Write `<artifact_root>../halt.json` with `{outcome: "DISPUTE_UPHELD_NEW_COVERAGE", dispute_payload, arbitration_verdict, attempt_history, dispute_history, actionable_recommendation: "Route the addition to the shipped test pair: run /relay-write-test <plan_path> with the halt.json dispute_evidence as the coverage input so `test-writer` records it as a NEW test, then /relay-test-write-review <plan_path> to approve the suite, then re-run /relay-implement <plan_path>."}`. HALT with verbatim message:
+  > DISPUTE_UPHELD_NEW_COVERAGE. The code-reviewer agreed the
+  > cited AC requires coverage that does not exist yet, and
+  > confirmed the disputed change touches no existing assertion.
+  > The test pair owns every test-file change, so the addition
+  > routes through it rather than through the Implementer.
+  > Sanctioned recovery: (1) review the dispute evidence at
+  > PRPs/reports/<feature>/phase-<N>/halt.json; (2) run
+  > /relay-write-test <plan_path>, passing that dispute_evidence
+  > as the coverage input, so `test-writer` records a NEW test in
+  > the lifecycle ledger; (3) run /relay-test-write-review
+  > <plan_path> to approve the suite; (4) re-run /relay-implement
+  > <plan_path>.
+
 - **`DISPUTE_UPHELD_PRD_AMBIGUOUS`** → the PRD itself is ambiguous; tests and proposed code both have legitimate readings. Write `<artifact_root>../halt.json` with the same shape, `actionable_recommendation: "Hand-edit the PRD to disambiguate; flip its status back to DRAFT; re-run /relay-prd."`. HALT with verbatim message:
   > DISPUTE_UPHELD_PRD_AMBIGUOUS. The code-reviewer agreed the
   > PRD itself is ambiguous on the disputed point. Manual
@@ -711,7 +725,7 @@ On the success path (Phase A.3 standard-mode APPROVED + all applicable D8 mutati
 > Visual: `<visual_outcome>` (`APPROVED` / named degraded rung, e.g. `DEGRADED_STATIC_ONLY` / `BUDGET_EXCEEDED` / `BUDGET_EXCEEDED_REVERTED` / `SKIPPED (not figma-sourced)` / `SKIPPED (--no-visual)`) — **this line's very presence is gated on `figma_track_declared`** (Phase A.0): shown ONLY when `figma_track_declared == true`; when `figma_track_declared == false` the line is OMITTED ENTIRELY (no line, no `SKIPPED` marker, nothing), so a non-Figma project's output stays byte-identical to today's (PRD AC-1 of `figma-implementation-track.prd.md`).
 > Worktree ready for `/relay:relay-test PRPs/plans/completed/<basename>.plan.md`.
 
-On HALT (one of `FAILED_AFTER_N_RETRIES`, `FAILED_TIME_BUDGET_EXCEEDED`, `FAILED_OSCILLATION_DETECTED`, `FAILED_DISPUTE_CAP_EXCEEDED`, `DISPUTE_UPHELD_TEST_WRONG`, `DISPUTE_UPHELD_PRD_AMBIGUOUS`, `PARTIAL_D8_FAILURE`, `AWAITING_VISUAL_APPROVAL`, `VISUAL_GATE_BLOCKED`, or any precondition HALT), the user-facing message is the verbatim halt message defined in the relevant Phase A.* sub-section above, and the command exits without performing further mutations.
+On HALT (one of `FAILED_AFTER_N_RETRIES`, `FAILED_TIME_BUDGET_EXCEEDED`, `FAILED_OSCILLATION_DETECTED`, `FAILED_DISPUTE_CAP_EXCEEDED`, `DISPUTE_UPHELD_TEST_WRONG`, `DISPUTE_UPHELD_NEW_COVERAGE`, `DISPUTE_UPHELD_PRD_AMBIGUOUS`, `PARTIAL_D8_FAILURE`, `AWAITING_VISUAL_APPROVAL`, `VISUAL_GATE_BLOCKED`, or any precondition HALT), the user-facing message is the verbatim halt message defined in the relevant Phase A.* sub-section above, and the command exits without performing further mutations.
 
 In all cases, the per-attempt artifacts at `PRPs/reports/<feature>/phase-<N>/attempts/<i>/` are preserved on disk for post-mortem audit.
 
@@ -735,7 +749,7 @@ In all cases, the per-attempt artifacts at `PRPs/reports/<feature>/phase-<N>/att
 
 8. **Never re-run the writer↔reviewer pair across `/relay-implement` invocations.** That is `/relay-execute`'s call. A single `/relay-implement` invocation produces zero or one APPROVED implementation; the loop is internal to one invocation. CHANGES_REQUESTED at the end of the budget terminates with `FAILED_AFTER_N_RETRIES`; the orchestrator (or developer) decides whether to re-run.
 
-9. **Never modify test files without an upheld dispute.** This is the universal R-X rule (D9 Layer 0). The code-reviewer enforces R-X; this command does not bypass. If the implementer modifies tests without a `TEST_CONTRACT_DISPUTE` verdict, R-X fails and the loop continues to the next attempt with the R-X reason in `last_reviewer_feedback`.
+9. **Never modify test files without an upheld dispute.** This is the universal R-X rule (D9 Layer 0). The code-reviewer enforces R-X; this command does not bypass. R-X clears a matched path only through its own Step X.2 executable-content equivalence check, computed by `${CLAUDE_PLUGIN_ROOT}/scripts/executable-content-hash.mjs` and recorded as two hashes in the verdict — this command never asserts an equivalence of its own, never re-runs the check to argue with the result, and never treats a small diff as self-clearing. If the implementer modifies tests without a `TEST_CONTRACT_DISPUTE` verdict, R-X fails and the loop continues to the next attempt with the R-X reason in `last_reviewer_feedback`.
 
 10. **Never invoke `/relay-code-review` from this command.** The standalone reviewer surface is for hand-invoked review of an existing implementation, not for the internal loop. The internal dispatch goes directly to the `code-reviewer` agent via `Task`.
 
