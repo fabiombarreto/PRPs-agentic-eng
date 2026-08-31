@@ -73,8 +73,17 @@ is anything else, return an error immediately:
 
 Run in the worktree:
 
+> **Single-argument form, deliberately.** These scans compare
+> `<base_branch>` against the WORKING TREE. A two-dot range would
+> compare two commits and return an empty set on uncommitted work —
+> which is every invocation, since relay never commits before review
+> and the feature worktree's `HEAD` never moves off its base. An empty
+> set does not fail this reviewer; it silently reports "no weakening
+> found" for every run. See `docs/context/architecture.md`
+> "Diff-base contract".
+
 ```
-git diff --name-only <base_branch>..HEAD -- \
+git diff --name-only <base_branch> -- \
     '**/test_*.py' '**/tests/**/*.py' '**/*.test.ts' '**/*.test.tsx' \
     '**/*.spec.ts' '**/*.spec.tsx' '**/*.test.js' '**/*.spec.js' \
     '**/*_test.go' '**/tests/**/*.rb' '**/*_spec.rb'
@@ -137,7 +146,7 @@ occur under `ledger = none`.
 
 ### Step 3 — For each changed test file, scan the diff
 
-Run `git diff <base_branch>..HEAD -- <file>` and apply these patterns
+Run `git diff <base_branch> -- <file>` and apply these patterns
 against the diff output (lines starting with `+` or `-`):
 
 #### 3a — Removed test functions (weakening via deletion)
@@ -258,7 +267,7 @@ verbatim so whole-file coverage matches the change-detection scan
 exactly):
 
 ```
-git diff --name-status <base_branch>..HEAD -- \
+git diff --name-status <base_branch> -- \
     '**/test_*.py' '**/tests/**/*.py' '**/*.test.ts' '**/*.test.tsx' \
     '**/*.spec.ts' '**/*.spec.tsx' '**/*.test.js' '**/*.spec.js' \
     '**/*_test.go' '**/tests/**/*.rb' '**/*_spec.rb'

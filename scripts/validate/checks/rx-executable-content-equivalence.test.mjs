@@ -80,7 +80,7 @@ function rxSection() {
 
 test('R-X still matches at the file level first, with the same 18-pattern pathspec set and the same git command', () => {
   const section = rxSection();
-  assert.match(section, /git diff --name-only <diff_target>\.\.HEAD -- <pathspec-set>/);
+  assert.match(section, /git diff --name-only <diff_target> -- <pathspec-set>/);
   for (const glob of [
     "'**/test_*.py'",
     "'**/tests/**/*.py'",
@@ -168,7 +168,7 @@ test('arbitration Step 3.3 offers four outcomes, and the new one carries BOTH ma
   const b = /** @type {string} */ (block);
 
   assert.match(b, /Two conditions, BOTH mandatory/);
-  assert.match(b, /git diff --numstat <diff_target>\.\.HEAD -- <cited-test-path>/);
+  assert.match(b, /git diff --numstat <diff_target> -- <cited-test-path>/);
   assert.match(b, /deletions column MUST be `0`/);
   assert.match(b, /verified by `Bash`, not\s+claimed/);
   assert.match(

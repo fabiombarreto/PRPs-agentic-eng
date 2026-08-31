@@ -51,12 +51,13 @@
           <tr><td><a href="#decisions-mirror">decisions-mirror</a></td><td><code>documentation/governance/decisions.html</code> carries an entry and an index row for every dated decision in <code>docs/decisions.md</code></td><td>9</td></tr>
           <tr><td><a href="#anti-patterns-mirror">anti-patterns-mirror</a></td><td><code>documentation/governance/anti-patterns.html</code> carries a numbered entry and an index row for every entry in <code>docs/anti-patterns.md</code>, numbered 1..N without gap or duplicate</td><td>13</td></tr>
           <tr><td><a href="#line-endings">line-endings</a></td><td>a root <code>.gitattributes</code> declares repo-wide <code>eol=lf</code>, and no tracked text file carries CRLF in the working tree &mdash; executable scripts reported separately, since a CRLF shebang fails outright on Unix</td><td>17</td></tr>
+          <tr><td><a href="#diff-base-form">diff-base-form</a></td><td>no plugin prompt derives a changed-file set with a two-dot commit range against a diff base &mdash; the form returns an empty set on uncommitted work and silently empties every changed-file-set rubric item</td><td>11</td></tr>
           <tr><td><a href="#efficiency-metrics">efficiency-metrics</a></td><td>pure classifier for <code>scripts/efficiency.mjs</code>'s before/after/degraded partition and its review-session partition (not a registered <code>npm run validate</code> check — a standalone unit suite, mirroring the <code>eval layer</code> row below)</td><td>21</td></tr>
           <tr><td><a href="#eval-layer">eval layer</a></td><td>reviewer-agent verdict on golden fixtures</td><td>2</td></tr>
         </tbody>
       </table>
 
-      <p><strong>Totals:</strong> <code>npm run validate</code> reports 16 checks, all PASS on the current tree. The <em>Unit tests</em> column counts each check's own <code>node:test</code> file; <code>metrics-isolation</code> has none yet.</p>
+      <p><strong>Totals:</strong> <code>npm run validate</code> reports 17 checks, all PASS on the current tree. The <em>Unit tests</em> column counts each check's own <code>node:test</code> file; <code>metrics-isolation</code> has none yet.</p>
 
       <h2 id="version-parity">version-parity</h2>
 
@@ -215,7 +216,8 @@ documentation/governance/anti-patterns.html's entry numbering reads 1, 2, 4, 5 b
 
       <h2 id="line-endings">line-endings</h2>
 
-      <p><strong>Functionality.</strong> Makes line endings repository policy rather than a per-developer accident. <code>core.autocrlf</code> is local git config and does not travel with a clone, so before this check the repository had no mechanism to keep working trees consistent &mdash; and two things had broken silently. Shell scripts checked out with CRLF, making the shebang <code>#!/bin/bash</code>, which fails on Unix with <code>bad interpreter: ^M</code>; this affected <code>.githooks/pre-commit</code>, the repository's own commit gate, and both <code>plugins/prp-core/hooks/*.sh</code>. And content-invariant tests that slice source on a literal <code>"
+      <p><strong>Functionality.</strong> Makes line endings repository policy rather than a per-developer accident. <code>core.autocrlf</code> is local git config and does not travel with a clone, so before this check the repository had no mechanism to keep working trees consistent &mdash; and two things had broken silently. Shell scripts checked out with CRLF, making the shebang <code>#!/bin/bash
+</code>, which fails on Unix with <code>bad interpreter: ^M</code>; this affected <code>.githooks/pre-commit</code>, the repository's own commit gate, and both <code>plugins/prp-core/hooks/*.sh</code>. And content-invariant tests that slice source on a literal <code>"
 "</code> silently changed meaning: <code>relay-field-findings-2026-08.test.mjs</code> sliced a function body with <code>indexOf('
 }
 ')</code>, which returns <code>-1</code> on a CRLF checkout, collapsing the slice to a two-character string &mdash; so the test passed on CI and failed on Windows against a correct implementation. <code>PRPs/metrics/.gitattributes</code> had already applied <code>text eol=lf</code> to <code>*.tsv</code> for exactly this reason; the root policy generalizes that precedent, and this check guards it the way <code>decisions-mirror</code> and <code>anti-patterns-mirror</code> guard theirs.</p>
@@ -223,8 +225,18 @@ documentation/governance/anti-patterns.html's entry numbering reads 1, 2, 4, 5 b
       <p><strong>Passes when</strong> the policy is declared and the working tree is CRLF-free &mdash; the current tree state.</p>
       <p><strong>Fails when</strong> the policy is missing, weakened to a per-extension rule, or any tracked text file carries CRLF. Representative findings:</p>
       <pre><code class="language-default">.gitattributes is missing. Line endings would fall back to each developer's local `core.autocrlf`...
-1 executable script(s) carry CRLF, so the shebang reads `#!...` and fails on Unix with `bad interpreter: ^M`: .githooks/pre-commit
+1 executable script(s) carry CRLF, so the shebang reads `#!...
+` and fails on Unix with `bad interpreter: ^M`: .githooks/pre-commit
 3 tracked text file(s) carry CRLF in the working tree: docs/decisions.md, ...</code></pre>
+
+      <h2 id="diff-base-form">diff-base-form</h2>
+
+      <p><strong>Functionality.</strong> Pins the form relay uses to derive a changed-file set. Pillar 2 never commits, and a feature worktree&#39;s <code>HEAD</code> never moves off its base &mdash; so <code>git diff &lt;base&gt;..HEAD</code> compares a commit to itself and returns an EMPTY set on every standard invocation. An empty set does not fail a rubric. It makes <code>R-S1</code> trivially true, <code>R-X</code> (the universal test-modification guard) pass by vacuity, the arbitration path&#39;s purely-additive verification verify nothing, and the post-green weakening scan report &ldquo;no weakening found&rdquo; for every run. The failure is silent by construction: every run looks green.</p>
+      <p>Measured before the fix, on a worktree carrying five genuinely modified files: <code>git diff --name-only &lt;base&gt;..HEAD</code> returned 0 paths; <code>git diff --name-only &lt;base&gt;</code> returned 8. Nine call sites across two agents carried the two-dot form. The check flags any line that invokes <code>git diff</code> with a two-dot range against a base placeholder or a relative commit, and exempts prose that quotes the form in order to forbid it &mdash; the contract has to be able to name what it prohibits.</p>
+      <p><strong>Passes when</strong> every <code>git diff</code> in <code>plugins/relay/agents/</code> and <code>plugins/relay/commands/</code> uses the single-argument form &mdash; the current tree state.</p>
+      <p><strong>Fails when</strong> the two-dot shape is reintroduced, or a scanned file is unreadable, or the scan set is empty (an empty scan cannot prove the invariant). Representative finding:</p>
+      <pre><code class="language-default">plugins/relay/agents/post-green-reviewer.md:261 &mdash; two-dot diff range against a diff base &mdash; use the single-argument form (`git diff &lt;base&gt;`), which compares the base against the working tree...</code></pre>
+      <p><strong>Unit tests (11).</strong> Authored by the test-writer/test-reviewer pair after the Implementer and Code Review (<code>tdd: false</code>, test-after ordering). The load-bearing ones prove the check actually FIRES &mdash; on a placeholder range, on a differently-named placeholder, on a relative-commit range, and on every offending line across multiple files &mdash; since a guard that cannot fail is precisely the defect it was written to catch. The rest pin the exemption (three separate prohibition idioms must not be flagged), the non-command case (a two-dot range in prose that never invokes <code>git diff</code>), and the fail-closed contract (an empty map, an omitted map, and an unreadable file are each findings rather than silent passes).</p>
 
       <h2 id="efficiency-metrics">efficiency-metrics (scripts/efficiency.test.mjs)</h2>
 
