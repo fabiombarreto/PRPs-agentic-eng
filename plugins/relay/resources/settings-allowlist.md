@@ -58,6 +58,7 @@ not emitted.
 - `Bash(git checkout feature/*)` — restricted to feature branches
 - `Bash(git checkout -b feature/*)`
 - `Bash(git worktree *)`
+- `Bash(git -C * worktree *)` — repo-qualified form, required once a workspace declares several members (each worktree is created in its own repository, not in the cwd)
 - `Bash(git worktree remove *)` — post-merge worktree cleanup (relay-approve Phase 2)
 - `Bash(git fetch*)`
 - `Bash(git push origin feature/*)` — never `main`, never `--force`

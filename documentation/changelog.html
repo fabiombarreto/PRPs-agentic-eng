@@ -45,6 +45,39 @@
 
       <h3 id="unreleased-added">Added</h3>
       <ul>
+        <li><strong>Multi-repo workspace topology</strong> &mdash; relay can now drive one feature across several
+          sibling git repositories. A workspace declares its members in a <code>## Repository topology</code> section
+          of its own <code>docs/context/architecture.md</code>; membership, <code>Role</code> and <code>Base</code> are
+          declared, never detected. Three roots are addressed separately: <code>project_root</code> (one artifact
+          plane), <code>context_root</code> and <code>repo_root</code> per member &mdash; the last two are not always
+          the same directory. Contract at
+          <code>plugins/relay/resources/repository-topology.md</code>.</li>
+        <li><strong><code>Repo</code> column in the Implementation Phases table</strong> &mdash; names the member a
+          phase targets. The legacy seven-column header stays valid and parsers map cells by column NAME rather than
+          ordinal, so no existing PRD needed migrating. <code>prd-reviewer</code>&#39;s
+          <code>R-COH-REPO-UNDECLARED</code> binds each value to a declared <code>editable</code> member.</li>
+        <li><strong>Per-repo worktrees and the base preflight</strong> &mdash; one worktree per member, cut from that
+          member&#39;s declared <code>Base</code> (default <code>current</code>), with the resolved ref and SHA recorded
+          to <code>PRPs/reports/&lt;feature&gt;/worktree-bases.json</code>. <code>/relay-execute</code> precondition P7
+          confirms every member&#39;s base once, before the autonomous loop. See
+          <a href="governance/decisions.html#base-preflight-fourth-interactivity-extension">decision 95</a>.</li>
+        <li><strong>Per-repo context resolution</strong> &mdash; the Decision Gate sources and
+          <code>methodology.md</code> are read from each phase&#39;s own member, so TDD routing is a per-phase decision.
+          One run can legitimately route one phase test-first and another test-after.</li>
+        <li><strong>Pillar 3 across N repos</strong> &mdash; <code>/relay-commit</code>, <code>/relay-pr</code> and
+          <code>/relay-approve</code> iterate the participating members: one commit, one PR and one cleanup each, with
+          per-member outcomes so a partial failure names the repository.</li>
+        <li><strong><code>worktree-path-qualified</code> validate check</strong> &mdash; an eighteenth registered check;
+          see <a href="reference/validation-checks.html#worktree-path-qualified">Validation checks</a>.</li>
+        <li><strong><code>*init-workspace</code> context-builder mode</strong> &mdash; prepares a workspace root:
+          <code>git init</code>, <code>PRPs/</code>, a root <code>.gitignore</code>, and a seeded topology section for a
+          human to review. It never writes into a member repository.</li>
+        <li><strong>Per-phase diff base</strong> &mdash; <code>/relay-execute</code> snapshots the worktree at each
+          phase close-out with <code>git write-tree</code> and passes it as the next phase&#39;s diff base, so phase N is
+          reviewed on phase N&#39;s work rather than on everything before it.</li>
+        <li><strong>Worktree settings propagation</strong> &mdash; <code>/relay-worktree</code> Step B.0 copies
+          <code>.claude/settings.json</code> into every worktree it creates. <code>git worktree add</code> never carries
+          it in, so the test runner used to abort on infrastructure that was never propagated.</li>
         <li><strong><code>diff-base-form</code> validate check</strong> &mdash; a seventeenth registered check that
           pins the corrected form across <code>plugins/relay/agents/</code> and
           <code>plugins/relay/commands/</code>, exempting prose that quotes the forbidden form in order to forbid it.
@@ -52,6 +85,21 @@
           <a href="reference/validation-checks.html#diff-base-form">Validation checks</a>.</li>
         <li><strong>Diff-base contract</strong> &mdash; recorded in <code>docs/context/architecture.md</code>, so the
           rule is a named architectural invariant rather than a convention observed in some files and not others.</li>
+      </ul>
+
+      <h3 id="unreleased-changed">Changed</h3>
+      <ul>
+        <li><strong>Worktree base for a declared member</strong> &mdash; the member&#39;s <code>Base</code> cell now
+          governs, defaulting to <code>current</code>. This changes the recorded D11 chain, which put
+          <code>origin/main</code> first and so never reached the current checkout. The chain is preserved verbatim for
+          projects that declare no topology. See
+          <a href="governance/decisions.html#member-base-defaults-to-current">decision 94</a>, including the
+          deliberately accepted limitation for single-repo projects.</li>
+        <li><strong><code>/relay-pr</code> base resolution</strong> &mdash; consumes the recorded creation base and the
+          <code>merge-base --fork-point</code> tier is removed. The branch a worktree was cut from and the branch its PR
+          merges into are now the same by construction.</li>
+        <li><strong><a href="reference/validation-checks.html">Validation checks</a></strong> &mdash; new
+          <code>topology-contract</code> row and detail section; totals 16 &rarr; 19 across the three checks that landed together.</li>
       </ul>
 
       <h2 id="v0-36-0">0.36.0 &#8212; 2026-08-28</h2>

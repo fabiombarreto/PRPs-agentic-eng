@@ -75,7 +75,7 @@ Preconditions check unchanged.
 Before the loop starts:
 
 1. **worktree exists and is a git worktree** — `git -C <worktree> rev-parse --git-dir` succeeds
-2. **`.claude/settings.json` exists in the worktree** — if not, HALT with message pointing the user at `*update` in the context-builder skill
+2. **`.claude/settings.json` exists in the worktree** — if not, HALT with a message naming `/relay-worktree` Step B.0, which propagates the file from the repository root at worktree-creation time. The file is gitignored, so `git worktree add` never carries it in, and re-running the context-builder skill does not populate a worktree — it writes to the project root. Re-create the worktree (or copy the file in by hand) rather than re-running the skill; run the skill only when the repository root itself has no `settings.json`.
 3. **methodology.md exists** — read `tdd` for downstream reporting
 4. **PRPs/ exists or can be created** — `mkdir -p <worktree>/PRPs/reports/<feature>/attempts`
 5. **No pending uncommitted changes in the worktree** — if there are, note them in the final summary but proceed (the user may be iterating manually)

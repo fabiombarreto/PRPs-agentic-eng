@@ -92,6 +92,10 @@ If the result is empty after sanitization, HALT with:
 
 Record the sanitized value as `<feature>`.
 
+**An optional `repo` input (supplied by an invoker, never by a CLI flag).** When an invoker — `/relay-execute`'s per-phase worktree sub-flow — supplies a `repo` context, it carries that member's resolved topology entry: `repo`, absolute `repo_root`, `role`, and the resolved base. In that case `repo_root` comes from the entry and P1's `git rev-parse --show-toplevel` is SKIPPED; the worktree is created in that member's repository rather than in the cwd's.
+
+When no `repo` context is supplied — every standalone invocation, and every project with no topology declaration — P1 runs exactly as it does today and `repo_root` is the cwd's toplevel. The repo-qualified forms used throughout this command then resolve to precisely today's behavior, so a single-repo project sees no change.
+
 **Optional flags:**
 
 - `--base <ref>` — override the base ref resolution chain (D11). Captures `<ref>` as `base_override`. When provided, P2 verifies the ref is resolvable before proceeding.
@@ -116,7 +120,13 @@ Record `repo_root` as the output of `git rev-parse --show-toplevel` (the absolut
 
 ### P2 — Base ref resolvable
 
-Resolve `<resolved-base>` using the following priority chain (D11):
+Resolve `<resolved-base>` using the following priority chain:
+
+0. **If a `repo` context was supplied, its declared `Base` governs** (this priority did not exist before the multi-repo topology feature). `current` or an empty cell resolves to `git -C <repo_root> rev-parse HEAD`; any other value resolves with `git -C <repo_root> rev-parse --verify <value>`, and a non-zero exit raises `FAILED_TOPOLOGY_BASE_UNRESOLVED` per `${CLAUDE_PLUGIN_ROOT}/resources/repository-topology.md`. An explicit `--base <ref>` still wins over this, per step 1.
+
+   This **INVERTS** the recorded D11 ordering for a declared member. D11 put `HEAD` last, after `origin/main` and `origin/master` — so it is never reached in any repository whose default branch exists on the remote, which is nearly all of them. `git worktree add`'s own documented behavior with no commit-ish is to branch from the current checkout, so D11 overrode git's default; a member checked out on `dev` while `origin/main` resolves would otherwise be cut from `main`, silently. Restoring `current` as the default for declared members restores git's semantics.
+
+   **The chain below is UNCHANGED when no `repo` context was supplied.** A project with no topology declaration resolves its base exactly as it did before this feature — steps 1 through 2 verbatim.
 
 1. If `--base <ref>` was provided: run `git rev-parse --verify <ref>`. If it exits zero → use `<ref>` as `<resolved-base>`. If non-zero:
 
@@ -137,7 +147,7 @@ Resolve `<resolved-base>` using the following priority chain (D11):
 
 ### P3 — Path `.worktrees/<feature>/` state check (idempotency + conflict detection)
 
-Run `git worktree list --porcelain` (locale-independent; per git man page, `--porcelain` output is stable across locales and git versions). Parse the output for an entry whose `worktree` field matches the absolute path `<repo_root>/.worktrees/<feature>/`.
+Run `git -C <repo_root> worktree list --porcelain` (locale-independent; per git man page, `--porcelain` output is stable across locales and git versions). Parse the output for an entry whose `worktree` field matches the absolute path `<repo_root>/.worktrees/<feature>/`.
 
 **Case A — Entry found, branch matches `feature/<feature>`:**
 Set `idempotent_reuse = true`. Proceed to Phase A.0. The bootstrap script is NOT re-executed.
@@ -151,7 +161,7 @@ Inspect the actual branch for the worktree entry. HALT with:
 > different feature slug, or the branch was manually switched inside the worktree.
 > Options:
 >   (a) Choose a different feature name: /relay-worktree <different-feature>
->   (b) Remove the existing worktree manually: git worktree remove .worktrees/<feature>/
+>   (b) Remove the existing worktree manually: git -C <repo_root> worktree remove <repo_root>/.worktrees/<feature>/
 >       then re-run /relay-worktree <feature>
 > Do NOT remove the worktree if it contains uncommitted work you want to preserve.
 
@@ -182,7 +192,7 @@ Verify whether the existing branch points at the same commit as `<resolved-base>
 >   (a) Delete the orphaned branch: git branch -D feature/<feature>
 >       then re-run /relay-worktree <feature>
 >   (b) Use the existing branch by creating the worktree without -b:
->       git worktree add .worktrees/<feature>/ feature/<feature>
+>       git -C <repo_root> worktree add <repo_root>/.worktrees/<feature>/ feature/<feature>
 >       (do this manually if you want to reuse the branch's existing history)
 
 If the branch exists but points at the same commit as `<resolved-base>`, the `git worktree add` command will still fail with `-b` because the branch exists; treat this as a conflict and HALT with the same `FAILED_BRANCH_CONFLICT` message above.
@@ -206,15 +216,19 @@ Do NOT proceed to Phase A.1 or Phase B.
 Execute via `Bash`:
 
 ```
-git worktree add .worktrees/<feature>/ -b feature/<feature> <resolved-base>
+git -C <repo_root> worktree add <repo_root>/.worktrees/<feature>/ -b feature/<feature> <resolved-base>
 ```
+
+The `git -C <repo_root>` prefix and the qualified path are what make this work for a
+declared member. With no `repo` context supplied, `<repo_root>` is the cwd's toplevel
+and this is behaviourally identical to the bare form it replaces.
 
 Capture exit code, stdout, and stderr.
 
 If exit code is non-zero:
 
 > Worktree creation failed. See above for git diagnostic.
-> git worktree add .worktrees/<feature>/ -b feature/<feature> <resolved-base>
+> git -C <repo_root> worktree add <repo_root>/.worktrees/<feature>/ -b feature/<feature> <resolved-base>
 > Exit code: <exit-code>
 > <verbatim git stderr output>
 > Manual recovery: inspect the error above, resolve any git state issue, and
@@ -238,9 +252,52 @@ Exit non-zero. No bootstrap script is run when Phase A.2 verification fails.
 
 Record `absolute_worktree_path = <repo_root>/.worktrees/<feature>/` for use in Phase B.
 
+**Record the resolved base.** Append this member's entry to
+`PRPs/reports/<feature>/worktree-bases.json` — an object keyed by member name (or by
+the feature name itself when no `repo` context was supplied), each value carrying the
+declared `base` string, the RESOLVED ref name, and its SHA. This turns the base from an
+implicit choice into an audited fact, and it is what lets `/relay-pr` target the branch
+the worktree was actually cut from instead of guessing with a `merge-base --fork-point`
+heuristic.
+
 ---
 
 ## Phase B — Bootstrap hook execution
+
+### Step B.0 — Propagate the permission allowlist
+
+Runs FIRST, before the script detection below — the project hook may itself need
+the allowlist that this step puts in place.
+
+When `<repo_root>/.claude/settings.json` exists: create
+`<absolute_worktree_path>/.claude/` if it is not already there, and copy the file
+into it as `<absolute_worktree_path>/.claude/settings.json`.
+
+When the source does not exist: emit a warning naming the absent path and
+continue to the script detection below. Never halt — worktree creation remains
+the load-bearing outcome (D8 of `relay-worktree.prd.md`), and a project without
+an allowlist is a project that has not run `context-builder` yet, not a broken
+worktree.
+
+**Why the copy is necessary.** `git worktree add` checks out TRACKED content
+only, and `.claude/settings.json` is gitignored. A newly created worktree
+therefore comes up without the permission allowlist the autonomous loop depends
+on, and the first bash command in that loop prompts — or, when the test stage is
+reached first, `test-runner` aborts with `ABORT_INFRA` reason
+`missing_settings_json`. Re-running `context-builder` does not fix it: the skill
+writes to the project root, where the file already exists. Only a copy into the
+worktree populates the worktree.
+
+**Why this is not an anti-pattern violation.** `docs/anti-patterns.md`'s
+"Writing pipeline artifacts under `.claude/`" governs PIPELINE ARTIFACTS —
+PRDs, plans, reports, verdict logs — which belong under `PRPs/`. `settings.json`
+is setup configuration, which that entry exempts on exactly that ground. The
+bootstrap LOG this phase writes still goes to
+`PRPs/reports/<feature>/worktree-bootstrap.log`, never under `.claude/`.
+
+**`settings.local.json` is deliberately NOT propagated.** It is a per-developer
+override, not the versioned allowlist; copying it would carry one developer's
+personal permissions into a worktree other tooling may read.
 
 ### Phase B.0 — Script detection
 

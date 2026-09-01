@@ -619,19 +619,44 @@ test('AC-A6: prd-template.md\'s Phase-pairing mechanism states the scope marker 
   );
 });
 
-test('AC-A6 (real structural proof): the real ## Implementation Phases table header row in prd-template.md is unchanged — still exactly the 7 pre-existing columns, matching the identical header substring prd-reviewer.md\'s own R7 check quotes, confirming no 8th column was added for the visual/logic scope marker', () => {
-  const HEADER_ROW = '| # | Phase | Description | Status | Parallel | Depends | PRP Plan |';
+test('AC-A6 (real structural proof): the real ## Implementation Phases table header row in prd-template.md is the canonical column set, matched as a whole LINE rather than a substring, and the R7 check in prd-reviewer.md quotes the identical row — and neither carries a visual/logic scope column, which is the property the visual-first feature actually required', () => {
+  // The canonical set gained a `Repo` column in multi-repo-topology Phase 4.
+  // The pin's original wording ("still exactly the 7 pre-existing columns")
+  // was only ever a PROXY for what the visual-first feature needed: that its
+  // scope marker was carried by a bracket tag in the `Phase` cell rather than
+  // by a new column. That property is asserted directly below, so the pin no
+  // longer breaks every time the schema legitimately grows for an unrelated
+  // reason — and no longer passes merely because the legacy header appears
+  // somewhere in the file's prose.
+  const HEADER_ROW = '| # | Phase | Description | Status | Repo | Parallel | Depends | PRP Plan |';
+  const SCOPE_COLUMN_NAMES = ['Scope', 'Visual', 'Phase Scope'];
 
   const templateContent = readRepoFile(PRD_TEMPLATE_PATH);
-  assert.ok(templateContent.includes(HEADER_ROW), 'expected the unchanged 7-column header row in prd-template.md');
+  // Anchored to a whole line: a substring match would also hit the paragraph
+  // that documents the legacy form, which is exactly how this pin went
+  // vacuous once that paragraph was added.
+  const templateLines = templateContent.split(String.fromCharCode(10)).map((l) => l.trim().replace(String.fromCharCode(13), ''));
+  assert.ok(
+    templateLines.includes(HEADER_ROW),
+    'expected the canonical header row as a whole line in prd-template.md, not merely as a substring'
+  );
 
   const reviewerContent = readRepoFile(PRD_REVIEWER_PATH);
   const r7Block = sliceBetween(reviewerContent, '### R7', '---');
   assert.ok(r7Block, 'expected an extractable ### R7 block');
   assert.ok(
     collapseWs(/** @type {string} */ (r7Block)).includes(HEADER_ROW),
-    'expected prd-reviewer.md\'s R7 check to quote the identical 7-column header row'
+    'expected the R7 check in prd-reviewer.md to quote the identical canonical header row'
   );
+
+  // The preserved intent, asserted directly rather than inferred from a count.
+  const headerCells = HEADER_ROW.split('|').map((c) => c.trim()).filter(Boolean);
+  for (const banned of SCOPE_COLUMN_NAMES) {
+    assert.ok(
+      !headerCells.includes(banned),
+      `expected no '${banned}' column: the visual/logic scope marker is carried by a bracket tag in the Phase cell, never by a dedicated column`
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------

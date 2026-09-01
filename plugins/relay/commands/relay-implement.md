@@ -141,7 +141,7 @@ Proceed to P4.
 
 **PRD mode only (`is_prd_less == false`):** `Read` `PRPs/prds/<feature>.prd.md`. Locate the Implementation Phases table by exact-match header line:
 
-| # | Phase | Description | Status | Parallel | Depends | PRP Plan |
+| # | Phase | Description | Status | Repo | Parallel | Depends | PRP Plan |
 
 Locate row `<N>` (the row whose first cell, trimmed, equals the integer `<N>`). Verify the `Status` cell is exactly `in-progress` (case-sensitive). If the cell value is anything else (`pending`, `implemented`, `tested`, `complete`, or other), HALT with the source PRD AC-11 message verbatim:
 
@@ -255,7 +255,11 @@ is a soft, recorded outcome.
 
 ### P6 — Base-commit derivable
 
-Detect the base branch in priority order:
+**First priority — an invoker-supplied base.** When the invoker supplied a diff base for this phase (an orchestrator driving a multi-phase run passes the previous phase's recorded end-state tree object — see `relay-execute.md` Step A.6.0.5), use it verbatim as `base_commit` and skip the base-branch detection and the `merge-base` call below entirely.
+
+The supplied value may be a **tree object** rather than a commit. That is safe because every existing consumer of `base_commit` already uses the single-argument form: the per-attempt capture runs `git diff <base-commit>`, and `files_changed_by_attempt` is populated from those patches. Both accept a tree unchanged. A two-dot range MUST NOT be introduced against it — `HEAD` is still the untouched base commit, so such a range would compare two committed states and return an empty set.
+
+**Fallback chain — applies only when no base was supplied.** Detect the base branch in priority order:
 
 1. If `$ARGUMENTS` contained `--base <branch>`, extract that value.
 2. Otherwise, run `git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@'`.

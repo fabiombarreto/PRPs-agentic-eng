@@ -33,6 +33,8 @@ import { runDecisionsMirrorCheck } from './checks/decisions-mirror.mjs';
 import { runAntiPatternsMirrorCheck } from './checks/anti-patterns-mirror.mjs';
 import { runLineEndingsCheck } from './checks/line-endings.mjs';
 import { runDiffBaseFormCheck } from './checks/diff-base-form.mjs';
+import { runTopologyContractCheck } from './checks/topology-contract.mjs';
+import { runWorktreePathQualifiedCheck } from './checks/worktree-path-qualified.mjs';
 
 function die(code, msg) {
   process.stderr.write(msg + '\n');
@@ -60,6 +62,8 @@ const CHECKS = [
   runAntiPatternsMirrorCheck,
   runLineEndingsCheck,
   runDiffBaseFormCheck,
+  runTopologyContractCheck,
+  runWorktreePathQualifiedCheck,
 ];
 
 function runChecks(checks) {

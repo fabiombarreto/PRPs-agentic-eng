@@ -28,6 +28,25 @@ See:
 
 ---
 
+## Per-member iteration (workspace mode)
+
+When the target project declares a `## Repository topology` (see
+`${CLAUDE_PLUGIN_ROOT}/resources/repository-topology.md`), this command runs its
+entire flow ONCE PER participating member: resolve the member list, and for each
+member push `feature/<feature>` from that member's worktree and open one pull
+request in that member's repository. A pull request cannot span repositories, so
+a cross-repo feature necessarily produces one PR per member.
+
+Record a per-member outcome — the member name, the pushed SHA, the resolved base
+and the PR URL — so a partial failure names which repository succeeded and which
+did not. A member already carrying an open PR for the branch is an idempotent
+skip, exactly as the single-member path already treats it.
+
+**When no topology is declared, everything below runs exactly once against the
+one worktree, unchanged.**
+
+---
+
 ## Phase 0: PRECONDITIONS
 
 ### P0 — Argument non-empty
@@ -60,7 +79,7 @@ Check that `.worktrees/<feature>/` exists on disk. If the path is absent, HALT:
 Run:
 
 ```bash
-git -C .worktrees/<feature>/ branch --show-current
+git -C <repo_root>/.worktrees/<feature>/ branch --show-current
 ```
 
 If the result is NOT `feature/<feature>`, HALT:
@@ -69,7 +88,7 @@ If the result is NOT `feature/<feature>`, HALT:
 > not the expected branch `feature/<feature>`.
 > Verify the worktree was created by /relay-worktree and not manually switched.
 > Resolve the branch manually:
->   git -C .worktrees/<feature>/ checkout feature/<feature>
+>   git -C <repo_root>/.worktrees/<feature>/ checkout feature/<feature>
 > Then re-run `/relay-pr <feature>`.
 
 ---
@@ -81,7 +100,7 @@ If the result is NOT `feature/<feature>`, HALT:
 Run:
 
 ```bash
-git -C .worktrees/<feature>/ status --porcelain
+git -C <repo_root>/.worktrees/<feature>/ status --porcelain
 ```
 
 If the output is **non-empty** (uncommitted changes present), HALT:
@@ -108,7 +127,9 @@ Resolve `<resolved-base>` using the following priority chain (first match wins):
    > FAILED_BASE_REF_UNRESOLVED: The specified base ref `<base-override>` does not exist.
    > Run `git fetch` to update remote refs, then re-run with a valid `--base` value.
 
-2. **Feature's source integration branch** — detect the nearest ancestor of `feature/<feature>` among all `origin/*` branches (excluding `origin/feature/*`). Use `git merge-base --fork-point` or the shortest `git log --ancestry-path` distance. The candidate with the smallest commit distance wins. Skip this step if the detection produces no unambiguous single result.
+2. **Recorded creation base** — read `PRPs/reports/<feature>/worktree-bases.json`, written by `/relay-worktree` when the worktree was created. When it carries an entry for this member, use its recorded resolved ref as `<resolved-base>`.
+
+   This is a recorded FACT, not an inference: it is the ref the worktree was actually cut from. Using it makes the branch a worktree was created from and the branch its PR merges into the same by construction. The tier this replaces detected the "nearest ancestor" with `git merge-base --fork-point`, which could disagree with the real creation base — on a repository checked out on `dev` while `origin/main` resolves, the two answer `origin/dev` and `origin/main`. That heuristic is deleted rather than demoted: a guess that fires only when the record is missing produces failures that are unreproducible, and the deterministic fallbacks below already cover that case.
 
 3. **Develop-family fallback** — try in order until one resolves (exit code 0):
    ```bash
@@ -140,7 +161,7 @@ Record `<resolved-base>` (the branch name, not the SHA — e.g., `develop`, `mai
 Run:
 
 ```bash
-git -C .worktrees/<feature>/ rev-list --count <resolved-base>..feature/<feature>
+git -C <repo_root>/.worktrees/<feature>/ rev-list --count <resolved-base>..feature/<feature>
 ```
 
 If the count is **0** (no commits ahead of base), HALT:
@@ -185,14 +206,14 @@ If the command fails or reports not authenticated, HALT:
 Run:
 
 ```bash
-git -C .worktrees/<feature>/ remote get-url origin
+git -C <repo_root>/.worktrees/<feature>/ remote get-url origin
 ```
 
 If the command fails (no `origin` remote), HALT:
 
 > FAILED_NO_ORIGIN: No `origin` remote found in `.worktrees/<feature>/`.
 > Add the remote with:
->   git -C .worktrees/<feature>/ remote add origin <repo-url>
+>   git -C <repo_root>/.worktrees/<feature>/ remote add origin <repo-url>
 > Then re-run `/relay-pr <feature>`.
 
 On success, derive the GitHub `<owner>/<repo>` slug from the returned origin URL and record it as `<origin-repo>`. Support both URL forms (strip any trailing `.git`):
@@ -218,7 +239,7 @@ If the origin URL is not a recognizable GitHub `<owner>/<repo>` form, HALT:
 Run:
 
 ```bash
-git -C .worktrees/<feature>/ rev-parse feature/<feature>
+git -C <repo_root>/.worktrees/<feature>/ rev-parse feature/<feature>
 ```
 
 Record the output as `<local-sha>`.
@@ -226,7 +247,7 @@ Record the output as `<local-sha>`.
 Attempt to resolve the remote tracking ref:
 
 ```bash
-git -C .worktrees/<feature>/ rev-parse origin/feature/<feature>
+git -C <repo_root>/.worktrees/<feature>/ rev-parse origin/feature/<feature>
 ```
 
 If this command **exits non-zero** (the remote ref does not exist — the branch has never been pushed): the remote ref is absent → push is needed. Proceed to Step 2.
@@ -245,7 +266,7 @@ If this command **exits zero**: record the output as `<remote-sha>`.
 Run:
 
 ```bash
-git -C .worktrees/<feature>/ push -u origin feature/<feature>
+git -C <repo_root>/.worktrees/<feature>/ push -u origin feature/<feature>
 ```
 
 Do **NOT** pass any force flag (`--force` or similar variants).
@@ -255,8 +276,8 @@ If the push command exits **non-zero** (non-fast-forward rejection or other erro
 > FAILED_BRANCH_DIVERGENCE: `git push` to `origin/feature/<feature>` failed.
 > The remote branch has commits that are not in your local branch (non-fast-forward).
 > Automatic force-push is never performed. Resolve manually:
->   git -C .worktrees/<feature>/ fetch origin
->   git -C .worktrees/<feature>/ rebase origin/feature/<feature>
+>   git -C <repo_root>/.worktrees/<feature>/ fetch origin
+>   git -C <repo_root>/.worktrees/<feature>/ rebase origin/feature/<feature>
 > Then re-run `/relay-pr <feature>`.
 
 If the push exits **zero**: the branch is now at `origin/feature/<feature>`.

@@ -2234,6 +2234,32 @@ This composes with, and does not supersede, entries 89 and 90. Formatting preven
 
 <!-- Template for future entries:
 
+## [2026-09-01] Worktree base for a declared member is its `Base` cell, defaulting to `current` — D11's chain is preserved only where no topology is declared
+
+**Context:** `docs/decisions.md` [2026-05-11] D11 resolves a worktree's base as `--base` → `origin/main` → `origin/master` → `HEAD`. The current checkout is therefore reached only when BOTH remote defaults fail to resolve, which does not happen in any repository whose default branch exists on the remote — so in practice relay never branches from the line the operator is working on. Reproduced during the multi-repo-topology feature on a repository checked out on `dev` with `origin/main` present: the worktree would be cut from `main`, silently. A second instance is documented in a target workspace whose SDK repository carries two diverged release lines with overlapping version numbers, where branching from the wrong one is destructive rather than merely surprising.
+
+**Decision:** For a member declared in a `## Repository topology` section, the member's `Base` cell governs the worktree's base. `current` — or an empty cell — resolves to that member's currently checked-out `HEAD`; any other value is a named ref verified with `git -C <repo_root> rev-parse --verify`, whose failure raises `FAILED_TOPOLOGY_BASE_UNRESOLVED`. An explicit `--base <ref>` still wins over both. **The D11 chain is preserved verbatim, and remains the resolution, for every project that declares no topology.**
+
+**Reason:** `git worktree add`'s own documented behavior with no commit-ish is to create the branch from the current checkout's `HEAD`; there is no notion of a workspace-wide default base. D11 therefore overrode git's own default without recording a rationale, and the override is what produces the defect. Restoring `current` as the default for declared members restores git's semantics rather than inventing new ones.
+
+**Known limitation, deliberately accepted:** this leaves the same defect live for projects with NO topology declaration — the majority. AC-1 of `PRPs/prds/multi-repo-topology.prd.md` guarantees that such a project resolves paths, roots AND base exactly as before the feature, which forbids the fix on that path. The choice was to honor the approved criterion and record the exposure rather than silently exceed scope. Whether AC-1's base clause was too strong is a question for a follow-up PRD; the evidence for revisiting it is already in that PRD's own Evidence section.
+
+**Areas affected:** `plugins/relay/commands/relay-worktree.md` (P2 gains a member-`Base` priority ahead of the chain), `plugins/relay/resources/repository-topology.md` (the `Base` column's semantics and its HALT), `plugins/relay/commands/relay-execute.md` (P7 resolves and confirms every member's base), `plugins/relay/commands/relay-pr.md` (consumes the recorded base and drops its fork-point tier), `PRPs/reports/<feature>/worktree-bases.json` (new artifact recording the resolved ref and SHA per member).
+
+---
+
+## [2026-09-01] The base preflight is relay's fourth interactivity-boundary extension, and the first that is a precondition rather than a resumable halt
+
+**Context:** `docs/context/architecture.md` records three sanctioned extensions to the interactivity boundary: PRD approval, the Design Spec pair (`docs/decisions.md` [2026-07-23]), and `/relay-visual-approve` ([2026-07-27]). The third deliberately used HALT-and-resume rather than a synchronous dialogue, on the recorded reasoning that `/relay-execute` drives many phases across one long unattended run and a dialogue only works inside a single unbroken interactive turn. The multi-repo-topology feature needed the operator to confirm which ref each member's worktree would be cut from — a decision that is cheap to get right up front and expensive to discover afterwards.
+
+**Decision:** `/relay-execute` gains precondition `P7 — Base preflight and confirmation`. When a topology is declared it resolves every `editable` member's base, emits one table naming each member's declared base, resolved ref, current branch and SHA, and requires ONE explicit confirmation before Phase A begins. A member whose base does not resolve HALTs before any confirmation is requested and before any worktree exists. When no topology is declared the precondition is a complete no-op: no table, no question, no artifact.
+
+**Reason:** A precondition runs BEFORE the unattended run starts, in the same turn the operator invoked the command — so it can dialogue, while the loop it precedes stays entirely prompt-free. That preserves the "Relying on interactive permission prompts in the autonomous loop" anti-pattern rather than carving an exception into it: the anti-pattern governs the loop, and this is not in the loop. Confirming N members in one interaction is also strictly cheaper than N confirmations inside the loop, which is the shape the 2026-07-27 reasoning rules out. The no-op branch is what keeps every existing single-repo project from seeing a new prompt at all.
+
+**Areas affected:** `plugins/relay/commands/relay-execute.md` (new P7), `docs/context/architecture.md` (Interactivity boundary — the count moves from three extensions to four), `plugins/relay/resources/repository-topology.md` (the base resolution P7 invokes).
+
+---
+
 ## [YYYY-MM-DD] Title of the decision
 
 **Context:** Why this decision was needed.

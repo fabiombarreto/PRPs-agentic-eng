@@ -124,6 +124,8 @@
         <li><a href="#r-sem-prose-clarification">Reviewer findings are never self-executing test-edit authorization</a></li>
         <li><a href="#rx-executable-content-equivalence">R-X clears a matched test path only through a script-computed executable-content hash</a></li>
         <li><a href="#reviewers-never-mutate-worktree">Review agents never mutate the target working tree</a></li>
+        <li><a href="#member-base-defaults-to-current">Worktree base for a declared member is its Base cell, defaulting to current</a></li>
+        <li><a href="#base-preflight-fourth-interactivity-extension">The base preflight is the fourth interactivity-boundary extension</a></li>
       </ol>
 
       <h2 id="entries">Entries</h2>
@@ -886,6 +888,22 @@
         <dt>Context</dt><dd><code>test-reviewer</code> (B8) ran <code>git stash</code> on a live working tree to isolate a state for its RED legitimacy check. The intent is sound, but the tree held a developer's uncommitted work and an open phase, and a stash that is never popped &mdash; interrupted run, failed command, later halt &mdash; destroys it. Nothing in either reviewer's prose forbade it, and the recommended allowlist actively pre-authorized <code>Bash(git stash*)</code>.</dd>
         <dt>Decision</dt><dd><code>test-reviewer</code> gains Hard constraint 2b and <code>post-green-reviewer</code> a working-tree rule: <code>git stash</code>, <code>git stash pop</code>, <code>git checkout</code>, <code>git restore</code>, <code>git reset</code> and <code>git clean</code> are forbidden, with no &quot;temporarily&quot; exception. A check that would need a tree state the agent cannot have degrades explicitly to <code>passed: null</code> with a reason naming what could not be re-verified. <code>Bash(git stash*)</code> is removed from <code>resources/settings-allowlist.md</code>, with its absence documented in place.</dd>
         <dt>Reason</dt><dd>These agents are pointed at trees they do not own and cannot tell a live tree from a disposable one. The degraded path already exists and is designed for exactly this, so the fix costs no capability. Provisioning a dedicated worktree was rejected: it makes the stash safe where provisioned but leaves the unsafe behavior legal everywhere else, and the allowlist entry would still invite it.</dd>
+      </div>
+
+      <h3 id="member-base-defaults-to-current">94. Worktree base for a declared member is its Base cell, defaulting to current</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-09-01</dd>
+        <dt>Context</dt><dd>D11 resolved a worktree&#39;s base as <code>--base</code> &rarr; <code>origin/main</code> &rarr; <code>origin/master</code> &rarr; <code>HEAD</code>, so the current checkout was reached only when both remote defaults failed &mdash; which does not happen in any repository whose default branch exists on the remote. Reproduced on a repository checked out on <code>dev</code> with <code>origin/main</code> present: the worktree would be cut from <code>main</code>, silently.</dd>
+        <dt>Decision</dt><dd>For a member declared in a <code>## Repository topology</code> section, that member&#39;s <code>Base</code> cell governs. <code>current</code> or an empty cell resolves to the member&#39;s checked-out <code>HEAD</code>; any other value is a named ref verified with <code>git rev-parse --verify</code>. The D11 chain is preserved verbatim for every project that declares no topology.</dd>
+        <dt>Reason</dt><dd><code>git worktree add</code>&#39;s own documented behavior with no commit-ish is to branch from the current checkout, so D11 overrode git&#39;s default without recording why. Restoring <code>current</code> as the default for declared members restores git&#39;s semantics rather than inventing new ones. The same defect stays live for projects with no topology, deliberately: AC-1 of the source PRD guarantees their base resolution is unchanged, and honoring an approved criterion while recording the exposure was preferred to silently exceeding scope.</dd>
+      </div>
+
+      <h3 id="base-preflight-fourth-interactivity-extension">95. The base preflight is the fourth interactivity-boundary extension</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-09-01</dd>
+        <dt>Context</dt><dd>Three extensions were sanctioned before this one: PRD approval, the Design Spec pair, and <code>/relay-visual-approve</code>. The third used HALT-and-resume rather than dialogue because <code>/relay-execute</code> drives many phases across one long unattended run, and a synchronous dialogue only works inside a single unbroken interactive turn.</dd>
+        <dt>Decision</dt><dd><code>/relay-execute</code> gains precondition <code>P7 &mdash; Base preflight and confirmation</code>: with a topology declared it resolves every editable member&#39;s base, emits one table, and requires ONE confirmation before the orchestration loop begins. A member whose base does not resolve halts before any confirmation and before any worktree exists. With no topology declared it is a complete no-op.</dd>
+        <dt>Reason</dt><dd>A precondition runs before the unattended run starts, in the turn the operator invoked &mdash; so it can dialogue while the loop stays prompt-free. That preserves the &quot;no interactive prompts in the autonomous loop&quot; anti-pattern rather than carving an exception into it. Confirming N members once is also strictly cheaper than N confirmations inside the loop, which is the shape the 2026-07-27 reasoning rules out.</dd>
       </div>
 
       <h2 id="how-to-add">Adding a new decision</h2>
