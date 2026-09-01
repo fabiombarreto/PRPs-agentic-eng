@@ -32,6 +32,7 @@ import { runMetricsIsolationCheck } from './checks/metrics-isolation.mjs';
 import { runDecisionsMirrorCheck } from './checks/decisions-mirror.mjs';
 import { runAntiPatternsMirrorCheck } from './checks/anti-patterns-mirror.mjs';
 import { runLineEndingsCheck } from './checks/line-endings.mjs';
+import { runDiffBaseFormCheck } from './checks/diff-base-form.mjs';
 
 function die(code, msg) {
   process.stderr.write(msg + '\n');
@@ -58,6 +59,7 @@ const CHECKS = [
   runDecisionsMirrorCheck,
   runAntiPatternsMirrorCheck,
   runLineEndingsCheck,
+  runDiffBaseFormCheck,
 ];
 
 function runChecks(checks) {

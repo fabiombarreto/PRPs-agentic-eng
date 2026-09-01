@@ -188,6 +188,31 @@ would interrupt the autonomous loop on every file write. See
 
 The canonical PRD shape is defined in `plugins/relay/resources/prd-template.md`.
 
+## Diff-base contract
+
+Relay derives what changed with the **single-argument** form
+`git diff <base>`, which compares the base against the WORKING TREE. The
+two-dot form `git diff <base>..HEAD` MUST NOT be used to derive a changed-file
+set.
+
+The reason is structural, not stylistic. Pillar 2 never commits, and a feature
+worktree's `HEAD` never moves off its base — so a two-dot range compares a
+commit to itself and returns an empty set on every standard invocation. An
+empty set does not fail a rubric: it makes `R-S1` trivially true, `R-X` (the
+universal test-modification guard) pass by vacuity, the arbitration path's
+purely-additive verification verify nothing, and the post-green weakening scan
+report "no weakening found" for every run. The failure is silent by
+construction — every run looks green.
+
+`<base>` may be a commit-ish or a **tree object**. An orchestrator driving a
+multi-phase run passes the previous phase's `git write-tree` snapshot, so each
+phase is reviewed against its own starting point rather than against a base
+commit shared by every phase.
+
+The `diff-base-form` check in `npm run validate` pins the rule across
+`plugins/relay/agents/` and `plugins/relay/commands/`, exempting only prose
+that quotes the forbidden form in order to forbid it.
+
 ## Command surface
 
 Relay exposes **19 commands**, organized by role. Full

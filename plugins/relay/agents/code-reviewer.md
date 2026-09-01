@@ -68,10 +68,20 @@ canonical divergences from the closest sibling reviewer
   `TEST_CONTRACT_DISPUTE` payload as the structured object
   `{disputed_tests, prd_refs, claim, proposed_resolution}`.
   Standard mode invocations do not pass this field.
-- `diff_target` (standard mode, optional): a base ref (default
-  `HEAD~1`) the agent diffs against to identify changed files.
-  When omitted, the agent uses `git diff --name-only HEAD~1..HEAD`
-  to enumerate changed files.
+- `diff_target` (standard mode, optional): a base the agent diffs
+  against to identify changed files. It may be a commit-ish OR a
+  **tree object** — an orchestrator driving a multi-phase run passes
+  the previous phase's `git write-tree` snapshot so each phase is
+  reviewed against its own starting point. Default `HEAD~1`.
+  The agent consumes it with the **single-argument form**
+  `git diff --name-only <diff_target>`, which compares the base
+  against the WORKING TREE. The two-dot form MUST NOT be used: it
+  compares two commits and so returns an empty set whenever the work
+  is uncommitted — which is every standard Pillar 2 invocation, since
+  relay never commits before review and a feature worktree's `HEAD`
+  never moves off its base. An empty set does not fail the rubric; it
+  makes `R-S1` trivially true and `R-X` pass by vacuity, which is the
+  defect this contract exists to prevent.
 - `review_started_at`: the full UTC instant (`YYYY-MM-DDTHH:MM:SSZ`)
   the calling command captured immediately before this dispatch.
   Write it verbatim into the verdict's `timestamp` field.
@@ -226,9 +236,13 @@ Inspect the `mode` value provided by the COMMAND:
   - Hold the plan-context (sections captured in Phase 0) for the
     Phase 2 standard-mode rubric.
   - Identify the changed-file set: run
-    `git diff --name-only <diff_target>..HEAD` (default
+    `git diff --name-only <diff_target>` (default
     `<diff_target>=HEAD~1`) via `Bash`. Capture the list as
     `files_changed` for R-S1, R-S2, and R-X.
+    The single argument is deliberate — do not "restore" a
+    `..HEAD` suffix here. Two commit arguments compare commit to
+    commit and return an empty set on uncommitted work, silently
+    emptying the input of all three items above.
   - Record `mode = "standard"` and `attempt = <attempt>` for the
     Phase 4 jsonl entry.
   - Proceed to Phase 2.
@@ -398,7 +412,7 @@ Using the canonical test-glob pathspec set:
 Run via `Bash`:
 
 ```
-git diff --name-only <diff_target>..HEAD -- <pathspec-set>
+git diff --name-only <diff_target> -- <pathspec-set>
 ```
 
 If the result is empty: PASS.
@@ -644,7 +658,7 @@ the parent must inject all needed context):
 
 ```
 <diff>
-...full unified diff content (from `git diff <diff_target>..HEAD`)...
+...full unified diff content (from `git diff <diff_target>`)...
 </diff>
 
 <plan_task>
@@ -819,7 +833,7 @@ possible outcomes:
      claimed:
 
      ```
-     git diff --numstat <diff_target>..HEAD -- <cited-test-path>
+     git diff --numstat <diff_target> -- <cited-test-path>
      ```
 
      The deletions column MUST be `0` for every cited path. Any
@@ -1171,7 +1185,7 @@ follows D10 of the source PRD.
     {
       "id": "arbitration",
       "verdict": "DISPUTE_UPHELD_NEW_COVERAGE",
-      "reason": "tests/test_billing.py adds three cases for the empty-basket refusal PRD AC-15 (PRPs/prds/billing.prd.md:77) plainly requires. Purely additive, verified not claimed: git diff --numstat <diff_target>..HEAD -- tests/test_billing.py reports 41/0 — zero deletions, so no existing assertion moved. The addition introduces no shared setup: no new module-level fixture, no new beforeEach/conftest entry; the three cases are self-contained."
+      "reason": "tests/test_billing.py adds three cases for the empty-basket refusal PRD AC-15 (PRPs/prds/billing.prd.md:77) plainly requires. Purely additive, verified not claimed: git diff --numstat <diff_target> -- tests/test_billing.py reports 41/0 — zero deletions, so no existing assertion moved. The addition introduces no shared setup: no new module-level fixture, no new beforeEach/conftest entry; the three cases are self-contained."
     }
   ],
   "dispute_evidence": {
