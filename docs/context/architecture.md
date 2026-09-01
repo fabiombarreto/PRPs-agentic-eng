@@ -213,6 +213,34 @@ The `diff-base-form` check in `npm run validate` pins the rule across
 `plugins/relay/agents/` and `plugins/relay/commands/`, exempting only prose
 that quotes the forbidden form in order to forbid it.
 
+## Workspace topology contract
+
+Relay addresses three distinct roots. `project_root` is the workspace root — the
+directory a command is invoked from, holding the single artifact plane (`PRPs/`
+and the workspace's own `docs/`). `context_root` is a member repository's relay
+context (its `CLAUDE.md` and `docs/`). `repo_root` is that member's git
+repository root, where its worktree is created. In most members the last two are
+the same directory; they are not always, so both are expressed rather than
+assumed equal.
+
+A project that contains several sibling git repositories declares its members in
+a dedicated section of its OWN `docs/context/architecture.md`. The declaration is
+explicit — relay never discovers members by scanning for `.git` directories, and
+never infers a member's role or base. This follows the same non-heuristic
+contract every opt-in gating key already obeys (`tdd`, `docs_sync`,
+`figma_track`).
+
+**This repository is single-repo and therefore declares no such section.** Its
+absence is the compatibility clause: with no declaration, `project_root`,
+`context_root` and `repo_root` all collapse to the current working directory and
+every stage behaves exactly as it did before the contract existed.
+
+The authoritative contract — the exact section heading and table header
+consumers match on, the parsing rules, the column semantics and the named HALT
+codes for topologies that cannot be served — lives in
+`${CLAUDE_PLUGIN_ROOT}/resources/repository-topology.md`. `/relay-execute`
+consumes it at precondition P6.
+
 ## Command surface
 
 Relay exposes **19 commands**, organized by role. Full
@@ -355,6 +383,137 @@ Phases table as its canonical state machine (D6 — 2026-05-01 decision).
 - **Model:** lightweight Airflow-style idempotency-by-convention, appropriate
   for relay's single-developer scale. A durable execution engine (Temporal-
   style event-sourced) would be over-engineering for the current use case.
+
+### Per-phase diff base
+
+Every phase of a multi-phase run would otherwise share one base commit. Pillar 2
+never commits, and a feature worktree's `HEAD` never moves off the commit it was
+created from — so `git merge-base HEAD <base_branch>` resolves to the same commit
+for phase 1 and for phase 8. Phase N's code review then inherits phases 1..N-1's
+files and emits scope failures against files the plan legitimately never
+mentioned.
+
+`/relay-execute` therefore snapshots the worktree at each phase close-out with
+`git add -A && git write-tree` and records the resulting tree object in
+`PRPs/reports/<feature>/orchestrator-run.json` under `phase_diff_bases`, keyed by
+phase number. A tree object is not a commit: the snapshot writes to the object
+store and the index and modifies no tracked file, so the no-commit invariant
+holds.
+
+The next phase's `/relay-implement` uses that tree as `base_commit` in place of
+its own `merge-base` derivation. The derivation remains the fallback — for the
+first phase of a run, for a hand-invoked `/relay-implement`, and whenever a
+snapshot soft-failed and recorded no entry.
+
+### Worktree setup
+
+A worktree is a TRACKED-CONTENT-ONLY checkout: anything gitignored is absent from
+it. Relay therefore splits worktree setup into two halves with different owners.
+
+The **universal half** is propagating `.claude/settings.json` so the autonomous
+loop's permission allowlist exists inside the worktree. It belongs to
+`/relay-worktree` Step B.0, because every relay worktree needs it in every
+project — leaving it to a project-owned script would reintroduce exactly the
+"forgot to check" versus "doesn't apply" ambiguity the declaration model exists
+to prevent. Without it, the first bash command in the loop prompts, or
+`test-runner` aborts with `missing_settings_json`. `settings.local.json` is
+deliberately not propagated: it is a per-developer override, not the versioned
+allowlist.
+
+The **stack-specific half** — dependencies, env files, ports, container project
+names — stays in the project-owned `scripts/worktree-bootstrap.sh` /
+`worktree-bootstrap.ps1` hook per D9 (`docs/decisions.md`, 2026-05-11), invoked
+with the absolute worktree path and a 60-second timeout, its failure non-fatal
+and its redacted output logged to
+`PRPs/reports/<feature>/worktree-bootstrap.log`. Keeping it project-owned is
+what stops relay from becoming a Docker or dependency orchestrator.
+
+### The Repo column
+
+The Implementation Phases table carries a `Repo` cell naming the workspace
+member each phase targets. An empty cell or `-` means the project's single
+repository — which is why no PRD authored before the column existed needed
+migrating, and why a single-repo project never has to think about it.
+
+The legacy seven-column header remains valid and every parser accepts both
+forms. Parsers map cells BY COLUMN NAME using the header row they matched,
+never by ordinal position: `Repo` sits between `Status` and `Parallel`, so an
+ordinal read would misinterpret every cell after `Status` in a legacy row.
+
+`prd-reviewer`'s `R-COH-REPO-UNDECLARED` binds each non-empty value to the
+`## Repository topology` registry — the member must exist and its `Role` must
+be `editable`. For a project with no topology section the check emits nothing
+at all, rather than passing vacuously or failing.
+
+### Per-repo worktrees and the base preflight
+
+In a declared workspace a worktree is created in EACH participating member's own
+repository, at `<repo_root>/.worktrees/<feature>/`, rather than once in the cwd. The
+member's declared `Base` governs which commit it is cut from, defaulting to `current`
+— the repository's currently checked-out `HEAD`, which is also what `git worktree add`
+does when given no commit-ish. That default deliberately restores git's own semantics:
+the recorded D11 chain put `HEAD` last, behind `origin/main` and `origin/master`, so a
+member checked out on `dev` was silently cut from `main`.
+
+The resolved ref name and SHA are recorded per member to
+`PRPs/reports/<feature>/worktree-bases.json`, so the base a worktree was cut from is an
+audited fact rather than an implicit choice — which is what lets Pillar 3 target the
+right branch instead of inferring one.
+
+`/relay-execute` precondition P7 resolves every member's base and confirms them all in
+ONE interaction before the orchestration loop begins. That makes it the pipeline's
+fourth human-confirmation point, and the first that is a precondition rather than a
+resumable halt: the loop runs long and unattended, so a dialogue only works before it
+starts.
+
+**A project with no topology declaration is untouched by all of this.** P7 is a
+complete no-op, no `repo` context is passed, and the D11 chain resolves the base
+exactly as it did before.
+
+### Per-repo context resolution
+
+A phase is governed by its OWN member's context. The three Decision Gate sources
+and `docs/context/methodology.md` are read from that member's `context_root` —
+never from the artifact root, which in a workspace holds no `methodology.md` at
+all.
+
+TDD routing is therefore a **per-phase** decision. One run can legitimately route
+one phase test-first and another test-after, because the members disagree:
+measured across one real workspace's six initialized members, jest, vitest and
+pytest coexist and `tdd` is `true` in half. The routing note that used to be
+emitted once at startup is emitted per phase instead, with its text unchanged.
+
+A member's declaration wins outright — no inheritance, no overlay. An overlay
+would leave a phase's effective `tdd` value readable from no single file, which
+is the ambiguity the declaration model exists to prevent.
+
+**With no topology declared, every one of these reads resolves at the project
+root exactly as before**, and the startup routing note is emitted once, as it
+always was.
+
+### Pillar 3 across N repos
+
+A pull request cannot span repositories, so a cross-repo feature produces one
+commit, one branch, one pull request and one cleanup PER member. `/relay-commit`,
+`/relay-pr` and `/relay-approve` each iterate the participating members and run
+their existing per-worktree logic once for each, recording a per-member outcome
+so a partial failure names the repository rather than leaving recovery to
+guesswork.
+
+Each PR targets the base recorded in `PRPs/reports/<feature>/worktree-bases.json`
+when the worktree was created. The branch a worktree was cut from and the branch
+its PR merges into are therefore the same BY CONSTRUCTION. The heuristic that
+previously inferred the target is deleted, not demoted: it could disagree with
+the real creation base, and a guess that fires only when the record is missing
+produces failures nobody can reproduce.
+
+The collision-safe cleanup order is preserved per member, and the
+`worktree-path-qualified` check in `npm run validate` keeps every git invocation
+repo-scoped: a line that invokes git against `.worktrees/` must name its
+repository, or it runs against whatever directory happens to be current.
+
+**With no topology declared, all three commands behave exactly as before**,
+against the single worktree.
 
 ## Phased rollout
 

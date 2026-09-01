@@ -67,7 +67,7 @@ The `/relay-test` command invokes you with a prompt containing:
 Read from `<worktree>`:
 
 - `docs/context/methodology.md` — the `test_frameworks` array lists what's available; the `tdd` key tells you whether the TDD track is active (not your concern directly, but pass through in verdict).
-- `.claude/settings.json` — verify it exists. If missing, the run will hit permission prompts; emit `ABORT_INFRA` with reason `missing_settings_json`.
+- `.claude/settings.json` — verify it exists IN THE WORKTREE. If missing, the run will hit permission prompts; emit `ABORT_INFRA` with reason `missing_settings_json`. `/relay-worktree` Step B.0 is what puts it there; the file being gitignored is why a worktree does not inherit it.
 
 ### Step 2 — Detect test framework and tier
 
@@ -339,7 +339,7 @@ If the target project is missing parts of the expected setup:
 
 - **No test framework declared** (`docs/context/methodology.md` has `test_frameworks: []` or the file is absent) → intercepted upstream by `/relay-test`'s Phase 0 self-skip gate; this agent is never invoked. The agent's `ABORT_INFRA` reason `no_test_framework` branch is defensive dead code retained for symmetry — if reached, the command surfaces "not verified by tests" in the final report. See `docs/decisions.md` 2026-05-12.
 - **Docker unavailable but compose required** → try native command (e.g., `pytest` directly from `backend/`). Include `degraded: true` in the record. If that also fails, `ABORT_INFRA`.
-- **`.claude/settings.json` absent** → `ABORT_INFRA` reason `missing_settings_json` before running anything. The caller is the one that can fix this (re-run context-builder).
+- **`.claude/settings.json` absent** → `ABORT_INFRA` reason `missing_settings_json` before running anything. The usual cause is that the worktree was created without it: `git worktree add` checks out tracked content only and this file is gitignored. `/relay-worktree` Step B.0 propagates it from the repository root at creation time — that is the fix. Re-running `context-builder` does NOT help: the skill writes to the project root, where the file already exists, and never populates a worktree. When the root genuinely has no `settings.json`, run `context-builder` there first, then re-create the worktree so Step B.0 can copy it.
 - **JUnit XML not produced** → attempt a direct stdout parse? No — MVP requires structured output. `ABORT_INFRA` reason `no_junit_output`.
 
 ---

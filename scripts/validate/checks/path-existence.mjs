@@ -15,10 +15,13 @@
  * genuine) documented in this plan's Risks section:
  *
  *   1. Backtick-quoted `scripts/<...>` references (repo-owned scripts) —
- *      EXCLUDING `scripts/worktree-bootstrap.sh` / `.ps1`, which name a
- *      script relay's prompts describe emitting into a TARGET project,
- *      never this repo; check P (bootstrap-parity) already owns that
- *      invariant.
+ *      EXCLUDING `scripts/worktree-bootstrap.sh` / `.ps1`. The exclusion
+ *      stands because this reference class is about paths relay's PROMPTS
+ *      name for TARGET projects, and check P (bootstrap-parity) already
+ *      owns the skill-template parity invariant. Note the pair now ALSO
+ *      exists in this repository, as its own D9 hook instance, so the
+ *      exclusion must not be re-justified on the ground that the files are
+ *      absent here.
  *   2. Backtick-quoted `${CLAUDE_PLUGIN_ROOT}/{agents,commands,skills,
  *      .claude-plugin,scripts}/<file>` references — self-referential plugin
  *      assets, resolved under `plugins/relay/`. `${CLAUDE_PLUGIN_ROOT}/hooks/…`
@@ -56,10 +59,12 @@ import { resolve } from 'node:path';
 const SCAN_ROOTS = ['plugins/relay', 'docs'];
 const CHECK_NAME = 'path-existence';
 
-// scripts/<...> prefixes that name a script relay's prompts describe
-// emitting into a TARGET project (never this repo) — excluded from class 1
-// so this check never fights check P (bootstrap-parity), which owns the
-// worktree-bootstrap.{sh,ps1} parity invariant.
+// scripts/<...> prefixes relay's prompts name for TARGET projects —
+// excluded from class 1 so this check never fights check P
+// (bootstrap-parity), which owns the worktree-bootstrap.{sh,ps1} parity
+// invariant. The pair also exists in this repository as its own D9 hook
+// instance; the exclusion is about ownership of the invariant, not about
+// the files being absent here.
 const TARGET_PROJECT_SCRIPT_PREFIXES = ['scripts/worktree-bootstrap.'];
 
 // ${CLAUDE_PLUGIN_ROOT}/<prefix>… prefixes resolved under plugins/relay/ by

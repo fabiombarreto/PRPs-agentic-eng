@@ -42,6 +42,23 @@ See:
 
 ---
 
+## Per-member iteration (workspace mode)
+
+When the target project declares a `## Repository topology` (see
+`${CLAUDE_PLUGIN_ROOT}/resources/repository-topology.md`), worktree mode runs its
+flow ONCE PER participating member: verify the branch, run
+`git status --porcelain` for idempotency, stage and commit. A member whose
+worktree is clean is a SKIP, not a failure — a cross-repo feature does not
+necessarily touch every member.
+
+Record a per-member outcome so a partial failure names the repository. Message
+generation is unchanged, and `--no-verify` is never passed in any member.
+
+**When no topology is declared, the flow runs exactly once against the one
+worktree, unchanged.**
+
+---
+
 ## Phase 0: MODE ROUTING
 
 Trim `$ARGUMENTS`. Record the trimmed value as `<arg>` (may be empty).
@@ -71,7 +88,7 @@ prefix.
 Run:
 
 ```bash
-git -C .worktrees/<feature>/ branch --show-current
+git -C <repo_root>/.worktrees/<feature>/ branch --show-current
 ```
 
 If the result is NOT `feature/<feature>`, HALT:
@@ -80,7 +97,7 @@ If the result is NOT `feature/<feature>`, HALT:
 > not the expected branch `feature/<feature>`.
 > Verify the worktree was created by /relay-worktree and not manually switched.
 > Resolve the branch manually:
->   git -C .worktrees/<feature>/ checkout feature/<feature>
+>   git -C <repo_root>/.worktrees/<feature>/ checkout feature/<feature>
 > Then re-run `/relay-commit <feature>`.
 
 ## A.1 — ASSESS
@@ -88,7 +105,7 @@ If the result is NOT `feature/<feature>`, HALT:
 Run:
 
 ```bash
-git -C .worktrees/<feature>/ status --porcelain
+git -C <repo_root>/.worktrees/<feature>/ status --porcelain
 ```
 
 If the output is **empty** (clean worktree — no uncommitted changes), exit 0:
@@ -127,19 +144,19 @@ Record internally whether the fallback was used (noted in A.4 output).
 **Step 1 — Stage all changes:**
 
 ```bash
-git -C .worktrees/<feature>/ add -A
+git -C <repo_root>/.worktrees/<feature>/ add -A
 ```
 
 **Step 2 — Preview staged changes:**
 
 ```bash
-git -C .worktrees/<feature>/ diff --cached --stat
+git -C <repo_root>/.worktrees/<feature>/ diff --cached --stat
 ```
 
 **Step 3 — Commit:**
 
 ```bash
-git -C .worktrees/<feature>/ commit -m "<generated-or-fallback-message>"
+git -C <repo_root>/.worktrees/<feature>/ commit -m "<generated-or-fallback-message>"
 ```
 
 Allow pre-commit hooks to run. Do **NOT** pass `--no-verify`.
@@ -154,7 +171,7 @@ If the commit command exits non-zero, surface the verbatim stderr and HALT:
 **Step 1 — Confirm:**
 
 ```bash
-git -C .worktrees/<feature>/ log -1 --oneline
+git -C <repo_root>/.worktrees/<feature>/ log -1 --oneline
 ```
 
 **Step 2 — Emit:**

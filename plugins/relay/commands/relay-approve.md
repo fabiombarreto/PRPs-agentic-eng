@@ -23,6 +23,31 @@ See:
 
 ---
 
+## Per-member iteration (workspace mode)
+
+When the target project declares a `## Repository topology` (see
+`${CLAUDE_PLUGIN_ROOT}/resources/repository-topology.md`), this command accepts
+the N pull requests opened for the feature and runs its merge plus the
+collision-safe cleanup sequence ONCE PER member. **That sequence keeps its order
+exactly** — `git worktree remove` then `git branch -d feature/<feature>` then
+`git push origin --delete feature/<feature>` then `git worktree prune` — because
+the ordering is what avoids the collision, not a stylistic preference.
+
+Record a per-member outcome. A member already merged and already cleaned is an
+idempotent skip, not a failure, exactly as the single-member path already treats
+it. On partial failure, every entry written to
+`PRPs/reports/<feature>/approve-halt.json` names the MEMBER alongside its failed
+step and its manual recovery — otherwise recovery is guesswork about which
+repository is in which state.
+
+The docs-updater/docs-reviewer dispatch is unchanged and runs once: it operates
+on the artifact plane, which is single.
+
+**When no topology is declared, the flow runs exactly once against the one
+worktree, unchanged.**
+
+---
+
 ## Phase 0: PRECONDITIONS
 
 Parse `$ARGUMENTS`. Extract flags first:
@@ -112,7 +137,7 @@ If `state == "OPEN"` and `mergeStateStatus` is `CONFLICTING` or `BLOCKED`, HALT:
 If `.worktrees/<feature>/` exists AND `force_flag` is NOT set, run:
 
 ```bash
-git -C .worktrees/<feature>/ status --porcelain
+git -C <repo_root>/.worktrees/<feature>/ status --porcelain
 ```
 
 If the output is non-empty (dirty working tree), HALT:
@@ -188,13 +213,13 @@ Guard: if `.worktrees/<feature>/` does NOT exist → skip (already removed), rec
 Otherwise, append `"worktree_remove"` to `steps_attempted`. Run:
 
 ```bash
-git worktree remove .worktrees/<feature>/
+git -C <repo_root> worktree remove <repo_root>/.worktrees/<feature>/
 ```
 
 If `force_flag = true`, use:
 
 ```bash
-git worktree remove --force .worktrees/<feature>/
+git -C <repo_root> worktree remove --force <repo_root>/.worktrees/<feature>/
 ```
 
 On success: append `"worktree_remove"` to `steps_succeeded`.

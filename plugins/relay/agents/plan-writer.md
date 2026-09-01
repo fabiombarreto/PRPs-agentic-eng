@@ -295,23 +295,34 @@ Proceed to Phase 1.B (skip Phase 1).
 Find the table whose header line matches **byte-for-byte**:
 
 ```
-| # | Phase | Description | Status | Parallel | Depends | PRP Plan |
+| # | Phase | Description | Status | Repo | Parallel | Depends | PRP Plan |
 ```
 
 If no such header exists in `<prd_path>`, halt with:
 
 > Implementation Phases table header not found in `<prd_path>`.
-> Expected: `| # | Phase | Description | Status | Parallel | Depends | PRP Plan |`.
+> Expected: `| # | Phase | Description | Status | Repo | Parallel | Depends | PRP Plan |`.
 > No DRAFT plan has been written.
 
-Do not attempt fuzzy matching. The canonical header is fixed.
+Do not attempt fuzzy matching. Each accepted form is matched byte-for-byte and nothing else is.
+
+A table whose header line is instead the LEGACY seven-column form
+`| # | Phase | Description | Status | Parallel | Depends | PRP Plan |` is also valid — it predates the `Repo` column, and every
+row in it is read with `Repo` empty. Detect which of the two forms is
+present, then map cells BY COLUMN NAME using that header row, never by
+ordinal position: an ordinal read would silently misinterpret a legacy
+row's cells once `Repo` shifted everything after `Status`.
+
 
 ### Step 1.2 — Parse all data rows
 
 For each pipe-delimited data row below the separator (`|---|...|`),
-extract the seven cells: `#`, `Phase`, `Description`, `Status`,
-`Parallel`, `Depends`, `PRP Plan`. Trim whitespace. Treat `-` as
-"empty" for `Parallel`, `Depends`, and `PRP Plan`.
+extract the cells BY COLUMN NAME, using the header row matched in Step 1.1
+to map each name to its position: `#`, `Phase`, `Description`, `Status`,
+`Repo`, `Parallel`, `Depends`, `PRP Plan`. On the legacy seven-column form
+`Repo` is absent and reads as empty. Ordinal extraction is forbidden — it
+misreads every legacy row. Trim whitespace. Treat `-` as "empty" for `Repo`,
+`Parallel`, `Depends`, and `PRP Plan`.
 
 ### Step 1.3 — Select the next actionable phase
 

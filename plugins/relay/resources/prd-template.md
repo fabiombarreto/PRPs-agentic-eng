@@ -181,10 +181,30 @@ Current value of `tdd` in `docs/context/methodology.md`: **{true | false}**.
 
 ## Implementation Phases
 
-| # | Phase | Description | Status | Parallel | Depends | PRP Plan |
-|---|-------|-------------|--------|----------|---------|----------|
-| 1 | {Phase name} | {What this phase delivers} | pending | - | - | - |
-| 2 | {Phase name} | {What this phase delivers} | pending | - | 1 | - |
+| # | Phase | Description | Status | Repo | Parallel | Depends | PRP Plan |
+|---|-------|-------------|--------|------|----------|---------|----------|
+| 1 | {Phase name} | {What this phase delivers} | pending | - | - | - | - |
+| 2 | {Phase name} | {What this phase delivers} | pending | - | - | 1 | - |
+
+#### The `Repo` column
+
+Names the workspace member this phase targets. The value must match a `Repo`
+entry declared in the target project's `## Repository topology` section (see
+`${CLAUDE_PLUGIN_ROOT}/resources/repository-topology.md`), and that member's
+`Role` must be `editable` — a `reference-only` member is never written to.
+`prd-reviewer`'s `R-COH-REPO-UNDECLARED` enforces both.
+
+An empty cell or `-` means **the project's single repository**. That is the
+single-repo default: a project with no topology declaration leaves every `Repo`
+cell empty and behaves exactly as it did before this column existed.
+
+**The legacy seven-column form remains valid.** A PRD whose header reads
+`| # | Phase | Description | Status | Parallel | Depends | PRP Plan |` — the form
+that predates this column — still parses, with `Repo` read as empty for every
+row. No existing PRD needs migration. Parsers accept both forms and MUST map
+cells by column NAME rather than by ordinal position, using the header row they
+matched; an ordinal read would misinterpret a legacy row once `Repo` shifted
+every column after `Status`.
 
 #### Phase-status lifecycle
 

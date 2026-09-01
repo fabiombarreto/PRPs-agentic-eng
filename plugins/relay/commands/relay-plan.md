@@ -162,6 +162,8 @@ character-for-character.
 
 ### P3 — Decision Gate sources readable
 
+**When no topology is declared:**
+
 All three files must exist and be readable at `target_root`:
 
 - `docs/decisions.md`
@@ -177,22 +179,32 @@ If any is missing, HALT with:
 > generate the missing governance files, then re-run
 > /relay-plan.
 
+**When a topology IS declared** in the target's
+`docs/context/architecture.md`, the same three files are required in the
+`context_root` of the member the phase being planned targets, per
+`${CLAUDE_PLUGIN_ROOT}/resources/repository-topology.md`'s "Where a member's
+context is read from" — the plan-writer runs once per phase, so the context that
+governs it is that phase's member's, not the artifact root's. The HALT names the
+member alongside the missing path.
+
 ### P4 — At least one actionable phase exists
 
 Locate the Implementation Phases table in the PRD by exact-match
 header line:
 
-| # | Phase | Description | Status | Parallel | Depends | PRP Plan |
+| # | Phase | Description | Status | Repo | Parallel | Depends | PRP Plan |
 
 If the header line is not found, HALT with:
 
 > Implementation Phases table header not found in `<prd_path>`.
-> Expected: `| # | Phase | Description | Status | Parallel | Depends | PRP Plan |`.
+> Expected: `| # | Phase | Description | Status | Repo | Parallel | Depends | PRP Plan |`.
 > The PRD must conform to ${CLAUDE_PLUGIN_ROOT}/resources/prd-template.md before
 > /relay-plan can run.
 
 Parse the data rows that follow (skip the GFM separator row
-`|---|---|...|` consisting only of dashes and pipes).
+`|---|---|...|` consisting only of dashes and pipes). The legacy
+seven-column form without `Repo` is also accepted; map cells by column
+name using the header row actually matched, never by ordinal position.
 
 A row is **actionable** when:
 - Its `Status` cell equals `pending` (case-sensitive), AND

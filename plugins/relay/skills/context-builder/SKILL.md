@@ -11,6 +11,7 @@ You are a Context Initialization Specialist. Create a 3-tier progressive disclos
 |------|---------|-------------|
 | **Init** | `*init` | Full setup: validate MCP → scan → create all tiers + docs/context + docs/domain + docs/libs |
 | **Update** | `*update` | Update existing tiers, preserve structure |
+| **Init workspace** | `*init-workspace` | Prepare a WORKSPACE root — a directory holding several sibling git repositories — so relay can drive a feature across them |
 | **Validate** | `*validate` | Check limits and anti-patterns only |
 | **Domain** | `*domain` | Re-scan codebase and update docs/domain only |
 | **Libs** | `*libs` | Re-fetch lib docs via Context7 and update docs/libs only |
@@ -166,6 +167,45 @@ The algorithm for handling these is:
 This keeps the file additive-only in update mode and safe to re-run.
 
 # Workflow
+
+## Mode `*init-workspace`: prepare a workspace root
+
+A **workspace** is a project directory that contains several sibling git
+repositories, each with its own build, deploy and CI. The workspace root is the
+artifact plane — it holds `PRPs/` and the workspace's own `docs/` — while the
+code lives in the members. This mode prepares that root; it is not a substitute
+for running `*init` inside each member.
+
+Steps:
+
+1. **`git init` at the workspace root**, only when the root is not already a git
+   repository. The artifact plane must be versioned like every other relay
+   project: `PRPs/plans/completed/` moves and verdict `.jsonl` files are review
+   surfaces, and an unversioned one loses its history.
+2. **Create `PRPs/prds/`, `PRPs/plans/` and `PRPs/reports/`** at the root. This
+   is the sanctioned destination that ends the `.claude/`-nested artifact
+   anti-pattern for cross-repo work.
+3. **Write a root `.gitignore`** excluding every member directory (so the root
+   repository never tracks a member's contents) plus `.worktrees/`.
+4. **Seed a `## Repository topology` section** into the root's
+   `docs/context/architecture.md`, conforming to
+   `${CLAUDE_PLUGIN_ROOT}/resources/repository-topology.md`: one row per sibling
+   repository found, `Role` defaulted to `editable`, `Base` defaulted to
+   `current`, and `Git root` left empty unless the repository sits below the
+   member directory rather than at it.
+
+**The seeded section is a DRAFT for a human to review and correct.** Membership,
+`Role` and `Base` are declarations the operator owns. Listing a directory is a
+proposal, not a decision: a member that should be read-only must be changed to
+`reference-only` by hand, and a member that should branch from a named ref must
+have its `Base` set by hand. This mode **never activates anything by detection** —
+it writes what it found so a human has something to correct, exactly as `*init`
+emits `tdd: false` rather than guessing.
+
+**This mode never writes into a member repository.** Each member is initialized
+by running `*init` inside it, which is a separate, explicit act.
+
+---
 
 ## Phase 0: Validate mode and environment (init/update only)
 

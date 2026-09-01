@@ -17,7 +17,7 @@ plugin.
 - Install locally: enable the marketplace at the repo root from Claude Code
 - Invoke the context-builder skill: `*init` (inside a target project)
 - Validate the plugin: `npm install` then `npm run validate`
-  (17 static consistency checks; docs at documentation/guide/validation-suite.html).
+  (19 static consistency checks; docs at documentation/guide/validation-suite.html).
   There is no build step — the plugin ships no runtime source to compile.
 
 ## Key patterns

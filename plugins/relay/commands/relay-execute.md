@@ -65,7 +65,7 @@ If the Decision Gate cannot be emitted because one of the three sources is unrea
 
 If the argument is non-empty but does not resolve to an existing readable file, fall through to P1 below for the canonical file-not-readable HALT message.
 
-Record `prd_path` as the resolved absolute path. Record `target_root` as the current working directory. Parse `<feature>` as the PRD basename minus `.prd.md`.
+Record `prd_path` as the resolved absolute path. Record `target_root` as the current working directory. `target_root` is the `project_root` — the single artifact plane holding `PRPs/` and the workspace's own `docs/`; in a workspace of sibling repositories the per-member code roots (`context_root`, `repo_root`) are resolved by P6 below, never assumed to equal `target_root`. Parse `<feature>` as the PRD basename minus `.prd.md`.
 
 Also scan `$ARGUMENTS` for the optional flag `--no-worktree`. If `--no-worktree` is present, record `no_worktree_flag = true`; otherwise record `no_worktree_flag = false`. When `no_worktree_flag = true`, Phase A.3.3 is entirely skipped and all downstream stages operate against cwd on the current branch — exactly preserving the pre-Phase-3 behavior. The `--no-worktree` flag is extracted before the PRD path token; the PRD path is always the first non-flag token in `$ARGUMENTS`.
 
@@ -102,16 +102,16 @@ Trim trailing whitespace and newlines before comparison; the check is "the last 
 
 `Read` the PRD. Locate the Implementation Phases table by exact-match header line:
 
-| # | Phase | Description | Status | Parallel | Depends | PRP Plan |
+| # | Phase | Description | Status | Repo | Parallel | Depends | PRP Plan |
 
 If the header line is not found, HALT with:
 
 > Implementation Phases table header not found in `<prd_path>`.
-> Expected: `| # | Phase | Description | Status | Parallel | Depends | PRP Plan |`.
+> Expected: `| # | Phase | Description | Status | Repo | Parallel | Depends | PRP Plan |`.
 > The PRD must conform to ${CLAUDE_PLUGIN_ROOT}/resources/prd-template.md before
 > /relay-execute can run.
 
-Parse the data rows that follow (skip the GFM separator row consisting only of dashes and pipes). Apply the actionable-row selection rule (plan-writer Step 1.3 verbatim):
+Parse the data rows that follow (skip the GFM separator row consisting only of dashes and pipes). The legacy seven-column form without `Repo` is also accepted; map cells by column name using the header row actually matched, never by ordinal position. Apply the actionable-row selection rule (plan-writer Step 1.3 verbatim):
 
 A row is **actionable** when:
 - Its `Status` cell equals `pending` (case-sensitive), AND
@@ -142,11 +142,15 @@ Record the parsed table for the Phase A.0 initial snapshot.
 
 ### P4 — Decision Gate sources readable
 
+**When `topology = null`** (P6 recorded no declaration):
+
 All three files must exist and be readable at `target_root`:
 
 - `docs/decisions.md`
 - `docs/anti-patterns.md`
 - `docs/context/architecture.md`
+
+**When a topology IS declared** — the same three files must exist and be readable in the `context_root` of every `editable` member, per `${CLAUDE_PLUGIN_ROOT}/resources/repository-topology.md`'s "Where a member's context is read from". The artifact root holds no `methodology.md` and need hold no `decisions.md`; each member's own context governs its own phases. The HALT below is emitted with the member named alongside the missing path.
 
 If any is missing, HALT with the byte-exact AC-9 message:
 
@@ -157,7 +161,9 @@ If any is missing, HALT with the byte-exact AC-9 message:
 
 ### P5 — test-authoring routing emitted + concurrency soft-fail diagnostic
 
-Read `docs/context/methodology.md` in the target project. Extract the `tdd:` value and whether `test_frameworks` is non-empty. The test writer/reviewer pair ACTIVATES on a declared framework (non-empty `test_frameworks`), in BOTH methodology modes; the `tdd:` value selects ordering (test-first vs test-after).
+**When a topology IS declared, P5 reads no `methodology.md` and emits no routing note.** Routing is **resolved per phase**, from the `context_root` of the member each phase's `Repo` cell names, and the note is emitted there instead — see Phase A.3.5.0. There is no single note to emit at startup when members disagree, and emitting one anyway would be wrong for every phase it does not describe.
+
+**When `topology = null`, P5 behaves exactly as it always has.** Read `docs/context/methodology.md` in the target project. Extract the `tdd:` value and whether `test_frameworks` is non-empty. The test writer/reviewer pair ACTIVATES on a declared framework (non-empty `test_frameworks`), in BOTH methodology modes; the `tdd:` value selects ordering (test-first vs test-after).
 
 - If `test_frameworks` non-empty AND `tdd: true` → **test-first** (AC-11 live-routing visibility):
 
@@ -189,6 +195,38 @@ Concurrency soft-fail diagnostic (D18): `Glob` `PRPs/reports/<feature>/orchestra
 
 Continue (do not block). This is a soft-fail diagnostic, not a halt.
 
+### P6 — Repository topology resolution
+
+`Read` `${CLAUDE_PLUGIN_ROOT}/resources/repository-topology.md` and execute its resolution protocol inline against `<target_root>/docs/context/architecture.md`. That contract — not this command — owns the table schema, the parsing rules, the column semantics and the HALT messages; this precondition only invokes it and records the result.
+
+**Section absent — the compatibility clause.** When `docs/context/architecture.md` does not exist, or contains no line equal to `## Repository topology`, record `topology = null` and proceed silently. No note is emitted, no artifact is written, and every downstream stage resolves paths exactly as it did before the contract existed. This mirrors P5's own `test_frameworks: []` branch: an absent optional declaration is not a failure and produces no output.
+
+**Section present.** The contract's table header must match byte-for-byte:
+
+| Repo | Path | Git root | Role | Base |
+
+Execute the contract's resolution protocol and record the resolved member list — each entry carrying `repo`, absolute `context_root`, absolute `repo_root`, `role` and the raw `base` string — as `topology` for the Phase A loop. `target_root` remains the `project_root`: the single artifact plane. Per-member code roots come from this list, never from the cwd.
+
+**On any HALT raised by the contract** — `FAILED_TOPOLOGY_MALFORMED_ROW`, `FAILED_TOPOLOGY_PATH_UNRESOLVED`, `FAILED_TOPOLOGY_NOT_A_GIT_REPO`, `FAILED_TOPOLOGY_ORPHANED_GITLINK` or `FAILED_TOPOLOGY_REFERENCE_ONLY_TARGET` — surface the contract's message verbatim and exit. No artifact is written and no phase work is performed. A topology that cannot be served never degrades to cwd-based execution; that silent fallback is the defect this precondition exists to remove.
+
+### P7 — Base preflight and confirmation
+
+**When `topology = null` (P6 recorded no declaration), this precondition is a complete no-op.** Emit nothing, ask nothing, write nothing, and proceed to Phase A. This is what preserves the single-repo guarantee: a project without a topology declaration sees no new precondition, no prompt and no artifact, and its base resolution stays exactly as it was.
+
+**When a topology IS declared:** for every `editable` member, resolve its declared `Base` per `${CLAUDE_PLUGIN_ROOT}/resources/repository-topology.md`. If any member's base fails to resolve, HALT with `FAILED_TOPOLOGY_BASE_UNRESOLVED` naming that member — BEFORE any confirmation is requested and before any worktree exists in any member, so a bad declaration costs nothing on disk.
+
+Then emit exactly one table:
+
+| Repo | Declared Base | Resolves to | Current branch | SHA |
+|------|---------------|-------------|----------------|-----|
+| `<repo>` | `<declared>` | `<resolved ref>` | `<branch>` | `<short sha>` |
+
+and require one explicit confirmation before Phase A begins. On a negative reply, or no reply, exit having created no worktree and written no artifact.
+
+**Why this is a precondition and not a step inside the loop.** `docs/decisions.md` 2026-07-27 records why relay's third interactivity extension used HALT-and-resume rather than dialogue: `/relay-execute` drives many phases across one long unattended run, and a synchronous dialogue only works inside a single unbroken interactive turn. A precondition runs before that run begins, in the turn the operator invoked — so it can dialogue, and the loop it precedes stays prompt-free. Confirming N members once is strictly cheaper than N confirmations inside the loop.
+
+This is the pipeline's **fourth** human-confirmation point, after PRD approval, the Design Spec pair, and `/relay-visual-approve` — and the first that is a precondition rather than a resumable halt.
+
 ---
 
 ## Phase A — Multi-phase orchestration loop
@@ -206,6 +244,7 @@ Set the budget caps and counters:
 - `orchestrator_run_log = []` — accumulator for `orchestrator-run.json`
 - `phases_completed = []` — list of phase numbers that reached `complete` this session
 - `last_plan_review_failing_ids = null` — set of failing rubric item IDs from the previous plan-review attempt; used by stuck-loop detection in Step A.3.2. Reset to `null` at the start of each phase iteration (Phase A.1).
+- `phase_diff_bases = {}` — map from phase number to that phase's end-state tree object, written by Step A.6.0.5 at each phase close-out and read by Step A.4.1 to supply the NEXT phase's diff base. Empty at the start of a run.
 
 Read the source PRD's Implementation Phases table in full for the initial snapshot. Hold this snapshot for Phase A.1's first iteration.
 
@@ -302,6 +341,7 @@ Runs only when `resume_mode` is non-null (set by Phase A.1's resumable visual-ap
 - `artifact_root = PRPs/reports/<feature>/phase-<N>/attempts/` — `relay-implement.md`'s own canonical-pattern formula.
 - `completed_target = PRPs/plans/completed/<basename of plan_path>.plan.md`.
 - `no_docs_flag = false`, `no_visual_flag = false` — neither flag has a forwarding mechanism from `/relay-execute`'s own `$ARGUMENTS` into an adopted `/relay-implement` protocol, resumed or not; both are always `false` in every `/relay-execute`-driven adoption.
+- `supplied diff base`: when `phase_diff_bases` holds an entry for the highest-numbered phase completed before this one, pass that tree object, exactly as Step A.4.1 does — a resumed phase must not silently lose the base its original session recorded and fall back to a `merge-base` derivation. When the map is empty — the first phase of a run — pass nothing.
 
 **Branch on `resume_mode`:**
 
@@ -466,6 +506,9 @@ Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-worktree.md` and execute its full pro
 
 - `feature`: `<feature>` (derived from the PRD basename in the Parse arguments section)
 - `target_root`: the cwd
+- `repo` context: resolve the current phase row's `Repo` cell against the topology P6 recorded, and pass that member's entry — `repo`, absolute `repo_root`, `role`, and the base P7 resolved. The worktree is then created at `<repo_root>/.worktrees/<feature>/`, in that member's own repository.
+  - When the `Repo` cell is empty, or `topology = null`, pass NO `repo` context. The adopted protocol then runs P1 against the cwd exactly as it does today.
+  - When the cell names a member whose `Role` is `reference-only`, HALT with `FAILED_TOPOLOGY_REFERENCE_ONLY_TARGET` from the contract, naming the phase number and the member, and create no worktree. This sub-flow is the first place that code can actually fire: the `Repo` column it reads did not exist before Phase 4 of the multi-repo topology feature.
 
 #### Step A.3.3.2 — Record outcome
 
@@ -473,7 +516,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-worktree.md` and execute its full pro
 
 Append to `orchestrator_run_log`:
 ```json
-{"phase": <N>, "stage": "worktree", "outcome": "CREATED", "worktree_path": ".worktrees/<feature>/", "worktree_attempted": true, "worktree_succeeded": true, "fallback_reason": null}
+{"phase": <N>, "stage": "worktree", "outcome": "CREATED", "repo": "<repo or null>", "worktree_path": "<repo_root>/.worktrees/<feature>/", "worktree_attempted": true, "worktree_succeeded": true, "fallback_reason": null}
 ```
 
 Proceed to Phase A.3.5. All subsequent stages (A.3.5 TDD, A.4 implement, A.5 test) operate with the worktree context established in A.3.3.
@@ -497,7 +540,11 @@ Conditional on `methodology.md` `tdd:` value read in P5.
 
 #### Step A.3.5.0 — methodology.md gate (activation = declared framework; ordering by `tdd:`)
 
-Re-read `<target_root>/docs/context/methodology.md` (already read in P5 — re-read here protects against mid-flow mutations). The single activation gate is a declared test framework; the `tdd:` value selects WHERE the pair runs relative to the Implementer — **test-first** (here, before A.4) when `tdd: true`, **test-after** (Phase A.4.5, after A.4 + code-review) when `tdd: false`.
+Re-read `<context_root of the phase's member>/docs/context/methodology.md` (already read in P5 for a single-repo project — re-read here protects against mid-flow mutations). The member is the one this phase's `Repo` cell names; with no topology declared, or with an empty `Repo` cell, that `context_root` IS `target_root`, so this read is identical to today's.
+
+**Emit the TDD routing note here, for this phase**, using the byte-exact strings P5 defines — when a topology is declared, this is where the note is emitted at all, because routing is a per-phase decision and one run can legitimately route one phase test-first and another test-after.
+
+The single activation gate is a declared test framework; the `tdd:` value selects WHERE the pair runs relative to the Implementer — **test-first** (here, before A.4) when `tdd: true`, **test-after** (Phase A.4.5, after A.4 + code-review) when `tdd: false`.
 
 - If file absent OR `test_frameworks: []` (empty): the pair self-skips entirely (no idiom to author in, either mode). Append to `orchestrator_run_log`:
   ```json
@@ -628,7 +675,9 @@ Else: re-adopt `/relay-write-test` role passing `prior_feedback = <captured defe
 
 #### Step A.4.1 — Adopt /relay-implement role
 
-Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-implement.md` and execute its full protocol inline against `current_plan_path`. The command's own D8 post-approval mutations run as part of its internal Phase A.4:
+Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-implement.md` and execute its full protocol inline against `current_plan_path`. Pass context:
+
+- `supplied diff base`: when `phase_diff_bases` holds an entry for the highest-numbered phase completed before this one, pass that tree object — the adopted protocol's `P6` uses it verbatim as `base_commit` and performs no `merge-base` derivation. When the map is empty — the first phase of a run — pass nothing, and `P6`'s own four-step chain applies unchanged. The command's own D8 post-approval mutations run as part of its internal Phase A.4:
 - Mutation a: plan trailing-block flip `*Status: APPROVED*` → `*Status: IMPLEMENTED*`
 - Mutation b: plan move to `PRPs/plans/completed/<basename>.plan.md`
 - Mutation c: source PRD row flip `in-progress → implemented`
@@ -715,7 +764,7 @@ so R-X never sees it.
 
 #### Step A.4.5.0 — gate
 
-Re-read `<target_root>/docs/context/methodology.md`. If NOT (`test_frameworks`
+Re-read `<context_root of the phase's member>/docs/context/methodology.md` — the member this phase's `Repo` cell names, collapsing to `target_root` when no topology is declared. If NOT (`test_frameworks`
 non-empty AND `tdd: false`) — i.e. this phase was test-first or framework-less —
 append `{"phase": <N>, "stage": "test_after", "outcome": "not_applicable"}` to
 `orchestrator_run_log` and proceed directly to Phase A.5. There is NO foundation
@@ -754,7 +803,7 @@ Steps A.5.3 and A.6 each advance the current phase's row through the five-state 
 
 1. `Read` `<prd_path>` and locate the Implementation Phases table by its exact-match header line:
 
-   | # | Phase | Description | Status | Parallel | Depends | PRP Plan |
+   | # | Phase | Description | Status | Repo | Parallel | Depends | PRP Plan |
 
 2. Locate row `<current_phase_N>` (the row whose first cell, trimmed, equals that integer).
 3. Read its `Status` cell.
@@ -784,7 +833,7 @@ Steps A.5.3 and A.6 each advance the current phase's row through the five-state 
 
 #### Step A.5.0 — methodology.md gate (self-skip when `test_frameworks: []` or file absent)
 
-Re-read `<target_root>/docs/context/methodology.md` (already read in P5 — re-read here protects against mid-flow mutations).
+Re-read `<context_root of the phase's member>/docs/context/methodology.md` (already read for this phase at A.3.5.0 — re-read here protects against mid-flow mutations), resolving the member from this phase's `Repo` cell and collapsing to `target_root` when no topology is declared.
 
 - If file absent or `test_frameworks: []` (empty list): A.5 self-skips. Append to `orchestrator_run_log`:
   ```json
@@ -913,6 +962,44 @@ Both source states are accepted, and which one the row is actually in is itself 
 
 The flip runs BEFORE the completion record is appended below, so that a crash between the two leaves the PRD table — the canonical state machine (D6) — correct rather than the audit artifact. Per Phase A.4.9's soft-fail discipline, a failed flip warns and continues into the completion record; it never halts the loop.
 
+#### Step A.6.0.5 — Phase-boundary snapshot
+
+Before recording the completion entry below, snapshot the worktree so the NEXT
+phase is reviewed against this phase's end state rather than against the base
+commit every phase shares.
+
+Run, in the worktree:
+
+```
+git add -A
+git write-tree
+```
+
+Record the object id `git write-tree` prints in `phase_diff_bases`, keyed by
+`current_phase_N`.
+
+**Why this does not breach any invariant.** `git write-tree` writes a tree
+object to the object store and `git add -A` updates the index. Neither modifies
+the content of any tracked file, and the step creates no commit — so this step
+respects both the Pillar 2 "never commit" boundary (`docs/decisions.md`
+2026-05-18) and the rule that review agents never mutate the target working tree
+(`docs/decisions.md` 2026-08-28). A tree object is an immutable, addressable
+snapshot; that is exactly what a diff base needs to be, and nothing more.
+
+**How the recorded tree is consumed.** The next phase's adopted
+`/relay-implement` protocol receives it as its supplied diff base (Step A.4.1)
+and uses it verbatim as `base_commit`. Consumers read it with the
+single-argument form `git diff <tree>`, which compares the tree against the
+WORKING TREE. `HEAD` is still the untouched base commit, so
+`git diff <tree>..HEAD` MUST NOT be used against it — that form would compare
+two committed states and return an empty set.
+
+**Soft-fail.** If `git write-tree` exits non-zero, emit a warning naming the
+phase, record no entry in `phase_diff_bases` for it, and continue to Step A.6.1
+unchanged. The next phase then falls back to `/relay-implement`'s own base
+derivation. A snapshot failure must never discard a phase whose work is
+complete — the same discipline Phase A.4.9 applies to row-status flips.
+
 #### Step A.6.1 — Completion record
 
 Append a completion record to `orchestrator_run_log`:
@@ -959,9 +1046,15 @@ Write / overwrite `PRPs/reports/<feature>/orchestrator-run.json` with the full l
   "phases_completed": <phases_completed>,
   "worktree_attempted": <boolean | null>,
   "worktree_succeeded": <boolean | null>,
-  "fallback_reason": "<string | null>"
+  "fallback_reason": "<string | null>",
+  "phase_diff_bases": <phase_diff_bases>
 }
 ```
+
+`phase_diff_bases` is the map Step A.6.0.5 maintains — phase number to that
+phase's end-state tree object. A phase whose snapshot soft-failed simply has no
+key. It is part of the audit trail: the tree object each phase was reviewed
+against is reproducible after the fact with `git diff <tree>`.
 
 Push `current_phase_N` to `phases_completed`.
 

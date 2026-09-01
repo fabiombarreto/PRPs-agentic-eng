@@ -296,9 +296,14 @@ TBD is permitted in:
 
 ### R7 — Implementation Phases table has at least one real row
 
-- `## Implementation Phases` contains a markdown table with the
-  header row from the template (`| # | Phase | Description | Status
-  | Parallel | Depends | PRP Plan |`).
+- `## Implementation Phases` contains a markdown table whose header
+  row is the canonical form from the template, quoted here unwrapped so
+  it can be compared byte-for-byte:
+  `| # | Phase | Description | Status | Repo | Parallel | Depends | PRP Plan |`
+  The legacy seven-column form that predates the `Repo` column also
+  satisfies R7, quoted here the same way:
+  `| # | Phase | Description | Status | Parallel | Depends | PRP Plan |`
+  Every PRD authored on the legacy form stays valid.
 - At least one data row with a non-empty Phase name, non-empty
   Description, and a Status value.
 - All-TBD table is a fail.
@@ -366,6 +371,28 @@ Two execution stages, in order:
 - Fail when any cited token is not in the defined set AND does NOT
   match the contextual filter. `reason` names the orphan citation
   and the `file:line` where it appears.
+
+#### R-COH-REPO-UNDECLARED — every Repo cell names a declared editable member
+
+**Class:** blocking
+
+- **Zero-emission branch:** if the target project's
+  `docs/context/architecture.md` has no `## Repository topology`
+  section, emit NO row at all for this check. A single-repo project has
+  no registry to validate against, and every `Repo` cell is legitimately
+  empty. Do NOT fail in this case.
+- Otherwise, parse the registry per
+  `${CLAUDE_PLUGIN_ROOT}/resources/repository-topology.md` and, for every
+  `## Implementation Phases` data row whose `Repo` cell is non-empty:
+  - **Value matches no `Repo` in the registry** → fail. `reason` names the
+    offending value and the phase number.
+  - **Value matches a member whose `Role` is `reference-only`** → fail.
+    `reason` names both the value and the phase number, and states that a
+    reference-only member is never written to and never receives a
+    worktree.
+  - Otherwise → pass.
+- A row whose `Repo` cell is empty or `-` is out of scope: it means the
+  project's single repository, which is the default even in a workspace.
 
 #### R-COH-DESIGN-SOURCE-INCOMPLETE — every Implementation Phases row has a Design Source declaration
 
