@@ -35,6 +35,11 @@ import { runLineEndingsCheck } from './checks/line-endings.mjs';
 import { runDiffBaseFormCheck } from './checks/diff-base-form.mjs';
 import { runTopologyContractCheck } from './checks/topology-contract.mjs';
 import { runWorktreePathQualifiedCheck } from './checks/worktree-path-qualified.mjs';
+import { runLaneContractCheck } from './checks/lane-contract.mjs';
+import { runLaneWorktreeParityCheck } from './checks/lane-worktree-parity.mjs';
+import { runLaneStateWritersCheck } from './checks/lane-state-writers.mjs';
+import { runAgentDispatchResolutionCheck } from './checks/agent-dispatch-resolution.mjs';
+import { runLaneFixtureCheck } from './checks/lane-fixture.mjs';
 
 function die(code, msg) {
   process.stderr.write(msg + '\n');
@@ -64,6 +69,11 @@ const CHECKS = [
   runDiffBaseFormCheck,
   runTopologyContractCheck,
   runWorktreePathQualifiedCheck,
+  runLaneContractCheck,
+  runLaneWorktreeParityCheck,
+  runLaneStateWritersCheck,
+  runAgentDispatchResolutionCheck,
+  runLaneFixtureCheck,
 ];
 
 function runChecks(checks) {

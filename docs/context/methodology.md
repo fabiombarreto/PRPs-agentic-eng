@@ -3,6 +3,7 @@ tdd: false
 tdd_evidence: null
 test_frameworks: ["node:test"]
 docs_sync: true
+lane_runtime_safe: false
 formatter_cmd: null
 ---
 

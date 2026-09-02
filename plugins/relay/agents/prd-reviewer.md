@@ -394,6 +394,30 @@ Two execution stages, in order:
 - A row whose `Repo` cell is empty or `-` is out of scope: it means the
   project's single repository, which is the default even in a workspace.
 
+#### R-COH-PARALLEL-CONTRADICTS-DEPENDS — no `Parallel` declaration contradicts the `Depends` graph
+
+**Class:** blocking
+
+- **Zero-emission branch:** if no `## Implementation Phases` data row carries a
+  `Parallel` cell matching the lane grammar `lane:[a-z0-9][a-z0-9-]*`, emit NO
+  row at all for this check. This is the case for every PRD authored before the
+  grammar existed, whose `Parallel` cells hold `-` or legacy free text; those
+  values carry no override and are not errors. Do NOT fail in this case.
+- Otherwise, derive the lanes per
+  `${CLAUDE_PLUGIN_ROOT}/resources/lane-model.md` and check the declared labels
+  against them:
+  - **Two rows in the same derived lane carry different labels** -> fail. The
+    `reason` names both phase numbers, both labels, and the code
+    `FAILED_LANE_SPLIT_FORBIDDEN`, and states that the rows are connected through
+    the `Depends` graph so a split is not expressible.
+  - **One label spans rows whose `Repo` cells differ** -> fail. The `reason` names
+    the label, both `Repo` values, and the code `FAILED_LANE_CROSS_REPO`, and
+    states that a lane becomes one worktree in one repository.
+  - Otherwise -> pass.
+- A label that merely MERGES lanes the graph would have separated is always
+  legal and never fails this check: the override is one-directional, and an
+  author may always choose to be more serial than the graph requires.
+
 #### R-COH-DESIGN-SOURCE-INCOMPLETE — every Implementation Phases row has a Design Source declaration
 
 - **Zero-emission branch:** if `## Design Source` is absent from the

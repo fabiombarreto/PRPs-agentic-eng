@@ -96,6 +96,19 @@ Record the sanitized value as `<feature>`.
 
 When no `repo` context is supplied — every standalone invocation, and every project with no topology declaration — P1 runs exactly as it does today and `repo_root` is the cwd's toplevel. The repo-qualified forms used throughout this command then resolve to precisely today's behavior, so a single-repo project sees no change.
 
+**An optional `lane` input (supplied by an invoker, never by a CLI flag).** When
+an invoker — `/relay-execute`'s concurrent lane dispatch — supplies a `lane`
+context, it carries the lane's index `k` within the derived lane list and the phase
+rows that lane owns. `<worktree_slug>` is then `<feature>-lane-<k>`, and the worktree
+is created at `<repo_root>/.worktrees/<worktree_slug>/` on branch
+`feature/<worktree_slug>`.
+
+When no `lane` context is supplied — every standalone invocation, and every serial
+orchestrator run — `<worktree_slug>` is exactly `<feature>`, so every path, branch,
+precondition and message below is byte-identical to its previous behaviour. The
+slug rule itself is defined once in
+`${CLAUDE_PLUGIN_ROOT}/resources/lane-model.md` and is not restated here.
+
 **Optional flags:**
 
 - `--base <ref>` — override the base ref resolution chain (D11). Captures `<ref>` as `base_override`. When provided, P2 verifies the ref is resolvable before proceeding.
@@ -145,9 +158,9 @@ Resolve `<resolved-base>` using the following priority chain:
    > and HEAD — none exist. Ensure the repository has at least one commit and run
    > `git fetch` to populate remote refs. Usage: /relay-worktree <feature-name> --base <ref>
 
-### P3 — Path `.worktrees/<feature>/` state check (idempotency + conflict detection)
+### P3 — Path `.worktrees/<worktree_slug>/` state check (idempotency + conflict detection)
 
-Run `git -C <repo_root> worktree list --porcelain` (locale-independent; per git man page, `--porcelain` output is stable across locales and git versions). Parse the output for an entry whose `worktree` field matches the absolute path `<repo_root>/.worktrees/<feature>/`.
+Run `git -C <repo_root> worktree list --porcelain` (locale-independent; per git man page, `--porcelain` output is stable across locales and git versions). Parse the output for an entry whose `worktree` field matches the absolute path `<repo_root>/.worktrees/<worktree_slug>/`.
 
 **Case A — Entry found, branch matches `feature/<feature>`:**
 Set `idempotent_reuse = true`. Proceed to Phase A.0. The bootstrap script is NOT re-executed.
@@ -180,7 +193,7 @@ Set `idempotent_reuse = false`. Proceed to P4.
 
 ### P4 — Branch `feature/<feature>` conflict check
 
-Run `git branch --list feature/<feature>`. If the branch exists AND `idempotent_reuse = false` (i.e., no worktree registered for this path):
+Run `git branch --list feature/<worktree_slug>`. If the branch exists AND `idempotent_reuse = false` (i.e., no worktree registered for this path):
 
 Verify whether the existing branch points at the same commit as `<resolved-base>` by running `git rev-parse feature/<feature>` and `git rev-parse <resolved-base>`. If they differ:
 
@@ -216,7 +229,7 @@ Do NOT proceed to Phase A.1 or Phase B.
 Execute via `Bash`:
 
 ```
-git -C <repo_root> worktree add <repo_root>/.worktrees/<feature>/ -b feature/<feature> <resolved-base>
+git -C <repo_root> worktree add <repo_root>/.worktrees/<worktree_slug>/ -b feature/<worktree_slug> <resolved-base>
 ```
 
 The `git -C <repo_root>` prefix and the qualified path are what make this work for a
@@ -228,7 +241,7 @@ Capture exit code, stdout, and stderr.
 If exit code is non-zero:
 
 > Worktree creation failed. See above for git diagnostic.
-> git -C <repo_root> worktree add <repo_root>/.worktrees/<feature>/ -b feature/<feature> <resolved-base>
+> git -C <repo_root> worktree add <repo_root>/.worktrees/<worktree_slug>/ -b feature/<worktree_slug> <resolved-base>
 > Exit code: <exit-code>
 > <verbatim git stderr output>
 > Manual recovery: inspect the error above, resolve any git state issue, and

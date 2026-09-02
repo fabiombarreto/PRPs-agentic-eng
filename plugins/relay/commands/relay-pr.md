@@ -28,6 +28,14 @@ See:
 
 ---
 
+**Lane integration is a precondition.** Under lane execution a repository's
+`feature/<feature>-lane-*` branches are integrated into its `feature/<feature>`
+branch by `/relay-commit` BEFORE this command runs. This command therefore still
+finds exactly one branch per repository and opens exactly one PR per repository,
+unchanged — concurrency inside the pipeline does not leak into the review
+surface. The integration order and the conflict semantics are defined in
+`${CLAUDE_PLUGIN_ROOT}/resources/lane-model.md`.
+
 ## Per-member iteration (workspace mode)
 
 When the target project declares a `## Repository topology` (see

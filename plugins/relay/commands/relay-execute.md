@@ -240,6 +240,8 @@ Set the budget caps and counters:
 - `max_plan_review_retries = 2` (0 forbidden; 3 total plan attempts including the initial)
 - `max_tdd_review_retries = 2` (0 forbidden; 3 total TDD-write attempts including the initial; only consulted in Phase A.3.5 when `tdd: true`)
 - `max_orchestrator_minutes = 240` (session-level wall-clock; 0 forbidden)
+- `max_lanes_in_flight = 3` (session-level cap on lanes running concurrently; the remainder QUEUE rather than being dropped, so a wide PRD is slowed, never truncated). **This value is provisional** — no measurement of concurrent lane cost exists yet, and the synthetic three-lane fixture is the instrument meant to set it. See `${CLAUDE_PLUGIN_ROOT}/resources/lane-model.md` for the rule; it is not restated here.
+- `lane_runtime_safe` — read from the target project's `docs/context/methodology.md`. `true` permits concurrent lanes; `false` or an absent key forces serial execution. The run log records WHICH of the two applied, because "nobody has decided yet" and "somebody decided no" are different facts. Never inferred — no port scan, no compose-file parse, no stack detection; the authority for the gate is `${CLAUDE_PLUGIN_ROOT}/resources/lane-model.md`.
 - `deadline_ts = now() + max_orchestrator_minutes minutes`
 - `orchestrator_run_log = []` — accumulator for `orchestrator-run.json`
 - `phases_completed = []` — list of phase numbers that reached `complete` this session
@@ -256,11 +258,38 @@ A row is **actionable** when:
 - Its `Status` cell equals `pending` (case-sensitive), AND
 - Its `Depends` cell is `-` (empty) OR every comma-separated phase number listed is in a dependency-satisfying state: `implemented`, `tested`, or `complete` (identical to the P3 rule above; `plan-writer.md` Step 1.3 holds the canonical definition).
 
+#### Lane-aware selection (runs before the lowest-numbered pick)
+
+Before picking the lowest-numbered actionable row, derive the lanes per
+`${CLAUDE_PLUGIN_ROOT}/resources/lane-model.md` and decide whether concurrency
+applies.
+
+1. Derive lanes from the Implementation Phases table (partition by `Repo`,
+   weakly-connected components of the `Depends` graph, then apply any `lane:`
+   override).
+2. Read `lane_runtime_safe` from the phase's member context.
+3. **Fall through to the existing lowest-numbered pick, UNCHANGED**, when any of
+   these holds — recording which one in `orchestrator-run.json`:
+   - `lane_runtime_safe` is absent, or is `false`;
+   - fewer than two lanes were derived;
+   - `max_lanes_in_flight` is 1.
+4. Otherwise, dispatch up to `max_lanes_in_flight` lanes concurrently. Each lane
+   adopts the same per-phase protocols this command already adopts, in its own
+   worktree and on its own branch. Lanes beyond the cap are `queued`.
+5. Apply every returned lane outcome SERIALLY through `flip_row_status`
+   (Phase A.4.9). A lane writes neither the Implementation Phases table nor
+   `orchestrator-run.json`.
+6. When a lane halts, bring every other lane to one of the terminal states the
+   contract defines and record each in the run log.
+
+Per-lane and shared budgets are split as the contract's budget table specifies;
+`max_orchestrator_minutes` is one shared deadline across all lanes.
+
 **Resumable visual-approval check (new, additive — mirrors the P3 precondition's own check verbatim; re-run here because Phase A.1 re-reads the table fresh on every loop iteration, per its own existing "do not reuse a stale snapshot" instruction above).** Before picking the lowest-numbered actionable row below, scan for any row whose `Status` cell equals `in-progress` and whose `PRPs/reports/<feature>/phase-<row's #>/halt.json` has `outcome == "AWAITING_VISUAL_APPROVAL"`:
 - No `resolution` field yet: apply the SAME structured no-op the P3 precondition performs (emit the "awaiting human visual approval" message, exit 0, no artifacts) rather than falling through to the "no actionable row" branch below.
 - A `resolution` field is present (`"approved"` or `"rejected"`): set `current_phase_N` to that row's `#` and `current_phase_slug` to that row's kebab-cased `Phase` cell (mirroring `plan-writer.md`'s own slug derivation), set `resume_mode` to the `resolution` value, and skip the normal actionable-row pick below entirely — proceed directly to Phase A.2 (Phase A.2.5, Task 3, branches on `resume_mode`).
 
-There is at most one such row under this orchestrator's serial execution model (D6). If none is found, proceed to the normal actionable-row pick below with `resume_mode = null`.
+There is at most one such row under this orchestrator's serial execution model (D6). If none is found, proceed to the normal actionable-row pick below with `resume_mode = null`. Under lane dispatch (see the lane-aware selection subsection above) more than one row may be in flight at once; each in-flight row is owned by exactly one lane, so this check scans per lane and the at-most-one property holds within a lane rather than across the run.
 
 Pick the lowest-numbered actionable row. Record `current_phase_N` and `current_phase_slug`. Set `resume_mode = null` (a fresh, non-resumed phase pick).
 
@@ -829,6 +858,15 @@ Steps A.5.3 and A.6 each advance the current phase's row through the five-state 
 
 6. On success, record `flip_success: true` and return.
 
+**Lane-reported mutations use this same procedure.** When a lane reports a
+completed stage, the ORCHESTRATOR — never the lane — calls `flip_row_status`,
+applying reported mutations one at a time in the order received. A lane writes
+neither the Implementation Phases table nor
+`PRPs/reports/<feature>/orchestrator-run.json`; it returns a structured outcome
+whose shape is defined in `${CLAUDE_PLUGIN_ROOT}/resources/lane-model.md` and is
+not restated here. Under serial execution there is exactly one lane, so this
+describes today's behaviour unchanged.
+
 ### Phase A.5 — Per-phase test sub-flow (guarded by command-exists check)
 
 #### Step A.5.0 — methodology.md gate (self-skip when `test_frameworks: []` or file absent)
@@ -1047,9 +1085,17 @@ Write / overwrite `PRPs/reports/<feature>/orchestrator-run.json` with the full l
   "worktree_attempted": <boolean | null>,
   "worktree_succeeded": <boolean | null>,
   "fallback_reason": "<string | null>",
-  "phase_diff_bases": <phase_diff_bases>
+  "phase_diff_bases": <phase_diff_bases>,
+  "lane_durations_ms": {},
+  "total_duration_ms": null
 }
 ```
+
+**Timing is recorded for serial runs too.** Both fields are written whether or not lanes ran. A parallel
+duration is meaningless on its own — it is only interpretable against a serial duration measured the same
+way — so a run carrying neither cannot participate in the non-regression comparison at all. The floor and
+the deliberate absence of a speedup target are defined in
+`${CLAUDE_PLUGIN_ROOT}/resources/lane-model.md`.
 
 `phase_diff_bases` is the map Step A.6.0.5 maintains — phase number to that
 phase's end-state tree object. A phase whose snapshot soft-failed simply has no
