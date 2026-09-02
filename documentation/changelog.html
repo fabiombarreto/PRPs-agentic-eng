@@ -30,7 +30,42 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <h3 id="unreleased-added">Added</h3>
+      <p>Nothing yet.</p>
+
+      <h2 id="v0-38-0">0.38.0 &#8212; 2026-09-02</h2>
+
+      <p>Independent phases can now run at the same time. A PRD whose phases form separate dependency chains
+        has paid their sum instead of their maximum since the table was defined: the <code>Parallel</code>
+        column sat in the byte-exact header from the start and no consumer ever read it. It now has a grammar.
+        A <em>lane</em> is a weakly-connected component of the <code>Depends</code> graph computed within a
+        <code>Repo</code> partition &mdash; derived from the table that already exists, never declared beside
+        it, so a lane cannot contradict a stated dependency. Each lane gets its own worktree and its own
+        branch, writes no shared state, and reports an outcome the orchestrator applies serially.</p>
+
+      <p>Two choices shape the rest. The <code>Parallel</code> override is <strong>one-directional</strong>:
+        it may merge lanes, never split one, because a split contradicts a dependency the table already
+        states &mdash; that asymmetry is a consequence, not a convention. And concurrency is gated on a
+        <em>declaration</em> rather than a detection, because the capability that would make concurrent test
+        stages genuinely safe is registered and BLOCKED, and its own out-of-scope list forbids assuming a
+        runnable environment exists. Absent or false, execution is serial and the run log records which of the
+        two applied. Every <code>Parallel</code> value in an already-approved PRD stays a no-op.</p>
+
+      <p>The last phase is the one that makes any of this falsifiable. Phases 1 through 6 are a specification,
+        and prose cannot fail; <code>scripts/validate/lane-derivation.mjs</code> is the first artifact that
+        computes a lane, and <code>colliding-lanes.prd.md</code> the first that <em>demonstrates</em> a refusal
+        rather than describing one. Its own test de-claws the fixture and requires the check to notice, which
+        is the difference between testing the fixture and testing the gate. The validation suite grows
+        <code>19</code> &rarr; <code>24</code> checks and the unit corpus <code>831</code> &rarr;
+        <code>928</code> tests.</p>
+
+      <p>Recorded rather than hidden: six agents declare <code>Task</code> in their <code>tools:</code>
+        frontmatter and none declares <code>Agent</code>. Whether that name resolves at runtime is not
+        statically decidable, and if it does not, the <code>R-SEM</code> semantic layer is absent today and
+        absent silently. A new check closes the structural half; no frontmatter was renamed on a guess.
+        Plugin manifest bumped <code>0.37.0</code> &rarr; <code>0.38.0</code> per
+        <a href="AGENTS.md">AGENTS.md</a> &sect;7.5.</p>
+
+      <h3 id="v0-38-0-added">Added</h3>
       <ul>
         <li><strong>Lane model contract</strong> &mdash; a new plugin-owned contract at
           <code>plugins/relay/resources/lane-model.md</code> defines what a <em>lane</em> is: a
@@ -156,15 +191,20 @@
           one before any measurement exists would be a guess wearing the shape of a finding.</li>
       </ul>
 
-      <h3 id="unreleased-changed">Changed</h3>
+      <h3 id="v0-38-0-changed">Changed</h3>
       <ul>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.37.0</code> &rarr; <code>0.38.0</code> to
+          match this release; Claude Code keys its plugin cache on the manifest version, so users running
+          <code>/plugin</code> after pulling this version get a fresh <code>relay/0.38.0/</code>
+          cache directory with every newly-shipped command, agent and resource registered.</li>
         <li><strong><code>plugins/relay/resources/prd-template.md</code></strong> &mdash; a
           <code>Parallel</code> column section now sits beside the <code>Repo</code> one, delegating the
           authoritative rules to the contract rather than restating them.</li>
         <li><strong><code>CLAUDE.md</code></strong> &mdash; the advertised check count moves 19 &rarr; 24 across the seven shipped phases.</li>
       </ul>
 
-      <h3 id="unreleased-fixed">Fixed</h3>
+      <h3 id="v0-38-0-fixed">Fixed</h3>
       <ul>
         <li><strong>Both validation-check catalogs were stale</strong> &mdash; a gap that accumulated quietly
           across several features&#39; docs-sync stages, each of which added its own new check without noticing the
