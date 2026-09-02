@@ -71,6 +71,14 @@ const SITES = [
       { id: 'backfill-only-when-absent', pattern: /backfill\s*`visual_first_approval: auto`/i },
     ],
   },
+  {
+    key: 'lane_runtime_safe',
+    markers: [
+      { id: 'default-false-emission', pattern: /always emit `lane_runtime_safe: false`/i },
+      { id: 'preserve-on-update', pattern: /`lane_runtime_safe`\s*preservation/i },
+      { id: 'backfill-only-when-absent', pattern: /backfill\s*`lane_runtime_safe: false`/i },
+    ],
+  },
 ];
 
 /**

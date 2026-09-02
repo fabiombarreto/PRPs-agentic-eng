@@ -30,7 +30,167 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <p>Nothing yet.</p>
+      <h3 id="unreleased-added">Added</h3>
+      <ul>
+        <li><strong>Lane model contract</strong> &mdash; a new plugin-owned contract at
+          <code>plugins/relay/resources/lane-model.md</code> defines what a <em>lane</em> is: a
+          weakly-connected component of the <code>Depends</code> graph, computed after partitioning phase rows
+          by <code>Repo</code>. Lanes are derived from the Implementation Phases table, never declared beside
+          it, so a lane cannot contradict a stated dependency. A cross-repo <code>Depends</code> edge is
+          retained as an inter-lane ordering constraint rather than merging two repositories&#39; lanes.</li>
+        <li><strong>The <code>Parallel</code> column gains semantics</strong> &mdash; reserved in the table
+          header since the schema was defined and read by nothing until now. It admits exactly one token,
+          <code>lane:&lt;label&gt;</code>, which MERGES rows into one sequential lane. The override is
+          one-directional: an author may always choose to be more serial than the graph, and may never split a
+          lane the graph derived &mdash; a lane that violates <code>Depends</code> is not expressible.
+          Every value the column carries today (roughly nineteen free-text entries across approved PRDs, plus
+          113 empty cells) stays a legacy no-op, so no approved PRD changes meaning.</li>
+        <li><strong><code>R-COH-PARALLEL-CONTRADICTS-DEPENDS</code></strong> &mdash; a blocking
+          <code>prd-reviewer</code> coherence row refusing a contradicting declaration by name
+          (<code>FAILED_LANE_SPLIT_FORBIDDEN</code>, <code>FAILED_LANE_CROSS_REPO</code>) at approval time
+          rather than at run time. Its zero-emission branch keeps it silent for every PRD authored before the
+          grammar existed.</li>
+        <li><strong>A 20th validation check</strong> &mdash; <code>lane-contract</code> holds the contract and
+          its consumers to the same named codes, failing on a cited code the registry does not define.</li>
+        <li><strong>Per-lane worktree and branch</strong> &mdash; the worktree identity key gains a lane
+          dimension through one derived value, <code>&lt;worktree_slug&gt;</code>: the feature name when no lane
+          is supplied, <code>&lt;feature&gt;-lane-&lt;k&gt;</code> when one is. Path and branch are built from
+          the same slug, because git refuses to check one branch out in two worktrees &mdash; so the branch
+          dimension is forced by the path dimension rather than chosen beside it. With no lane the slug IS the
+          feature name, which is what makes every existing path and branch form byte-identical rather than
+          merely intended to be.</li>
+        <li><strong>An optional <code>lane</code> input on <code>/relay-worktree</code></strong> &mdash;
+          supplied by an invoker, never by a CLI flag, exactly as the <code>repo</code> input shipped by
+          <code>multi-repo-topology</code>. The lane dimension composes with the per-repo one rather than
+          replacing it.</li>
+        <li><strong>A 21st validation check</strong> &mdash; <code>lane-worktree-parity</code> holds a creation
+          command&#39;s path slug and branch slug to being the same token, and fails on an empty input set
+          rather than reporting a clean pass over nothing.</li>
+        <li><strong>Lanes are read-only over shared state</strong> &mdash; a lane writes neither the source
+          PRD&#39;s Implementation Phases table nor <code>orchestrator-run.json</code>. It returns a structured
+          outcome carrying a <code>requested_transition</code>, and the orchestrator applies every mutation
+          serially through the <code>flip_row_status</code> procedure it already owns. The race is removed by
+          construction rather than guarded: the second writer never exists, so no lock is introduced &mdash;
+          which would have been this codebase&#39;s first.</li>
+        <li><strong>A shared-state writer registry</strong> &mdash; the lane contract now names, in a parseable
+          table, every surface that writes shared state today and the anchor by which each does it. The per-plan
+          verdict logs are recorded as explicitly NOT shared, because they are keyed by plan basename and are
+          therefore already per phase &mdash; stated as a finding so the exclusion reads as a decision rather
+          than an oversight.</li>
+        <li><strong>A 22nd validation check</strong> &mdash; <code>lane-state-writers</code> holds that registry
+          to being true: each named surface must exist and must still contain its claimed anchor.</li>
+        <li><strong>A declared runtime-safety gate</strong> &mdash; <code>lane_runtime_safe</code> joins the
+          methodology declaration with the same three non-heuristic properties every gating key since
+          <code>docs_sync</code> has carried. Absent or <code>false</code>, phases run serially and the run log
+          records which of the two applied &mdash; &ldquo;nobody has decided yet&rdquo; and &ldquo;somebody
+          decided no&rdquo; are different facts. The gate is declared rather than detected because the
+          capability that would make concurrent test stages genuinely safe is registered and BLOCKED, and its
+          own out-of-scope list forbids assuming a runnable environment exists; a port scan or compose-file
+          parse would break that and the no-heuristic-gating rule at once.</li>
+        <li><strong>A concurrency cap</strong> &mdash; <code>max_lanes_in_flight</code> joins the
+          orchestrator&#39;s session-level budgets, with the remainder queued rather than dropped so a wide PRD
+          is slowed, never truncated. Its value is explicitly <em>provisional</em>: no measurement exists yet,
+          and publishing a tuned number would repeat the error this feature refused when it declined to set a
+          speedup target.</li>
+        <li><strong>Concurrent lane dispatch</strong> &mdash; the orchestrator gains a lane-aware selection
+          step that derives lanes, reads the gate, caps lanes in flight and dispatches each as a subagent
+          adopting the <em>same</em> per-phase protocols the serial path adopts. It falls through to the
+          existing lowest-numbered pick, unchanged, in three named cases &mdash; gate absent or false, fewer
+          than two lanes, or a cap of one &mdash; each recorded by name, because &ldquo;ran serially&rdquo;
+          and &ldquo;ran serially because the project declared its test stage contends&rdquo; are different
+          facts.</li>
+        <li><strong>Per-lane budgets, one shared clock</strong> &mdash; retry, oscillation and dispute budgets
+          were already re-initialised per phase and are therefore per lane for free;
+          <code>max_orchestrator_minutes</code> is one deadline for the whole session and is now documented as
+          shared rather than silently contended. Every lane reaches one of four named terminal states when
+          another halts, so a halt never leaves a lane undescribed.</li>
+        <li><strong>A 23rd validation check</strong> &mdash; <code>agent-dispatch-resolution</code> resolves
+          every <code>subagent_type</code> reference inside an agent body and holds every dispatching agent to
+          declaring a dispatch tool. This closes a real gap: <code>dispatch-graph</code> scopes itself to
+          command files and says so, which left <code>code-reviewer</code> &rarr;
+          <code>code-reviewer-semantic</code> &mdash; the edge carrying the entire R-SEM semantic layer &mdash;
+          verified by nothing.</li>
+        <li><strong>An unverified dispatch name, recorded as a finding</strong> &mdash; six agents declare
+          <code>Task</code> in their <code>tools:</code> frontmatter and none declares <code>Agent</code>.
+          Whether that name resolves at runtime is not statically decidable, and if it does not, the R-SEM
+          layer is absent today and absent silently. The contract records this with its evidence; no
+          frontmatter was renamed on a guess, because renaming a declaration that may currently work would be
+          worse than the ambiguity.</li>
+        <li><strong>Lane integration in Pillar 3</strong> &mdash; <code>/relay-commit</code> now merges a
+          repository&#39;s <code>feature/&lt;feature&gt;-lane-*</code> branches into its
+          <code>feature/&lt;feature&gt;</code> branch before its branch check, so there is again exactly one
+          branch per repository and <code>/relay-pr</code> still opens exactly one PR per repository. With a
+          single lane the step is a documented no-op. Integration lives in Pillar 3 rather than the
+          orchestration loop because Pillar 2 never commits &mdash; a permanent boundary, not a deferral.</li>
+        <li><strong>A merge conflict between lanes is a finding about the PRD</strong> &mdash; lanes are
+          disjoint by construction, so two of them touching one file means the <code>Depends</code> column was
+          wrong about their independence. <code>FAILED_LANE_INTEGRATION_CONFLICT</code> names both branches and
+          the contended path, and auto-resolution is forbidden rather than discouraged: resolving it would
+          produce a working branch and destroy the only signal that the dependency graph misdescribes the
+          work.</li>
+        <li><strong>Multiple paused approvals are no longer a failure</strong> &mdash;
+          <code>/relay-visual-approve</code> presented more than one pending approval as
+          &ldquo;unexpected under this track&#39;s serial execution model&rdquo; and refused. Once lanes exist
+          that is routine, so approvals in different lanes are now presented for the operator to choose
+          between. The original halt is kept for the case it was written for: more than one pending approval
+          within a single lane.</li>
+        <li><strong>The lane model becomes executable</strong> &mdash;
+          <code>scripts/validate/lane-derivation.mjs</code> implements the derivation the contract specifies:
+          partition by <code>Repo</code>, weakly-connected components of the <code>Depends</code> graph, then
+          the one-directional <code>Parallel</code> override. The contract remains the authority and the module
+          is a reading of it &mdash; a disagreement is a bug in the module, not the contract, because the
+          contract is what six commands and an agent actually read.</li>
+        <li><strong>Two fixtures, and one of them must fail</strong> &mdash; a three-chain fixture derives to
+          exactly the lanes the contract&#39;s worked example documents, and a colliding fixture declares two
+          rows of one derived lane under different <code>lane:</code> labels and MUST be refused. Until the
+          derivation was executable, nothing in this feature could demonstrate that a contradicting
+          declaration is genuinely rejected &mdash; every earlier check verified that surfaces cite each other
+          consistently, which is a different claim.</li>
+        <li><strong>A 24th validation check</strong> &mdash; <code>lane-fixture</code> exercises both fixtures
+          on every suite run. Its own test de-claws the negative fixture and requires the check to notice,
+          which is the difference between testing the fixture and testing the gate.</li>
+        <li><strong>Timing instrumentation</strong> &mdash; <code>orchestrator-run.json</code> gains
+          <code>lane_durations_ms</code> and <code>total_duration_ms</code>, recorded for serial runs too,
+          because a parallel duration is only interpretable against a serial one measured the same way. The
+          floor is that the parallel run must not be <em>slower</em>; no speedup target is set, since naming
+          one before any measurement exists would be a guess wearing the shape of a finding.</li>
+      </ul>
+
+      <h3 id="unreleased-changed">Changed</h3>
+      <ul>
+        <li><strong><code>plugins/relay/resources/prd-template.md</code></strong> &mdash; a
+          <code>Parallel</code> column section now sits beside the <code>Repo</code> one, delegating the
+          authoritative rules to the contract rather than restating them.</li>
+        <li><strong><code>CLAUDE.md</code></strong> &mdash; the advertised check count moves 19 &rarr; 24 across the seven shipped phases.</li>
+      </ul>
+
+      <h3 id="unreleased-fixed">Fixed</h3>
+      <ul>
+        <li><strong>Both validation-check catalogs were stale</strong> &mdash; a gap that accumulated quietly
+          across several features&#39; docs-sync stages, each of which added its own new check without noticing the
+          rows its predecessors had missed. The catalog in
+          <a href="guide/validation-suite.html">Validation suite</a> listed 17 of the 24 checks that ship, omitting
+          <code>metrics-isolation</code>, <code>decisions-mirror</code>, <code>anti-patterns-mirror</code>,
+          <code>line-endings</code>, <code>diff-base-form</code>, <code>topology-contract</code> and
+          <code>worktree-path-qualified</code>; it now carries all 24, in registration order. The per-check
+          reference at <a href="reference/validation-checks.html">Validation checks</a> was missing the five lane
+          checks and its totals line still read 19.</li>
+        <li><strong>The reference page gains a <code>lane-derivation</code> entry</strong> &mdash; a pure module
+          rather than a registered check, listed alongside <code>efficiency-metrics</code> and the eval layer under
+          the same convention, so a reader counting rows is not misled about what
+          <code>npm run validate</code> runs.</li>
+        <li><strong>Check counts written into prose are now count-free</strong> &mdash; the guide heading read
+          &ldquo;The twelve static checks&rdquo;, and four more places (a shell comment, the reference page&#39;s
+          subtitle and how-to-read callout, and two search-index excerpts) each carried their own copy of a
+          number that had to be updated in lockstep. It was not: the changelog entry for 0.29.0 records this
+          exact drift being corrected once already, from eleven to twelve, at three of the same sites. Five
+          independent copies of one number is a recurrence waiting to happen, so the prose no longer states a
+          count at all and the Summary table&#39;s totals line is the single place that does.</li>
+        <li><strong>Nothing polices these catalogs</strong> &mdash; <code>registration-parity</code> covers commands
+          and agents against NAV and the search index, but no check compares the rendered check catalogs against the
+          <code>CHECKS</code> array, which is why the drift went unnoticed for several releases. Recorded here as a
+          known gap rather than left implicit.</li>
+      </ul>
 
       <h2 id="v0-37-0">0.37.0 &#8212; 2026-09-01</h2>
 

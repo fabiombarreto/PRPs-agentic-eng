@@ -84,6 +84,19 @@ Already enforced by `## Parse arguments` above — a blank `$ARGUMENTS` HALTs be
   > visual approval, or it was already resolved — re-run
   > `/relay-execute PRPs/prds/<feature>.prd.md` to check current status.
 
+**Lane-aware branch.** When the matched pending approvals belong to DIFFERENT
+lanes, more than one is **expected**, not unexpected — lanes run concurrently by
+design, and each may independently reach a state that awaits a human decision.
+In that case do NOT halt. Present all of them instead, each with its phase
+number, its lane, and its fidelity-report path, and let the operator choose which
+to act on. Refusing here would block approval of every paused phase for as long
+as any other phase is also paused, which is the opposite of what the approval
+command is for.
+
+The HALT below is kept for the case it was actually written for: more than one
+unresolved approval **within a single lane**. That remains unexpected, because a
+lane runs its own phases sequentially.
+
 - If more than one remains: HALT `FAILED_MULTIPLE_PENDING_APPROVALS`, naming every matched `phase-<N>` path:
 
   > FAILED_MULTIPLE_PENDING_APPROVALS: More than one unresolved

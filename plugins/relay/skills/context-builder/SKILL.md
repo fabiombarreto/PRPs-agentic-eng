@@ -637,6 +637,7 @@ test_frameworks: []       # array of frameworks detected in the scan (informativ
 docs_sync: true           # true | false — per-project master switch for automated docs/ sync (docs-updater/docs-reviewer)
 figma_track: false        # true | false — opt-in switch for the Figma implementation track (design-to-code); default off, never heuristically flipped
 visual_first_approval: auto  # auto | human — default approval mode for the Figma Visual-First Track's visual-first blocking gate; only meaningful when figma_track: true
+lane_runtime_safe: false  # true | false — declares the project's test stage does not contend on shared runtime resources (ports, containers, databases); default off, never heuristically flipped
 formatter_cmd: null   # null | "<command string>" — project formatter command; null means undeclared; never heuristically inferred
 ---
 
@@ -700,6 +701,15 @@ in CONTRIBUTING.md / README.md. None of these activate TDD on their own.]
   (`/relay-visual-approve` records a per-phase approval decision on
   that phase's `halt.json`; it never edits this file) — and never by
   heuristic detection. Only meaningful when `figma_track: true`.
+- Always emit `lane_runtime_safe: false` — the per-project declaration
+  that this project's test stage does not contend on shared runtime
+  resources (ports, container names, database namespaces), mirroring
+  the `figma_track` default-emission precedent verbatim. Never
+  heuristically inferred — no port scan, no `docker-compose` parse, no
+  stack detection; always emitted deterministically on every `*init`
+  run. Flips to `true` only via a human edit to this file — no command
+  flips it. Absent or `false`, `/relay-execute` runs phases serially
+  and records which of the two applied.
 - Always emit `formatter_cmd: null` — the per-project declared formatter
   command defaults to undeclared, mirroring the `tdd_evidence: null`
   default-emission precedent verbatim. Never heuristically inferred from
@@ -746,6 +756,15 @@ in CONTRIBUTING.md / README.md. None of these activate TDD on their own.]
     `*update` adds this key; never remove or flip an existing value.
     Heuristics MUST NOT flip this value — only a human edit can
     (no command flips it).
+  - **`lane_runtime_safe` preservation**: if `lane_runtime_safe` is
+    already present in the frontmatter, preserve its value untouched —
+    validated human input, same treatment as `figma_track`. If the key
+    is entirely absent (a project initialized before this key existed),
+    backfill `lane_runtime_safe: false` — this is the ONLY case where
+    `*update` adds this key; never remove or flip an existing value.
+    Heuristics MUST NOT flip this value (no port scan, no
+    `docker-compose` parse, no stack detection) — only a human edit can;
+    no command flips it.
   - **`formatter_cmd` preservation**: if `formatter_cmd` is already
     present in the frontmatter (including an explicit `null`), preserve
     its value untouched — same treatment as `tdd`/`docs_sync`. If the

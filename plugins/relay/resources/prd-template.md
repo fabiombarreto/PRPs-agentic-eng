@@ -206,6 +206,29 @@ cells by column NAME rather than by ordinal position, using the header row they
 matched; an ordinal read would misinterpret a legacy row once `Repo` shifted
 every column after `Status`.
 
+#### The `Parallel` column
+
+Optional. It is an author override on the lanes relay derives from the
+`Depends` column, and it can only make execution MORE serial.
+
+Leaving the cell `-` (the default, and what every row should carry unless you
+have a reason) derives lanes from `Depends` alone. Writing `lane:<label>` on two
+or more rows merges those rows into a single lane that runs sequentially — use
+it when two chains the graph considers independent would in fact collide, for
+example by touching the same file. A label can never split a lane the graph
+derived: rows connected by `Depends` run in one lane no matter what this column
+says, and a declaration that tries to split them is refused by name rather than
+honored.
+
+Any other text in this cell is legacy and is ignored — the column predates its
+own semantics and existing PRDs carry free-text values such as `yes` in it, so
+those values change nothing and are not errors.
+
+The authoritative rules — the derivation algorithm, the label grammar, the
+cross-repo constraint and the named refusal codes (see
+`${CLAUDE_PLUGIN_ROOT}/resources/lane-model.md`) — are defined there and are not
+restated here.
+
 #### Phase-status lifecycle
 
 This table IS relay's canonical phase-state machine (`docs/decisions.md`,

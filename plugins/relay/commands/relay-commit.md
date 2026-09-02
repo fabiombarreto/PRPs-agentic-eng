@@ -83,6 +83,42 @@ Reached when `<arg>` names an existing `.worktrees/<feature>/`. Deterministic
 and non-interactive. All git operations use the `git -C .worktrees/<feature>/`
 prefix.
 
+## A.-1 — Lane-branch integration (runs before the branch check)
+
+List the branches matching `feature/<feature>-lane-*` in this repository:
+
+```bash
+git -C <repo_root> branch --list "feature/<feature>-lane-*"
+```
+
+**If none exist, this step is a complete no-op** and A.0 proceeds exactly as it
+does today. That is the single-lane case, and it must stay byte-identical.
+
+Otherwise, for each matched branch in **ascending lane order**, merge it into
+`feature/<feature>`:
+
+```bash
+git -C <repo_root>/.worktrees/<feature>/ merge --no-ff feature/<feature>-lane-<k>
+```
+
+Then continue to A.0, which will now find the branch it expects.
+
+**On a merge conflict**, HALT:
+
+> FAILED_LANE_INTEGRATION_CONFLICT: merging `feature/<feature>-lane-<k>` into
+> `feature/<feature>` conflicted on `<path>`.
+> Lanes are disjoint by construction — a lane is a connected component of the
+> `Depends` graph, so two lanes touching one file means the source PRD's
+> `Depends` column was WRONG about their independence. This is a correctness
+> finding about the PRD, not a routine merge failure.
+> Do NOT auto-resolve: resolving it produces a working branch and destroys the
+> only signal that the dependency graph misdescribes the work.
+> Inspect `<path>`, correct the PRD's `Depends` cells so the two phases share a
+> lane, and re-run the affected phases.
+
+The authority for lane branch names, ordering and the conflict semantics is
+`${CLAUDE_PLUGIN_ROOT}/resources/lane-model.md`; the rules are not restated here.
+
 ## A.0 — Branch check
 
 Run:
