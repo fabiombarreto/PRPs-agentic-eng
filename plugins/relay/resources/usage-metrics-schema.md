@@ -70,6 +70,22 @@ or rewriting existing data.
 Files are LF-terminated. The first line of every shard is a header row naming
 the columns; every subsequent line is one record.
 
+`materialize` also scaffolds two git control files into the same directory:
+
+```
+PRPs/metrics/.gitattributes    *.tsv -diff, *.tsv text eol=lf
+PRPs/metrics/.gitignore        !*.tsv re-include, *.tsv.tmp
+```
+
+Their canonical content, including the rationale comments, is
+`${CLAUDE_PLUGIN_ROOT}/resources/usage-metrics.gitattributes` and
+`${CLAUDE_PLUGIN_ROOT}/resources/usage-metrics.gitignore`. Each is written
+only when absent — an existing file is never overwritten, because a project may
+have customized it — and `--dry-run` writes neither. The `-diff` rule is the
+anti-Goodhart guard: without it, a working-tree diff over a shard feeds metric
+values to `/relay-implement`'s reviewers, `/relay-commit` and
+`/relay-qa-report`.
+
 ## Versioning
 
 Adapted from `${CLAUDE_PLUGIN_ROOT}/resources/test-output-schema.md`, whose
