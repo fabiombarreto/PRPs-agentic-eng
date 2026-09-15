@@ -427,6 +427,39 @@ export function writeAtomic(path, content) {
 }
 
 /**
+ * Git control files scaffolded into the output directory, keyed by the name
+ * written there. Canonical content ships as
+ * ${CLAUDE_PLUGIN_ROOT}/resources/usage-metrics.gitattributes and
+ * ${CLAUDE_PLUGIN_ROOT}/resources/usage-metrics.gitignore — resolved from
+ * this module's own location, because the plugin root is all an installed
+ * user receives.
+ */
+const SCAFFOLD = {
+  '.gitattributes': 'usage-metrics.gitattributes',
+  '.gitignore': 'usage-metrics.gitignore',
+};
+
+/**
+ * Write each scaffold file into outDir when absent. An existing file is never
+ * overwritten: a project may have customized it, and a regenerated default
+ * would silently discard that. Content is normalized to literal '\n' so a
+ * CRLF checkout of the plugin cannot leak into the target.
+ * @param {string} outDir
+ * @returns {string[]} names written
+ */
+export function scaffoldOutDir(outDir) {
+  /** @type {string[]} */ const written = [];
+  for (const [name, template] of Object.entries(SCAFFOLD)) {
+    const dest = join(outDir, name);
+    if (existsSync(dest)) continue;
+    const src = new URL(`../resources/${template}`, import.meta.url);
+    writeAtomic(dest, readFileSync(src, 'utf8').split('\r\n').join('\n'));
+    written.push(name);
+  }
+  return written;
+}
+
+/**
  * Group every projected row into its destination shard.
  * @param {Record<string, Record<string,string>[]>} relations
  * @returns {Map<string, {relation: string, rows: Record<string,string>[]}>}
@@ -623,6 +656,10 @@ export function main(argv) {
   }
 
   mkdirSync(args.out, { recursive: true });
+  // Scaffold before any shard lands, so no shard ever exists without -diff.
+  for (const name of scaffoldOutDir(args.out)) {
+    process.stdout.write(`scaffolded ${join(args.out, name)}\n`);
+  }
   for (const name of names) {
     const shard = /** @type {{relation: string, rows: Record<string,string>[]}} */ (shards.get(name));
     let rows = shard.rows;
