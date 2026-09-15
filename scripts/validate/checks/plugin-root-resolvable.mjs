@@ -75,7 +75,7 @@ const PLUGIN_ROOT = 'plugins/relay';
 const SCANNED_EXTENSIONS = new Set(['.md', '.mjs', '.js']);
 const SKIP_DIR_NAMES = new Set(['node_modules', '.git']);
 
-// The nine resource basenames plugins/relay/resources/ packages. Any
+// The eleven resource basenames plugins/relay/resources/ packages. Any
 // citation of one of these anywhere under plugins/relay/ that is not
 // exactly OWNED_RESOURCE_PREFIX + basename is an R1 finding.
 const OWNED_RESOURCES = [
@@ -88,6 +88,11 @@ const OWNED_RESOURCES = [
   'test-output-schema.md',
   'mock-sentinels.md',
   'usage-metrics-schema.md',
+  // Scaffolding templates the materializer copies into a target's
+  // PRPs/metrics/. Non-dot basenames so R1 does not flag every prose
+  // mention of a project's own `.gitignore`.
+  'usage-metrics.gitattributes',
+  'usage-metrics.gitignore',
 ];
 const OWNED_RESOURCE_PREFIX = '${CLAUDE_PLUGIN_ROOT}/resources/';
 

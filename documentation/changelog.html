@@ -32,6 +32,20 @@
 
       <h3 id="unreleased-fixed">Fixed</h3>
       <ul>
+        <li><strong><code>usage-metrics.mjs materialize</code> now scaffolds its git control files</strong>
+          &mdash; the usage-metrics PRD requires <code>PRPs/metrics/.gitattributes</code>
+          (<code>*.tsv -diff</code>, <code>*.tsv text eol=lf</code>) and <code>PRPs/metrics/.gitignore</code>
+          (<code>!*.tsv</code>, <code>*.tsv.tmp</code>), but the script never wrote them; this repository only
+          had them because they were committed by hand. In every other project materialization produced bare
+          shards, so the <code>-diff</code> anti-Goodhart guard was absent and metric values could reach
+          <code>/relay-implement</code>&#39;s <code>diff.patch</code>, <code>/relay-commit</code> and
+          <code>/relay-qa-report</code>. The canonical content now ships as
+          <code>plugins/relay/resources/usage-metrics.gitattributes</code> and
+          <code>usage-metrics.gitignore</code> (reachable through <code>${CLAUDE_PLUGIN_ROOT}</code>); each is
+          written atomically only when absent, never overwrites a customized file, and is not written by
+          <code>--dry-run</code>. The phase-3 tests had passed against the hand-committed files without ever
+          running the script; new tests exercise the materializer itself, including <code>git check-attr</code>
+          in a throwaway repository.</li>
         <li><strong><code>usage-metrics.mjs</code> no longer materializes on <code>--help</code> or a typo</strong>
           &mdash; <code>parseArgs</code> defaulted to <code>materialize</code> and silently ignored any token it
           did not recognize, so <code>--help</code>, <code>--dryrun</code> or <code>querry</code> rewrote the
