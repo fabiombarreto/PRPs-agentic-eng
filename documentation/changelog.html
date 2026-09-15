@@ -30,7 +30,18 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <p>Nothing yet.</p>
+      <h3 id="unreleased-fixed">Fixed</h3>
+      <ul>
+        <li><strong><code>usage-metrics.mjs</code> no longer materializes on <code>--help</code> or a typo</strong>
+          &mdash; <code>parseArgs</code> defaulted to <code>materialize</code> and silently ignored any token it
+          did not recognize, so <code>--help</code>, <code>--dryrun</code> or <code>querry</code> rewrote the
+          tracked shards under <code>PRPs/metrics/</code> and appended a row to the <code>scan</code> history.
+          <code>--help</code>/<code>-h</code> now prints usage and exits 0; an unknown argument, a flag missing its
+          value (<code>--root</code> with nothing after it), conflicting modes, or no mode at all print an error
+          plus usage to stderr and exit 2. In every case nothing is written. The mode is now mandatory &mdash;
+          every documented caller, including the release-cut ritual, already passes <code>materialize</code>
+          explicitly. New tests spawn the script in an empty directory and assert it stays empty.</li>
+      </ul>
 
       <h2 id="v0-38-0">0.38.0 &#8212; 2026-09-02</h2>
 

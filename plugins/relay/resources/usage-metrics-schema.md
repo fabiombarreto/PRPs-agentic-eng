@@ -8,6 +8,13 @@ which regenerates every shard by full rescan of the artifacts relay already
 writes. **Consumer:** a human, an AI, or a script deciding which part of relay
 to improve next.
 
+**Invocation:** the mode is mandatory — `materialize`, `--dry-run`, or
+`query`, with optional `--root <dir>`, `--out <dir>`, `--project <id>`. Run
+with `--help` for usage. The command line is parsed strictly: an unknown
+argument, a flag missing its value, or no mode at all prints an error and
+usage to stderr and exits `2` without writing anything, so a typo can never
+fall through to rewriting shards.
+
 Source of truth for the field set: `PRPs/prds/usage-metrics.prd.md`.
 
 ---
