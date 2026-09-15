@@ -30,7 +30,25 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <h3 id="unreleased-fixed">Fixed</h3>
+      <p>Nothing yet.</p>
+
+      <h2 id="v0-38-1">0.38.1 &#8212; 2026-09-15</h2>
+
+      <p>Two fixes to <code>usage-metrics.mjs</code>, both found while materializing projects other than this
+        one. In those projects <code>materialize</code> wrote shards with no <code>-diff</code> guard, and a
+        mistyped argument or <code>--help</code> quietly rewrote tracked shards. Both were invisible here: this
+        repository had hand-committed control files, and no test tried an unrecognized argument.</p>
+
+      <h3 id="v0-38-1-changed">Changed</h3>
+      <ul>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.38.0</code> &rarr; <code>0.38.1</code> to
+          match this release; users running <code>/plugin</code> after pulling
+          this version will get a fresh <code>relay/0.38.1/</code> cache directory
+          with the fixed script and the new scaffolding templates.</li>
+      </ul>
+
+      <h3 id="v0-38-1-fixed">Fixed</h3>
       <ul>
         <li><strong><code>usage-metrics.mjs materialize</code> now scaffolds its git control files</strong>
           &mdash; the usage-metrics PRD requires <code>PRPs/metrics/.gitattributes</code>
