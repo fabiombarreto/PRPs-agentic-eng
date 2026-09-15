@@ -15,6 +15,11 @@
  * Usage:
  *   node <plugin-root>/scripts/usage-metrics.mjs materialize [--root <dir>] [--out <dir>] [--project <id>]
  *   node <plugin-root>/scripts/usage-metrics.mjs --dry-run   [--root <dir>] [--out <dir>] [--project <id>]
+ *   node <plugin-root>/scripts/usage-metrics.mjs query       [--root <dir>] [--out <dir>]
+ *   node <plugin-root>/scripts/usage-metrics.mjs --help
+ *
+ * The mode is mandatory. Unknown arguments, flags missing a value, or no mode
+ * exit 2 without writing (see USAGE / parseArgs).
  *
  * No npm dependencies. Node >=18, ESM, synchronous node: builtins only.
  */
@@ -476,23 +481,63 @@ export function planShards(relations) {
   return shards;
 }
 
-/** @param {string[]} argv @returns {{mode: string, root: string, out: string, project: string|null}} */
+export const USAGE = `Usage:
+  node <plugin-root>/scripts/usage-metrics.mjs materialize [--dry-run] [--root <dir>] [--out <dir>] [--project <id>]
+  node <plugin-root>/scripts/usage-metrics.mjs --dry-run [--root <dir>] [--out <dir>] [--project <id>]
+  node <plugin-root>/scripts/usage-metrics.mjs query [--root <dir>] [--out <dir>]
+  node <plugin-root>/scripts/usage-metrics.mjs --help
+
+Modes (one is required):
+  materialize      rescan the corpus and rewrite every shard under --out
+  --dry-run        print shard paths and row counts; write nothing
+  query            print per-stage counts and failure rates from existing shards
+
+Flags:
+  --root <dir>     project root to scan (default: current directory)
+  --out <dir>      shard directory (default: <root>/PRPs/metrics)
+  --project <id>   project id recorded in every row
+  -h, --help       print this help and exit
+`;
+
+/** A malformed command line. main() reports it with usage and exits 2. */
+export class UsageError extends Error {}
+
+/**
+ * Strict by design: materialize rewrites tracked shards and appends to the
+ * scan history, so a typo or `--help` must never fall through to it. Unknown
+ * tokens, flags without a value, and a missing or conflicting mode all throw.
+ * @param {string[]} argv @returns {{mode: string, root: string, out: string, project: string|null}}
+ */
 export function parseArgs(argv) {
-  let mode = 'materialize';
+  /** @type {string|null} */ let command = null;
+  let dryRun = false;
+  let help = false;
   let root = process.cwd();
   let out = '';
   /** @type {string|null} */ let project = null;
+  /** @param {string} flag @param {number} i */
+  const value = (flag, i) => {
+    const v = argv[i];
+    if (v === undefined || v.startsWith('-')) throw new UsageError(`${flag} requires a value`);
+    return v;
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--dry-run') mode = 'dry-run';
-    else if (a === 'materialize') mode = 'materialize';
-    else if (a === 'query') mode = 'query';
-    else if (a === '--root') root = argv[++i] || root;
-    else if (a === '--out') out = argv[++i] || out;
-    else if (a === '--project') project = argv[++i] || null;
+    if (a === '--help' || a === '-h') help = true;
+    else if (a === '--dry-run') dryRun = true;
+    else if (a === 'materialize' || a === 'query') {
+      if (command && command !== a) throw new UsageError(`conflicting subcommands: ${command} and ${a}`);
+      command = a;
+    } else if (a === '--root') root = value(a, ++i);
+    else if (a === '--out') out = value(a, ++i);
+    else if (a === '--project') project = value(a, ++i);
+    else throw new UsageError(`unknown argument: ${a}`);
   }
   if (!out) out = join(root, 'PRPs', 'metrics');
-  return { mode, root, out, project };
+  if (help) return { mode: 'help', root, out, project };
+  if (command === 'query' && dryRun) throw new UsageError('--dry-run does not apply to query');
+  if (!command && !dryRun) throw new UsageError('missing subcommand: pass materialize, --dry-run or query');
+  return { mode: dryRun ? 'dry-run' : /** @type {string} */ (command), root, out, project };
 }
 
 /** @param {string} root @returns {string} */
@@ -629,7 +674,19 @@ export function doQuery(outDir) {
 
 /** @param {string[]} argv @returns {number} exit code */
 export function main(argv) {
-  const args = parseArgs(argv);
+  let args;
+  try {
+    args = parseArgs(argv);
+  } catch (e) {
+    if (!(e instanceof UsageError)) throw e;
+    process.stderr.write(`error: ${e.message}\n\n${USAGE}`);
+    return 2;
+  }
+
+  if (args.mode === 'help') {
+    process.stdout.write(USAGE);
+    return 0;
+  }
 
   if (args.mode === 'query') {
     process.stdout.write(doQuery(args.out));
