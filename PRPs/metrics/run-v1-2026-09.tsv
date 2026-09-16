@@ -1,0 +1,11 @@
+proj	ts	feat	phase	stage	outcome	halt	bud_prr	bud_min	natt	ms	suite_ms	corr_ms
+PRPs-agentic-eng	2026-09-01T00:30:00Z	multi-repo-topology	6	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-09-01T01:20:00Z	multi-repo-topology	7	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-09-01T02:00:00Z	multi-repo-topology	8	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-09-02T00:00:00Z	parallel-phase-execution	1	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-09-02T00:00:00Z	parallel-phase-execution	2	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-09-02T00:00:00Z	parallel-phase-execution	3	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-09-02T00:00:00Z	parallel-phase-execution	4	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-09-02T00:00:00Z	parallel-phase-execution	5	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-09-02T00:00:00Z	parallel-phase-execution	6	complete	complete	-	2	240	-	-	-	-
+PRPs-agentic-eng	2026-09-02T00:00:00Z	parallel-phase-execution	7	complete	complete	-	2	240	-	-	-	-
