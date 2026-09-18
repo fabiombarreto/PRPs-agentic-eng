@@ -310,6 +310,29 @@
         </p>
       </div>
 
+      <h3 id="planned-deterministic-checks">Planned: deterministic scripts for mechanical reviewer checks <span class="badge badge--pending">planned</span></h3>
+
+      <p>Many checks the reviewer agents run have exactly one correct answer, computable from file contents, paths, or exit codes. An LLM still performs them on every verdict. That costs tokens, and the answer can change between attempts. Examples: the PRD and plan structural rubric R1&ndash;R7 (section order, <code>TBD</code> tokens, counts, <code>.claude/</code> prefix), cited-path existence checks such as <code>R-COH-PATTERN-SOURCE-MISSING</code>, <code>code-reviewer</code>'s R-S2 and R-L1&ndash;R-L3, <code>docs-reviewer</code>'s D-R5&ndash;D-R8, <code>R-DM1</code>/<code>R-DM4</code>, <code>R-DS1</code>, and <code>post-green-reviewer</code>'s removed-test and skip-marker detection.</p>
+
+      <p>A registered future capability moves these checks into dependency-free Node scripts under <code>plugins/relay/scripts/</code>. The reviewer consumes their results as authoritative facts and keeps only the judgment work (<code>R-SEM</code>, <code>R-IMPL-LEAK</code>, <code>D-R3</code>, PRD&harr;plan traceability). The precedent already exists: since 2026-08-28, R-X clears a test path only through a script-computed executable-content hash.</p>
+
+      <p>The capability's PRD must decide:</p>
+
+      <div class="kv">
+        <dt>Inventory</dt><dd>A full per-check audit of every reviewer rubric, classifying each check as deterministic, hybrid (a script extracts facts, the LLM judges them), or judgment.</dd>
+        <dt>Authority contract</dt><dd>Whether the agent may override a script-computed row, and how a script failure surfaces: a named degraded outcome, never a silent fallback to LLM judgment.</dd>
+        <dt>Invocation point</dt><dd>Command-side before dispatch, or reviewer-side via <code>Bash</code>. Four reviewers have no <code>Bash</code> in <code>tools:</code>, so command-side is the default candidate.</dd>
+        <dt>Verdict-log compatibility</dt><dd>How script rows appear in the <code>*.review.jsonl</code> family (for example a <code>source</code> field) without breaking <code>efficiency.mjs</code> or the usage-metrics field contract.</dd>
+        <dt>Materiality</dt><dd>A check moved to a script keeps its <code>blocking</code> / <code>advisory</code> class. Changing the class requires a separate decision.</dd>
+        <dt>Plan validation dry-run</dt><dd>Whether plan review runs the plan's own Validation Commands against the unmodified tree, which catches always-pass and always-fail commands by running them, while staying read-only.</dd>
+        <dt>Measurement and order</dt><dd>The before/after signal (tokens per verdict, retries, disagreement between attempts on the same check), and which reviewer migrates first.</dd>
+      </div>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Registered, not scheduled</div>
+        <p>Recorded in <code>docs/decisions.md</code> (2026-09-17, "Moving mechanical reviewer checks from LLM judgment to deterministic scripts"). Not implemented and not yet placed in a numbered project phase. Every rubric check keeps its current LLM implementation, and no reviewer consumes a new script as a rubric outcome, until a dedicated PRD is authored via <code>/relay-prd</code> and approved.</p>
+      </div>
+
       <h2 id="dogfood-status">Dogfood status</h2>
 
       <p>The <strong>phoenix</strong> project (Django + React SaaS for MEC higher-education assessments) is relay's first target. Status as of 2026-05-10:</p>

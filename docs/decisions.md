@@ -2260,6 +2260,31 @@ This composes with, and does not supersede, entries 89 and 90. Formatting preven
 
 ---
 
+## [2026-09-17] Moving mechanical reviewer checks from LLM judgment to deterministic scripts is a registered future capability
+
+**Context:** A large share of the checks relay's reviewer agents run are mechanical — they have exactly one correct answer computable from file contents, paths, or exit codes — yet an LLM performs them on every verdict, spending tokens and occasionally getting them wrong. Examples from the current rubrics: `plan-reviewer` and `prd-reviewer` R1 (Decision Gate block is the first fenced block), R2 (mandatory sections present and in order), R3 (no `TBD` tokens), R4 (task / AC count and shape), R5 (TDD routing note matches `methodology.md`), R6 (no `.claude/` output prefix), R7 (table has a real row); `plan-reviewer` R-COH-PATTERN-SOURCE-MISSING and R-COH-MANDATORY-READING-MISSING (cited paths exist), R-COH-TASK-AC-MISSING and R-COH-FILES-UNTOUCHED (token cross-references); `prd-reviewer` R-COH-REPO-UNDECLARED and R-COH-PARALLEL-CONTRADICTS-DEPENDS (a graph check); `code-reviewer` R-S2 (every Files-to-Change row appears in the diff) and R-L1–R-L3 (command exit codes); `docs-reviewer` D-R5, D-R6, D-R7, D-R8 (path scope, index consistency, manifest well-formedness); `design-map-reviewer` R-DM1 and R-DM4 (import paths resolve, no duplicate ids); `design-spec-reviewer` R-DS1 (reference PNGs exist); and `post-green-reviewer`'s removed-test-function and new-skip-marker detection. Leaving these to judgment has two recorded costs: a memoryless reviewer can re-decide the same mechanical fact differently on a retry, one of the sources of the moving-target retries identified in the 2026-08 plan-pair failure analysis; and the plan-writer's dominant defect class (always-pass greps, always-fail comparisons) is only ever caught by a reviewer reasoning about a command instead of running it. relay already has the precedent: the [2026-08-28] entry made R-X clear a test path only through a script-computed executable-content hash (`plugins/relay/scripts/executable-content-hash.mjs`), and `npm run validate` runs 24 deterministic checks over this repository.
+
+**Decision:** Replacing mechanical reviewer checks with deterministic, dependency-free Node scripts under `plugins/relay/scripts/` — whose results the reviewer consumes as authoritative facts rather than re-deriving — is a **registered future capability**. It is NOT implemented. Every rubric check keeps its current LLM implementation until a dedicated PRD has been authored via `/relay-prd` and approved. The eventual PRD MUST decide, explicitly:
+
+1. **Inventory and classification** — a complete per-check audit of every reviewer rubric, classifying each check as `deterministic` (script alone decides), `hybrid` (script extracts facts, the LLM judges them — e.g. R8 traceability, R-S1), or `judgment` (stays LLM — e.g. R-SEM, R-IMPL-LEAK, D-R3). The list in Context is a starting point, not the audit.
+2. **Authority contract** — whether a script-computed row is final and the agent is forbidden to override it (the R-X hash precedent), and how a script crash or unparseable input is reported (a named degraded outcome, never a silent LLM fallback that reintroduces the nondeterminism).
+3. **Invocation point** — whether the command runs the script before dispatching the reviewer and passes results in the prompt, or the reviewer invokes it via `Bash`; reviewers without `Bash` in `tools:` (`plan-reviewer`, `prd-reviewer`, `design-map-reviewer`, `design-spec-reviewer`) make the command-side option the default candidate.
+4. **Verdict-log compatibility** — how script-computed rows appear in the `*.review.jsonl` family (e.g. a `source: script|llm` field) without breaking `scripts/efficiency.mjs`, the `CONSUMERS` registry, or `usage-metrics.mjs`'s closed field contract.
+5. **Materiality** — confirmation that moving a check to a script never changes its `blocking`/`advisory` class ([2026-08-06] taxonomy); a class change is a separate decision.
+6. **Plan validation dry-run** — whether a plan's own Validation Commands are executed against the unmodified tree at plan-review time (catching always-pass and always-fail commands by running them rather than reasoning about them), and how that stays read-only per the [2026-08-28] no-mutation rule.
+7. **Measurement and rollout order** — the before/after signal (tokens per verdict, retry count, disagreement between attempts on the same check) read through the existing efficiency and usage-metrics instruments, and which reviewer migrates first.
+
+**Reason:** A deterministic check is cheaper, faster, reproducible across attempts, and testable with `node:test`; an LLM performing it adds cost and variance without adding judgment. Registering the capability rather than migrating checks ad hoc prevents each reviewer from growing its own one-off script with its own output shape and authority rules — the same producer/consumer drift the [2026-07-31] `CONSUMERS` registry was created to stop. Leaving judgment checks explicitly out keeps the writer/reviewer model intact: scripts remove mechanical work from the reviewer, they do not replace the reviewer.
+
+**Out of scope until a dedicated PRD is approved:**
+- Adding a new script that any reviewer agent or command consumes as a rubric outcome.
+- Changing any reviewer's rubric ids, materiality classes, or verdict-log schema.
+- Removing any check from an agent's prompt on the grounds that a script "could" do it.
+
+**Areas affected (when eventually shipped):** `plugins/relay/scripts/` (new check scripts and their tests); the reviewer agents and their dispatching commands under `plugins/relay/`; the verdict-log consumers (`scripts/efficiency.mjs`, `plugins/relay/scripts/usage-metrics.mjs`); `docs/context/architecture.md`; `documentation/` (reference/agents, roadmap/status, changelog); `npm run validate` (a consistency check that every script-backed rubric row names an existing script).
+
+---
+
 ## [YYYY-MM-DD] Title of the decision
 
 **Context:** Why this decision was needed.

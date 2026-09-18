@@ -126,6 +126,7 @@
         <li><a href="#reviewers-never-mutate-worktree">Review agents never mutate the target working tree</a></li>
         <li><a href="#member-base-defaults-to-current">Worktree base for a declared member is its Base cell, defaulting to current</a></li>
         <li><a href="#base-preflight-fourth-interactivity-extension">The base preflight is the fourth interactivity-boundary extension</a></li>
+        <li><a href="#deterministic-reviewer-checks">Deterministic scripts for mechanical reviewer checks: registered future capability</a></li>
       </ol>
 
       <h2 id="entries">Entries</h2>
@@ -904,6 +905,14 @@
         <dt>Context</dt><dd>Three extensions were sanctioned before this one: PRD approval, the Design Spec pair, and <code>/relay-visual-approve</code>. The third used HALT-and-resume rather than dialogue because <code>/relay-execute</code> drives many phases across one long unattended run, and a synchronous dialogue only works inside a single unbroken interactive turn.</dd>
         <dt>Decision</dt><dd><code>/relay-execute</code> gains precondition <code>P7 &mdash; Base preflight and confirmation</code>: with a topology declared it resolves every editable member&#39;s base, emits one table, and requires ONE confirmation before the orchestration loop begins. A member whose base does not resolve halts before any confirmation and before any worktree exists. With no topology declared it is a complete no-op.</dd>
         <dt>Reason</dt><dd>A precondition runs before the unattended run starts, in the turn the operator invoked &mdash; so it can dialogue while the loop stays prompt-free. That preserves the &quot;no interactive prompts in the autonomous loop&quot; anti-pattern rather than carving an exception into it. Confirming N members once is also strictly cheaper than N confirmations inside the loop, which is the shape the 2026-07-27 reasoning rules out.</dd>
+      </div>
+
+      <h3 id="deterministic-reviewer-checks">96. Deterministic scripts for mechanical reviewer checks: registered future capability</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-09-17</dd>
+        <dt>Context</dt><dd>Many reviewer rubric checks have exactly one correct answer, computable from file contents, paths, or exit codes: PRD/plan R1&ndash;R7, cited-path existence checks, <code>code-reviewer</code> R-S2 and R-L1&ndash;R-L3, <code>docs-reviewer</code> D-R5&ndash;D-R8, R-DM1/R-DM4, R-DS1, and <code>post-green-reviewer</code>&#39;s removed-test and skip-marker detection. An LLM performs them on every verdict, at token cost and with answers that can change between attempts. The R-X executable-content hash (2026-08-28) is the existing precedent for a script-computed rubric outcome.</dd>
+        <dt>Decision</dt><dd>Moving these checks into dependency-free Node scripts under <code>plugins/relay/scripts/</code>, with reviewers consuming the results as authoritative facts, is a registered future capability. Nothing is implemented. Every check keeps its LLM implementation until an approved PRD decides the inventory and classification, the authority contract, the invocation point, verdict-log compatibility, materiality preservation, a plan validation dry-run, and the measurement and rollout order.</dd>
+        <dt>Reason</dt><dd>A deterministic check is cheaper, reproducible, and testable. Registering the capability first prevents each reviewer from growing its own one-off script with its own output shape and authority rules. Judgment checks such as R-SEM stay with the LLM: scripts take mechanical work away from reviewers but do not replace them.</dd>
       </div>
 
       <h2 id="how-to-add">Adding a new decision</h2>
