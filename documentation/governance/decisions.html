@@ -127,6 +127,7 @@
         <li><a href="#member-base-defaults-to-current">Worktree base for a declared member is its Base cell, defaulting to current</a></li>
         <li><a href="#base-preflight-fourth-interactivity-extension">The base preflight is the fourth interactivity-boundary extension</a></li>
         <li><a href="#deterministic-reviewer-checks">Deterministic scripts for mechanical reviewer checks: registered future capability</a></li>
+        <li><a href="#simplify-before-code-review">Simplification pass before code review: registered future capability</a></li>
       </ol>
 
       <h2 id="entries">Entries</h2>
@@ -913,6 +914,14 @@
         <dt>Context</dt><dd>Many reviewer rubric checks have exactly one correct answer, computable from file contents, paths, or exit codes: PRD/plan R1&ndash;R7, cited-path existence checks, <code>code-reviewer</code> R-S2 and R-L1&ndash;R-L3, <code>docs-reviewer</code> D-R5&ndash;D-R8, R-DM1/R-DM4, R-DS1, and <code>post-green-reviewer</code>&#39;s removed-test and skip-marker detection. An LLM performs them on every verdict, at token cost and with answers that can change between attempts. The R-X executable-content hash (2026-08-28) is the existing precedent for a script-computed rubric outcome.</dd>
         <dt>Decision</dt><dd>Moving these checks into dependency-free Node scripts under <code>plugins/relay/scripts/</code>, with reviewers consuming the results as authoritative facts, is a registered future capability. Nothing is implemented. Every check keeps its LLM implementation until an approved PRD decides the inventory and classification, the authority contract, the invocation point, verdict-log compatibility, materiality preservation, a plan validation dry-run, and the measurement and rollout order.</dd>
         <dt>Reason</dt><dd>A deterministic check is cheaper, reproducible, and testable. Registering the capability first prevents each reviewer from growing its own one-off script with its own output shape and authority rules. Judgment checks such as R-SEM stay with the LLM: scripts take mechanical work away from reviewers but do not replace them.</dd>
+      </div>
+
+      <h3 id="simplify-before-code-review">97. Simplification pass before code review: registered future capability</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-09-17</dd>
+        <dt>Context</dt><dd>In <code>/relay-implement</code>, the <code>code-reviewer</code> judges the implementer&#39;s diff immediately. The rubric checks plan conformance, exit codes, and business-rule bugs, not redundancy, so correct but redundant code is approved. Claude Code&#39;s built-in <code>/simplify</code> skill reviews changed code for reuse, simplification, and efficiency, and applies the fixes.</dd>
+        <dt>Decision</dt><dd>A simplification pass between Phase A.2 (implementer) and Phase A.3 (code-reviewer) is a registered future capability. Nothing is implemented. An approved PRD must first decide the mechanism (built-in skill versus plugin-owned agent), the insertion point and artifact, the scope fence (diff files only, never test paths, because of R-X), a Levels 1&ndash;3 re-run with deterministic revert, budget and oscillation interaction, opt-in and whether the read-only <code>/relay-code-review</code> is affected, and measurement.</dd>
+        <dt>Reason</dt><dd>Neither the implementer nor the rubric is designed to catch redundancy. Running the pass before review means the reviewer judges the code that ships, and any behavior drift is caught by the same rubric. The pass edits the tree autonomously inside the loop, touching R-X, oscillation detection, diff artifacts, and budgets, and each of those needs a decision rather than an assumption.</dd>
       </div>
 
       <h2 id="how-to-add">Adding a new decision</h2>

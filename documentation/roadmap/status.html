@@ -333,6 +333,27 @@
         <p>Recorded in <code>docs/decisions.md</code> (2026-09-17, "Moving mechanical reviewer checks from LLM judgment to deterministic scripts"). Not implemented and not yet placed in a numbered project phase. Every rubric check keeps its current LLM implementation, and no reviewer consumes a new script as a rubric outcome, until a dedicated PRD is authored via <code>/relay-prd</code> and approved.</p>
       </div>
 
+      <h3 id="planned-simplify-before-review">Planned: simplification pass before code review <span class="badge badge--pending">planned</span></h3>
+
+      <p>In <code>/relay-implement</code>'s loop, the <code>code-reviewer</code> judges the implementer's diff as soon as it is written. The rubric checks plan conformance, command exit codes, and business-rule bugs, not redundancy. Duplicated logic, missed reuse of existing helpers, and needless indirection therefore pass review. Claude Code's built-in <code>/simplify</code> skill covers exactly this: it reviews changed code for reuse, simplification, and efficiency, and applies the fixes.</p>
+
+      <p>A registered future capability inserts that pass between Phase A.2 (implementer) and Phase A.3 (code-reviewer), so the reviewer judges the code that will actually ship. Because the pass edits the working tree autonomously inside the loop, its PRD must decide:</p>
+
+      <div class="kv">
+        <dt>Mechanism</dt><dd>The built-in <code>/simplify</code> skill (not versioned with the plugin, and not yet proven reachable from the <code>Task</code>-dispatched loop) versus a plugin-owned simplifier agent.</dd>
+        <dt>Insertion point</dt><dd>Only after <code>IMPLEMENTATION_COMPLETE</code>; every attempt or only the first; inside the attempt's <code>diff.patch</code> or as its own artifact, so changes can be attributed.</dd>
+        <dt>Scope fence</dt><dd>Only files already in the diff, no files outside Files-to-Change, and never a test-glob path. A single test edit straight-fails the attempt under R-X.</dd>
+        <dt>Behavior guard</dt><dd>Validation Levels 1&ndash;3 re-run after the pass. A red result is deterministically reverted to the implementer's state and never becomes the implementer's retry.</dd>
+        <dt>Loop interaction</dt><dd>Counts against <code>max_implement_minutes</code>, never against <code>max_implement_retries</code>. The PRD must also define how oscillation detection treats a simplifier edit that undoes a reviewer-requested change.</dd>
+        <dt>Opt-in and surfaces</dt><dd>Default-on versus a <code>methodology.md</code> key. <code>/relay-code-review</code> is read-only by contract, so extending the pass to it is a contract change.</dd>
+        <dt>Measurement</dt><dd>Code-review rejection rate, R-SEM findings, diff size, and the time and tokens added.</dd>
+      </div>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Registered, not scheduled</div>
+        <p>Recorded in <code>docs/decisions.md</code> (2026-09-17, "A simplification pass immediately before code review"). Not implemented and not yet placed in a numbered project phase. <code>/relay-implement</code> keeps dispatching <code>code-reviewer</code> directly after the implementer until a dedicated PRD is authored via <code>/relay-prd</code> and approved.</p>
+      </div>
+
       <h2 id="dogfood-status">Dogfood status</h2>
 
       <p>The <strong>phoenix</strong> project (Django + React SaaS for MEC higher-education assessments) is relay's first target. Status as of 2026-05-10:</p>

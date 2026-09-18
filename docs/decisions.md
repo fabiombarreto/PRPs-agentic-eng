@@ -2285,6 +2285,31 @@ This composes with, and does not supersede, entries 89 and 90. Formatting preven
 
 ---
 
+## [2026-09-17] A simplification pass immediately before code review is a registered future capability
+
+**Context:** Inside `/relay-implement`'s writer↔reviewer loop, the `implementer` returns `IMPLEMENTATION_COMPLETE` in Phase A.2 and the `code-reviewer` judges that diff straight away in Phase A.3. Nothing between the two looks for duplicated logic, missed reuse of existing helpers, needless indirection, or inefficiency. The rubric is not designed to catch these either: R-S1–R-S3 check plan conformance, R-L1–R-L3 check command exit codes, and R-SEM looks for business-rule bugs and security gaps. Code that is correct but redundant is approved and merged. Claude Code ships a built-in `/simplify` skill for exactly this job: it reviews the changed code for reuse, simplification, efficiency, and altitude cleanups and applies the fixes, without hunting for bugs. The operator's stated intent (2026-09-17) is to run `/simplify` right before code review.
+
+**Decision:** A **simplification pass between the implementer and the code-reviewer**, which cleans up the attempt's diff before the reviewer judges it, is a **registered future capability**. It is NOT implemented. `/relay-implement` keeps dispatching `code-reviewer` directly after the implementer until a dedicated PRD has been authored via `/relay-prd` and approved. The eventual PRD MUST decide, explicitly:
+
+1. **Mechanism** — whether to invoke Claude Code's built-in `/simplify` skill, or to ship a plugin-owned simplifier agent. The built-in skill is not versioned with the plugin, its prompt can change under relay with no release, and it must be proven reachable from the non-interactive, `Task`-dispatched context where the loop runs (the [2026-07-22] Figma MCP spike is the precedent for proving reachability empirically). `plugins/prp-core/`'s `code-simplifier` is a reference only, not active relay code.
+2. **Insertion point and trigger** — whether the pass runs only after `IMPLEMENTATION_COMPLETE` (never after `TEST_CONTRACT_DISPUTE`, where no code is being judged), on every attempt or only on the first, and whether it runs before Phase A.2's `git add -A` / `diff.patch` capture or produces its own separate artifact (for example `<attempt>/simplify.patch`). That choice decides whether measurement can attribute changes to the simplifier or only to the implementer.
+3. **Scope fence** — confinement to files already in the attempt's diff; no new files outside the plan's Files-to-Change (otherwise R-S2 and R-COH-REGISTRY-MISSING are disturbed); and no edits to any test-glob path. Under R-X ([2026-08-28]) and the [2026-08-27] rule that reviewer findings never authorize test edits, one simplifier edit to a test file straight-fails the attempt.
+4. **Behavior-preservation guard** — the plan's Validation Commands Levels 1–3 re-run after the pass, and a pass that turns any level red is **deterministically reverted** to the implementer's state before review. Phase A.3.4's visual-fix revert is the precedent. The simplifier's failure never becomes the implementer's retry.
+5. **Loop interaction** — how the pass counts against `max_implement_minutes`; that it never consumes `max_implement_retries`; and how oscillation detection treats a simplifier edit that undoes a change the reviewer asked for on a previous attempt.
+6. **Opt-in and surfaces** — default-on versus a `methodology.md` key (the `docs_sync` / `figma_track` precedent), and whether `/relay-code-review` is affected. That command's contract is read-only (it never modifies any artifact other than its verdict log), so adding an editing pass there would be a contract change, not an inherited default.
+7. **Measurement** — the before/after signal (code-review `CHANGES_REQUESTED` rate, R-SEM findings, diff size, time and tokens added), read through `scripts/efficiency.mjs` and the usage-metrics corpus.
+
+**Reason:** The implementer's goal is to satisfy the plan, and the reviewer's rubric checks correctness. Neither is designed to catch redundancy, so cleanup work falls through and accumulates as debt in every target project. Placing the pass *before* review, rather than after approval, means the reviewer judges the code that will actually ship, and any behavior drift the simplifier introduces is caught by the same rubric that caught the implementer's. Registering first matters because the pass edits the working tree autonomously inside the loop. That puts it in contact with R-X, the oscillation detector, the per-attempt diff artifacts, and the budgets, and each of those contacts needs a decision rather than an assumption.
+
+**Out of scope until a dedicated PRD is approved:**
+- Invoking `/simplify`, `code-simplifier`, or any other editing pass from `/relay-implement`, `/relay-execute`, or `/relay-code-review`.
+- Adding simplification instructions to the `implementer` or `code-reviewer` prompts as a substitute.
+- Adding a rubric check that penalizes non-simplified code.
+
+**Areas affected (when eventually shipped):** `plugins/relay/commands/relay-implement.md` (a new sub-phase between A.2 and A.3); possibly a new agent under `plugins/relay/agents/`; the `methodology.md` template (if opt-in); `docs/context/architecture.md` (implementation-pair diagram); `scripts/efficiency.mjs` and `plugins/relay/resources/usage-metrics-schema.md` (if a new artifact is emitted); `documentation/` (concepts/pipeline, reference/commands, roadmap/status, changelog).
+
+---
+
 ## [YYYY-MM-DD] Title of the decision
 
 **Context:** Why this decision was needed.
