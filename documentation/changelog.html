@@ -30,7 +30,36 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <h3 id="unreleased-added">Added</h3>
+      <p>Nothing yet.</p>
+
+      <h2 id="v0-38-2">0.38.2 &#8212; 2026-09-21</h2>
+
+      <p>A one-line correction to <code>/relay-execute</code>: its out-of-scope list still described parallel
+        phase orchestration as strictly serial after parallel lanes shipped. Also carries the two roadmap
+        registrations accumulated since 0.38.1.</p>
+
+      <h3 id="v0-38-2-changed">Changed</h3>
+      <ul>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.38.1</code> &rarr; <code>0.38.2</code> to
+          match this release; users running <code>/plugin</code> after pulling
+          this version will get a fresh <code>relay/0.38.2/</code> cache directory
+          with the corrected command.</li>
+      </ul>
+
+      <h3 id="v0-38-2-fixed">Fixed</h3>
+      <ul>
+        <li><strong><code>/relay-execute</code> no longer claims parallel orchestration is out of scope</strong>
+          &mdash; its out-of-scope list said the MVP was strictly serial and that the <code>Parallel</code> cell was
+          read but not acted upon, which contradicted the command's own lane-aware selection in Phase A.1. The
+          bullet now names what actually remains out of scope: running lanes in parallel for projects whose tests
+          contend on a database, ports, containers, or env vars. Those projects keep
+          <code>lane_runtime_safe: false</code> until per-worktree environment provisioning, registered as
+          <a href="roadmap/status.html#planned-runnable-worktrees">runnable worktree environments</a>, has an
+          approved PRD.</li>
+      </ul>
+
+      <h3 id="v0-38-2-added">Added</h3>
       <ul>
         <li><strong><a href="roadmap/status.html#planned-deterministic-checks">Phase status &mdash; Planned: deterministic scripts for mechanical reviewer checks</a></strong>
           &mdash; registers the future capability of moving reviewer checks that have one correct answer
