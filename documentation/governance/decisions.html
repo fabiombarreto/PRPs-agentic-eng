@@ -128,6 +128,9 @@
         <li><a href="#base-preflight-fourth-interactivity-extension">The base preflight is the fourth interactivity-boundary extension</a></li>
         <li><a href="#deterministic-reviewer-checks">Deterministic scripts for mechanical reviewer checks: registered future capability</a></li>
         <li><a href="#simplify-before-code-review">Simplification pass before code review: registered future capability</a></li>
+        <li><a href="#code-review-evaluation">relay code review versus built-in <code>/code-review</code>: registered evaluation</a></li>
+        <li><a href="#garbage-collector">Garbage collector for obsolete code and artifacts: registered future capability</a></li>
+        <li><a href="#parallel-test-environments">Parallel test environments extend runnable worktree environments</a></li>
       </ol>
 
       <h2 id="entries">Entries</h2>
@@ -922,6 +925,30 @@
         <dt>Context</dt><dd>In <code>/relay-implement</code>, the <code>code-reviewer</code> judges the implementer&#39;s diff immediately. The rubric checks plan conformance, exit codes, and business-rule bugs, not redundancy, so correct but redundant code is approved. Claude Code&#39;s built-in <code>/simplify</code> skill reviews changed code for reuse, simplification, and efficiency, and applies the fixes.</dd>
         <dt>Decision</dt><dd>A simplification pass between Phase A.2 (implementer) and Phase A.3 (code-reviewer) is a registered future capability. Nothing is implemented. An approved PRD must first decide the mechanism (built-in skill versus plugin-owned agent), the insertion point and artifact, the scope fence (diff files only, never test paths, because of R-X), a Levels 1&ndash;3 re-run with deterministic revert, budget and oscillation interaction, opt-in and whether the read-only <code>/relay-code-review</code> is affected, and measurement.</dd>
         <dt>Reason</dt><dd>Neither the implementer nor the rubric is designed to catch redundancy. Running the pass before review means the reviewer judges the code that ships, and any behavior drift is caught by the same rubric. The pass edits the tree autonomously inside the loop, touching R-X, oscillation detection, diff artifacts, and budgets, and each of those needs a decision rather than an assumption.</dd>
+      </div>
+
+      <h3 id="code-review-evaluation">98. relay code review versus built-in <code>/code-review</code>: registered evaluation</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-09-21</dd>
+        <dt>Context</dt><dd>relay&#39;s <code>code-reviewer</code> drives <code>/relay-implement</code>&#39;s loop and backs the read-only <code>/relay-code-review</code>. It is plan-anchored and carries the loop&#39;s contract: a structured verdict, dispute arbitration, the R-X test-path guard, and a jsonl log that the metrics scripts read. Claude Code&#39;s built-in <code>/code-review</code> is not plan-aware and hunts for correctness bugs at effort levels from <code>low</code> to <code>max</code>, plus a billed cloud <code>ultra</code> level.</dd>
+        <dt>Decision</dt><dd>A comparative evaluation is registered, not started. It ends in exactly one outcome, recorded as a new entry: keep, improve (through a PRD), or replace (through a PRD, stating whether temporary). It must treat the in-loop reviewer and the standalone command as separate decisions, benchmark both on the same diffs (75 archived <code>diff.patch</code> files plus target-project diffs), prove the built-in skill is reachable from the <code>Task</code>-dispatched loop, preserve the loop contract (<code>--fix</code> excluded), detect drift in an unversioned skill, compare only the judgment work left after entries 96 and 97 land, and place or exclude <code>ultra</code>.</dd>
+        <dt>Reason</dt><dd>Most of what makes relay&#39;s reviewer load-bearing is its contract with the loop, not its bug-finding. Comparing on a fixed corpus, with the two surfaces separated, makes the choice measurable and prevents a swap that silently drops R-X or the audit log.</dd>
+      </div>
+
+      <h3 id="garbage-collector">99. Garbage collector for obsolete code and artifacts: registered future capability</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-09-21</dd>
+        <dt>Context</dt><dd>relay writes plans, verdict logs, reports, and worktrees on every run, and nothing removes them. On 2026-09-21 this repository held 262 verdict logs at the root of <code>PRPs/plans/</code>, 9.2&nbsp;MB of reports, and three empty worktree folders git no longer tracks. Target projects also accumulate dead code, flags, docs, and tests. The verdict logs are also the measurement corpus, so not everything old is obsolete.</dd>
+        <dt>Decision</dt><dd>A garbage collector, run manually first and later on a schedule, is a registered future capability. Nothing is implemented. An approved PRD must first decide the closed list of categories and their evidence (code through the stack&#39;s own dead-code tools), keep rules read from consumer registries, a read-only report before any removal, reversibility (commits on a branch, quarantine for untracked items), validation of code removals by the test suite, an autonomy boundary (scheduled runs only report and open PRs), and archiving versus deletion.</dd>
+        <dt>Reason</dt><dd>Obsolete artifacts cost tokens and mislead agents that read them as current. Without explicit keep rules a collector would delete this repository&#39;s own measurement corpus first, so the categories, evidence standard, and autonomy boundary are named before anything deletes anything.</dd>
+      </div>
+
+      <h3 id="parallel-test-environments">100. Parallel test environments extend runnable worktree environments</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-09-21</dd>
+        <dt>Context</dt><dd>Parallel lanes run only when <code>methodology.md</code> declares <code>lane_runtime_safe: true</code>, so any project whose tests need a database, ports, containers, or env vars runs its lanes serially. The bootstrap script has no database step, runs only at creation, and is capped at 60 seconds. <code>test-runner</code> has no environment contract, and test prerequisites are written only for humans. The 2026-05-15 &ldquo;runnable worktree environments&rdquo; registration still has no PRD.</dd>
+        <dt>Decision</dt><dd>This entry extends, and does not supersede, the 2026-05-15 registration, and makes it the prerequisite for parallel lanes with stateful tests. relay owns the contract, lifecycle, and handle; the project owns stack-specific commands. The PRD must also decide a machine-readable environment declaration (and whether <code>lane_runtime_safe</code> is derived from it), isolation per resource type, an idempotent provision/readiness/seed/teardown lifecycle that re-runs on reuse, a per-worktree environment handle file, failure semantics, capacity against <code>max_lanes_in_flight</code>, teardown with leftovers reported to the garbage collector, and a two-lane database-backed dogfood as proof.</dd>
+        <dt>Reason</dt><dd>File isolation already works, but the declared-boolean gate turns lanes back into serial runs exactly where tests take longest. Tying the unowned May strategies to the lane gate gives them an acceptance test, and the missing contract becomes explicit: today the bootstrap script does environment work no agent can see, re-run, or verify.</dd>
       </div>
 
       <h2 id="how-to-add">Adding a new decision</h2>
