@@ -245,6 +245,8 @@
         <p>Recorded in <code>docs/decisions.md</code> (2026-05-15, "Runnable worktree environments"). Not implemented and not yet placed in a numbered project phase. No agent builds any of the six strategies ahead of a dedicated PRD authored via <code>/relay-prd</code> and approved; until then the project-owned bootstrap-script delegation (D6, 2026-05-11) remains the only operative contract.</p>
       </div>
 
+      <p><strong>Extended 2026-09-21</strong> by <a href="#planned-parallel-test-envs">parallel test environments</a>: this feature is now the named prerequisite for running parallel lanes whose tests need a database, ports, or env vars.</p>
+
       <h3 id="planned-planning-track">Planned: planning-document track <span class="badge badge--pending">planned</span></h3>
 
       <p>relay's interactive entry point, <code>/relay-prd</code>, authors one feature at a time. Everything upstream of a single feature — the multi-feature planning documents that decide which features exist and in what order — sits outside the pipeline. This repository's own <code>docs/planning/</code> documents were hand-authored, are cited by the 2026-04-19 phased-rollout decision as the source of the five project-level phases above, and have no writer/reviewer pair, no rubric, no status lifecycle, and no mechanical path from a planning statement to a PRD. Every other authoring stage in relay has all four.</p>
@@ -352,6 +354,70 @@
       <div class="callout callout--note">
         <div class="callout__title">Registered, not scheduled</div>
         <p>Recorded in <code>docs/decisions.md</code> (2026-09-17, "A simplification pass immediately before code review"). Not implemented and not yet placed in a numbered project phase. <code>/relay-implement</code> keeps dispatching <code>code-reviewer</code> directly after the implementer until a dedicated PRD is authored via <code>/relay-prd</code> and approved.</p>
+      </div>
+
+      <h3 id="planned-code-review-evaluation">Planned: evaluate relay code review against <code>/code-review</code> <span class="badge badge--pending">planned</span></h3>
+
+      <p>relay's <code>code-reviewer</code> judges every attempt inside <code>/relay-implement</code>'s loop and also backs the read-only <code>/relay-code-review</code> command. It is plan-anchored: plan conformance (R-S1&ndash;R-S3), the plan's Validation Commands (R-L1&ndash;R-L3), semantic bugs (R-SEM and R-COH-*), and the R-X test-path guard, with every verdict logged to <code>code-review.jsonl</code>. Claude Code's built-in <code>/code-review</code> is not plan-aware. It hunts for correctness bugs at effort levels from <code>low</code> to <code>max</code>, plus a billed cloud <code>ultra</code> level.</p>
+
+      <p>A registered evaluation compares the two and ends in one outcome: <strong>keep</strong>, <strong>improve</strong> (borrow techniques through a PRD), or <strong>replace</strong> (some or all review, temporarily or permanently, through a PRD). It must settle:</p>
+
+      <div class="kv">
+        <dt>Scope</dt><dd>The in-loop reviewer and the standalone command are separate decisions. The loop needs a structured verdict, dispute arbitration, R-X, and the jsonl log, none of which <code>/code-review</code> provides. A hybrid, such as <code>/code-review</code> feeding R-SEM, is a valid option.</dd>
+        <dt>Benchmark</dt><dd>Both reviewers run over the same diffs: the 75 archived <code>diff.patch</code> files and their existing verdicts, plus target-project diffs. Measured: true and false positives, unique catches, tokens, and time per effort level.</dd>
+        <dt>Reachability</dt><dd>Proof that a built-in skill can run from the <code>Task</code>-dispatched loop. Without it, only the standalone surface is replaceable.</dd>
+        <dt>Contract</dt><dd>A machine-readable verdict, R-X's straight fail, no tree mutation by a reviewer (so <code>--fix</code> is excluded), and a log the metrics consumers can read.</dd>
+        <dt>Drift</dt><dd><code>/code-review</code> is not versioned with the plugin. A pinned regression set detects behavior changes.</dd>
+        <dt>Overlap</dt><dd>Compared on the judgment work left after the <a href="#planned-deterministic-checks">deterministic checks</a> and the <a href="#planned-simplify-before-review">simplification pass</a> land.</dd>
+        <dt>Ultra</dt><dd>Whether the billed cloud level has a place, such as an optional pre-PR step, or stays outside the pipeline.</dd>
+      </div>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Registered, not started</div>
+        <p>Recorded in <code>docs/decisions.md</code> (2026-09-21, "Evaluating relay's code review against Claude Code's built-in <code>/code-review</code>"). No relay command or agent invokes <code>/code-review</code>, and the reviewer's rubric does not change, until the outcome is recorded and, for improve or replace, a PRD is approved.</p>
+      </div>
+
+      <h3 id="planned-garbage-collector">Planned: garbage collector for obsolete code and artifacts <span class="badge badge--pending">planned</span></h3>
+
+      <p>relay writes artifacts on every run and nothing removes them. On 2026-09-21 this repository held 262 verdict logs at the root of <code>PRPs/plans/</code>, 9.2&nbsp;MB of reports, and three empty <code>.worktrees/</code> folders git no longer tracks. Target projects also accumulate unreachable code, dead feature flags, stale docs, and obsolete tests. Some of it only looks obsolete: the verdict logs are the corpus the efficiency and usage-metrics scripts read.</p>
+
+      <p>A registered future capability adds a routine that runs manually first, and later on a schedule or autonomously. Its PRD must decide:</p>
+
+      <div class="kv">
+        <dt>Categories</dt><dd>A closed list (relay artifacts, repository files, code), each with a detection rule and evidence. Code uses the stack's own dead-code tools declared in <code>methodology.md</code>, not an LLM guess.</dd>
+        <dt>Keep rules</dt><dd>Never collected: anything a registered consumer reads, reference directories such as <code>plugins/prp-core/</code>, APPROVED PRDs, decision history, and a project-owned ignore file.</dd>
+        <dt>Report, then collect</dt><dd>A read-only scan writes a candidate report. A separate step removes only what the report lists.</dd>
+        <dt>Reversibility</dt><dd>Removal happens as a commit or PR on a branch. Untracked items go to quarantine before deletion.</dd>
+        <dt>Validation</dt><dd>Whether a scanner/reviewer pair confirms each candidate. Code removals re-run the test suite, and a red result reverts that candidate.</dd>
+        <dt>Autonomy</dt><dd>Scheduled runs only report and open PRs, never merge. The PRD states whether relay-artifact categories may be collected without review.</dd>
+        <dt>Retention</dt><dd>Whether verdict logs and reports are archived rather than deleted, so measurement history survives.</dd>
+      </div>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Registered, not scheduled</div>
+        <p>Recorded in <code>docs/decisions.md</code> (2026-09-21, "A garbage collector for obsolete code and artifacts"). No command, agent, script, or scheduled task deletes or moves files as garbage collection until a dedicated PRD is authored via <code>/relay-prd</code> and approved.</p>
+      </div>
+
+      <h3 id="planned-parallel-test-envs">Planned: parallel test environments <span class="badge badge--pending">planned</span></h3>
+
+      <p>Parallel lanes run in their own worktrees only when <code>methodology.md</code> declares <code>lane_runtime_safe: true</code>. Any project whose tests need a database, fixed ports, containers, or env vars must leave it <code>false</code>, so its lanes run serially. The bootstrap script has no database step, runs only at worktree creation, and is capped at 60 seconds. <code>test-runner</code> has no per-worktree environment contract, and test prerequisites are written only for humans.</p>
+
+      <p>This entry extends <a href="#planned-runnable-worktrees">runnable worktree environments</a> and makes it the prerequisite for parallel lanes with stateful tests. relay owns the contract, lifecycle, and handle; the project owns the stack-specific commands. Beyond the six original strategies, the PRD must decide:</p>
+
+      <div class="kv">
+        <dt>Declaration</dt><dd>A machine-readable list of what a test run needs (services, env vars, ports, migrations, seed data), and whether <code>lane_runtime_safe</code> becomes derived from it.</dd>
+        <dt>Isolation</dt><dd>Per resource type, with a default: database or schema per lane, container per lane, ephemeral containers, or transaction rollback; port offsets; per-lane env files; prefixes for caches and queues. A resource that cannot be isolated keeps the lane serial, and the run log names it.</dd>
+        <dt>Lifecycle</dt><dd>Provision, readiness, migrate and seed, and teardown, all idempotent, re-run on worktree reuse, with a configurable timeout.</dd>
+        <dt>Handle</dt><dd>One file per worktree with the resolved values, read by <code>test-runner</code>, the implementer's Validation Commands, and <code>/relay-qa-report</code>. Secrets are redacted from reports.</dd>
+        <dt>Failure</dt><dd>Whether a provisioning failure drops the lane to serial or halts it, and a provisioning retry budget of its own.</dd>
+        <dt>Capacity</dt><dd>How <code>max_lanes_in_flight</code> interacts with machine limits when every lane starts containers.</dd>
+        <dt>Teardown</dt><dd>On <code>/relay-approve</code>, on HALT, and on abort. Leftovers go to the <a href="#planned-garbage-collector">garbage collector</a>&rsquo;s report, never to <code>docker system prune</code>.</dd>
+        <dt>Proof</dt><dd>Two lanes running a database-backed suite at the same time in a target project, with no cross-lane failures, compared on wall time against serial.</dd>
+      </div>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Registered, not scheduled</div>
+        <p>Recorded in <code>docs/decisions.md</code> (2026-09-21, "Parallel test environments extend the runnable-worktree-environments registration"). Not implemented. <code>lane_runtime_safe</code> stays a hand-declared boolean, and no command provisions or tears down environments, until a dedicated PRD is authored via <code>/relay-prd</code> and approved.</p>
       </div>
 
       <h2 id="dogfood-status">Dogfood status</h2>
