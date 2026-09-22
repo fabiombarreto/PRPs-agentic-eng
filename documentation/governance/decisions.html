@@ -131,6 +131,7 @@
         <li><a href="#code-review-evaluation">relay code review versus built-in <code>/code-review</code>: registered evaluation</a></li>
         <li><a href="#garbage-collector">Garbage collector for obsolete code and artifacts: registered future capability</a></li>
         <li><a href="#parallel-test-environments">Parallel test environments extend runnable worktree environments</a></li>
+        <li><a href="#code-review-evaluation-outcome">Code-review evaluation outcome: improve</a></li>
       </ol>
 
       <h2 id="entries">Entries</h2>
@@ -949,6 +950,33 @@
         <dt>Context</dt><dd>Parallel lanes run only when <code>methodology.md</code> declares <code>lane_runtime_safe: true</code>, so any project whose tests need a database, ports, containers, or env vars runs its lanes serially. The bootstrap script has no database step, runs only at creation, and is capped at 60 seconds. <code>test-runner</code> has no environment contract, and test prerequisites are written only for humans. The 2026-05-15 &ldquo;runnable worktree environments&rdquo; registration still has no PRD.</dd>
         <dt>Decision</dt><dd>This entry extends, and does not supersede, the 2026-05-15 registration, and makes it the prerequisite for parallel lanes with stateful tests. relay owns the contract, lifecycle, and handle; the project owns stack-specific commands. The PRD must also decide a machine-readable environment declaration (and whether <code>lane_runtime_safe</code> is derived from it), isolation per resource type, an idempotent provision/readiness/seed/teardown lifecycle that re-runs on reuse, a per-worktree environment handle file, failure semantics, capacity against <code>max_lanes_in_flight</code>, teardown with leftovers reported to the garbage collector, and a two-lane database-backed dogfood as proof.</dd>
         <dt>Reason</dt><dd>File isolation already works, but the declared-boolean gate turns lanes back into serial runs exactly where tests take longest. Tying the unowned May strategies to the lane gate gives them an acceptance test, and the missing contract becomes explicit: today the bootstrap script does environment work no agent can see, re-run, or verify.</dd>
+      </div>
+
+      <h3 id="code-review-evaluation-outcome">101. Code-review evaluation outcome: improve</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-09-21</dd>
+        <dt>Context</dt><dd>
+          <p>The evaluation registered in <a href="#code-review-evaluation">entry 98</a> ran against the corpus of archived attempts. Its evidence is in <code>PRPs/reports/code-review-evaluation/</code>.</p>
+          <ul>
+            <li><strong>Reachability:</strong> a <code>Task</code>-dispatched <code>general-purpose</code> subagent can invoke <code>/code-review</code>, as long as the target path is passed. <code>code-reviewer</code> as declared cannot, because it has no <code>Skill</code> tool.</li>
+            <li><strong>Findings:</strong> on 10 rebuilt attempts, <code>/code-review high</code> reported 44 findings and relay reported 12 judgment findings; five were shared. <code>/code-review</code> found real defects on attempts relay approved. Relay alone found the plan-anchored ones.</li>
+            <li><strong>Behavior:</strong> <code>/code-review</code> returns no verdict and varies between runs.</li>
+            <li><strong>Cost:</strong> <code>max</code> took over an hour and more than 2M tokens per review, and its sub-agents acted outside the review target.</li>
+          </ul>
+        </dd>
+        <dt>Decision</dt><dd>
+          <p>The outcome is improve, and it is permanent until superseded.</p>
+          <ul>
+            <li><strong>Inside <code>/relay-implement</code>:</strong> <code>code-reviewer</code> keeps the verdict, R-X, arbitration, and the <code>code-review.jsonl</code> log. A <code>/code-review</code> pass at <code>medium</code> or <code>high</code> becomes an evidence source for R-SEM. Its findings are advisory by default, and become blocking only when the reviewer confirms they are reachable.</li>
+            <li><strong><code>/relay-code-review</code>:</strong> kept unchanged.</li>
+            <li><strong><code>xhigh</code>, <code>max</code>, and <code>ultra</code>:</strong> stay outside the pipeline.</li>
+            <li><strong>Drift:</strong> a pinned sample set detects drift in the unversioned skill.</li>
+          </ul>
+          <p>Nothing changes until a PRD is approved. That PRD must settle the dispatch mechanism, level, path passing, intake rule, log field, drift threshold, opt-in key, headless reachability, a baseline of the reviewer's own cost, and a target-project dogfood.</p>
+        </dd>
+        <dt>Reason</dt><dd>
+          <p>Replacing the reviewer would break the loop's contract and bring back moving-target retries. Keeping it unchanged leaves defects that <code>/code-review</code> demonstrably finds. The hybrid adds bug-finding breadth where it helps and keeps the plan-anchored judgment only relay has. Advisory intake keeps the extra volume from inflating rejections.</p>
+        </dd>
       </div>
 
       <h2 id="how-to-add">Adding a new decision</h2>
