@@ -356,11 +356,11 @@
         <p>Recorded in <code>docs/decisions.md</code> (2026-09-17, "A simplification pass immediately before code review"). Not implemented and not yet placed in a numbered project phase. <code>/relay-implement</code> keeps dispatching <code>code-reviewer</code> directly after the implementer until a dedicated PRD is authored via <code>/relay-prd</code> and approved.</p>
       </div>
 
-      <h3 id="planned-code-review-evaluation">Planned: evaluate relay code review against <code>/code-review</code> <span class="badge badge--pending">planned</span></h3>
+      <h3 id="planned-code-review-evaluation">Evaluated: relay code review against <code>/code-review</code> (outcome: improve) <span class="badge badge--done">done</span></h3>
 
       <p>relay's <code>code-reviewer</code> judges every attempt inside <code>/relay-implement</code>'s loop and also backs the read-only <code>/relay-code-review</code> command. It is plan-anchored: plan conformance (R-S1&ndash;R-S3), the plan's Validation Commands (R-L1&ndash;R-L3), semantic bugs (R-SEM and R-COH-*), and the R-X test-path guard, with every verdict logged to <code>code-review.jsonl</code>. Claude Code's built-in <code>/code-review</code> is not plan-aware. It hunts for correctness bugs at effort levels from <code>low</code> to <code>max</code>, plus a billed cloud <code>ultra</code> level.</p>
 
-      <p>A registered evaluation compares the two and ends in one outcome: <strong>keep</strong>, <strong>improve</strong> (borrow techniques through a PRD), or <strong>replace</strong> (some or all review, temporarily or permanently, through a PRD). It must settle:</p>
+      <p>A registered evaluation compared the two and had to end in one outcome: <strong>keep</strong>, <strong>improve</strong> (borrow techniques through a PRD), or <strong>replace</strong> (some or all review, temporarily or permanently, through a PRD). It had to settle:</p>
 
       <div class="kv">
         <dt>Scope</dt><dd>The in-loop reviewer and the standalone command are separate decisions. The loop needs a structured verdict, dispute arbitration, R-X, and the jsonl log, none of which <code>/code-review</code> provides. A hybrid, such as <code>/code-review</code> feeding R-SEM, is a valid option.</dd>
@@ -372,9 +372,20 @@
         <dt>Ultra</dt><dd>Whether the billed cloud level has a place, such as an optional pre-PR step, or stays outside the pipeline.</dd>
       </div>
 
+      <p>The evaluation ran on 2026-09-21. Its evidence is in <code>PRPs/reports/code-review-evaluation/</code>.</p>
+
+      <div class="kv">
+        <dt>Reachability</dt><dd>A <code>general-purpose</code> subagent dispatched via <code>Task</code> can invoke <code>/code-review</code>, as long as the target path is passed in the arguments. <code>code-reviewer</code> as declared has no <code>Skill</code> tool. Headless reachability is still unproven.</dd>
+        <dt>Benchmark</dt><dd>On 10 rebuilt attempts, <code>/code-review high</code> reported 44 findings and relay reported 12 judgment findings. Five were shared. Relay's unique findings include the plan-anchored ones. <code>/code-review</code> found real defects on attempts relay approved.</dd>
+        <dt>Cost</dt><dd><code>low</code> to <code>high</code> take 19 to 133 seconds. <code>xhigh</code> takes about 4.5 minutes. <code>max</code> takes over an hour and more than 2M tokens, and its sub-agents act outside the review target.</dd>
+        <dt>Contract</dt><dd><code>/code-review</code> returns no verdict and varies between runs, so it cannot own the loop's verdict.</dd>
+      </div>
+
       <div class="callout callout--note">
-        <div class="callout__title">Registered, not started</div>
-        <p>Recorded in <code>docs/decisions.md</code> (2026-09-21, "Evaluating relay's code review against Claude Code's built-in <code>/code-review</code>"). No relay command or agent invokes <code>/code-review</code>, and the reviewer's rubric does not change, until the outcome is recorded and, for improve or replace, a PRD is approved.</p>
+        <div class="callout__title">Outcome: improve, pending a PRD</div>
+        <p>Recorded in <code>docs/decisions.md</code> (2026-09-21, "Code-review evaluation outcome: improve") and mirrored as <a href="../governance/decisions.html#code-review-evaluation-outcome">Decisions &mdash; entry 101</a>.</p>
+        <p>In <code>/relay-implement</code>, <code>code-reviewer</code> keeps the verdict, R-X, arbitration, and the log. A <code>/code-review</code> pass at <code>medium</code> or <code>high</code> becomes an advisory-by-default evidence source for R-SEM. <code>/relay-code-review</code> is kept unchanged. <code>xhigh</code>, <code>max</code>, and <code>ultra</code> stay outside the pipeline. A pinned sample set detects drift in the unversioned skill.</p>
+        <p>Nothing changes in any command, agent, or rubric until that PRD is authored via <code>/relay-prd</code> and approved.</p>
       </div>
 
       <h3 id="planned-garbage-collector">Planned: garbage collector for obsolete code and artifacts <span class="badge badge--pending">planned</span></h3>
