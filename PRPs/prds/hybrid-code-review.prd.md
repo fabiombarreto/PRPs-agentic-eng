@@ -48,11 +48,14 @@ We'll know we're right when the pinned sample set recovers its known defects, a 
 
 | Metric | Target | How Measured |
 |--------|--------|--------------|
-| Recall on the pinned sample set | TBD - needs validation | Re-run `PRPs/reports/code-review-evaluation/build-samples.sh` and count recovered `STILL-PRESENT` + `MATCH-RELAY` defects |
-| Attempts per phase, and first-attempt `CHANGES_REQUESTED` rate | No material rise; threshold TBD - needs validation | `scripts/efficiency.mjs`, comparing markers before and after, day-apart boundaries |
-| Added wall time and tokens per review | Ceiling TBD - needs validation | The pass's own recorded duration; `usage-metrics.mjs` for the verdict corpus |
+| Recall on the pinned sample set | At least 8 of the 10 distinct `STILL-PRESENT` defects | Re-run `PRPs/reports/code-review-evaluation/build-samples.sh` and count recovered `STILL-PRESENT` + `MATCH-RELAY` defects |
+| First-attempt `CHANGES_REQUESTED` rate | At most 39.3% (no more than 5 points above the 34.3% baseline) | `scripts/efficiency.mjs`, comparing markers before and after with day-apart boundaries |
+| Attempts per phase | At most 1.60 (baseline 1.49) | `scripts/efficiency.mjs`, same marker comparison |
+| Added wall time per review | At most 150 s (twice the 75 s median measured at `high`) | The pass's own recorded duration on the verdict row |
+| `/code-review` passes per review | Exactly 1 | Count of pass invocations recorded per verdict in `<basename>.code-review.jsonl` |
 | Real defects found in a target-project dogfood | At least 1 that relay alone approved | Operator judgment on the dogfood run |
-| Baseline cost of `code-reviewer` without the pass | Recorded, no target | Measured in Phase 1 before the pass exists |
+
+Every threshold above is derived from the 2026-09-21 measurements and is revisable in Phase 5, which is where the post-change numbers are read. The baseline cost of `code-reviewer` without the pass is a Phase 1 deliverable rather than a success metric, so it is recorded there and not listed here.
 
 ## Acceptance Criteria (test scenarios)
 
@@ -119,7 +122,7 @@ Operators of the standalone `/relay-code-review` (unchanged); headless and CI ru
 
 ### MVP Scope
 
-Phases 1 through 3 plus the dogfood: the opt-in key and log contract, the pass itself with its timeout and degradation, the adjudication rule in R-SEM, and one dogfood run against a target project with real code. The drift gate (Phase 4) ships immediately after, before the pass is recommended as a default.
+Phases 1 through 4 plus the dogfood in Phase 5: the opt-in key and log contract, the pass itself with its timeout and degradation, the adjudication rule in R-SEM, the drift gate, and one dogfood run against a target project with real code. The dogfood is last because it depends on the gate being in place before the pass is recommended as a default.
 
 ### User Flow
 
@@ -207,7 +210,7 @@ Current value of `tdd` in `docs/context/methodology.md`: **false**. Test-after o
 | Level ceiling | `medium` or `high` only, higher levels refused by name | Allowing `xhigh` for depth | `max` cost 65 to 73 minutes and over 2M tokens, wrote files, ran `npm install`, and read outside the target |
 | Verdict ownership | `code-reviewer`, unchanged | `/code-review` deriving a verdict | It emits none, varies between runs, and has no R-X, arbitration, or log |
 | Standalone surface | `/relay-code-review` untouched | Adding the pass there too | Its contract is read-only and plan-anchored; operators can run `/code-review` directly |
-| Success thresholds | Left `TBD - needs validation` | Fixing numbers now | Operator instruction, 2026-09-21: the baseline does not exist yet, so a number now would be invented |
+| Success thresholds | Derived from the 2026-09-21 measurements (10 known defects, 34.3% first-attempt rejection rate, 1.49 attempts per phase, 75 s median at `high`), revisable in Phase 5 | Leaving them unquantified until the baseline exists | First proposed as `TBD`; the rubric requires a target and a method on every metric row, and deriving from measured numbers avoids inventing them. The reviewer's own cost baseline moved to Phase 1 as a deliverable rather than a metric |
 
 ---
 
@@ -222,4 +225,5 @@ Phase A.3 dispatches `code-reviewer` with `plan_path, target_root, mode, attempt
 ---
 
 *Generated: 2026-09-22*
-*Status: DRAFT*
+*Approved: 2026-09-23*
+*Status: APPROVED*
