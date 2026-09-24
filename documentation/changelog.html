@@ -46,6 +46,11 @@
           <code>code-reviewer.md</code>'s hybrid pass. <code>CLAUDE.md</code>'s
           check count is bumped <code>24</code> &rarr; <code>25</code> to
           match.</li>
+        <li><strong><a href="governance/decisions.html#hybrid-pass-operating-conditions">Decisions &mdash; entry 102</a></strong>
+          &mdash; promotes five parked candidate decisions from the hybrid-code-review phase manifests into one entry: the
+          promotion rule (high severity AND a <code>git diff</code>-confirmed reachable line), the fixed cap of 10 adjudicated
+          findings, the drift gate's split between an offline validate check and a manual measurement at recall 8 of 10, and the
+          gate's deliberate fail-open direction. The two phase-1 candidates were not promoted.</li>
       </ul>
 
       <h3 id="unreleased-changed">Changed</h3>

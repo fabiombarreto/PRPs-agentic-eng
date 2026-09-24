@@ -132,6 +132,7 @@
         <li><a href="#garbage-collector">Garbage collector for obsolete code and artifacts: registered future capability</a></li>
         <li><a href="#parallel-test-environments">Parallel test environments extend runnable worktree environments</a></li>
         <li><a href="#code-review-evaluation-outcome">Code-review evaluation outcome: improve</a></li>
+        <li><a href="#hybrid-pass-operating-conditions">The hybrid <code>/code-review</code> pass: four named conditions, and a fail-open drift gate</a></li>
       </ol>
 
       <h2 id="entries">Entries</h2>
@@ -977,6 +978,21 @@
         <dt>Reason</dt><dd>
           <p>Replacing the reviewer would break the loop's contract and bring back moving-target retries. Keeping it unchanged leaves defects that <code>/code-review</code> demonstrably finds. The hybrid adds bug-finding breadth where it helps and keeps the plan-anchored judgment only relay has. Advisory intake keeps the extra volume from inflating rejections.</p>
         </dd>
+      </div>
+
+      <h3 id="hybrid-pass-operating-conditions">102. The hybrid <code>/code-review</code> pass: four named conditions, and a fail-open drift gate</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-09-24</dd>
+        <dt>Context</dt><dd><a href="#code-review-evaluation-outcome">Entry 101</a> settled that a finding blocks only on confirmed reachability and left the operating parameters to the PRD. The approved PRD carried three of them as Open Questions: the findings cap, who runs the drift gate, and the default level. Phases 1&ndash;4 fixed them in the implementation, so the docs pair proposed three separate entries across its phase manifests &mdash; each rejected at the time for recording an implementation inference as a settled decision, and one of which broke the <code>decisions-mirror</code> check in the process. The operator reviewed all five parked candidates and chose to promote them as one entry.</dd>
+        <dt>Decision</dt><dd>
+          <ol>
+            <li><strong>Promotion needs severity and confirmed reachability.</strong> A finding becomes <code>class: blocking</code> with <code>escalated: true</code> only when it is high-severity AND <code>code-reviewer</code> confirms, by running <code>git diff</code> against the diff under review, that the cited line sits in an added or modified hunk. Everything else is <code>class: advisory</code> and leaves R-SEM's own verdict untouched. This mirrors the discipline R-X already follows: a guard clears on a computed result, not on a reviewer's reading.</li>
+            <li><strong>The cap is 10, fixed and not project-configurable.</strong> Excess findings are excluded from promotion but still counted in the raw total. One declared level key is the whole configuration surface; a second knob would invite per-project drift in what blocking means.</li>
+            <li><strong>The drift gate is split, and only its cheap half is automatic.</strong> An offline <code>npm run validate</code> check verifies the recorded status file and its wiring; the measurement is a manual CLI run at plugin-update time, with recall at 8 of 10. A gate that re-reviewed ten samples live could not stay inside a fast, offline validate.</li>
+            <li><strong>The gate fails open.</strong> A missing or unreadable status file means the pass runs. The pass is advisory by default and cannot block unless condition 1 holds, so an unavailable gate degrades to extra evidence rather than to a silently weakened review; failing closed would instead remove bug-finding coverage with no signal. The <code>hybrid_code_review</code> key stays the only deliberate off switch.</li>
+          </ol>
+        </dd>
+        <dt>Reason</dt><dd>Each condition alone looks like an implementation choice; together they are the contract for letting an unversioned external tool touch a verdict, which is what future agents must not re-litigate. Promoting them as one entry also keeps the fail-open direction explicit &mdash; it appeared in none of the three proposed candidates, and a reader who saw only the gate's existence would assume the opposite. The two phase-1 candidates were not promoted: one is a status the PRD's own table already carries, and the other is a discoverability tweak to an anti-pattern entry whose wording already covers the key.</dd>
       </div>
 
       <h2 id="how-to-add">Adding a new decision</h2>
