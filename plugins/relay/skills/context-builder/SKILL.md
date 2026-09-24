@@ -639,6 +639,8 @@ figma_track: false        # true | false — opt-in switch for the Figma impleme
 visual_first_approval: auto  # auto | human — default approval mode for the Figma Visual-First Track's visual-first blocking gate; only meaningful when figma_track: true
 lane_runtime_safe: false  # true | false — declares the project's test stage does not contend on shared runtime resources (ports, containers, databases); default off, never heuristically flipped
 formatter_cmd: null   # null | "<command string>" — project formatter command; null means undeclared; never heuristically inferred
+hybrid_code_review: false  # true | false — opt-in switch for the hybrid /code-review evidence pass inside code-reviewer's R-SEM row; default off, never heuristically flipped
+hybrid_code_review_level: "medium"   # "medium" | "high" — configured /code-review effort level for the hybrid pass; any other value (xhigh, max, ultra, etc.) is refused by name inside code-reviewer, never heuristically inferred
 ---
 
 # Methodology
@@ -718,6 +720,18 @@ in CONTRIBUTING.md / README.md. None of these activate TDD on their own.]
   formatting time, never a value written back into this file; always
   emitted deterministically on every `*init` run. Flips away from `null`
   only via a human edit to this file.
+- Always emit `hybrid_code_review: false` — the per-project opt-in switch
+  for the hybrid `/code-review` evidence pass inside `code-reviewer`'s
+  R-SEM row defaults off, mirroring the `lane_runtime_safe`
+  default-emission precedent verbatim. Never heuristically inferred — no
+  scan for mentions of `/code-review` in a PRD, plan, or diff; always
+  emitted deterministically on every `*init` run. Flips to `true` only via
+  a human edit to this file — no command flips it.
+- Always emit `hybrid_code_review_level: "medium"` — the configured
+  `/code-review` effort level for the hybrid pass, mirroring
+  `formatter_cmd`'s value-string-key shape rather than a boolean
+  gate's shape. Never heuristically inferred; always emitted
+  deterministically on every `*init` run.
 
 **Update behavior:**
 
@@ -772,6 +786,19 @@ in CONTRIBUTING.md / README.md. None of these activate TDD on their own.]
     case `*update` adds this key; never remove or flip an existing
     non-null value, and never infer one from `package.json`
     `scripts.format` or any other project file.
+  - **`hybrid_code_review` preservation**: if `hybrid_code_review` is
+    already present in the frontmatter, preserve its value untouched —
+    validated human input, same treatment as `lane_runtime_safe`. If the
+    key is entirely absent (a project initialized before this key
+    existed), backfill `hybrid_code_review: false` — this is the ONLY
+    case where `*update` adds this key; never remove or flip an existing
+    value.
+  - **`hybrid_code_review_level` preservation**: if
+    `hybrid_code_review_level` is already present in the frontmatter,
+    preserve its value untouched. If the key is entirely absent,
+    backfill `hybrid_code_review_level: "medium"` — the ONLY case
+    `*update` adds this key; never remove or flip an existing value;
+    never infer one from any project file.
 - If the file is missing: run Init behavior.
 
 **Reporting (both modes):**

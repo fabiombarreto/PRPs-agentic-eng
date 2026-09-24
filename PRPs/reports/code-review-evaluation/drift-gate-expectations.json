@@ -1,0 +1,76 @@
+{
+  "threshold": 8,
+  "source": "findings-sheet.md",
+  "defects": [
+    {
+      "id": "d1",
+      "sample": "s1",
+      "ref": "C1",
+      "description": "version-parity.mjs: strict equality breaks the AGENTS.md §7.5 doc-only patch exemption",
+      "label": "STILL-PRESENT"
+    },
+    {
+      "id": "d2",
+      "sample": "s1",
+      "ref": "C2",
+      "description": "heading regex skips headings with inline markup or attributes before id, so the check falls through to an older release",
+      "label": "STILL-PRESENT"
+    },
+    {
+      "id": "d3",
+      "sample": "s3",
+      "ref": "C4",
+      "description": "NEXT_POINTER_RE has no lookbehind, so path segments read as commands",
+      "label": "STILL-PRESENT"
+    },
+    {
+      "id": "d4",
+      "sample": "s5f",
+      "ref": "C1",
+      "description": "generate-final-report.mjs loadOpenPlanReviewAdvisories reads the last review.jsonl line without checking verdict",
+      "label": "STILL-PRESENT"
+    },
+    {
+      "id": "d5",
+      "sample": "s5f",
+      "ref": "C3",
+      "description": "efficiency.mjs: comment says entries without failClasses count as blocking, but ?? [] drops them",
+      "label": "STILL-PRESENT"
+    },
+    {
+      "id": "d6",
+      "sample": "s6f",
+      "ref": "C1",
+      "description": "docs-updater dispatch lacks feature/prd_path",
+      "label": "MATCH-RELAY"
+    },
+    {
+      "id": "d7",
+      "sample": "s6f",
+      "ref": "C2",
+      "description": "docs-reviewer cannot derive feature without pr; the line-393 justification is false",
+      "label": "MATCH-RELAY"
+    },
+    {
+      "id": "d8",
+      "sample": "s10",
+      "ref": "C3",
+      "description": "zero-evidence branch only defined for quota refusals (HC10 contradiction)",
+      "label": "MATCH-RELAY"
+    },
+    {
+      "id": "d9",
+      "sample": "s12",
+      "ref": "C1",
+      "description": "commit -m with an unescaped PRD title; backticks or $ break or inject",
+      "label": "STILL-PRESENT"
+    },
+    {
+      "id": "d10",
+      "sample": "s13",
+      "ref": "C4",
+      "description": "docs_sync: false is read by nothing",
+      "label": "MATCH-RELAY"
+    }
+  ]
+}

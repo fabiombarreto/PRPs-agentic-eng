@@ -37,6 +37,15 @@
           verdict, R-X, arbitration, and the log. A <code>/code-review</code> pass at <code>medium</code> or <code>high</code> becomes an
           advisory-by-default evidence source for R-SEM inside <code>/relay-implement</code>. <code>/relay-code-review</code> is kept.
           <code>xhigh</code>, <code>max</code>, and <code>ultra</code> stay outside the pipeline. Nothing changes until a PRD is approved.</li>
+        <li><strong><a href="guide/validation-suite.html#the-checks">Validation
+          suite &mdash; <code>hybrid-drift-gate</code> check</a></strong>
+          &mdash; a 25th <code>npm run validate</code> check verifies the drift
+          gate's recorded-verdict file
+          (<code>plugins/relay/resources/drift-gate-status.json</code>) is
+          well-formed, internally consistent, and actually wired into
+          <code>code-reviewer.md</code>'s hybrid pass. <code>CLAUDE.md</code>'s
+          check count is bumped <code>24</code> &rarr; <code>25</code> to
+          match.</li>
       </ul>
 
       <h3 id="unreleased-changed">Changed</h3>

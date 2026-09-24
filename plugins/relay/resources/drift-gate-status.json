@@ -1,0 +1,8 @@
+{
+  "disabled": false,
+  "reason": null,
+  "recall": null,
+  "threshold": 8,
+  "sample_count": 10,
+  "measured_at": null
+}

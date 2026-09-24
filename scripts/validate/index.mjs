@@ -40,6 +40,7 @@ import { runLaneWorktreeParityCheck } from './checks/lane-worktree-parity.mjs';
 import { runLaneStateWritersCheck } from './checks/lane-state-writers.mjs';
 import { runAgentDispatchResolutionCheck } from './checks/agent-dispatch-resolution.mjs';
 import { runLaneFixtureCheck } from './checks/lane-fixture.mjs';
+import { runHybridDriftGateCheck } from './checks/hybrid-drift-gate.mjs';
 
 function die(code, msg) {
   process.stderr.write(msg + '\n');
@@ -74,6 +75,7 @@ const CHECKS = [
   runLaneStateWritersCheck,
   runAgentDispatchResolutionCheck,
   runLaneFixtureCheck,
+  runHybridDriftGateCheck,
 ];
 
 function runChecks(checks) {
