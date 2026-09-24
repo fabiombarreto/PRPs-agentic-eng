@@ -175,7 +175,7 @@ test('AC-A1: code-reviewer.md\'s own worked APPROVED example verdict carries non
   );
 });
 
-test('AC-A1: no real .code-review.jsonl verdict on disk carries any hyb* field or a `class` value on R-SEM yet — the schema slots documented this phase stay entirely unpopulated in the real corpus', () => {
+test('AC-A1: no real .code-review.jsonl verdict on disk carries any hyb* field yet — the four verdict-log fields documented this phase stay entirely unpopulated in the real corpus', () => {
   const dir = resolve(PLANS_DIR);
   const files = readdirSync(dir).filter((f) => f.endsWith('.code-review.jsonl'));
   assert.ok(files.length > 0, 'expected at least one real .code-review.jsonl file to check');
@@ -192,19 +192,76 @@ test('AC-A1: no real .code-review.jsonl verdict on disk carries any hyb* field o
         continue;
       }
       checked++;
-      assert.equal(obj.hyb, undefined, `${file}: unexpected "hyb" field on a Phase 1 verdict`);
-      assert.equal(obj.hyb_lvl, undefined, `${file}: unexpected "hyb_lvl" field on a Phase 1 verdict`);
-      assert.equal(obj.hyb_n, undefined, `${file}: unexpected "hyb_n" field on a Phase 1 verdict`);
-      assert.equal(obj.hyb_ms, undefined, `${file}: unexpected "hyb_ms" field on a Phase 1 verdict`);
-      if (Array.isArray(obj.rubric)) {
-        const semRow = obj.rubric.find((r) => r && r.id === 'R-SEM');
-        if (semRow) {
-          assert.equal(semRow.class, undefined, `${file}: unexpected "class" value on an R-SEM row before Phase 3 exists`);
-        }
-      }
+      assert.equal(obj.hyb, undefined, `${file}: unexpected "hyb" field on a verdict`);
+      assert.equal(obj.hyb_lvl, undefined, `${file}: unexpected "hyb_lvl" field on a verdict`);
+      assert.equal(obj.hyb_n, undefined, `${file}: unexpected "hyb_n" field on a verdict`);
+      assert.equal(obj.hyb_ms, undefined, `${file}: unexpected "hyb_ms" field on a verdict`);
     }
   }
   assert.ok(checked > 0, 'expected at least one real verdict line to check');
+});
+
+// Updated for hybrid-code-review Phase 4 (test-after, EXISTING_TEST_UPDATED):
+// the original assertion here claimed NO real verdict ever carries a `class`
+// value on R-SEM. That was true when Phase 1 shipped; it stopped being true
+// BY DESIGN once Phase 3 (adjudication in R-SEM) shipped and its own
+// code-review run populated `class: "advisory"` on its R-SEM row (and Phase
+// 4's drift-gate code-review run did the same) — commit bfb1641 brought both
+// verdict logs into the repository. Deleting or neutering the assertion
+// would lose the real invariant it protects: that class population is not
+// yet a free-for-all. So this replaces the "nothing populates it yet" fact
+// with the positive, still-discriminative claim it was actually guarding —
+// a populated `class` value may appear ONLY on a verdict for a
+// hybrid-code-review phase whose own plan is phase-3-or-later (the phase
+// that shipped the adjudication that sets it), and even there its value
+// must stay inside the documented closed domain. A verdict for any other
+// feature, or an earlier hybrid-code-review phase, populating `class` would
+// still fail this test — this is a tightening, not a weakening.
+// Authorization: ordinary test-after maintenance (this pair owns the test
+// files) per the plan's Phase 3/4 lifecycle, not a TEST_CONTRACT_DISPUTE —
+// no implementer is involved and this session's dispute cap is exhausted
+// regardless.
+test('AC-A1: a populated `class` value on a real R-SEM row appears only on a hybrid-code-review phase-3-or-later verdict, and only inside the documented `blocking`|`advisory` domain — no other verdict in the corpus populates it', () => {
+  const dir = resolve(PLANS_DIR);
+  const files = readdirSync(dir).filter((f) => f.endsWith('.code-review.jsonl'));
+  assert.ok(files.length > 0, 'expected at least one real .code-review.jsonl file to check');
+
+  const hybridPhasePattern = /^hybrid-code-review-phase-(\d+)-/;
+
+  let checked = 0;
+  let sawPopulatedClass = false;
+  for (const file of files) {
+    const raw = readFileSync(join(dir, file), 'utf-8');
+    for (const line of raw.split('\n')) {
+      if (!line.trim()) continue;
+      let obj;
+      try {
+        obj = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      checked++;
+      if (!Array.isArray(obj.rubric)) continue;
+      const semRow = obj.rubric.find((r) => r && r.id === 'R-SEM');
+      if (!semRow || semRow.class === undefined) continue;
+
+      sawPopulatedClass = true;
+      const phaseMatch = file.match(hybridPhasePattern);
+      assert.ok(
+        phaseMatch && Number(phaseMatch[1]) >= 3,
+        `${file}: unexpected populated "class" value on an R-SEM row — only a hybrid-code-review phase-3-or-later verdict may carry one`,
+      );
+      assert.ok(
+        semRow.class === 'blocking' || semRow.class === 'advisory',
+        `${file}: R-SEM "class" value must be in the closed { blocking, advisory } domain, got ${JSON.stringify(semRow.class)}`,
+      );
+    }
+  }
+  assert.ok(checked > 0, 'expected at least one real verdict line to check');
+  assert.ok(
+    sawPopulatedClass,
+    'expected at least one real verdict to demonstrate phase-3+ class population — otherwise this test would pass vacuously and stop being discriminative',
+  );
 });
 
 // ---------------------------------------------------------------------------
