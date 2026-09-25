@@ -37,6 +37,11 @@
           verdict, R-X, arbitration, and the log. A <code>/code-review</code> pass at <code>medium</code> or <code>high</code> becomes an
           advisory-by-default evidence source for R-SEM inside <code>/relay-implement</code>. <code>/relay-code-review</code> is kept.
           <code>xhigh</code>, <code>max</code>, and <code>ultra</code> stay outside the pipeline. Nothing changes until a PRD is approved.</li>
+        <li><strong><a href="roadmap/status.html#planned-manual-qa-runner">Phase status &mdash; Planned: manual-QA runner and local test-auth kit</a></strong>
+          &mdash; registers a runner that gives every case of any project's <code>qa-report.md</code> an outcome, and a
+          <code>PRPs/auth/</code> kit that documents the project's auth and permission model, stores test-only credentials
+          outside git and outside the model's context, and ships per-role login scripts. Local hosts only. Mirrored as
+          <a href="governance/decisions.html#manual-qa-runner">Decisions &mdash; entry 102</a>. Nothing is implemented.</li>
         <li><strong><a href="guide/validation-suite.html#the-checks">Validation
           suite &mdash; <code>hybrid-drift-gate</code> check</a></strong>
           &mdash; a 25th <code>npm run validate</code> check verifies the drift
@@ -46,7 +51,7 @@
           <code>code-reviewer.md</code>'s hybrid pass. <code>CLAUDE.md</code>'s
           check count is bumped <code>24</code> &rarr; <code>25</code> to
           match.</li>
-        <li><strong><a href="governance/decisions.html#hybrid-pass-operating-conditions">Decisions &mdash; entry 102</a></strong>
+        <li><strong><a href="governance/decisions.html#hybrid-pass-operating-conditions">Decisions &mdash; entry 103</a></strong>
           &mdash; promotes five parked candidate decisions from the hybrid-code-review phase manifests into one entry: the
           promotion rule (high severity AND a <code>git diff</code>-confirmed reachable line), the fixed cap of 10 adjudicated
           findings, the drift gate's split between an offline validate check and a manual measurement at recall 8 of 10, and the
