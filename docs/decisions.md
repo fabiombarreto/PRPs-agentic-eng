@@ -2232,8 +2232,6 @@ This composes with, and does not supersede, entries 89 and 90. Formatting preven
 
 ---
 
-<!-- Template for future entries:
-
 ## [2026-09-01] Worktree base for a declared member is its `Base` cell, defaulting to `current` — D11's chain is preserved only where no topology is declared
 
 **Context:** `docs/decisions.md` [2026-05-11] D11 resolves a worktree's base as `--base` → `origin/main` → `origin/master` → `HEAD`. The current checkout is therefore reached only when BOTH remote defaults fail to resolve, which does not happen in any repository whose default branch exists on the remote — so in practice relay never branches from the line the operator is working on. Reproduced during the multi-repo-topology feature on a repository checked out on `dev` with `origin/main` present: the worktree would be cut from `main`, silently. A second instance is documented in a target workspace whose SDK repository carries two diverged release lines with overlapping version numbers, where branching from the wrong one is destructive rather than merely surprising.
@@ -2390,6 +2388,50 @@ The [2026-05-15] entry "Runnable worktree environments" already registered the s
 
 ---
 
+## [2026-09-21] Code-review evaluation outcome: improve — `code-reviewer` keeps the verdict, `/code-review` becomes an advisory evidence source for R-SEM, `/relay-code-review` is kept
+
+**Context:** The registered evaluation ([2026-09-21] "Evaluating relay's code review against Claude Code's built-in `/code-review`") was run on 2026-09-21. The evidence is in `PRPs/reports/code-review-evaluation/`: `report.md`, `findings-sheet.md`, and `build-samples.sh`.
+- **Reachability spike:** a `general-purpose` subagent dispatched via `Task` can invoke `Skill("code-review", "<level> <path>")` without any prompt. The target path must be passed in `args`; otherwise the skill reviews the session's primary working directory. `code-reviewer` as currently declared has no `Skill` tool. Headless `claude -p` reachability was not determined, because the CLI's authentication had expired.
+- **Corpus:** 99 verdict logs (150 verdicts). 41 of the 47 `CHANGES_REQUESTED` verdicts failed a judgment row, and R-X never failed in this repository. Only 18 of the 75 archived patches touch code. Per-phase patches are not cumulative, so a replay must apply the earlier phases first.
+- **Benchmark at `high`, 10 cleanly rebuilt attempts:**
+  - `/code-review` reported 44 findings against relay's 12 judgment findings, and 5 were shared.
+  - Relay's 7 unique findings include the plan-anchored ones (R-COH-TASK-CONTRADICTION and plan-aware R-SEM) that a plan-unaware reviewer cannot produce.
+  - On the 3 attempts relay APPROVED, `/code-review` reported 16 findings. At least 5 of these are real defects, either fixed later or still present in `development`. One still present is `/relay-commit`'s unescaped `commit -m "<PRD title>"`.
+  - The operator accepted the evidence-based preliminary labels in `findings-sheet.md` as the TP/FP judgment; rows labelled `OPEN` stay unjudged.
+- **Effort levels:** `low`, `medium` and `high` took 19 to 133 s and return free text. `xhigh` took about 4.5 min and returns JSON. `max` took 65 to 73 min and used more than 2M tokens per review. It fanned out about 30 agents that wrote probe files, ran `npm install`, and read files outside the target, including later-dated repository artifacts and the operator's local settings.
+- **Non-determinism:** findings vary between levels and between runs.
+
+The operator chose the outcome on 2026-09-21.
+
+**Decision:** The outcome is **improve**. It is permanent until a later entry says otherwise, and it applies to the two surfaces separately.
+1. **In-loop (`/relay-implement` Phase A.3):** `code-reviewer` remains the only verdict owner. It keeps R-S*/R-L* (moving to scripts per entry 96), R-X, arbitration, and the `code-review.jsonl` log. A `/code-review` pass at `medium` or `high` becomes an additional **evidence source for R-SEM**. Its findings enter as **advisory by default**, under the [2026-08-06] materiality taxonomy. A finding becomes blocking only when `code-reviewer` confirms it is reachable in the diff under review. The log changes only additively (for example, a `source` field), registered with the verdict-log `CONSUMERS`. `--fix` stays excluded from any review role.
+2. **Standalone `/relay-code-review`:** kept unchanged, as the read-only plan-conformance surface. `/code-review` remains directly available to operators for bug hunting, so wrapping it or replacing the command adds nothing.
+3. **`xhigh`, `max`, and `ultra`:** outside the pipeline. `ultra` (billed) and `max` are at most an operator-triggered step before `/relay-pr`, never invoked by relay. The reasons are cost, side effects outside the target tree, and exposure to later-dated artifacts.
+4. **Drift detection:** the pinned sample set (`build-samples.sh`, plus the `MATCH-RELAY` and `STILL-PRESENT` rows of `findings-sheet.md`) is the regression set for the unversioned skill. Falling below a recall threshold that the PRD sets disables the hybrid pass, with a logged fallback to today's reviewer, until the set is re-baselined.
+
+**Reason:** Replacing the in-loop reviewer fails the loop's contract. `/code-review` emits no verdict, has no R-X or arbitration, writes no log, and changes its output shape with the level. It is also non-deterministic, which would reintroduce the moving-target retries identified in the 2026-08 plan-pair analysis. Keeping the reviewer unchanged leaves real defects unfound, because `/code-review` found defects on attempts relay approved. The hybrid adds bug-finding breadth where it helps (R-SEM) without giving up the plan-anchored judgment only relay has. Intake is advisory by default so the extra volume cannot inflate `CHANGES_REQUESTED`. The standalone command's value is plan conformance, which `/code-review` does not offer.
+
+**Out of scope until a dedicated PRD is approved (next step: `/relay-prd`):**
+- Invoking `/code-review` from `/relay-implement`, `/relay-execute`, `/relay-code-review`, or any relay agent.
+- Adding `Skill` to `code-reviewer`'s `tools:`.
+- Changing its rubric, prompt, verdict contract, or log shape.
+
+The PRD must decide:
+- the dispatch mechanism: a command-side `general-purpose` subagent, or `Skill` in `code-reviewer`'s tools;
+- the level;
+- how the worktree path is passed;
+- the advisory intake rule;
+- the additive log field;
+- the drift gate and its threshold;
+- an opt-in `methodology.md` key;
+- proof of headless reachability;
+- a baseline measurement of `code-reviewer`'s own token and time cost;
+- a target-project dogfood before the pass is on by default, because this corpus is relay's own and mostly prose.
+
+**Areas affected (when eventually shipped):** `plugins/relay/commands/relay-implement.md` (Phase A.3); `plugins/relay/agents/code-reviewer.md` (R-SEM intake; possibly `tools:`); `scripts/efficiency.mjs`, `plugins/relay/scripts/usage-metrics.mjs`, and the `CONSUMERS` registry (if the log gains a field); the `methodology.md` template; `docs/context/architecture.md`; `documentation/` (concepts/pipeline, reference/agents, roadmap/status, changelog). `plugins/relay/commands/relay-code-review.md` is not affected.
+
+---
+
 ## [2026-09-25] Executing a QA report's cases, backed by a project-local test-auth kit under `PRPs/auth/`, is a registered future capability
 
 **Context:** `/relay-qa-report` writes `PRPs/reports/<feature>/qa-report.md`, where every case carries a risk level, a prose "required state", a coverage value, and a numbered manual step-by-step, with its manual status set to `pending`. The command states that statuses change only conversationally, never by re-running it, and nothing in relay executes the cases: the human validator runs each one by hand. Most real cases need an authenticated user with a specific role, and relay has no way to produce one. The visual track already *consumes* a Playwright storage-state file (`plugins/relay/scripts/visual/capture.mjs` reads `auth_mode: "storage-state:<path>"`, and the Design Spec's Visual Acceptance Criteria table has an "Auth mode" column), but `capture.mjs` states it never performs its own login, nothing in relay creates that file, and `visual-verifier` lists "auth seeding beyond a single Playwright storage-state session" as out of scope, degrading such screens to manual QA. Every target project authenticates differently (session cookies, JWT, OAuth/SSO, API keys, MFA), with its own role and permission model and, often, tenant scoping. The operator asked (2026-09-25) for (a) a feature that can exercise every case written in any project's `qa-report.md`, and (b) a flow, with instructions, that creates auxiliary files inside the project under `PRPs/auth/`: a description of how the project's permission and authentication system works, stored test credentials (created by the scripts themselves or typed by the user), and scripts that use those credentials to authenticate. Everything runs locally; nothing targets an external server.
@@ -2427,6 +2469,8 @@ The [2026-05-15] entry "Runnable worktree environments" already registered the s
 **Areas affected (when eventually shipped):** new commands (and possibly an agent pair) under `plugins/relay/`; templates for `auth-model.md`, the credentials example, and the login scripts under `plugins/relay/resources/`; `plugins/relay/commands/relay-qa-report.md` (status write-back); `plugins/relay/scripts/visual/capture.mjs` and `plugins/relay/resources/design-spec-template.md` (auth mode produced by the kit); `plugins/relay/resources/redaction-policy.md`; `docs/context/settings-allowlist.md`; the `methodology.md` and `testing.md` templates in `context-builder`; `docs/context/architecture.md`; `documentation/` (reference/commands, roadmap/status, changelog).
 
 ---
+
+<!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision
 

@@ -34,6 +34,9 @@ PRPs/reports/*
 # comparison depends on; an ignored one is useless the moment the tree is
 # re-cloned. Per-feature run reports under PRPs/reports/<feature>/ stay ignored.
 !PRPs/reports/efficiency/
+# ...and the code-review evaluation, which a docs/decisions.md entry cites as
+# its evidence and whose pinned sample set is the /code-review drift baseline.
+!PRPs/reports/code-review-evaluation/
 
 # Test-suite advisory lock (scripts/validate/checks/scan-root-lock.mjs). It now
 # holds a holder.json for diagnostics, so a run killed mid-section would leave a
