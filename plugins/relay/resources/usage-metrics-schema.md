@@ -163,6 +163,10 @@ relay	2026-08-07T21:14:03Z	0	plan-review	example-feature-phase-1-example-slug	2	
 | `nblk` | non-negative integer | Failing rows classed `blocking`. A row with no `class` field counts as blocking. | yes |
 | `nadv` | non-negative integer | Failing rows classed `advisory`. | yes |
 | `nesc` | non-negative integer | Failing rows carrying `escalated: true`. | no |
+| `hyb` | `0` \| `1` \| `-` | Whether a hybrid `/code-review` pass was invoked this verdict. The `-` here is this relation's absent-field sentinel, not a value `code-reviewer` ever writes — the producer either emits a literal `0`/`1` or omits the field entirely, and this relation materializes an omitted field as `-`. Populated only once `code-reviewer` emits it (Phase 2+ of `hybrid-code-review`) — absent on every row materialized before then, per this file's own "Duration is recorded where it exists and absent elsewhere — never zero" rule. | no |
+| `hyb_lvl` | code \| `-` | The configured hybrid pass level (`medium` \| `high`). Populated only once `code-reviewer` emits it (Phase 2+ of `hybrid-code-review`) — absent on every row materialized before then. | no |
+| `hyb_n` | non-negative integer \| `-` | Findings the hybrid pass returned. Populated only once `code-reviewer` emits it (Phase 2+ of `hybrid-code-review`) — absent on every row materialized before then. | no |
+| `hyb_ms` | non-negative integer \| `-` | The hybrid pass's own wall-clock duration. Populated only once `code-reviewer` emits it (Phase 2+ of `hybrid-code-review`) — absent on every row materialized before then. | no |
 
 ## Relation: rubric
 
@@ -192,17 +196,22 @@ relay	2026-08-07T21:14:03Z	0	plan-review	example-feature-phase-1-example-slug	2	
 | `rat` | code \| `-` | The row's `ratchet` annotation when present, e.g. `out-of-scope-new-finding`. | no |
 
 **`cls` is only comparable within a stage.** The `class` field is emitted by
-`plan-reviewer` alone. Measured against this repository's own corpus at the
-time of writing: across 2184 rubric rows in every `.code-review.jsonl` and
-`.test-write-review.jsonl` on disk — including entries written after the
-materiality taxonomy shipped — exactly zero carry a `class` field. So `cls`
-reads `blocking` for every code-review and test-write-review row, always, and
-that is a property of the producer rather than of the finding. A cross-stage
-comparison of advisory rate therefore measures which reviewer emits the field,
-not how materially the stages differ; it will report those two stages as
-having never produced an advisory finding, which is an artifact, not a result.
-Compare within `plan-review` only, until the other two reviewers emit the
-field.
+`plan-reviewer`, and, as of `hybrid-code-review` Phase 1, is also documented
+(schema-only, not yet populated) on `code-reviewer`'s R-SEM row — no code in
+this repo sets the value on R-SEM until a later phase. Measured against this
+repository's own corpus at the time of writing: across 2184 rubric rows in
+every `.code-review.jsonl` and `.test-write-review.jsonl` on disk —
+including entries written after the materiality taxonomy shipped — exactly
+zero carry a `class` field. This count is scoped to `code-review.jsonl` and
+`test-write-review.jsonl` as they stand at the time of writing, and remains
+accurate today since `hybrid-code-review` Phase 1 adds no code that sets the
+value. So `cls` reads `blocking` for every code-review and test-write-review
+row, always, and that is a property of the producer rather than of the
+finding. A cross-stage comparison of advisory rate therefore measures which
+reviewer emits the field, not how materially the stages differ; it will
+report those two stages as having never produced an advisory finding, which
+is an artifact, not a result. Compare within `plan-review` only, until the
+other two reviewers emit the field.
 
 **Passing rows are retained, not only failures.** Without them, two questions
 are unanswerable: which checks never fire (and are therefore candidates for

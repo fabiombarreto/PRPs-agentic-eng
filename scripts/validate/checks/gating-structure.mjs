@@ -79,6 +79,14 @@ const SITES = [
       { id: 'backfill-only-when-absent', pattern: /backfill\s*`lane_runtime_safe: false`/i },
     ],
   },
+  {
+    key: 'hybrid_code_review',
+    markers: [
+      { id: 'default-false-emission', pattern: /always emit `hybrid_code_review: false`/i },
+      { id: 'preserve-on-update', pattern: /`hybrid_code_review`\s*preservation/i },
+      { id: 'backfill-only-when-absent', pattern: /backfill\s*`hybrid_code_review: false`/i },
+    ],
+  },
 ];
 
 /**

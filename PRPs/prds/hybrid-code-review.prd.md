@@ -165,10 +165,10 @@ Current value of `tdd` in `docs/context/methodology.md`: **false**. Test-after o
 
 | # | Phase | Description | Status | Repo | Parallel | Depends | PRP Plan |
 |---|-------|-------------|--------|------|----------|---------|----------|
-| 1 | Contract and opt-in | The `methodology.md` key, the `class` field on R-SEM plus the additive verdict-log fields and their `CONSUMERS` registration, and a recorded baseline of the reviewer's own cost. No pass is dispatched yet. | pending | - | - | - | - |
-| 2 | The pass | `code-reviewer` gains `Skill`, invokes one `/code-review` at the configured level with the explicit path, enforces the level and flag refusals, its own timeout, and the degradation reasons. Findings are recorded but do not yet influence the verdict. | pending | - | - | 1 | - |
-| 3 | Adjudication in R-SEM | The advisory-by-default intake, the reachability confirmation that promotes a finding to blocking, the findings cap, and the interaction with R-X and the dispute channel. | pending | - | - | 2 | - |
-| 4 | Drift gate | The pinned sample set wired as a repeatable check, with the recall threshold and the disable-on-regression fallback. | pending | - | - | 3 | - |
+| 1 | Contract and opt-in | The `methodology.md` key, the `class` field on R-SEM plus the additive verdict-log fields and their `CONSUMERS` registration, and a recorded baseline of the reviewer's own cost. No pass is dispatched yet. | complete | - | - | - | PRPs/plans/hybrid-code-review-phase-1-contract-and-opt-in.plan.md |
+| 2 | The pass | `code-reviewer` gains `Skill`, invokes one `/code-review` at the configured level with the explicit path, enforces the level and flag refusals, its own timeout, and the degradation reasons. Findings are recorded but do not yet influence the verdict. | complete | - | - | 1 | PRPs/plans/hybrid-code-review-phase-2-the-pass.plan.md |
+| 3 | Adjudication in R-SEM | The advisory-by-default intake, the reachability confirmation that promotes a finding to blocking, the findings cap, and the interaction with R-X and the dispute channel. | complete | - | - | 2 | PRPs/plans/hybrid-code-review-phase-3-adjudication-in-r-sem.plan.md |
+| 4 | Drift gate | The pinned sample set wired as a repeatable check, with the recall threshold and the disable-on-regression fallback. | complete | - | - | 3 | PRPs/plans/hybrid-code-review-phase-4-drift-gate.plan.md |
 | 5 | Dogfood and measurement | A run against a target project with real code, plus the before/after reading through `efficiency.mjs` and the usage-metrics corpus, and the decision on the default level and default-on. | pending | - | - | 4 | - |
 
 ### Phase Details

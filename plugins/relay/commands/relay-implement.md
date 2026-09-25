@@ -411,8 +411,16 @@ Task(subagent_type="code-reviewer",
        attempt: <attempt>,
        diff_target: "<artifact_root><attempt>/diff.patch",
        review_started_at: <the instant captured immediately above>,
+       deadline_ts: <deadline_ts>,
      })
 ```
+
+`deadline_ts` (the wall-clock deadline computed in Phase A.0 as
+`deadline_ts = now() + max_implement_minutes minutes`) lets
+code-reviewer's own hybrid-pass budget check (when
+`hybrid_code_review: true`) skip the pass rather than risk
+contributing to a later `FAILED_TIME_BUDGET_EXCEEDED` on the loop's
+own next pre-flight check.
 
 The code-reviewer runs the 8-item rubric (R-S1, R-S2, R-S3, R-L1, R-L2, R-L3, R-SEM, R-X — plus R-COH-* additive when the reviewer-coherence-layer is active) against the diff. It appends one verdict line to `PRPs/plans/<basename>.code-review.jsonl` itself per its protocol (D11 — code-reviewer is the writer of its own audit log; the command does not duplicate that write). All 8 rubric items are recorded in the verdict line; no short-circuit.
 

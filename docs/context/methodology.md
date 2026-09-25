@@ -5,6 +5,8 @@ test_frameworks: ["node:test"]
 docs_sync: true
 lane_runtime_safe: false
 formatter_cmd: null
+hybrid_code_review: false
+hybrid_code_review_level: "medium"
 ---
 
 # Methodology
@@ -99,6 +101,54 @@ window opens.
    files); `*update` preserves an existing value untouched and backfills
    `formatter_cmd: null` only when the key is entirely absent — never
    flipping a set value.
+
+## Hybrid Code Review
+
+Current state: **false** (default) — `hybrid_code_review: false` in
+the frontmatter above means this project has not opted into the hybrid
+`/code-review` evidence pass inside `code-reviewer`'s R-SEM row. The key
+is consumed starting Phase 2 of `hybrid-code-review`; Phase 1 only
+declares the key and its schema slots — no pass is dispatched by any
+value of this key today.
+
+### How to override
+
+1. Change `hybrid_code_review: false` to `hybrid_code_review: true`
+   above to opt this project into the hybrid pass once Phase 2 exists.
+   This is a manual human edit to this file — `context-builder` never
+   produces a `true` value itself.
+2. Heuristics MUST NOT flip this value — only a human edit can.
+   `context-builder` `*init` always emits the deterministic default
+   `hybrid_code_review: false` (never heuristically inferred from
+   mentions of `/code-review` in a PRD, plan, or diff); `*update`
+   preserves an existing value untouched and backfills
+   `hybrid_code_review: false` only when the key is entirely absent —
+   never flipping a set value.
+
+### Level
+
+Current state: **"medium"** (default) — `hybrid_code_review_level:
+"medium"` in the frontmatter above declares the configured
+`/code-review` effort level for the hybrid pass. Values are
+restricted to `"medium"` or `"high"`; any other value (`xhigh`,
+`max`, `ultra`, or anything else) causes `code-reviewer` to refuse
+the pass by name per Phase 2 of `hybrid-code-review`
+(`HYBRID_LEVEL_REFUSED` / `refused_level:<value>`), rather than
+invoking it at an unsupported level.
+
+### How to override
+
+1. Change `hybrid_code_review_level: "medium"` to
+   `hybrid_code_review_level: "high"` above to run the pass at the
+   higher effort level. This is a manual human edit to this file —
+   `context-builder` never produces a non-`"medium"` value itself.
+2. Heuristics MUST NOT flip this value — only a human edit can.
+   `context-builder` `*init` always emits the deterministic default
+   `hybrid_code_review_level: "medium"` (never heuristically
+   inferred); `*update` preserves an existing value untouched and
+   backfills `hybrid_code_review_level: "medium"` only when the key
+   is entirely absent — never flipping a set value. Consumed
+   starting Phase 2 of `hybrid-code-review`.
 
 ## Other methodologies
 

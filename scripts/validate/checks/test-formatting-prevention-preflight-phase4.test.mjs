@@ -36,9 +36,42 @@
  * code-reviewer.md or implementer.md; figma-track-ac2-reuse-enforcement's
  * code-reviewer.md/implementer.md coverage targets the unrelated
  * R-COH-DS-REUSE / Step 2.3.5 surfaces). No EXISTING_TEST_COVERS,
- * EXISTING_TEST_UPDATED, OBSOLETE_TEST_REMOVED, or REDUNDANT_TEST_REMOVED
- * outcome applies to any in-scope AC this session — every AC below is
+ * OBSOLETE_TEST_REMOVED, or REDUNDANT_TEST_REMOVED outcome applies to any
+ * in-scope AC for THIS feature — every AC below was originally
  * NEW_TEST_REQUIRED.
+ *
+ * EXISTING_TEST_UPDATED (hybrid-code-review Phase 2, 2026-09-23):
+ * the two AC-A3 (PRD AC-4) extraction tests below and the negative
+ * carve-out test used `sliceBetween(content, R-X heading,
+ * '## The R-COH-* coherence layer')` as the extraction span. That
+ * end-anchor was a boundary literal — "whatever text sits immediately
+ * before the R-COH-* heading" — not a property of R-X's own content. The
+ * APPROVED hybrid-code-review Phase 2 plan's Task 2 legitimately inserts a
+ * new `## The hybrid /code-review pass (Phase 2 — evidence collection
+ * only)` section immediately after R-X's own trailing `---` separator and
+ * before the `## The R-COH-*` heading, which made the old span capture
+ * R-X's unchanged content PLUS the entire new section, tripping the
+ * byte-identical comparison on an extraction-span artifact rather than a
+ * real R-X change. An arbitration-mode code-reviewer run independently
+ * verified R-X's own text (heading through its own trailing `---`) is
+ * byte-identical to this file's pinned EXPECTED_RX_SECTION and returned
+ * DISPUTE_UPHELD_TEST_WRONG naming exactly this fix
+ * (PRPs/plans/hybrid-code-review-phase-2-the-pass.code-review.jsonl,
+ * mode: "arbitration", 2026-09-23), with proposed_resolution: "assert
+ * R-X's own content as a prefix bounded at R-X's own closing sentence, or
+ * use a narrower R-X-specific closing marker". This update applies that
+ * fix: the extraction now ends at the next level-2 (`## `) heading after
+ * the `### R-X` heading, computed dynamically via `sliceToNextH2Heading`,
+ * rather than a heading literal hardcoded to a specific, and now
+ * outdated, structural neighbor. EXPECTED_RX_SECTION itself is
+ * UNCHANGED — the text between R-X's heading and the next `## ` heading
+ * is byte-identical before and after hybrid-code-review Phase 2's
+ * insertion, which is exactly the property the arbiter verified and this
+ * fix now asserts robustly. Nothing about R-X's own rule text, its
+ * 12-pattern glob set, or Step X.2/X.3 changed, and no assertion below was
+ * weakened: the same byte-identical equality check still runs, only
+ * pointed at a span boundary that is a property of R-X's own content
+ * rather than of whatever happens to follow it.
  *
  * Traceability (PRPs/prds/test-formatting-prevention-preflight.prd.md
  * Acceptance Criteria, narrowed by the plan's own AC-A1..AC-A3; AC-1/2/3/
@@ -47,7 +80,9 @@
  *
  *   AC-A3 (PRD AC-4, "R-X byte-identical") — code-reviewer.md's
  *     `### R-X` section (from its heading through, but excluding, the
- *     following `## The R-COH-*` heading) is extracted, its extraction is
+ *     next level-2 `## ` heading — R-X's own trailing content, computed
+ *     dynamically so a legitimately inserted section after R-X does not
+ *     corrupt the extraction span) is extracted, its extraction is
  *     asserted non-empty first, then asserted exactly byte-identical to
  *     the canonical shipped text — zero carve-outs, zero new exception
  *     prose inside the rule. A dedicated negative check also asserts no
@@ -111,13 +146,43 @@ function sliceBetween(content, startNeedle, endNeedle) {
   return endIdx === -1 ? content.slice(startIdx) : content.slice(startIdx, endIdx);
 }
 
+/**
+ * Slices `content` from the first occurrence of `startNeedle` up to (but
+ * excluding) the next level-2 markdown heading (a line beginning exactly
+ * `## `, distinct from `### `/`#### ` sub-headings, which do not match the
+ * literal `\n## ` needle) that appears after it. Unlike `sliceBetween`,
+ * this does NOT hardcode which heading follows — it is a property of the
+ * source section's OWN boundary (the next structural sibling), not of a
+ * specific neighbor's title. This is what makes the extraction robust to
+ * a legitimately inserted new section between the source section and
+ * whatever heading used to follow it directly (see the "EXISTING_TEST_
+ * UPDATED" note above this file's header comment for why the old
+ * `sliceBetween(..., '## The R-COH-* coherence layer')` form broke under
+ * exactly that kind of legitimate insertion).
+ * @param {string} content
+ * @param {string} startNeedle
+ * @returns {string | undefined}
+ */
+function sliceToNextH2Heading(content, startNeedle) {
+  const startIdx = content.indexOf(startNeedle);
+  if (startIdx === -1) return undefined;
+  const searchFrom = startIdx + startNeedle.length;
+  const newlineIdx = content.indexOf('\n## ', searchFrom);
+  return newlineIdx === -1 ? content.slice(startIdx) : content.slice(startIdx, newlineIdx + 1);
+}
+
 // The canonical, pinned R-X section text — from the `### R-X` heading
-// through, but excluding, the following `## The R-COH-*` heading. Captured
+// through, but excluding, the next level-2 (`## `) heading. Captured
 // verbatim from the shipped file (PRPs/plans/completed/
 // test-formatting-prevention-preflight-phase-4-r-sem-prose.plan.md's own
 // Task 3 / Level 2 mechanically verified this stayed byte-identical to the
 // pre-phase HEAD baseline at implementation time; this test pins that same
-// text as a standing regression guard, independent of git history).
+// text as a standing regression guard, independent of git history). This
+// text is unchanged by hybrid-code-review Phase 2's later insertion of a
+// new section immediately after R-X's own trailing `---` separator — the
+// span this string covers ends at that same `---` either way, since
+// `sliceToNextH2Heading` stops at the next `## ` heading regardless of
+// which section that heading now belongs to.
 const EXPECTED_RX_SECTION =
   "### R-X — Universal test-modification guard (straight fail, D17)\n\nUsing the canonical test-glob pathspec set:\n\n```\n'**/test_*.py' '**/tests/**/*.py' '**/*.test.ts' '**/*.test.tsx'\n'**/*.spec.ts' '**/*.spec.tsx' '**/*.test.js' '**/*.spec.js'\n'**/*_test.go' '**/tests/**/*.rb' '**/*_spec.rb'\n'**/__tests__/**' '**/*.test.rs' '**/*_test.rs'\n'**/*.test.jsx' '**/*.test.mjs' '**/*.test.cjs' '**/spec/**'\n```\n\nRun via `Bash`:\n\n```\ngit diff --name-only <diff_target> -- <pathspec-set>\n```\n\nIf the result is empty: PASS.\n\nIf the result is non-empty AND the input `mode` is `\"standard\"`\n(NOT post-arbitration-upheld), every matched path is a candidate\nR-X failure. Exactly one thing can clear a candidate path: the\ncomputed equivalence step below. Run it before recording the\nverdict; no other consideration — not the implementer's claim, not\nthis reviewer's own reading of the diff, not the sympathy of the\nchange — may clear a path.\n\n#### Step X.2 — Executable-content equivalence (computed, never asserted)\n\nRun via `Bash`, over exactly the matched paths:\n\n```\nnode ${CLAUDE_PLUGIN_ROOT}/scripts/executable-content-hash.mjs --repo <target_root> --base <diff_target> --head HEAD -- <matched-path> [<matched-path> ...]\n```\n\nThe script normalizes both versions of each path — dropping\ncomments, Python docstrings, and the test-title string literal of a\n`describe` / `it` / `test` / `context` / `suite` call — and hashes\nwhat remains. Every other string literal, including every expected\nvalue, survives into the hash; so does the callee, so `it(` and\n`it.skip(` are different executable content.\n\nA path is CLEARED if and only if its report row carries\n`cleared: true`. Every other row is NOT cleared — `supported:\nfalse` (unlisted extension), a path absent on either side (a\ncreated or deleted test file), an ambiguous or unterminated source,\nor differing hashes. The script is fail-closed by construction, and\nso is this step: if the command cannot run at all (node missing,\nscript path unresolvable, non-zero exit), NO path is cleared and\nthe `reason` string says which command failed and how.\n\nRecord verbatim in the jsonl `reason`, for every path this step\nclears, its `base_hash` and `head_hash`. The carve-out is\nlegitimate only because it is reproducible: anyone can re-run that\nexact command against those two revisions and obtain the same two\nhashes, or refute the clearance.\n\n#### Step X.3 — Verdict\n\n- Every matched path cleared → PASS, with the per-path hashes in\n  the `reason` field.\n- Any matched path not cleared → straight FAIL, listing ONLY the\n  not-cleared paths verbatim. D17: no \"first warning\" grace period.\n  A test-glob match whose executable content changed, in standard\n  mode and without an upheld dispute, is an immediate R-X failure\n  with the file paths recorded in the jsonl `reason` field.\n\nWhat Step X.2 is NOT:\n\n- **Not a formatting carve-out.** Formatting is prevented upstream —\n  `/relay-write-test`'s formatting step and `/relay-implement`'s P5\n  preflight — and formatting is never a `TEST_CONTRACT_DISPUTE`\n  subject. A formatting-only diff that reaches R-X anyway clears\n  here as a consequence of being executable-content-identical, never\n  by a rule about whitespace.\n- **Not a self-certification.** The implementer's assertion that an\n  edit was harmless carries exactly the weight it carried before\n  this step existed: none. Only the script's report clears a path.\n- **Not available for ADDED test content.** A new `it()` block\n  changes executable content and can never clear here. Purely\n  additive, PRD-grounded coverage is arbitrated under\n  `DISPUTE_UPHELD_NEW_COVERAGE` (Phase 3) — a different channel with\n  its own, separately verified precondition.\n- **Not a reason to soften the reported failure.** A path that fails\n  to clear is reported exactly as it was before: named verbatim, no\n  hedging about how small the diff looked.\n\nR-X fires regardless of whether `docs/context/methodology.md` has\n`tdd: true` or `tdd: false` (D9 Layer 0 universality). The R-X\nrationale string SHOULD name the universality explicitly so the\nCOMMAND's CHANGES_REQUESTED feedback to the implementer is\nunambiguous.\n\n---\n\n";
 
@@ -135,28 +200,30 @@ const EXPECTED_ANTIPATTERN_BLOCK =
 // ---------------------------------------------------------------------------
 // AC-A3 (PRD AC-4) — code-reviewer.md's `### R-X` section is byte-identical
 // to the pre-phase canonical text, even though the adjacent R-SEM section
-// of the same file was edited. Extraction non-emptiness is checked FIRST,
-// so an empty-vs-empty comparison can never pass vacuously.
+// of the same file was edited (and, since hybrid-code-review Phase 2, even
+// though a new section is legitimately inserted right after R-X). Extraction
+// non-emptiness is checked FIRST, so an empty-vs-empty comparison can never
+// pass vacuously. The span now ends at the next level-2 heading (whichever
+// section that turns out to be) rather than a hardcoded heading literal —
+// see sliceToNextH2Heading and the EXISTING_TEST_UPDATED note above.
 // ---------------------------------------------------------------------------
 
 test('AC-A3 (PRD AC-4): code-reviewer.md\'s ### R-X section extraction is non-empty (guards against a vacuous empty-vs-empty pass)', () => {
   const content = readRepoFile(CODE_REVIEWER_PATH);
-  const section = sliceBetween(
+  const section = sliceToNextH2Heading(
     content,
-    '### R-X — Universal test-modification guard (straight fail, D17)',
-    '## The R-COH-* coherence layer'
+    '### R-X — Universal test-modification guard (straight fail, D17)'
   );
 
-  assert.ok(section, 'expected an extractable ### R-X section between its own heading and the ## The R-COH-* heading');
+  assert.ok(section, 'expected an extractable ### R-X section between its own heading and the next level-2 heading');
   assert.ok(section.length > 0, 'extracted ### R-X section must be non-empty');
 });
 
-test('AC-A3 (PRD AC-4): code-reviewer.md\'s ### R-X section is exactly byte-identical to the canonical shipped text — the D17 rule prose, the 12-pattern test-glob pathspec set, the git diff command, and the straight-fail semantics all unchanged by the adjacent R-SEM edit', () => {
+test('AC-A3 (PRD AC-4): code-reviewer.md\'s ### R-X section is exactly byte-identical to the canonical shipped text — the D17 rule prose, the 12-pattern test-glob pathspec set, the git diff command, and the straight-fail semantics all unchanged by the adjacent R-SEM edit or by any section legitimately inserted after R-X', () => {
   const content = readRepoFile(CODE_REVIEWER_PATH);
-  const section = sliceBetween(
+  const section = sliceToNextH2Heading(
     content,
-    '### R-X — Universal test-modification guard (straight fail, D17)',
-    '## The R-COH-* coherence layer'
+    '### R-X — Universal test-modification guard (straight fail, D17)'
   );
 
   assert.equal(section, EXPECTED_RX_SECTION);
@@ -164,10 +231,9 @@ test('AC-A3 (PRD AC-4): code-reviewer.md\'s ### R-X section is exactly byte-iden
 
 test('AC-A3 (PRD AC-4) + the 2026-08-28 R-X equivalence entry: the ### R-X section carries no FORMATTING-specific exception, and its only clearance path is the script-computed one', () => {
   const content = readRepoFile(CODE_REVIEWER_PATH);
-  const section = sliceBetween(
+  const section = sliceToNextH2Heading(
     content,
-    '### R-X — Universal test-modification guard (straight fail, D17)',
-    '## The R-COH-* coherence layer'
+    '### R-X — Universal test-modification guard (straight fail, D17)'
   );
   assert.ok(section, 'expected an extractable ### R-X section');
 
