@@ -192,6 +192,12 @@
     "excerpt": "Dispatched non-interactively by /relay-implement's Phase A.3.4 (Visual-verification dispatch), immediately after code-review APPROVED, AND by the standalone /relay-visual-review command. Orchestrates the self-contained plugins/relay/scripts/visual/ tooling (provision -> capture -> compare) against a plan's ## Design Source table and the referenced APPROVED Design Spec's ## Visual Acceptance Criteria table, writes fidelity-report.json, and returns VISUAL_VERIFIED, VISUAL_DEGRADED, or VISUAL_MISMATCH. Degrades gracefully through DEGRADED_STATIC_ONLY / DEGRADED_PROVISION_FAILED rungs rather than blocking delivery; never edits application code; never queries the Figma MCP. Part of the Figma Implementation Track (Phase 6; dispatcher extended in Phase 7)."
   },
   {
+    "title": "code-reviewer hybrid /code-review pass",
+    "path": "reference/agents.html#code-reviewer-hybrid-pass",
+    "category": "Reference",
+    "excerpt": "Opt-in hybrid pass: one /code-review invocation per review at the declared level with an explicit path, advisory-by-default intake into R-SEM, promotion only on high severity plus a git diff-confirmed reachable line, a fixed cap and timeout, named degradation reasons, and a fail-open drift gate. Shipped off by default behind the hybrid_code_review key."
+  },
+  {
     "title": "/relay-visual-review",
     "path": "reference/commands.html#relay-visual-review",
     "category": "Reference",

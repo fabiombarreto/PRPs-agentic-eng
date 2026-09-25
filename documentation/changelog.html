@@ -30,7 +30,21 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <h3 id="unreleased-added">Added</h3>
+      <p>Nothing yet.</p>
+
+      <h2 id="v0-39-0">0.39.0 &#8212; 2026-09-25</h2>
+
+      <p>The hybrid code review ships, off by default. <code>code-reviewer</code> can now run Claude Code's built-in
+        <code>/code-review</code> as an evidence source for its own R-SEM row, without giving up anything that made it
+        load-bearing: it still emits the single machine-readable verdict, still fails R-X only through the computed
+        equivalence report, still routes test disagreements through <code>TEST_CONTRACT_DISPUTE</code>, and still writes one
+        line per verdict to the log the metrics scripts read. This is phases 1&ndash;4 of
+        <code>PRPs/prds/hybrid-code-review.prd.md</code>, the PRD that decision entry 101 called for; phase 5, the
+        target-project dogfood, is still pending. Also carries the two roadmap registrations and the decision entries
+        accumulated since 0.38.2.</p>
+
+
+      <h3 id="v0-39-0-added">Added</h3>
       <ul>
         <li><strong><a href="governance/decisions.html#code-review-evaluation-outcome">Decisions &mdash; entry 101</a></strong>
           &mdash; records the outcome of the code-review evaluation: <strong>improve</strong>. <code>code-reviewer</code> keeps the
@@ -56,13 +70,35 @@
           promotion rule (high severity AND a <code>git diff</code>-confirmed reachable line), the fixed cap of 10 adjudicated
           findings, the drift gate's split between an offline validate check and a manual measurement at recall 8 of 10, and the
           gate's deliberate fail-open direction. The two phase-1 candidates were not promoted.</li>
+        <li><strong><a href="reference/agents.html#code-reviewer">Agents &mdash; the hybrid <code>/code-review</code> pass in <code>code-reviewer</code></a></strong>
+          &mdash; when a project declares <code>hybrid_code_review: true</code>, the reviewer runs Claude Code's built-in
+          <code>/code-review</code> once per review, at the level <code>hybrid_code_review_level</code> declares (default
+          <code>medium</code>), with the target path always explicit. Its findings enter R-SEM as <code>class: advisory</code> and
+          promote to blocking only on high severity AND a <code>git diff</code>-confirmed reachable line, capped at 10. R-X,
+          arbitration and the verdict log are untouched; <code>xhigh</code>, <code>max</code>, <code>ultra</code>,
+          <code>--fix</code> and <code>--comment</code> are refused by name. Shipped <strong>off</strong>: the key defaults to
+          <code>false</code>, so nothing changes for a project that does not opt in.</li>
+        <li><strong>Drift gate for an unversioned dependency</strong>
+          &mdash; <code>scripts/record-drift-gate-result.mjs</code> measures recall against the ten pinned samples of the
+          2026-09-21 evaluation and records a verdict the reviewer reads before running the pass. A recorded regression disables
+          the pass; a missing or unreadable status file lets it run, which is the deliberate fail-open direction.</li>
       </ul>
 
-      <h3 id="unreleased-changed">Changed</h3>
+      <h3 id="v0-39-0-changed">Changed</h3>
       <ul>
         <li><strong><a href="roadmap/status.html#planned-code-review-evaluation">Phase status &mdash; relay code review against <code>/code-review</code></a></strong>
           &mdash; the section moves from planned to done. It summarizes the reachability spike, the benchmark, the cost of each
           effort level, and the outcome, and points to the evidence in <code>PRPs/reports/code-review-evaluation/</code>.</li>
+        <li><strong><code>docs/api-reference.md</code></strong>
+          &mdash; the <code>code-reviewer</code> agent row now lists the <code>Skill</code> tool and the hybrid pass, the
+          <code>/relay-implement</code> row records that it forwards <code>deadline_ts</code>, and the
+          <code>/relay-code-review</code> row states plainly that the pass lives in the agent rather than the command, so that
+          surface inherits it when a project opts in &mdash; its read-only contract is unchanged, its behavior is not.</li>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.38.2</code> &rarr; <code>0.39.0</code> to
+          match this release; users running <code>/plugin</code> after pulling
+          this version will get a fresh <code>relay/0.39.0/</code> cache directory
+          with all newly-shipped commands and agents registered.</li>
       </ul>
 
       <h2 id="v0-38-2">0.38.2 &#8212; 2026-09-21</h2>

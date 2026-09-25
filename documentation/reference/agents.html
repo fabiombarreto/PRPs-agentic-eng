@@ -375,6 +375,7 @@ target_root: absolute path to the target project root</code></pre>
         <dt>Model</dt><dd>sonnet</dd>
         <dt>Invoked by</dt><dd><code>/relay-implement</code> (post-implementer review) or <code>/relay-code-review</code> (standalone)</dd>
         <dt>Responsibility</dt><dd>Validate the implementer's working-tree diff against an 8-item three-layer rubric (R-S1/R-S2/R-S3 structural, R-L1/R-L2/R-L3 lint/type/build static, R-SEM semantic vs. plan/PRD, R-X universal test-modification guard) <strong>plus the additive <code>R-COH-*</code> coherence layer</strong> (5 deterministic intra-diff checks, one of which is conditional on the Figma track, + a bounded sub-agent dispatch to <code>code-reviewer-semantic</code> via <code>Task</code>). Standard mode runs the full rubric; arbitration mode resolves a <code>TEST_CONTRACT_DISPUTE</code> payload (R-COH-* rows do NOT appear in arbitration mode). Append every verdict to <code>PRPs/plans/&lt;basename&gt;.code-review.jsonl</code> with all R-S*/R-L*/R-SEM/R-X outcomes plus zero or more R-COH-* outcomes.</dd>
+        <dt>Tools</dt><dd>Adds <code>Skill</code> in 0.39.0, used only for the hybrid pass below; still no <code>Edit</code>.</dd>
         <dt>Never does</dt><dd>Modify any source file, plan, or PRD (read-only review philosophy; D11). The <code>Edit</code> tool is absent from frontmatter; <code>Write</code> is exclusively scoped to the jsonl log. Use <code>Bash</code> for write operations. Perform D8 post-approval mutations (those are the COMMAND's responsibility). Short-circuit the rubric (R-S*/R-L*/R-SEM/R-X always present, no duplicates among them). Prompt the user. <strong>Pad the K=5 LLM pass with synthetic contradictions</strong>. Add <code>Edit</code> to its tools (the 2026-04-28 <code>docs/decisions.md</code> entry adds only <code>Task</code> for bounded sub-agent dispatch; <code>Edit</code> remains forbidden forever).</dd>
       </div>
 
@@ -390,6 +391,40 @@ target_root: absolute path to the target project root</code></pre>
         <dt>R-SEM Semantic review</dt><dd>Diff's business-rule consistency, bugs, security gaps; alignment to plan task and PRD AC. The "primary value layer" per D4 of the source PRD.</dd>
         <dt>R-X Test-modification guard</dt><dd>Diff does NOT touch test files (canonical pathspec set), unless a prior arbitration upheld the implementer's <code>TEST_CONTRACT_DISPUTE</code>. D17 straight-fail in standard mode without an upheld dispute.</dd>
       </div>
+
+      <h4 id="code-reviewer-hybrid-pass">The hybrid <code>/code-review</code> pass (opt-in, shipped off)</h4>
+
+      <p>Shipped in 0.39.0. When the target project declares <code>hybrid_code_review: true</code> in
+        <code>docs/context/methodology.md</code>, the reviewer runs Claude Code's built-in <code>/code-review</code> once per
+        review and treats its findings as evidence for its own R-SEM row. The key defaults to <code>false</code>, so a project
+        that does not opt in sees the rubric above unchanged. The operating conditions are frozen in
+        <a href="../governance/decisions.html#hybrid-pass-operating-conditions">decision entry 103</a>.</p>
+
+      <div class="kv">
+        <dt>Invocation</dt><dd>Exactly one <code>Skill("code-review", "&lt;level&gt; &lt;target_root&gt;")</code> call, at the level
+          <code>hybrid_code_review_level</code> declares (default <code>medium</code>). The path is always explicit: without it the
+          skill reviews the session's own working directory instead of the tree under review, which the 2026-09-21 evaluation
+          measured.</dd>
+        <dt>Refused by name</dt><dd><code>xhigh</code>, <code>max</code> and <code>ultra</code> (cost, and sub-agents that act
+          outside the review target), plus <code>--fix</code> and <code>--comment</code> (a reviewer never mutates the tree and
+          never posts outward).</dd>
+        <dt>Intake</dt><dd>Findings are <code>class: advisory</code> by default and leave R-SEM's own verdict untouched. A finding
+          promotes to <code>class: blocking</code> with <code>escalated: true</code> only when it is high-severity AND the reviewer
+          confirms, via <code>git diff</code> against the diff under review, that the cited line sits in an added or modified hunk.
+          At most 10 findings are adjudicated.</dd>
+        <dt>Budget</dt><dd>A fixed three-minute timeout that never consumes an implement retry. When <code>/relay-implement</code>
+          forwards <code>deadline_ts</code> and the remaining wall clock is short, the pass skips itself with a recorded reason
+          rather than overrunning the loop's budget.</dd>
+        <dt>Degradation</dt><dd>An unavailable skill, an error, unparseable output or a timeout each degrade with a named reason.
+          The pass never halts the review and never prompts the operator.</dd>
+        <dt>Drift gate</dt><dd>Before running, a step 0 reads <code>plugins/relay/resources/drift-gate-status.json</code> and skips
+          the pass when a recall regression was recorded against the ten pinned samples. A missing or unreadable status file lets
+          the pass run &mdash; the gate fails <strong>open</strong>, because the pass cannot block without the confirmation above.</dd>
+        <dt>Unchanged</dt><dd>R-X, the arbitration outcomes, the dispute channel and the verdict log's shape. A promoted finding
+          about a test file still confers no authority to edit that test; it routes through
+          <code>TEST_CONTRACT_DISPUTE</code> like any other.</dd>
+      </div>
+
 
       <h4 id="code-reviewer-coherence">The <code>R-COH-*</code> coherence layer (additive)</h4>
 
