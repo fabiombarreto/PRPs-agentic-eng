@@ -131,6 +131,7 @@
         <li><a href="#code-review-evaluation">relay code review versus built-in <code>/code-review</code>: registered evaluation</a></li>
         <li><a href="#garbage-collector">Garbage collector for obsolete code and artifacts: registered future capability</a></li>
         <li><a href="#parallel-test-environments">Parallel test environments extend runnable worktree environments</a></li>
+        <li><a href="#manual-qa-runner">Manual-QA runner with a local test-auth kit: registered future capability</a></li>
       </ol>
 
       <h2 id="entries">Entries</h2>
@@ -949,6 +950,14 @@
         <dt>Context</dt><dd>Parallel lanes run only when <code>methodology.md</code> declares <code>lane_runtime_safe: true</code>, so any project whose tests need a database, ports, containers, or env vars runs its lanes serially. The bootstrap script has no database step, runs only at creation, and is capped at 60 seconds. <code>test-runner</code> has no environment contract, and test prerequisites are written only for humans. The 2026-05-15 &ldquo;runnable worktree environments&rdquo; registration still has no PRD.</dd>
         <dt>Decision</dt><dd>This entry extends, and does not supersede, the 2026-05-15 registration, and makes it the prerequisite for parallel lanes with stateful tests. relay owns the contract, lifecycle, and handle; the project owns stack-specific commands. The PRD must also decide a machine-readable environment declaration (and whether <code>lane_runtime_safe</code> is derived from it), isolation per resource type, an idempotent provision/readiness/seed/teardown lifecycle that re-runs on reuse, a per-worktree environment handle file, failure semantics, capacity against <code>max_lanes_in_flight</code>, teardown with leftovers reported to the garbage collector, and a two-lane database-backed dogfood as proof.</dd>
         <dt>Reason</dt><dd>File isolation already works, but the declared-boolean gate turns lanes back into serial runs exactly where tests take longest. Tying the unowned May strategies to the lane gate gives them an acceptance test, and the missing contract becomes explicit: today the bootstrap script does environment work no agent can see, re-run, or verify.</dd>
+      </div>
+
+      <h3 id="manual-qa-runner">101. Manual-QA runner with a local test-auth kit: registered future capability</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-09-25</dd>
+        <dt>Context</dt><dd><code>/relay-qa-report</code> writes a manual step-by-step for every case, and nothing executes them: the human runs each one by hand. Most cases need a logged-in user with a specific role. The visual track already reads a Playwright storage-state file through <code>auth_mode</code>, but nothing in relay creates one, and every project authenticates differently.</dd>
+        <dt>Decision</dt><dd>A runner that executes every case of any project&#39;s <code>qa-report.md</code>, plus a test-auth kit under <code>PRPs/auth/</code>, is a registered future capability. Nothing is implemented. The PRD must decide: every case gets an outcome (<code>needs-human</code> when no driver can perform it, never a silent pass), evidence per case, how results meet the report&#39;s conversational-status rule and the human gate, setup through the project&#39;s own seed commands, and a hard local-only guard (loopback or a declared local hostname, permanently). The kit documents the project&#39;s auth and permission model in a tracked <code>auth-model.md</code>, stores test-only credentials created by scripts or typed by the user in a local terminal prompt (never in the conversation), proves its ignore rules with <code>git check-ignore</code> before writing a secret, and ships per-role login scripts that produce storage-state files and tokens, with a headed-browser fallback for SSO and MFA.</dd>
+        <dt>Reason</dt><dd>Authentication, not the steps, is what stops cases from being executed. A per-project kit that records how auth works, keeps credentials out of git and out of the model&#39;s context, and produces sessions in the format relay already consumes serves both the runner and the visual track. Registering first fixes the local-only guard and the secrecy rules before any script handles a credential.</dd>
       </div>
 
       <h2 id="how-to-add">Adding a new decision</h2>
