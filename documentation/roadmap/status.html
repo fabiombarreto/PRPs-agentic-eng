@@ -431,6 +431,30 @@
         <p>Recorded in <code>docs/decisions.md</code> (2026-09-21, "Parallel test environments extend the runnable-worktree-environments registration"). Not implemented. <code>lane_runtime_safe</code> stays a hand-declared boolean, and no command provisions or tears down environments, until a dedicated PRD is authored via <code>/relay-prd</code> and approved.</p>
       </div>
 
+      <h3 id="planned-manual-qa-runner">Planned: manual-QA runner and local test-auth kit <span class="badge badge--pending">planned</span></h3>
+
+      <p><code>/relay-qa-report</code> lists, for every case, the required state and a manual step-by-step, and leaves each status at <code>pending</code>. Nothing executes those steps; the human validator runs each case by hand. Most cases need a logged-in user in a specific role, and relay cannot produce one: <code>capture.mjs</code> accepts a Playwright storage-state file through <code>auth_mode</code> but never logs in, and nothing creates that file.</p>
+
+      <p>A registered future capability adds a runner that gives every case of any project's <code>qa-report.md</code> an outcome, and a test-auth kit under <code>PRPs/auth/</code> that it depends on. Everything runs locally. The PRD must decide:</p>
+
+      <div class="kv">
+        <dt>Coverage</dt><dd>Every case gets an outcome. Each is routed to a driver (browser, HTTP, CLI, read-only DB check). A case no driver can perform returns <code>needs-human</code> with its steps, never a silent pass.</dd>
+        <dt>Evidence</dt><dd>A closed outcome set (for example pass, fail, blocked, needs-human), each backed by redacted evidence under <code>PRPs/reports/&lt;feature&gt;/</code>.</dd>
+        <dt>Write-back</dt><dd>Whether the runner edits only the Manual status field or writes a separate results file, and whether a runner pass satisfies the human gate or stays evidence the human signs off on.</dd>
+        <dt>Setup</dt><dd>Required state comes from the project's declared seed commands, the kit's user creation, and the <a href="#planned-parallel-test-envs">environment handle</a> when it exists.</dd>
+        <dt>Local only</dt><dd>Any host that is not loopback or a declared local hostname is refused as a hard failure. This is permanent, not an MVP limit.</dd>
+        <dt>Auth model</dt><dd>An agent reads the project's auth and permission code and writes a tracked <code>PRPs/auth/auth-model.md</code>: mechanisms, login flow, role matrix, and how to create a user per role locally. The human confirms it before scripts are generated.</dd>
+        <dt>Credentials</dt><dd>Test-only accounts per role, created by a kit script or typed by the user in a local terminal prompt, never in the conversation. Ignore rules are proven with <code>git check-ignore</code> before any secret is written. Agents reference credential files by path, never by value.</dd>
+        <dt>Login scripts</dt><dd>One per role, idempotent, producing a Playwright storage-state file (the format the visual track already reads) or a token. SSO and MFA fall back to a headed browser where the user logs in once.</dd>
+        <dt>Invocation</dt><dd>Standalone commands, not run by <code>/relay-execute</code>. Auth setup is an interactivity-boundary extension.</dd>
+        <dt>Proof</dt><dd>A target project with at least two roles runs a real report end to end, with no credential value in any tracked file or report.</dd>
+      </div>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Registered, not scheduled</div>
+        <p>Recorded in <code>docs/decisions.md</code> (2026-09-25, "Executing a QA report's cases, backed by a project-local test-auth kit"). No command, agent, or script executes QA cases, logs into a target application, or stores a credential until a dedicated PRD is authored via <code>/relay-prd</code> and approved.</p>
+      </div>
+
       <h2 id="dogfood-status">Dogfood status</h2>
 
       <p>The <strong>phoenix</strong> project (Django + React SaaS for MEC higher-education assessments) is relay's first target. Status as of 2026-05-10:</p>

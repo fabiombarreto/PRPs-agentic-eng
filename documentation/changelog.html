@@ -37,6 +37,11 @@
           verdict, R-X, arbitration, and the log. A <code>/code-review</code> pass at <code>medium</code> or <code>high</code> becomes an
           advisory-by-default evidence source for R-SEM inside <code>/relay-implement</code>. <code>/relay-code-review</code> is kept.
           <code>xhigh</code>, <code>max</code>, and <code>ultra</code> stay outside the pipeline. Nothing changes until a PRD is approved.</li>
+        <li><strong><a href="roadmap/status.html#planned-manual-qa-runner">Phase status &mdash; Planned: manual-QA runner and local test-auth kit</a></strong>
+          &mdash; registers a runner that gives every case of any project's <code>qa-report.md</code> an outcome, and a
+          <code>PRPs/auth/</code> kit that documents the project's auth and permission model, stores test-only credentials
+          outside git and outside the model's context, and ships per-role login scripts. Local hosts only. Mirrored as
+          <a href="governance/decisions.html#manual-qa-runner">Decisions &mdash; entry 102</a>. Nothing is implemented.</li>
       </ul>
 
       <h3 id="unreleased-changed">Changed</h3>
