@@ -388,6 +388,21 @@
         <p>That PRD was authored and approved on 2026-09-23 as <code>PRPs/prds/hybrid-code-review.prd.md</code>. Phases 1&ndash;4 are implemented: the opt-in key, the pass itself, the advisory-by-default adjudication into R-SEM, and the drift gate. Its operating conditions are recorded as <a href="../governance/decisions.html#hybrid-pass-operating-conditions">Decisions &mdash; entry 103</a>. Phase 5, the target-project dogfood and the before/after measurement, is still pending.</p>
       </div>
 
+      <p>The Phase 5 conditions were fixed before the run, so its reading stays comparable:</p>
+
+      <div class="kv">
+        <dt>Target</dt><dd><code>assistente-pessoal</code>, named by the operator on 2026-09-24. It has real code, a declared
+          test framework, and an existing relay corpus. This repository has none of the first two, and its benchmark corpus is
+          mostly prose, so it cannot evidence the hypothesis on real code.</dd>
+        <dt>Level</dt><dd><code>high</code>, not the shipped default <code>medium</code>. The pinned sample set the drift gate
+          measures against was benchmarked at <code>high</code>, so a <code>medium</code> run would produce recall numbers that
+          are not comparable to that baseline. This does not pre-decide the default level, which is what the dogfood exists to
+          settle.</dd>
+        <dt>Baseline</dt><dd>The before reading is the target project's own corpus as of 2026-09-29: 38 plans and 68 verdicts,
+          46 <code>APPROVED</code> against 22 <code>CHANGES_REQUESTED</code>, a 32.4 percent first-attempt rejection rate. The
+          after reading compares against that, not against the 34.3 percent measured in this repository.</dd>
+      </div>
+
       <h3 id="planned-garbage-collector">Planned: garbage collector for obsolete code and artifacts <span class="badge badge--pending">planned</span></h3>
 
       <p>relay writes artifacts on every run and nothing removes them. On 2026-09-21 this repository held 262 verdict logs at the root of <code>PRPs/plans/</code>, 9.2&nbsp;MB of reports, and three empty <code>.worktrees/</code> folders git no longer tracks. Target projects also accumulate unreachable code, dead feature flags, stale docs, and obsolete tests. Some of it only looks obsolete: the verdict logs are the corpus the efficiency and usage-metrics scripts read.</p>

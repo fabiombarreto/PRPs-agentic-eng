@@ -197,6 +197,10 @@ Current value of `tdd` in `docs/context/methodology.md`: **false**. Test-after o
 - **Goal:** decide the defaults on evidence from real code.
 - **Scope:** one target-project run; the before/after measurement; resolution of the default level and whether the key ships on.
 - **Success signal:** at least one real defect found that relay alone approved, with the cost and retry deltas recorded.
+- **Fixed conditions** (recorded 2026-09-30 as an additive post-approval note; no approved scope, metric or AC changed):
+  - **Target project:** `C:\repos\assistente-pessoal` (Praesto Sum), named by the operator on 2026-09-24. It has real code, a declared test framework, and an existing relay corpus — none of which this repository offers, since its own benchmark corpus is mostly prose.
+  - **Level:** the run uses `high`, not the shipped default `medium`. The pinned sample set the drift gate measures against was benchmarked at `high`, so a `medium` run would produce recall numbers that are not comparable to that baseline. This does not pre-decide the Open Question on the default level; it only keeps the measurement comparable.
+  - **The "before" baseline, measured in that project on 2026-09-29:** 38 plans and 68 verdicts, of which 46 `APPROVED` and 22 `CHANGES_REQUESTED` — a 32.4% first-attempt rejection rate. The "after" reading compares against these numbers, not against the 34.3% measured in this repository.
 
 ---
 
@@ -211,6 +215,7 @@ Current value of `tdd` in `docs/context/methodology.md`: **false**. Test-after o
 | Verdict ownership | `code-reviewer`, unchanged | `/code-review` deriving a verdict | It emits none, varies between runs, and has no R-X, arbitration, or log |
 | Standalone surface | `/relay-code-review` untouched | Adding the pass there too | Its contract is read-only and plan-anchored; operators can run `/code-review` directly |
 | Success thresholds | Derived from the 2026-09-21 measurements (10 known defects, 34.3% first-attempt rejection rate, 1.49 attempts per phase, 75 s median at `high`), revisable in Phase 5 | Leaving them unquantified until the baseline exists | First proposed as `TBD`; the rubric requires a target and a method on every metric row, and deriving from measured numbers avoids inventing them. The reviewer's own cost baseline moved to Phase 1 as a deliverable rather than a metric |
+| Dogfood target, level and baseline | `assistente-pessoal` at level `high`, read against that project's own 32.4% rejection baseline | This repository as the target; any target at the shipped default `medium`; this repository's 34.3% baseline | Operator decision, 2026-09-24 (target) and 2026-09-29 (level and baseline). This repository is prose-heavy and declares no test framework, so it cannot evidence real code. The pinned sample set was benchmarked at `high`, so a `medium` dogfood would not be comparable to it |
 
 ---
 
