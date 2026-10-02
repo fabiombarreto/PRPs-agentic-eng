@@ -30,7 +30,23 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <h3 id="unreleased-added">Added</h3>
+      <p>Nothing yet.</p>
+
+      <h2 id="v0-40-0">0.40.0 &#8212; 2026-10-02</h2>
+
+      <p>The manual-QA runner and the local test-auth kit ship. <code>/relay-qa-report</code> has always listed, for every
+        case, the required state and the manual steps &mdash; and left each status at <code>pending</code>, because most
+        cases need a logged-in user in a specific role and relay could not produce one. Three new standalone commands close
+        that gap: <code>/relay-auth-setup</code> writes a human-confirmed description of how a project authenticates,
+        <code>/relay-auth-scripts</code> generates per-role login scripts that produce the Playwright storage-state file
+        <code>capture.mjs</code> already consumed but nothing created, and <code>/relay-qa-run</code> gives every case one of
+        exactly four outcomes with redacted evidence, leaving the report byte-identical and the human gate open. Everything
+        runs locally, behind a hard local-only guard that is permanent rather than an MVP limit. This is phases
+        1&ndash;4 of <code>PRPs/prds/manual-qa-runner-auth-kit.prd.md</code>; phase 5, the target-project dogfood, is still
+        pending, and with it the evidence for AC-10 and AC-12. Also fixes <code>post-green-reviewer</code>, whose weakening
+        scan could not see this repository's own test files.</p>
+
+      <h3 id="v0-40-0-added">Added</h3>
 
       <ul>
         <li><strong><code>/relay-qa-run</code> &mdash; the QA runner</strong> &mdash; a standalone, non-interactive
@@ -71,7 +87,7 @@
           than being credited with coverage it does not have.</li>
       </ul>
 
-      <h3 id="unreleased-changed">Changed</h3>
+      <h3 id="v0-40-0-changed">Changed</h3>
 
       <ul>
         <li><strong><a href="reference/validation-checks.html">Validation checks</a> and
@@ -90,9 +106,14 @@
           commands&rdquo; in two places and the <a href="reference/commands.html">commands page</a> subtitle said
           &ldquo;Nineteen commands&rdquo;; <code>plugins/relay/commands/</code> holds 21. Both now agree with the directory
           and with the search-index excerpt, which already read &ldquo;Twenty-one commands&rdquo;.</li>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.39.0</code> &rarr; <code>0.40.0</code> to
+          match this release; users running <code>/plugin</code> after pulling
+          this version will get a fresh <code>relay/0.40.0/</code> cache directory
+          with all newly-shipped commands and agents registered.</li>
       </ul>
 
-      <h3 id="unreleased-fixed">Fixed</h3>
+      <h3 id="v0-40-0-fixed">Fixed</h3>
 
       <ul>
         <li><strong><code>post-green-reviewer</code> &mdash; the weakening scan now matches <code>.test.mjs</code></strong>
