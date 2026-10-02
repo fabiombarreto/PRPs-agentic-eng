@@ -55,6 +55,19 @@
         <dd>Blank argument. Cases come from <code>git status --porcelain</code> plus <code>git diff</code> (unstaged) and <code>git diff --staged</code> (staged) on the current branch — everything uncommitted. A clean tree HALTs with <code>FAILED_NOTHING_TO_REPORT</code> and creates no file.</dd>
       </div>
 
+      <h2 id="report-layout">Report layout</h2>
+
+      <p>The report is written as per-entry sections in one canonical layout, so every consumer parses the same shape. The seven-field schema and the status rule are unchanged; only the layout is fixed.</p>
+
+      <ul>
+        <li>Each case is a <code>### &lt;case id&gt; &mdash; &lt;title&gt;</code> section. Cases may be grouped under <code>## &lt;group&gt;</code> headings; a <code>---</code> line may separate groups and is always followed by a heading. An optional <code>## Summary table</code> (one row per case, first column <code>#</code> = case id) may come first.</li>
+        <li>Prose sections use <code>##</code>, never <code>###</code> &mdash; a <code>###</code> section is a case.</li>
+        <li>The seven fields are top-level bullets <code>- **&lt;Label&gt;:** &lt;value&gt;</code> with the exact schema labels; the title is the heading text.</li>
+        <li><code>Manual step-by-step</code> is followed by an indented numbered list that ends at the next top-level labeled bullet (<code>- **&lt;Label&gt;:**</code> at column 0), the next heading, or a <code>---</code> followed by a heading. Extra labeled bullets are allowed and are not part of the list. A step that needs a horizontal rule writes it in inline code.</li>
+      </ul>
+
+      <p>Reports generated before this layout was specified wrote <code>Risk</code> for <code>Risk level</code>; consumers accept that spelling. The command carries one canonical example between two HTML-comment markers so a parser fixture can be extracted from it.</p>
+
       <h2 id="honesty-and-grounding">Honesty guarantee and coverage grounding</h2>
 
       <p>Any case covered by <strong>neither</strong> an automated <strong>nor</strong> a manual test still appears in the report, explicitly marked <code>coverage: none</code>. The entry is never silently dropped to make the report look complete — hiding a coverage gap is the exact anti-pattern this command exists to counter.</p>

@@ -22,7 +22,7 @@ The plugin is composed of four Claude Code asset types:
 | Type | Folder | Purpose | Status |
 |------|--------|---------|--------|
 | Skills | `plugins/relay/skills/` | Reusable, prompt-based capabilities loaded on demand. Currently: `context-builder`. | 1 present |
-| Commands | `plugins/relay/commands/` | `/relay-*` slash commands users invoke. | 19 implemented (including `/relay-commit` v0.14.0, dual-mode since v0.16.0, `/relay-pr` v0.15.0, `/relay-approve` v0.17.0, `/relay-qa-report` as the QA / Support command, three standalone `figma_track`-gated Figma Implementation Track commands — `/relay-design-map`, `/relay-design-spec`, `/relay-visual-review` — and `/relay-visual-approve`, the sibling Figma Visual-First Track's own standalone command); see `docs/api-reference.md` |
+| Commands | `plugins/relay/commands/` | `/relay-*` slash commands users invoke. | 22 implemented (including `/relay-commit` v0.14.0, dual-mode since v0.16.0, `/relay-pr` v0.15.0, `/relay-approve` v0.17.0, `/relay-qa-report` as the QA / Support command, three standalone `figma_track`-gated Figma Implementation Track commands — `/relay-design-map`, `/relay-design-spec`, `/relay-visual-review` — and `/relay-visual-approve`, the sibling Figma Visual-First Track's own standalone command, and `/relay-auth-setup`, the standalone human-triggered command that produces the approved `PRPs/auth/auth-model.md`, `/relay-auth-scripts`, the standalone command that generates the per-role login scripts, and `/relay-qa-run`, the standalone manual-QA runner); see `docs/api-reference.md` |
 | Agents | `plugins/relay/agents/` | Specialized sub-agents (PRD Writer, Plan Writer, Test Runner, etc.). | planned, not yet implemented |
 | Hooks | `plugins/relay/hooks/` | Event-triggered scripts (Stop, PostToolUse, etc.) wired in `hooks/hooks.json`. | planned, not yet implemented |
 
@@ -243,7 +243,7 @@ consumes it at precondition P6.
 
 ## Command surface
 
-Relay exposes **19 commands**, organized by role. Full
+Relay exposes **22 commands**, organized by role. Full
 table and contracts in `docs/api-reference.md`; rationale in
 `docs/decisions.md`. Summary of the philosophy:
 

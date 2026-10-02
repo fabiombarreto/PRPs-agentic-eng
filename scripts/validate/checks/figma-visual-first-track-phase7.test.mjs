@@ -561,11 +561,17 @@ test('AC-A3 (PRD AC-4, real CLI invocation): a truncated/malformed last line in 
 // correction to Nineteen/19 in the same edit.
 // ---------------------------------------------------------------------------
 
-test('AC-A4 (PRD AC-1): docs/api-reference.md\'s command count is corrected to "19 commands" (both occurrences) with "18 commands" entirely absent, and the opening paragraph names /relay-visual-approve as the fourth standalone command, gated by visual_first_approval: human rather than figma_track directly', () => {
+test('AC-A4 (PRD AC-1): docs/api-reference.md\'s command count tracks the real command total, "22 commands" (both occurrences), with the stale "21 commands", "19 commands" and "18 commands" entirely absent, and the opening paragraph names /relay-visual-approve as the fourth standalone command, gated by visual_first_approval: human rather than figma_track directly', () => {
   const content = readRepoFile(API_REFERENCE_PATH);
 
-  const nineteenOccurrences = (content.match(/19 commands/g) || []).length;
-  assert.equal(nineteenOccurrences, 2, 'expected exactly two occurrences of "19 commands" (re-derived count, guarding the repo\'s own persistent count-drift defect class)');
+  // Lifecycle update (2026-10-02, EXISTING_TEST_UPDATED): /relay-qa-run was
+  // registered as the 22nd command (`ls plugins/relay/commands` = 22), so the
+  // source now says "22 commands" in both places. The superseded "21 commands"
+  // is pinned absent beside the older negatives. Same pin shape, retargeted.
+  const twentyTwoOccurrences = (content.match(/22 commands/g) || []).length;
+  assert.equal(twentyTwoOccurrences, 2, 'expected exactly two occurrences of "22 commands" (re-derived count, guarding the repo\'s own persistent count-drift defect class)');
+  assert.doesNotMatch(content, /21 commands/, 'expected the superseded "21 commands" count to be entirely absent');
+  assert.doesNotMatch(content, /19 commands/, 'expected the stale "19 commands" count to be entirely absent');
   assert.doesNotMatch(content, /18 commands/, 'expected the stale "18 commands" count to be entirely absent');
 
   const collapsed = collapseWs(content);
@@ -599,9 +605,13 @@ test('AC-A4 (PRD AC-1): docs/api-reference.md gains a new "#### Figma Visual-Fir
   );
 });
 
-test('AC-A4 (PRD AC-1): documentation/reference/commands.html\'s page-subtitle count is corrected to "Nineteen commands" with the stale "Fifteen commands" entirely absent', () => {
+test('AC-A4 (PRD AC-1): documentation/reference/commands.html\'s page-subtitle count tracks the real command total, "Twenty-two commands", with the superseded "Twenty-one commands" and the stale "Nineteen commands" and "Fifteen commands" entirely absent', () => {
   const content = readRepoFile(COMMANDS_HTML_PATH);
-  assert.match(content, /Nineteen commands/);
+  // Lifecycle update (2026-10-02, EXISTING_TEST_UPDATED): subtitle moved
+  // Twenty-one -> Twenty-two to match `ls plugins/relay/commands` (22).
+  assert.match(content, /Twenty-two commands/);
+  assert.doesNotMatch(content, /Twenty-one commands/);
+  assert.doesNotMatch(content, /Nineteen commands/);
   assert.doesNotMatch(content, /Fifteen commands/);
 });
 
@@ -630,7 +640,7 @@ test('AC-A4 (PRD AC-1): documentation/reference/commands.html gains a new "Figma
   );
 });
 
-test('AC-A4 (PRD AC-1, real JSON.parse): documentation/assets/data/search-index.json parses as valid JSON and carries a dedicated /relay-visual-approve entry plus a Nineteen-commands-corrected top-level Commands entry', () => {
+test('AC-A4 (PRD AC-1, real JSON.parse): documentation/assets/data/search-index.json parses as valid JSON and carries a dedicated /relay-visual-approve entry plus a Twenty-two-commands top-level Commands entry (superseded Twenty-one pinned absent)', () => {
   const entries = JSON.parse(readRepoFile(SEARCH_INDEX_PATH));
   assert.ok(Array.isArray(entries), 'expected the search index to parse as a JSON array');
 
@@ -643,7 +653,18 @@ test('AC-A4 (PRD AC-1, real JSON.parse): documentation/assets/data/search-index.
 
   const commandsEntry = entries.find((/** @type {any} */ e) => e.title === 'Commands' && e.path === 'reference/commands.html');
   assert.ok(commandsEntry, 'expected the top-level Commands search-index entry');
-  assert.match(commandsEntry.excerpt, /^Nineteen commands/);
+  // Lifecycle update (2026-09-30, EXISTING_TEST_UPDATED): manual-qa-runner-auth-kit
+  // Phase 2 registered the twentieth command (/relay-auth-setup) and Phase 3
+  // the twenty-first (/relay-auth-scripts), so the top-level count prefix moved
+  // from Nineteen to Twenty to Twenty-one. Same pin, same discriminative power;
+  // see PRPs/reports/manual-qa-runner-auth-kit/phase-3/test-suite-manifest.md.
+  // Lifecycle update (2026-10-02, EXISTING_TEST_UPDATED): /relay-qa-run is the
+  // twenty-second command, so the prefix moved Twenty-one -> Twenty-two; the
+  // superseded value is pinned absent.
+  assert.match(commandsEntry.excerpt, /^Twenty-two commands/);
+  assert.doesNotMatch(commandsEntry.excerpt, /Twenty-one commands/);
+  assert.doesNotMatch(commandsEntry.excerpt, /^Twenty commands/);
+  assert.doesNotMatch(commandsEntry.excerpt, /Nineteen commands/);
   assert.doesNotMatch(commandsEntry.excerpt, /Fifteen commands/);
 });
 

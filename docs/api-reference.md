@@ -14,7 +14,7 @@ Modes for `context-builder`: `*init`, `*update`, `*validate`, `*domain`,
 
 ## Commands
 
-19 commands organized by role (11 Pillar 1–2 plus `/relay-commit`,
+22 commands organized by role (11 Pillar 1–2 plus `/relay-commit`,
 `/relay-pr`, and `/relay-approve` as the three Pillar 3 commands, shipped
 v0.14.0, v0.15.0, and v0.17.0, plus `/relay-qa-report` as the QA / Support
 command in the human validation gate, plus three standalone,
@@ -25,11 +25,16 @@ command in the human validation gate, plus three standalone,
 belonging to the sibling Figma Visual-First Track and gated by
 `visual_first_approval: human` (itself only reachable when
 `figma_track: true` AND `visual_first: true`) rather than `figma_track`
-directly — also never invoked by `/relay-execute`. All 19 commands are now
+directly — also never invoked by `/relay-execute`. All 22 commands are now
 implemented;
 `/relay-execute` ✅ orchestrator shipped in v0.9.0 completing project Phase 3;
 `/relay-approve` ✅ shipped in v0.17.0 completing Phase 4. See
 `docs/decisions.md` for the decision record and rationale.
+
+Three further standalone commands, `/relay-auth-setup`, `/relay-auth-scripts`
+and `/relay-qa-run` (the test-auth kit, see "Test-auth kit" below), shipped after
+that count was struck, bringing the surface to 22 in all; none is ever invoked by
+`/relay-execute`.
 
 ### Happy path
 
@@ -82,7 +87,7 @@ docs-update cycle.
 
 | Command | Input | Output |
 |---------|-------|--------|
-| `/relay-qa-report [<prd-path> \| <plan-path> \| <description>]` (blank = uncommitted diff) ✅ **implemented** | Four-way argument router: a `.prd.md` path enters PRD mode (cases derived from the PRD Acceptance Criteria); a `.plan.md` path enters plan mode (cases derived from the plan's Step-by-Step Tasks + Validation Commands); non-empty free text enters description mode (cases derived from the uncommitted diff read through the description, or from the description itself on a clean tree); blank enters diff mode (cases derived from `git status --porcelain` + `git diff` on the current branch; a clean tree HALTs with `FAILED_NOTHING_TO_REPORT` and writes no file). | `PRPs/reports/<feature>/qa-report.md` — one entry per case carrying all seven fields (title, risk level, required state, coverage, automated test path, manual status defaulting to `pending`, manual step-by-step); uncovered cases are listed explicitly, never omitted. Single LLM-judgment command with NO writer/reviewer pair; never invoked by `/relay-execute`; an anti-overwrite HALT guards an existing report. See `PRPs/prds/relay-qa-report-command.prd.md`. |
+| `/relay-qa-report [<prd-path> \| <plan-path> \| <description>]` (blank = uncommitted diff) ✅ **implemented** | Four-way argument router: a `.prd.md` path enters PRD mode (cases derived from the PRD Acceptance Criteria); a `.plan.md` path enters plan mode (cases derived from the plan's Step-by-Step Tasks + Validation Commands); non-empty free text enters description mode (cases derived from the uncommitted diff read through the description, or from the description itself on a clean tree); blank enters diff mode (cases derived from `git status --porcelain` + `git diff` on the current branch; a clean tree HALTs with `FAILED_NOTHING_TO_REPORT` and writes no file). | `PRPs/reports/<feature>/qa-report.md` — one entry per case carrying all seven fields (title, risk level, required state, coverage, automated test path, manual status defaulting to `pending`, manual step-by-step); uncovered cases are listed explicitly, never omitted. The report uses one canonical per-entry layout: each case is a `### <case id> — <title>` section whose seven fields are top-level `- **<Label>:** <value>` bullets (cases may be grouped under `## <group>` headings, with an optional `## Summary table` first), and the command carries an example consumers can parse. Single LLM-judgment command with NO writer/reviewer pair; never invoked by `/relay-execute`; an anti-overwrite HALT guards an existing report. See `PRPs/prds/relay-qa-report-command.prd.md`. |
 
 #### Design system (Figma track)
 
@@ -109,6 +114,20 @@ are both declared. Never invoked by `/relay-execute`.
 | Command | Input | Output |
 |---------|-------|--------|
 | `/relay-visual-approve <feature>` ✅ **implemented** (`visual_first_approval: human` gate) | A feature name identifying the single unresolved `AWAITING_VISUAL_APPROVAL` halt to locate. | A recorded approve/reject decision via a single `Edit` on the paused phase's `halt.json` plus an appended audit `visual-approval.jsonl` line. Three HALT codes: `FAILED_NOTHING_TO_APPROVE`, `FAILED_MULTIPLE_PENDING_APPROVALS`, `FAILED_PLAN_AMBIGUOUS`. Never invoked by `/relay-execute`. Figma Visual-First Track Phase 6. |
+
+#### Test-auth kit (manual-qa-runner-auth-kit)
+
+Standalone commands that describe how a project authenticates and generate
+per-role login scripts for local manual QA, and execute a QA report's cases.
+None of them is ever invoked by `/relay-execute`; all three enforce the hard
+local-only guard and prove the `PRPs/auth` secrecy ignore rules before
+anything is written.
+
+| Command | Input | Output |
+|---------|-------|--------|
+| `/relay-auth-setup [--base-url <local-url>]` ✅ **implemented** | Optional `--base-url` naming a local application URL. Interactive — a human is present. | `PRPs/auth/auth-model.md` with status `APPROVED` and nothing else — no login script, no credential file. Inline-adopts `auth-model-writer` (Phase A) then `auth-model-reviewer` with `invocation_context: main` (Phase B), never `Task`-dispatched; the fourth interactivity-boundary extension, confined to this command. The `DRAFT` to `APPROVED` flip happens only after the rubric passes AND the user's own explicit affirmative reply. Bounded `max_auth_model_review_retries=2`; exhaustion offers retry-or-abort, never a silent loop. See `PRPs/prds/manual-qa-runner-auth-kit.prd.md`. |
+| `/relay-auth-scripts [--role <role>]...` ✅ **implemented** | An `APPROVED` `PRPs/auth/auth-model.md`; optional repeatable `--role` to limit generation. Non-interactive — never asks the user a question. | `PRPs/auth/login.config.json` derived from the model's evidence, one login script per role copied from `plugins/relay/resources/auth-login.template.mjs` (copied, never rewritten), and a placeholder-only `PRPs/auth/credentials.example.json`. Calls `auth-local-guard.mjs` and `auth-kit-secrecy.mjs` rather than reimplementing them. Writes no credential value and creates no session; the operator runs each generated script at their own terminal. See `PRPs/prds/manual-qa-runner-auth-kit.prd.md`. |
+| `/relay-qa-run <feature> [--env-handle <path>]` ✅ **implemented** | An existing `PRPs/reports/<feature>/qa-report.md` and an optional explicit environment-handle file (one `baseUrl` key; no path is discovered). Non-interactive — never asks the user a question, never invoked by `/relay-execute`. | `PRPs/reports/<feature>/qa-run/<run-id>/results.json` with exactly one entry per report case, each `pass`, `fail`, `blocked` or `needs-human`, plus redacted evidence and a `plan.json`. Browser and HTTP drivers are active; the CLI and database drivers are not built, so those cases return `needs-human` with their steps verbatim. The report is never edited and no Manual status changes; a pass is evidence and the human gate stays open. Calls `auth-local-guard.mjs` and the kit login scripts rather than reimplementing them. See `PRPs/prds/manual-qa-runner-auth-kit.prd.md`. |
 
 #### Pillar 3 (commit + PR + approval cycle)
 
@@ -171,6 +190,9 @@ prompts are designed during Phase 2/3 implementation.
 | `research-design` ✅ | `plugins/relay/agents/research-design.md` | `plan-writer` (Phase 2 GROUNDING) — a conditional third parallel `Task` call alongside `research-codebase`/`research-web`, dispatched only when a `design_spec_path` is available (`design_source: figma`); `figma_track: true` gate | Cross-checks every `CM-<n>` id a Design Spec's `## Component Mapping` cites against `docs/design/component-map.md`, verifies the import path still resolves in the design-system clone, flags stale mappings, and harvests real usage snippets for the plan's own Patterns to Mirror section. Text-only; never queries the Figma MCP; never reads image files. Tools: `Read, Glob, Grep`. Color: purple. Figma Implementation Track Phase 5. |
 | `visual-verifier` ✅ | `plugins/relay/agents/visual-verifier.md` | `/relay-implement` command (Phase A.3.4, immediately after code-review `APPROVED`, never on an arbitration-mode verdict) AND `/relay-visual-review` command (standalone, single-shot, `attempt: 1` sentinel); `figma_track: true` gate | Given a plan's `## Design Source` table and the referenced APPROVED Design Spec, orchestrates the self-contained `plugins/relay/scripts/visual/` tooling (provision → capture → compare), classifies every frame, performs content-vs-style triage on `FAIL` frames before ever returning `VISUAL_MISMATCH`, and returns `VISUAL_VERIFIED` / `VISUAL_DEGRADED` / `VISUAL_MISMATCH` plus the `fidelity-report.json` path. Degrades gracefully (`DEGRADED_STATIC_ONLY` / `DEGRADED_PROVISION_FAILED` / `DEGRADED_NO_BASELINE`) rather than blocking delivery; never edits application code; never queries the Figma MCP. Tools: `Read, Write, Glob, Grep, Bash, BashOutput, KillBash`. Color: cyan. Figma Implementation Track Phase 6 (dispatcher extended in Phase 7). |
 
+| `auth-model-writer` ✅ | `plugins/relay/agents/auth-model-writer.md` | `/relay-auth-setup` command (Phase A) — inline-adopted directly in the main conversation, never `Task`-dispatched | Statically discovers a project's login endpoints, middleware and guards, session or token configuration, role and permission models and tenant scoping (`Read`/`Glob`/`Grep` only — no network, no running app) and writes a DRAFT `PRPs/auth/auth-model.md` conforming to `plugins/relay/resources/auth-model-template.md`. Never reads secret files or `.env` files other than examples; records environment variables by name only. Never approves its own output. Tools: `Read, Write, Edit, Glob, Grep`. Color: orange. |
+| `auth-model-reviewer` ✅ | `plugins/relay/agents/auth-model-reviewer.md` | `/relay-auth-setup` command (Phase B, `invocation_context: main`) — inline-adopted, never `Task`-dispatched | Validates a DRAFT `auth-model.md` against a seven-item `R-AM1`–`R-AM7` rubric (mechanisms with `file:line` evidence, a login flow per mechanism, a complete role and permission matrix, declared local user creation per role, listed non-automatable items, no credential-shaped values and local-only hosts, no unresolved TBD). Flip ownership is scoped by `invocation_context` (default `subagent`, fail-safe); in main mode it asks the user directly and flips `*Status: DRAFT*` → `*Status: APPROVED*` only after the user's own explicit affirmative reply — the fourth place in relay where a reviewer dialogues with the user before flipping status. Never accepts caller-relayed consent as approval. Tools: `Read, Edit, Write`. Color: red. |
+
 ### Planned
 
 All planned agents have now shipped. The PRD Authoring pair (PRD Writer + PRD Reviewer + the two research
@@ -191,6 +213,9 @@ Node, no npm dependencies. Invoked as `node ${CLAUDE_PLUGIN_ROOT}/scripts/<name>
 | `normalize-test-output.mjs` | `test-runner` agent | Parses JUnit XML into the canonical test-output schema |
 | `generate-final-report.mjs` | `/relay-pr` | Assembles `final-report.md` for the PR body, applying the redaction policy |
 | `usage-metrics.mjs` ✅ | **an operator, never the pipeline** | `materialize` regenerates the per-project usage-metrics shards by full rescan of artifacts relay already writes, and scaffolds `PRPs/metrics/.gitattributes` (`-diff`) and `.gitignore` when absent; `--dry-run` reports row counts and destinations without writing; `query` prints per-stage counts, first-attempt failure rates and top failing rubric ids. The mode is mandatory and arguments are parsed strictly: `--help` prints usage, while an unknown argument, a flag without its value, or no mode exits `2` without writing. Output is a pure function of input, so re-runs converge rather than duplicate. No agent, command, or skill may reference `PRPs/metrics` — enforced by the `metrics-isolation` check, because a reviewer aware of its own pass rate has an incentive to approve leniently. Schema: `plugins/relay/resources/usage-metrics-schema.md`. |
+| `auth-kit-secrecy.mjs` ✅ | `/relay-auth-setup`, `/relay-auth-scripts` | `scaffold` copies the packaged `plugins/relay/resources/auth-kit.gitignore` into `<root>/PRPs/auth/.gitignore`; `prove` uses `git check-ignore` to prove every secret path is ignored; `ensure` is the gate later phases call before any secret write. The only file it ever writes is that tracked ignore file; it never reads, prints or writes a credential value. Mode is mandatory and arguments are parsed strictly: an unknown argument, a flag missing its value, no mode, an absolute `--path`, or a `--path` containing a `..` segment exits `2` without writing; an unproven ignore exits `1` (`FAILED_IGNORE_UNPROVEN`). Enforced by the `auth-secrecy` check. |
+| `auth-local-guard.mjs` ✅ | `/relay-auth-setup`, `/relay-auth-scripts` | `check --url <url>` decides whether a target is a local application, from the WHATWG parser's own hostname by exact equality against built-in loopback names or hostnames declared in the tracked `PRPs/auth/local-hosts.txt` (each must resolve with every address loopback); a URL carrying userinfo is refused even when its host is local; `list-declared` prints the declared hosts. No per-run flag and no environment-variable source for declared hosts. Never writes any file. Exit `0` allowed, `1` `FAILED_NON_LOCAL_TARGET`, `2` bad arguments. Call sites enforced by the `auth-local-guard-sites` check. |
+| `qa-run.mjs` ✅ | `/relay-qa-run` | Modes `parse` (read-only case listing), `init` (guard, then a fresh run directory) and `run` (executes a plan, gives every case one outcome, writes `results.json`). The local-only guard runs before any request, login or write; one marked write helper is the only writer and refuses any path outside the run directory; evidence is redacted in memory before it is written. Exit `0` completed, `1` a named halt or an aborted run, `2` bad arguments. Contract enforced by the `qa-run-contract` check. |
 
 ## Hooks (planned)
 

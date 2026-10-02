@@ -41,6 +41,9 @@ import { runLaneStateWritersCheck } from './checks/lane-state-writers.mjs';
 import { runAgentDispatchResolutionCheck } from './checks/agent-dispatch-resolution.mjs';
 import { runLaneFixtureCheck } from './checks/lane-fixture.mjs';
 import { runHybridDriftGateCheck } from './checks/hybrid-drift-gate.mjs';
+import { runAuthSecrecyCheck } from './checks/auth-secrecy.mjs';
+import { runAuthLocalGuardSitesCheck } from './checks/auth-local-guard-sites.mjs';
+import { runQaRunContractCheck } from './checks/qa-run-contract.mjs';
 
 function die(code, msg) {
   process.stderr.write(msg + '\n');
@@ -76,6 +79,9 @@ const CHECKS = [
   runAgentDispatchResolutionCheck,
   runLaneFixtureCheck,
   runHybridDriftGateCheck,
+  runAuthSecrecyCheck,
+  runAuthLocalGuardSitesCheck,
+  runQaRunContractCheck,
 ];
 
 function runChecks(checks) {

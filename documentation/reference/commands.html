@@ -21,7 +21,7 @@
       </div>
 
       <h1>Commands</h1>
-      <p class="page-subtitle">The full slash-command surface of the relay plugin. Nineteen commands, organized by role (writer / reviewer / infra / orchestrator / QA / Pillar 3). Each command is invocable on its own for testing or manual intervention; the orchestrator (<code>/relay-execute</code>) composes the Pillar 2 stages into a full run.</p>
+      <p class="page-subtitle">The full slash-command surface of the relay plugin. Twenty-two commands, organized by role (writer / reviewer / infra / orchestrator / QA / Pillar 3). Each command is invocable on its own for testing or manual intervention; the orchestrator (<code>/relay-execute</code>) composes the Pillar 2 stages into a full run.</p>
 
       <h2 id="happy-path">The happy path</h2>
 
@@ -236,7 +236,7 @@
         <dt>Input</dt>
         <dd>Phase 0 four-way routing by argument shape: a <code>.prd.md</code> path (cases from the PRD Acceptance Criteria), a <code>.plan.md</code> path (cases from the plan&rsquo;s tasks / validation), non-empty free text (description mode; <code>&lt;feature&gt;</code> from the current branch slug), or blank (diff mode over <code>git status --porcelain</code> + <code>git diff</code>).</dd>
         <dt>Output</dt>
-        <dd>A human-facing QA support report at <code>PRPs/reports/&lt;feature&gt;/qa-report.md</code> enumerating test cases, each with seven fields: title, risk level (Critical / High / Medium / Low), required state (DB entities + values), coverage (automated / manual / none), automated test path, manual status (defaults to <code>pending</code>), and a manual step-by-step. A single test may cover multiple cases (n:1); less-critical cases may be left uncovered.</dd>
+        <dd>A human-facing QA support report at <code>PRPs/reports/&lt;feature&gt;/qa-report.md</code> enumerating test cases, each with seven fields: title, risk level (Critical / High / Medium / Low), required state (DB entities + values), coverage (automated / manual / none), automated test path, manual status (defaults to <code>pending</code>), and a manual step-by-step. A single test may cover multiple cases (n:1); less-critical cases may be left uncovered. The report is written in one canonical per-entry layout: each case is a <code>### &lt;case id&gt; &mdash; &lt;title&gt;</code> section with its seven fields as top-level <code>- **&lt;Label&gt;:** &lt;value&gt;</code> bullets, optionally grouped under <code>##</code> headings and preceded by a <code>## Summary table</code>.</dd>
         <dt>Mode</dt>
         <dd>Single LLM-judgment command &mdash; no writer/reviewer pair (the human doing manual QA is the validator). <strong>Honest by contract:</strong> any case covered by neither an automated nor a manual test is listed explicitly as uncovered, never omitted; cited automated-test paths must resolve to real files, and unconfirmed coverage is marked unverified rather than invented. When <code>PRPs/reports/&lt;feature&gt;/record.json</code> from a prior Test Runner run exists it grounds the automated-coverage column; otherwise coverage is inferred from repo test files. Full reference: <a href="relay-qa-report.html">/relay-qa-report</a>. See <code>plugins/relay/commands/relay-qa-report.md</code>.</dd>
         <dt>Preconditions</dt>
@@ -304,6 +304,49 @@
         <dd>Deterministic infra command (no writer/reviewer pair). Never invoked by <code>/relay-execute</code>; mirrors <a href="#relay-design-map"><code>/relay-design-map</code></a>'s own confirm-then-single-Edit discipline.</dd>
         <dt>Notes</dt>
         <dd>Three HALT codes: <code>FAILED_NOTHING_TO_APPROVE</code>, <code>FAILED_MULTIPLE_PENDING_APPROVALS</code>, <code>FAILED_PLAN_AMBIGUOUS</code>. Figma Visual-First Track Phase 6.</dd>
+      </div>
+
+      <h2 id="test-auth-kit">Test-auth kit</h2>
+
+      <p>Two standalone commands that describe how a project authenticates and generate per-role login scripts for local manual QA. Neither is ever invoked by <code>/relay-execute</code>; both enforce the hard local-only guard (<a href="scripts.html#auth-local-guard"><code>auth-local-guard.mjs</code></a>) and prove the <code>PRPs/auth</code> secrecy ignore rules (<a href="scripts.html#auth-kit-secrecy"><code>auth-kit-secrecy.mjs</code></a>) before anything is written.</p>
+
+      <h3 id="relay-auth-setup"><code>/relay-auth-setup [--base-url &lt;local-url&gt;]</code> <span class="badge badge--done">implemented</span></h3>
+
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>Optional <code>--base-url</code> naming a local application URL. Interactive &mdash; a human is present.</dd>
+        <dt>Output</dt>
+        <dd><code>PRPs/auth/auth-model.md</code> with status <code>APPROVED</code> and nothing else &mdash; no login script and no credential file.</dd>
+        <dt>Mode</dt>
+        <dd>Inline-adopts <a href="agents.html#auth-model-writer"><code>auth-model-writer</code></a> (Phase A) then <a href="agents.html#auth-model-reviewer"><code>auth-model-reviewer</code></a> with <code>invocation_context: main</code> (Phase B), never <code>Task</code>-dispatched. The fourth interactivity-boundary extension, confined to this command; the flip to <code>APPROVED</code> follows only the user's own explicit affirmative reply.</dd>
+        <dt>Notes</dt>
+        <dd>Bounded by <code>max_auth_model_review_retries=2</code>; exhaustion offers retry-or-abort, never a silent loop.</dd>
+      </div>
+
+      <h3 id="relay-auth-scripts"><code>/relay-auth-scripts [--role &lt;role&gt;]...</code> <span class="badge badge--done">implemented</span></h3>
+
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>An <code>APPROVED</code> <code>PRPs/auth/auth-model.md</code>; optional repeatable <code>--role</code>. Non-interactive &mdash; never asks the user a question.</dd>
+        <dt>Output</dt>
+        <dd><code>PRPs/auth/login.config.json</code>, one login script per role copied from <code>auth-login.template.mjs</code>, and a placeholder-only <code>PRPs/auth/credentials.example.json</code>.</dd>
+        <dt>Mode</dt>
+        <dd>Deterministic generator with no writer/reviewer pair. Calls the guard and secrecy scripts rather than reimplementing them; the template is copied, never rewritten.</dd>
+        <dt>Notes</dt>
+        <dd>Writes no credential value and creates no session; the operator runs each generated script at their own terminal.</dd>
+      </div>
+
+      <h3 id="relay-qa-run"><code>/relay-qa-run &lt;feature&gt; [--env-handle &lt;path&gt;]</code> <span class="badge badge--done">implemented</span></h3>
+
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>An existing <code>PRPs/reports/&lt;feature&gt;/qa-report.md</code> and an optional explicit <code>--env-handle</code> file (one <code>baseUrl</code> key; no path is discovered). Non-interactive &mdash; never asks the user a question and is never invoked by <code>/relay-execute</code>.</dd>
+        <dt>Output</dt>
+        <dd><code>PRPs/reports/&lt;feature&gt;/qa-run/&lt;run-id&gt;/results.json</code> with exactly one entry per report case, each <code>pass</code>, <code>fail</code>, <code>blocked</code> or <code>needs-human</code>, plus redacted evidence and the <code>plan.json</code> the command wrote.</dd>
+        <dt>Mode</dt>
+        <dd>The command translates a case's manual steps into a closed plan only where they map onto the browser and HTTP drivers; the <code>qa-run.mjs</code> script owns the case list, the local-only guard, sessions from the kit's login scripts, redaction, timestamps and the one-entry-per-case invariant. The CLI and database drivers are not built, so those cases return <code>needs-human</code> with their steps verbatim.</dd>
+        <dt>Notes</dt>
+        <dd>The report is never edited and no Manual status changes. A runner pass is evidence, not approval: the human validation gate stays open.</dd>
       </div>
 
       <h2 id="pillar3">Pillar 3 — Commit, PR &amp; Approval</h2>

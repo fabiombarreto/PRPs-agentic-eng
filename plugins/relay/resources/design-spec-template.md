@@ -172,7 +172,12 @@ Per frame:
   a future phase of `PRPs/prds/figma-visual-first-track.prd.md`. This
   is the objective, machine-checkable fidelity contract a future
   Phase 6 visual-verification loop will consume — `design-spec-reviewer`'s
-  R-DS7 enforces completeness now, before that loop exists.
+  R-DS7 enforces completeness now, before that loop exists. For a frame
+  behind a login, the `Auth mode` value is
+  `storage-state:PRPs/auth/.sessions/<role>.json`, the file the test-auth
+  kit's login script for that role writes (the path is handed to
+  `capture.mjs` unchanged, and it is the kit's producer that makes the value
+  meaningful); a frame needing no login uses `none`.
 
 The spec ends with the same trailing two-line block used by every
 other relay artifact:
