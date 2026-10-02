@@ -1079,6 +1079,95 @@ test('parse mode: prints the seven report fields per case as JSON, steps verbati
   assert.match(r3.stderr, /FAILED_REPORT_UNPARSEABLE/);
 });
 
+// Regression: dogfood of /relay-qa-run against a real /relay-qa-report output
+// (praesto-sum, unit 10 `missed-sweep`, 2026-10-02) halted
+// FAILED_REPORT_UNPARSEABLE on a 23-case report. Two independent causes, both
+// covered here: FIELD_RE rejected the `- ` list-item prefix the generator
+// writes, so all seven fields parsed as null; and the no-`## Test Cases` branch
+// required a literal `Title:` label, so blocks whose title lives in the `###`
+// heading were dropped. reportText() above builds the parser-friendly shape, so
+// it could never have caught either — this report is written out literally in
+// the shape /relay-qa-report emits.
+test('parse mode: a generator-shaped report parses — bullet-prefixed fields, titles from the ### heading, no "## Test Cases" section, and a field-less subsection is not a case', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'relay-qarun-shape-'));
+  temps.push(dir);
+  const report = join(dir, 'qa-report.md');
+  writeFileSync(
+    report,
+    [
+      '# QA support report — demo',
+      '',
+      '- **Mode:** `prd` — source `PRPs/prds/demo.prd.md`',
+      '- **Cases:** 2',
+      '',
+      '## Where the cited code lives',
+      '',
+      'Prose that carries no field label at all.',
+      '',
+      '### A note that is not a case',
+      '',
+      'Narrative only, at case-heading depth.',
+      '',
+      '## Phase 1 — the pure plan',
+      '',
+      '### AC-1 — Pure and clock-free',
+      '',
+      '- **Risk:** Medium',
+      '- **Required state:** none (pure function arguments only)',
+      '- **Coverage:** automated',
+      '- **Automated test path:** `test/demo.test.ts`',
+      '- **Manual status:** — (automated; no manual test needed)',
+      '- **Manual step-by-step:**',
+      '  1. Run the suite.',
+      '  2. Confirm it passes.',
+      '',
+      '## Phase 2 — the screen',
+      '',
+      '### AC-2 — On screen (manual)',
+      '',
+      '- **Risk level:** High',
+      '- **Required state:** at least one `missed` occurrence',
+      '- **Coverage:** manual',
+      '- **Automated test path:** —',
+      '- **Manual status:** `pending`',
+      '- **Manual step-by-step:**',
+      '  1. Open the app.',
+      '  2. Confirm the group is collapsed by default.',
+      '',
+    ].join('\n'),
+  );
+  const r = await runScript(REAL_SCRIPT, ['parse', '--report', report], { cwd: dir });
+  assert.equal(r.code, 0, r.stderr);
+  const out = JSON.parse(r.stdout);
+
+  // The field-less `### A note that is not a case` must not become a case.
+  assert.equal(out.cases.length, 2, JSON.stringify(out.cases.map((c) => c.title)));
+
+  const [c1, c2] = out.cases;
+  assert.equal(c1.index, 1);
+  assert.equal(c1.title, 'AC-1 — Pure and clock-free', 'the title falls back to the ### heading');
+  assert.equal(c1.risk, 'Medium', '`Risk` is accepted as a synonym for `Risk level`');
+  assert.equal(c1.required_state, 'none (pure function arguments only)');
+  assert.equal(c1.coverage, 'automated');
+  assert.equal(c1.automated_test_path, '`test/demo.test.ts`');
+  assert.equal(c1.manual_status, '— (automated; no manual test needed)');
+  assert.equal(c1.manual_steps_verbatim, '  1. Run the suite.\n  2. Confirm it passes.');
+
+  assert.equal(c2.index, 2);
+  assert.equal(c2.title, 'AC-2 — On screen (manual)');
+  assert.equal(c2.risk, 'High', 'the canonical `Risk level` label still works');
+  assert.equal(c2.coverage, 'manual');
+  assert.equal(c2.manual_status, '`pending`');
+  assert.equal(c2.manual_steps_verbatim, '  1. Open the app.\n  2. Confirm the group is collapsed by default.');
+
+  // Mutation proof: with only the list-item prefix removed from FIELD_RE, the
+  // same report loses every field and both cases fall out of the list.
+  const broken = pluginCopy({ mutations: [['(?:[-*+]\\s+|\\d+\\.\\s*)?', '(?:\\d+\\.\\s*)?']] });
+  const r2 = await runScript(broken, ['parse', '--report', report], { cwd: dir, env: COPY_ENV });
+  assert.equal(r2.code, 1, 'without the bullet prefix the generator-shaped report is unparseable');
+  assert.match(r2.stderr, /FAILED_REPORT_UNPARSEABLE/);
+});
+
 test('arguments: no mode, an unknown flag and a run without --run-dir exit 2 and write nothing; --help exits 0', async () => {
   for (const args of [[], ['run', '--bogus'], ['run', '--feature', FEATURE], ['init']]) {
     const r = await runScript(REAL_SCRIPT, args);

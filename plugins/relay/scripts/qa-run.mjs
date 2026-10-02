@@ -128,18 +128,35 @@ function parseArgs(argv) {
 // Report parser
 // ---------------------------------------------------------------------------
 
+// The seven field labels, as a bare line, a numbered line, or a markdown list
+// item. The list-item prefix matters: /relay-qa-report writes the seven fields
+// as a `- **Label:** value` bullet list, which is the most readable shape and
+// the one a human hand-writing a report reaches for first. Without `[-*+]` here
+// every field silently parsed as null and the whole block fell out of the case
+// list, so a real report produced by the generator yielded zero cases.
 const FIELD_RE =
-  /^\s*(?:\d+\.\s*)?\*\*(Title|Risk level|Required state|Coverage|Automated test path|Manual status|Manual step-by-step):\*\*\s*(.*)$/;
+  /^\s*(?:[-*+]\s+|\d+\.\s*)?\*\*(Title|Risk level|Risk|Required state|Coverage|Automated test path|Manual status|Manual step-by-step):\*\*\s*(.*)$/;
 /** @type {Record<string, string>} */
 const FIELD_KEYS = {
   Title: 'title',
   'Risk level': 'risk',
+  // `Risk` is accepted as a synonym: the generator command names the field
+  // "risk level" in prose, and both it and humans shorten it in the heading of
+  // a bullet. Silently dropping the risk of a case is worse than one synonym.
+  Risk: 'risk',
   'Required state': 'required_state',
   Coverage: 'coverage',
   'Automated test path': 'automated_test_path',
   'Manual status': 'manual_status',
   'Manual step-by-step': 'steps',
 };
+
+/**
+ * How many of the seven labels a heading block must carry to count as a case
+ * when it does not label its own title. Two keeps a prose subsection that
+ * happens to bold one line out of the case list.
+ */
+const MIN_FIELDS_FOR_CASE = 2;
 
 /**
  * @typedef {{ index: number, heading: string, title: string, risk: string | null, required_state: string | null, coverage: string | null, automated_test_path: string | null, manual_status: string | null, manual_steps_verbatim: string | null }} ReportCase
@@ -192,6 +209,11 @@ function parseBlock(heading, body, index) {
   const title = val('title');
   return {
     hasTitleLabel: 'title' in raw,
+    // How many of the seven labels this block carried. A case block is
+    // field-shaped; a prose subsection under the same heading level is not, so
+    // this is what lets a block whose title lives in its heading still be
+    // recognized as a case without swallowing surrounding narrative.
+    fieldCount: Object.keys(raw).length,
     kase: {
       index,
       heading,
@@ -208,6 +230,13 @@ function parseBlock(heading, body, index) {
 
 /**
  * Splits `lines` into `###`/`####` heading blocks, ignoring fenced code.
+ *
+ * A block ends at the next `###`/`####` heading, at any SHALLOWER heading
+ * (`#`/`##`), or at a thematic break (`---`, `***`, `___`). Without those two
+ * terminators a report that groups its cases under `## Phase N` sections — the
+ * shape /relay-qa-report emits — folded the section heading and the rule that
+ * preceded it into the previous case's last field, which is almost always its
+ * manual step-by-step. A table separator row is not a break: it starts with `|`.
  * @param {string[]} lines
  * @returns {{ heading: string, body: string[] }[]}
  */
@@ -215,11 +244,18 @@ function splitHeadingBlocks(lines) {
   /** @type {{ heading: string, body: string[] }[]} */
   const blocks = [];
   let fenced = false;
+  let open = false;
   for (const line of lines) {
     if (/^\s*```/.test(line)) fenced = !fenced;
     const h = fenced ? null : /^#{3,4}\s+(.*)$/.exec(line);
-    if (h) blocks.push({ heading: h[1].trim(), body: [] });
-    else if (blocks.length > 0) blocks[blocks.length - 1].body.push(line);
+    if (h) {
+      blocks.push({ heading: h[1].trim(), body: [] });
+      open = true;
+    } else if (!fenced && (/^#{1,2}\s/.test(line) || /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line))) {
+      open = false;
+    } else if (open && blocks.length > 0) {
+      blocks[blocks.length - 1].body.push(line);
+    }
   }
   return blocks;
 }
@@ -300,8 +336,15 @@ export function parseReport(text) {
     }
     cases = splitHeadingBlocks(lines.slice(start + 1, end)).map((b, i) => parseBlock(b.heading, b.body, i + 1).kase);
   } else {
+    // Without a `## Test Cases` section, a heading block counts as a case when
+    // it labels its own title OR is field-shaped enough to be one. Requiring
+    // the `Title:` label alone rejected every report whose case title lives in
+    // its `###` heading — the shape /relay-qa-report actually emits — while
+    // `fieldCount` keeps a neighbouring prose subsection out of the case list.
     const parsed = splitHeadingBlocks(lines).map((b) => ({ b, p: parseBlock(b.heading, b.body, 0) }));
-    cases = parsed.filter((x) => x.p.hasTitleLabel).map((x, i) => ({ ...x.p.kase, index: i + 1 }));
+    cases = parsed
+      .filter((x) => x.p.hasTitleLabel || x.p.fieldCount >= MIN_FIELDS_FOR_CASE)
+      .map((x, i) => ({ ...x.p.kase, index: i + 1 }));
   }
   if (cases.length === 0) cases = parseTableCases(lines);
   return { cases };
