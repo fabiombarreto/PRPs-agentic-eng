@@ -52,7 +52,7 @@ The alternative considered and rejected was having the runner edit the report's 
 
 We believe that **producing an authenticated session per role** — not interpreting the steps — is what unlocks automatic execution of a QA report's cases.
 
-We'll know we're right when, in the `assistente-pessoal` project, at least 60% of a real `qa-report.md`'s cases return an automated outcome without intervention, every remaining case returns `needs-human` or `blocked` **for a named reason other than "could not log in"**, and no credential value appears in any tracked file or report.
+We'll know we're right when, in each dogfood project (`praesto-sum` and `super-ensino`), at least 60% of a real `qa-report.md`'s cases return an automated outcome without intervention, every remaining case returns `needs-human` or `blocked` **for a named reason other than "could not log in"**, and no credential value appears in any tracked file or report.
 
 ## What We're NOT Building
 
@@ -102,6 +102,7 @@ A baseline for manual execution time is deliberately **not** claimed. Nothing in
 - [ ] Whether `results.json` should also be emitted as a human-readable markdown sibling, or whether the terminal summary plus the JSON is enough. Deferred to the Phase 4 plan.
 - [ ] Whether a later, separate PRD should add a status-preserving update mode to `/relay-qa-report` that consumes a `results.json` — explicitly **not** part of this feature, which leaves the report untouched.
 - [ ] Whether the CLI and read-only-DB drivers earn their place in v1 at all, or whether the dogfood shows the browser and HTTP drivers cover the real case mix. Resolved by the Phase 5 dogfood, not before.
+- [ ] Which project can prove AC-12's actual trigger — a role whose login is non-scriptable *because of* genuine SSO or MFA. Neither dogfood project has one: `praesto-sum` is single-user, and `super-ensino` authenticates only through a custom model backend issuing JWTs. Phase 5 proves the headed fallback mechanism against a real app; the SSO/MFA trigger itself remains unproven until such a project is found.
 - [ ] Whether `auth-model.md` should eventually carry a machine-readable role matrix. Market research found no established convention for a test-tooling-oriented auth document (OpenFGA and Cedar are policy formats, not fixture role matrices), so v1 keeps it human-readable prose plus a plain markdown table.
 
 ---
@@ -208,7 +209,7 @@ Current value of `tdd` in `docs/context/methodology.md`: **false**. Test-after o
 | 2 | Auth model pair | `/relay-auth-setup` command plus the `auth-model-writer`/`auth-model-reviewer` pair; human-confirmed `DRAFT → APPROVED` flip on `PRPs/auth/auth-model.md` | complete | - | - | 1 | PRPs/plans/manual-qa-runner-auth-kit-phase-2-auth-model-pair.plan.md |
 | 3 | Login scripts | Per-role login script templates under `plugins/relay/resources/`; storage-state and token artifacts; idempotency and expiry re-login; headed fallback for SSO/MFA; `design-spec-template.md` example repointed | complete | - | - | 2 | PRPs/plans/manual-qa-runner-auth-kit-phase-3-login-scripts.plan.md |
 | 4 | The runner | `/relay-qa-run` command; driver routing (browser, HTTP; CLI and read-only DB as Should); the four-outcome vocabulary; redacted evidence; `results.json` with real UTC instants | complete | - | - | 3 | PRPs/plans/manual-qa-runner-auth-kit-phase-4-the-runner.plan.md |
-| 5 | Dogfood | `assistente-pessoal`, at least two roles, one real `qa-report.md` end to end, every case with an outcome, zero credential values in any tracked file or report | pending | - | - | 4 | - |
+| 5 | Dogfood | Two projects. `praesto-sum`: one real `qa-report.md` end to end, single role. `super-ensino`: at least two roles, an authenticated `capture.mjs` render (AC-10), and the headed fallback against a real app (AC-12, mechanism only). Both: every case with an outcome, zero credential values in any tracked file or report | pending | - | - | 4 | - |
 
 The local-only guard is not a phase. It is a precondition in every phase that touches the network, and a hard failure at each one.
 
@@ -236,8 +237,11 @@ The local-only guard is not a phase. It is a precondition in every phase that to
 
 **Phase 5: Dogfood**
 - **Goal:** proof in a real project.
-- **Scope:** `assistente-pessoal` with at least two roles; one real `qa-report.md` end to end; the metric readings above.
-- **Success signal:** ≥60% automated outcomes, zero cases without an outcome, zero credential values found, and no case blocked for lack of a login.
+- **Scope:** two projects, because neither alone covers every criterion.
+  - `praesto-sum` (repository `C:\repos\assistente-pessoal`): one real `qa-report.md` end to end, with the metric readings above. It is a single-user application, so it cannot satisfy the two-role requirement, and it renders nothing worth an authenticated `capture.mjs` check.
+  - `super-ensino` (workspace `C:\repos\super-ensino`; the `portal` SPA against the `spe-services` API): at least two of its three roles (teacher, admin, student); one real `qa-report.md` end to end; an authenticated screen rendered by `capture.mjs` from a kit-produced storage-state file, discharging AC-10; and one role declared `headed` in the kit's login configuration, exercising AC-12's fallback against a real application.
+- **AC-12 limit, stated in advance:** `super-ensino` authenticates through a single custom model backend (`core.backends.RegistrationModelBackend`) issuing JWTs, with no SSO and no MFA anywhere in `spe-services`. Its headed role is therefore login-scriptable and declared `headed` deliberately. That proves the fallback mechanism works end to end against a real app — headed launch, a human login, the state saved, the next run reusing it — but not that a genuine SSO or MFA flow completes through it. That trigger stays unproven until a project with real SSO or MFA is dogfooded; see Open Questions.
+- **Success signal:** in both projects, ≥60% automated outcomes, zero cases without an outcome, zero credential values found, and no case blocked for lack of a login; in `super-ensino`, an authenticated `capture.mjs` render and a reused headed session.
 
 ---
 
@@ -257,6 +261,7 @@ The local-only guard is not a phase. It is a precondition in every phase that to
 | Credentials in context | Never — files are referenced by path; typed credentials go through a local terminal prompt the script runs | The market default of passing credentials in the prompt | A transcript, a prompt and a log are all leak surfaces; this is the explicit inversion of the prevailing pattern |
 | Time metric | Record real UTC instants from v1; no "reduction versus manual" claim | Ask the operator to stopwatch a manual pass | Nothing timestamps manual QA today, so the "before" cannot be derived from recorded data; recording from v1 establishes the baseline going forward |
 | Relationship to the review loop | Untouched, asserted by AC-16 | Folding in the 2026-09-17 registrations | `hybrid-code-review` Phase 5's measurement would be confounded by a second variable |
+| Dogfood targets: two projects, not one (changed 2026-10-02, before phase 5) | `praesto-sum` for the end-to-end run; `super-ensino` for the two-role requirement, AC-10 and AC-12's mechanism | `assistente-pessoal` alone, as originally specified | `assistente-pessoal` is the repository of `praesto-sum`, a single-user application — the original phase 5 asked it for "at least two roles", which it cannot satisfy, and it renders nothing that makes an authenticated `capture.mjs` check meaningful. `super-ensino` has three roles and a React SPA. It has no SSO and no MFA, so it proves AC-12's headed fallback only by declaring a scriptable role `headed`; the genuine SSO/MFA trigger is carried as an Open Question rather than claimed |
 | Command count: three, not two (reconciled 2026-10-02, post-implementation) | `/relay-auth-setup`, `/relay-auth-scripts`, `/relay-qa-run` | Keep script generation inside `/relay-auth-setup`, as this PRD originally specified | Phase 2 shipped `/relay-auth-setup` with tests pinning that it writes no login script and lists exactly three written paths — pins that exist to protect AC-9's human gate. Adding generation there would have required rewriting those very assertions. Phase 3 therefore introduced a third command gated on `*Status: APPROVED*` in `auth-model.md`. This row records the divergence rather than leaving the PRD contradicting the shipped surface |
 
 ---
