@@ -90,6 +90,7 @@
       <h3 id="v0-40-0-changed">Changed</h3>
 
       <ul>
+        <li><strong><a href="reference/relay-qa-report.html#report-layout"><code>/relay-qa-report</code> &mdash; the report layout is now specified</a></strong> &mdash; the command listed the seven fields but said only &ldquo;a markdown table (or per-entry sections)&rdquo;, so every consumer parser guessed the layout. It now states one canonical per-entry layout (<code>###</code> case sections, top-level field bullets, an indented step list, optional <code>## Summary table</code> and group headings) with a marked example the parser fixtures are extracted from. The seven-field schema and the status rule are unchanged. <code>/relay-qa-run</code> parses exactly this layout: a rule inside a step list stays content, a case with any missing field is counted and reported <code>blocked</code> / <code>CASE_INCOMPLETE</code> instead of dropped, and a <code>SUMMARY_TABLE_MISMATCH</code> warning flags a summary table that disagrees with the case sections.</li>
         <li><strong><a href="reference/validation-checks.html">Validation checks</a> and
           <a href="guide/validation-suite.html">Validation suite</a> &mdash; check count corrected</strong> &mdash; the checks
           page reported 24 checks and now reports 27, matching the 27 checks registered in

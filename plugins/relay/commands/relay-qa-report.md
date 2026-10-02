@@ -205,7 +205,81 @@ Wait for the operator's explicit confirmation before overwriting; do not infer c
 
 ## Phase 3 — Write the report and emit output
 
-Write `PRPs/reports/<feature>/qa-report.md` as a markdown table (or per-entry sections when a table would be unreadable) — one row/section per case, all seven fields present, uncovered cases listed explicitly per the honesty rule.
+Write `PRPs/reports/<feature>/qa-report.md` as per-entry sections in the canonical layout below — one section per case, all seven fields present, uncovered cases listed explicitly per the honesty rule. An optional `## Summary table` (one row per case, first column `#` = the case id) may precede the sections.
+
+### Canonical per-entry layout
+
+This fixes the LAYOUT only; the seven-field schema and the status rule above are unchanged. Consumers of the report (the QA runner among them) parse exactly this shape:
+
+- Each case is a `### <case id> — <title>` section. Cases may be grouped under `## <group>` headings; a `---` line may separate groups and is always followed by a heading.
+- Prose sections use `##`, never `###` — a `###` section is a case.
+- The seven fields are top-level bullets `- **<Label>:** <value>` with the exact labels of the seven-field schema: `Risk level`, `Required state`, `Coverage`, `Automated test path`, `Manual status`, `Manual step-by-step`. The title is the heading text.
+- `Manual step-by-step` is followed by an indented numbered list. The list ends at the next top-level labeled bullet (`- **<Label>:**` at column 0), the next heading, or a `---` followed by a heading. An indented bullet inside a step is part of that step.
+- Additional labeled bullets beyond the seven are allowed and are not part of the step list.
+- A step that needs a horizontal rule writes it in inline code, never as a bare `---` line.
+
+Reports generated before this layout was specified wrote `Risk` for `Risk level`; consumers accept that spelling.
+
+<!-- qa-report-layout-example:begin -->
+```markdown
+# QA support report — Example feature
+
+## How to read this report
+
+`automated` means a real test file asserts the case; `manual` means a human must exercise it; `none` means neither.
+
+## Summary table
+
+| # | Case | Risk | Coverage | Automated test path | Manual |
+|---|------|------|----------|---------------------|--------|
+| AC-1 | Login rejects a bad password | High | automated | `test/login.test.ts` | — |
+| AC-2 | Settings screen shows the saved theme | Medium | manual | — | `pending` |
+| G-1 | Logout clears the session | Low | none | — | `pending` |
+
+---
+
+## Phase 1 — Sign-in
+
+### AC-1 — Login rejects a bad password
+
+- **Risk level:** High
+- **Required state:** a registered user exists
+- **Coverage:** automated
+- **Automated test path:** `test/login.test.ts`
+- **Manual status:** `pending`
+- **Manual step-by-step:**
+  1. Open the login page.
+  2. Submit a wrong password and confirm the error message appears.
+
+### AC-2 — Settings screen shows the saved theme (manual)
+
+- **Risk level:** Medium
+- **Required state:** a signed-in user with the dark theme saved
+- **Coverage:** manual
+- **Automated test path:** — (none)
+- **Manual status:** `pending`
+- **Manual step-by-step:**
+  1. Open the settings screen.
+  2. Confirm the dark theme is selected.
+  3. Press the key that prints `---` and confirm nothing changes.
+- **Known gap in the existing checklist run:** the checklist was produced by code reading only; no device was used.
+
+---
+
+## Phase 2 — Sign-out
+
+### G-1 — Logout clears the session
+
+- **Risk level:** Low
+- **Required state:** a signed-in user
+- **Coverage:** none
+- **Automated test path:** —
+- **Manual status:** `pending`
+- **Manual step-by-step:**
+  1. Click logout.
+  2. Reload the page and confirm the login page is shown.
+```
+<!-- qa-report-layout-example:end -->
 
 On success, emit:
 

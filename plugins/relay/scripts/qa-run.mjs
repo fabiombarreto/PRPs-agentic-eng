@@ -152,14 +152,31 @@ const FIELD_KEYS = {
 };
 
 /**
- * How many of the seven labels a heading block must carry to count as a case
- * when it does not label its own title. Two keeps a prose subsection that
- * happens to bold one line out of the case list.
+ * A top-level labeled bullet (`- **Label:** ...` at column 0). When its label is
+ * not one of the seven it is an extra field: it ends whatever field precedes it
+ * (in particular the step list) and is never folded into one of the seven.
  */
-const MIN_FIELDS_FOR_CASE = 2;
+const EXTRA_LABEL_RE = /^[-*+]\s+\*\*[^*\n]+:\*\*/;
+
+/**
+ * The labels a case block must carry besides its heading (the title is the
+ * heading text), keyed by the case property each one fills. Used to name what a
+ * CASE_INCOMPLETE entry is missing.
+ * @type {[string, string][]}
+ */
+const REQUIRED_LABELS = [
+  ['risk', 'Risk level'],
+  ['required_state', 'Required state'],
+  ['coverage', 'Coverage'],
+  ['automated_test_path', 'Automated test path'],
+  ['manual_status', 'Manual status'],
+  ['steps', 'Manual step-by-step'],
+];
 
 /**
  * @typedef {{ index: number, heading: string, title: string, risk: string | null, required_state: string | null, coverage: string | null, automated_test_path: string | null, manual_status: string | null, manual_steps_verbatim: string | null }} ReportCase
+ * @typedef {{ index: number, title: string, missing: string[] }} IncompleteCase
+ * @typedef {{ code: string, message: string, missing_from_table: string[], missing_from_cases: string[] }} ReportWarning
  */
 
 /**
@@ -178,7 +195,7 @@ function trimBlankEnds(lines) {
  * @param {string} heading
  * @param {string[]} body
  * @param {number} index
- * @returns {{ kase: ReportCase, hasTitleLabel: boolean }}
+ * @returns {{ kase: ReportCase, hasTitleLabel: boolean, fieldCount: number, missing: string[] }}
  */
 function parseBlock(heading, body, index) {
   /** @type {Record<string, { inline: string, rest: string[] }>} */
@@ -186,9 +203,13 @@ function parseBlock(heading, body, index) {
   /** @type {string | null} */ let cur = null;
   for (const line of body) {
     const m = FIELD_RE.exec(line);
-    if (m) {
+    // Inside the step list only a column-0 label ends the list: an indented
+    // line that merely looks like a label is part of a step.
+    if (m && !(cur === 'steps' && /^\s/.test(line))) {
       cur = FIELD_KEYS[m[1]];
       raw[cur] = { inline: m[2], rest: [] };
+    } else if (EXTRA_LABEL_RE.test(line)) {
+      cur = null;
     } else if (cur !== null) {
       raw[cur].rest.push(line);
     }
@@ -214,6 +235,7 @@ function parseBlock(heading, body, index) {
     // this is what lets a block whose title lives in its heading still be
     // recognized as a case without swallowing surrounding narrative.
     fieldCount: Object.keys(raw).length,
+    missing: REQUIRED_LABELS.filter(([k]) => !(k in raw)).map(([, label]) => label),
     kase: {
       index,
       heading,
@@ -232,11 +254,12 @@ function parseBlock(heading, body, index) {
  * Splits `lines` into `###`/`####` heading blocks, ignoring fenced code.
  *
  * A block ends at the next `###`/`####` heading, at any SHALLOWER heading
- * (`#`/`##`), or at a thematic break (`---`, `***`, `___`). Without those two
- * terminators a report that groups its cases under `## Phase N` sections — the
- * shape /relay-qa-report emits — folded the section heading and the rule that
- * preceded it into the previous case's last field, which is almost always its
- * manual step-by-step. A table separator row is not a break: it starts with `|`.
+ * (`#`/`##`), or at a qualifying thematic break. A bare `---`, `***` or `___`
+ * line qualifies ONLY when the next non-blank line is a heading of depth <= 3
+ * or the end of the file — the shape /relay-qa-report emits between groups.
+ * Anywhere else it is content: a rule inside a step list belongs to the step
+ * list and the steps after it must not be dropped. A table separator row is not
+ * a break: it starts with `|`.
  * @param {string[]} lines
  * @returns {{ heading: string, body: string[] }[]}
  */
@@ -245,19 +268,66 @@ function splitHeadingBlocks(lines) {
   const blocks = [];
   let fenced = false;
   let open = false;
-  for (const line of lines) {
+  /** @param {number} from @returns {boolean} */
+  const breakQualifies = (from) => {
+    for (let j = from + 1; j < lines.length; j++) {
+      if (lines[j].trim() === '') continue;
+      return /^#{1,3}\s/.test(lines[j]);
+    }
+    return true;
+  };
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     if (/^\s*```/.test(line)) fenced = !fenced;
     const h = fenced ? null : /^#{3,4}\s+(.*)$/.exec(line);
     if (h) {
       blocks.push({ heading: h[1].trim(), body: [] });
       open = true;
-    } else if (!fenced && (/^#{1,2}\s/.test(line) || /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line))) {
+    } else if (!fenced && /^#{1,2}\s/.test(line)) {
+      open = false;
+    } else if (!fenced && /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line) && breakQualifies(i)) {
       open = false;
     } else if (open && blocks.length > 0) {
       blocks[blocks.length - 1].body.push(line);
     }
   }
   return blocks;
+}
+
+/**
+ * Reads the first column of the table under an exact `## Summary table`
+ * heading. Returns null when no such heading exists.
+ * @param {string[]} lines
+ * @returns {string[] | null}
+ */
+function summaryTableIds(lines) {
+  const at = lines.findIndex((l) => /^## Summary table\s*$/.test(l));
+  if (at === -1) return null;
+  /** @type {string[]} */ const ids = [];
+  let started = false;
+  let rows = 0;
+  for (let i = at + 1; i < lines.length; i++) {
+    const l = lines[i];
+    if (!l.trim().startsWith('|')) {
+      if (started || /^#{1,6}\s/.test(l)) break;
+      continue;
+    }
+    started = true;
+    rows++;
+    if (rows <= 2) continue; // header row and separator row
+    ids.push((splitTableRow(l)[0] ?? '').replace(/`/g, '').trim());
+  }
+  return ids;
+}
+
+/**
+ * The case id is the heading text before ` — `.
+ * @param {string} heading
+ * @returns {string}
+ */
+function caseId(heading) {
+  const i = heading.indexOf(' — ');
+  return (i === -1 ? heading : heading.slice(0, i)).trim();
 }
 
 /**
@@ -317,12 +387,20 @@ function parseTableCases(lines) {
 
 /**
  * @param {string} text
- * @returns {{ cases: ReportCase[] }}
+ * @returns {{ cases: ReportCase[], incomplete: IncompleteCase[], warnings: ReportWarning[] }}
  */
 export function parseReport(text) {
   const lines = String(text).replace(/\r\n/g, '\n').split('\n');
   /** @type {ReportCase[]} */
   let cases = [];
+  /** @type {IncompleteCase[]} */
+  let incomplete = [];
+  /** @type {ReportWarning[]} */
+  const warnings = [];
+  /** @type {string[]} */
+  let ids = [];
+  /** @type {{ heading: string, body: string[] }[]} */
+  let scope;
   const start = lines.findIndex((l) => /^##\s+Test Cases\s*$/.test(l));
   if (start !== -1) {
     let end = lines.length;
@@ -334,20 +412,41 @@ export function parseReport(text) {
         break;
       }
     }
-    cases = splitHeadingBlocks(lines.slice(start + 1, end)).map((b, i) => parseBlock(b.heading, b.body, i + 1).kase);
+    scope = splitHeadingBlocks(lines.slice(start + 1, end));
   } else {
-    // Without a `## Test Cases` section, a heading block counts as a case when
-    // it labels its own title OR is field-shaped enough to be one. Requiring
-    // the `Title:` label alone rejected every report whose case title lives in
-    // its `###` heading — the shape /relay-qa-report actually emits — while
-    // `fieldCount` keeps a neighbouring prose subsection out of the case list.
-    const parsed = splitHeadingBlocks(lines).map((b) => ({ b, p: parseBlock(b.heading, b.body, 0) }));
-    cases = parsed
-      .filter((x) => x.p.hasTitleLabel || x.p.fieldCount >= MIN_FIELDS_FOR_CASE)
-      .map((x, i) => ({ ...x.p.kase, index: i + 1 }));
+    scope = splitHeadingBlocks(lines);
   }
-  if (cases.length === 0) cases = parseTableCases(lines);
-  return { cases };
+  // A heading block with none of the seven labels is prose; a block with at
+  // least one is a case. A case missing some labels is STILL a case (counted,
+  // reported in `incomplete`), never dropped: dropping it would shrink N with no
+  // trace, and demanding two labels admitted prose while excluding real cases.
+  const parsed = scope.map((b) => parseBlock(b.heading, b.body, 0)).filter((p) => p.fieldCount >= 1);
+  cases = parsed.map((p, i) => ({ ...p.kase, index: i + 1 }));
+  incomplete = parsed
+    .map((p, i) => ({ index: i + 1, title: p.kase.title, missing: p.missing }))
+    .filter((x) => x.missing.length > 0);
+  ids = parsed.map((p) => caseId(p.kase.heading));
+  if (cases.length === 0) {
+    cases = parseTableCases(lines);
+    incomplete = [];
+  } else {
+    const tableIds = summaryTableIds(lines);
+    if (tableIds !== null) {
+      const inCases = new Set(ids);
+      const inTable = new Set(tableIds);
+      const missingFromTable = ids.filter((id, i) => !inTable.has(id) && ids.indexOf(id) === i);
+      const missingFromCases = tableIds.filter((id, i) => !inCases.has(id) && tableIds.indexOf(id) === i);
+      if (missingFromTable.length > 0 || missingFromCases.length > 0) {
+        warnings.push({
+          code: 'SUMMARY_TABLE_MISMATCH',
+          message: `the Summary table and the case sections disagree: not in the table [${missingFromTable.join(', ')}]; not a case section [${missingFromCases.join(', ')}]`,
+          missing_from_table: missingFromTable,
+          missing_from_cases: missingFromCases,
+        });
+      }
+    }
+  }
+  return { cases, incomplete, warnings };
 }
 
 // ---------------------------------------------------------------------------
@@ -1132,7 +1231,10 @@ async function runRun(args) {
   const reportAbs = join(root, ...reportRel.split('/'));
   if (!existsSync(reportAbs)) throw new Halt('FAILED_QA_REPORT_MISSING', `${reportRel} does not exist`);
   const shaBefore = sha256File(reportAbs);
-  const cases = parseReport(readFileSync(reportAbs, 'utf8')).cases;
+  const parsedReport = parseReport(readFileSync(reportAbs, 'utf8'));
+  const cases = parsedReport.cases;
+  const warnings = parsedReport.warnings;
+  /** @type {Map<number, string[]>} */ const incompleteByIndex = new Map(parsedReport.incomplete.map((x) => [x.index, x.missing]));
   if (cases.length === 0) throw new Halt('FAILED_REPORT_UNPARSEABLE', `no cases found in ${reportRel}`);
 
   /** @type {Map<number, any>} */ const planByIndex = new Map();
@@ -1202,10 +1304,16 @@ async function runRun(args) {
       /** @type {string | null} */ let driver = null;
       /** @type {string | null} */ let role = null;
       try {
-        const r = await executeCase(ctx, c, planByIndex, target, makeCtx);
-        result = r.result;
-        driver = r.driver;
-        role = r.role;
+        const missing = incompleteByIndex.get(c.index);
+        if (missing) {
+          // Counted, never dropped, and never executed: a case missing a label is not a case the runner can vouch for.
+          result = blocked('CASE_INCOMPLETE', `the case section lacks the labeled field(s): ${missing.join(', ')}`);
+        } else {
+          const r = await executeCase(ctx, c, planByIndex, target, makeCtx);
+          result = r.result;
+          driver = r.driver;
+          role = r.role;
+        }
       } catch (err) {
         result = blocked('RUNNER_ERROR', `an unexpected error stopped this case: ${redactText(String(err && /** @type {any} */ (err).message ? /** @type {any} */ (err).message : err), table)}`);
       }
@@ -1265,6 +1373,7 @@ async function runRun(args) {
       base_url_origin: target ? target.origin : null,
       counts,
       aborted,
+      warnings,
       human_gate: { status: 'open', review_file: reportRel },
       cases: entries,
     };
@@ -1284,6 +1393,7 @@ async function runRun(args) {
       `Results: ${runDirRel}/results.json`,
       `Evidence: ${runDirRel}/evidence/`,
     ];
+    for (const w of warnings) lines.push(`WARNING ${w.code}: ${w.message}`);
     if (aborted) lines.push(`RUN ABORTED: ${aborted.reason_code}`);
     if (shaAfter !== shaBefore) {
       process.stderr.write(`FAILED_REPORT_MODIFIED: ${reportRel} changed during the run\n`);
@@ -1311,12 +1421,12 @@ function runParse(args) {
   }
   const rel = fwd(relative(process.cwd(), reportPath));
   const shown = rel.startsWith('..') || isAbsolute(rel) ? fwd(String(args.report)) : rel;
-  const { cases } = parseReport(text);
+  const { cases, incomplete, warnings } = parseReport(text);
   if (cases.length === 0) {
     process.stderr.write(`FAILED_REPORT_UNPARSEABLE: no cases found in ${shown}\n`);
     return 1;
   }
-  process.stdout.write(`${JSON.stringify({ report_path: shown, cases }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ report_path: shown, cases, incomplete, warnings }, null, 2)}\n`);
   return 0;
 }
 
