@@ -169,6 +169,59 @@
         <li>Outcome badges: ✅ for green/passed/approved, ❌ for failed, ⏱ for time-budget, 🔁 for oscillation, ⚠ for infra-unrecoverable, ⏭ for skipped.</li>
       </ul>
 
+      <h2 id="auth-kit-secrecy">auth-kit-secrecy.mjs <span class="badge badge--done">shipped</span></h2>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/scripts/auth-kit-secrecy.mjs</code></dd>
+        <dt>Purpose</dt><dd>Make it impossible to write a secret before the ignore rules are proven. Copies the packaged <code>auth-kit.gitignore</code> resource into <code>&lt;root&gt;/PRPs/auth/.gitignore</code> and proves with <code>git check-ignore</code> that every secret path is ignored.</dd>
+        <dt>Invoked by</dt><dd><code>/relay-auth-setup</code> and <code>/relay-auth-scripts</code>; the generated per-role login scripts call it too, before any write. Also invocable directly.</dd>
+        <dt>Runtime</dt><dd>Node.js ≥ 18.</dd>
+        <dt>Dependencies</dt><dd>None. Synchronous Node built-ins only.</dd>
+      </div>
+
+      <h3 id="auth-kit-secrecy-usage">Usage</h3>
+
+      <pre><code class="language-bash">node ${CLAUDE_PLUGIN_ROOT}/scripts/auth-kit-secrecy.mjs scaffold [--root &lt;dir&gt;]
+node ${CLAUDE_PLUGIN_ROOT}/scripts/auth-kit-secrecy.mjs prove    [--root &lt;dir&gt;] [--path &lt;relative-path&gt;]...
+node ${CLAUDE_PLUGIN_ROOT}/scripts/auth-kit-secrecy.mjs ensure   [--root &lt;dir&gt;] [--path &lt;relative-path&gt;]...</code></pre>
+
+      <p>The mode is mandatory. Exit code 0 when proven or done, 1 for <code>FAILED_IGNORE_UNPROVEN</code>, 2 for bad arguments (an unknown argument, a flag missing its value, no mode, an absolute <code>--path</code>, or a <code>--path</code> containing a <code>..</code> segment), always without writing. <code>ensure</code> is the gate later phases call before any secret write. The only file the script ever writes is that tracked ignore file; it never reads, prints or writes a credential value.</p>
+
+      <h2 id="auth-local-guard">auth-local-guard.mjs <span class="badge badge--done">shipped</span></h2>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/scripts/auth-local-guard.mjs</code></dd>
+        <dt>Purpose</dt><dd>The local-only guard of the test-auth kit: decides whether a target URL is a local application. The host comes from the WHATWG URL parser's own hostname component and is decided by exact equality against the built-in loopback names, or against hostnames declared in the tracked <code>PRPs/auth/local-hosts.txt</code> (one bare hostname per line, <code>#</code> comments allowed), each of which must resolve with every address loopback.</dd>
+        <dt>Invoked by</dt><dd><code>/relay-auth-setup</code> and <code>/relay-auth-scripts</code>; the generated per-role login scripts call it too. Also invocable directly.</dd>
+        <dt>Runtime</dt><dd>Node.js ≥ 18.</dd>
+        <dt>Dependencies</dt><dd>None. <code>node:</code> built-ins only.</dd>
+      </div>
+
+      <h3 id="auth-local-guard-usage">Usage</h3>
+
+      <pre><code class="language-bash">node ${CLAUDE_PLUGIN_ROOT}/scripts/auth-local-guard.mjs check --url &lt;url&gt; [--root &lt;dir&gt;]
+node ${CLAUDE_PLUGIN_ROOT}/scripts/auth-local-guard.mjs list-declared [--root &lt;dir&gt;]</code></pre>
+
+      <p>The mode is mandatory. Exit code 0 when allowed, 1 for <code>FAILED_NON_LOCAL_TARGET</code>, 2 for bad arguments. A target carrying userinfo is refused even when its host is local. There is no per-run flag and no environment-variable source for declared hosts, and the script never writes any file.</p>
+
+      <h2 id="qa-run">qa-run.mjs <span class="badge badge--done">shipped</span></h2>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/scripts/qa-run.mjs</code></dd>
+        <dt>Purpose</dt><dd>The runner of the test-auth kit's consumer side. Parses a <code>qa-report.md</code>, gives every case exactly one of <code>pass</code>, <code>fail</code>, <code>blocked</code> or <code>needs-human</code>, captures redacted evidence and writes <code>results.json</code> under a fresh <code>PRPs/reports/&lt;feature&gt;/qa-run/&lt;run-id&gt;/</code> directory. It never edits the report and ends every run by stating that the human validation gate is still open.</dd>
+        <dt>Invoked by</dt><dd><code>/relay-qa-run</code>. Also invocable directly.</dd>
+        <dt>Runtime</dt><dd>Node.js &ge; 18.</dd>
+        <dt>Dependencies</dt><dd>None of its own: <code>node:</code> built-ins only. <code>playwright</code> is resolved lazily at run time, from the project root and then from <code>plugins/relay/scripts/visual/</code>; when it is absent the HTTP and browser cases are <code>blocked</code>, never a crash.</dd>
+      </div>
+
+      <h3 id="qa-run-usage">Usage</h3>
+
+      <pre><code class="language-bash">node ${CLAUDE_PLUGIN_ROOT}/scripts/qa-run.mjs parse --report &lt;path&gt;
+node ${CLAUDE_PLUGIN_ROOT}/scripts/qa-run.mjs init --root &lt;dir&gt; --feature &lt;slug&gt; [--env-handle &lt;path&gt;]
+node ${CLAUDE_PLUGIN_ROOT}/scripts/qa-run.mjs run --root &lt;dir&gt; --feature &lt;slug&gt; --run-dir &lt;rel-dir&gt; [--env-handle &lt;path&gt;] [--max-cases &lt;n&gt;]</code></pre>
+
+      <p>The mode is mandatory. Exit code 0 when completed, 1 for a named <code>FAILED_*</code> halt or an aborted run, 2 for bad arguments. The local-only guard runs before any request, login or write; one marked write helper is the only writer and refuses any path outside the run directory; evidence is redacted in memory before it is written.</p>
+
       <h2 id="extension-pattern">How new scripts join the plugin</h2>
 
       <p>If a future stage needs a new helper script (e.g., a coverage-differ, a mutation-tester wrapper), it should follow the same pattern:</p>

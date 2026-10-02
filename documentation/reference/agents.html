@@ -606,6 +606,30 @@ target_root: absolute path to the target project root</code></pre>
         <dt>VISUAL_MISMATCH</dt><dd>FULL rung, at least one frame <code>FAIL</code> after content-vs-style triage confirms a genuine regression (not dynamic content a mask should have covered). Carries <code>failing_frames</code> and a <code>claim</code> naming the triage reasoning, including whether a mask-gap possibility was considered.</dd>
       </div>
 
+      <h3 id="auth-model-writer">auth-model-writer <span class="badge badge--done">shipped</span></h3>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/agents/auth-model-writer.md</code></dd>
+        <dt>Model</dt><dd>sonnet</dd>
+        <dt>Color</dt><dd>orange</dd>
+        <dt>Tools</dt><dd><code>Read, Write, Edit, Glob, Grep</code> &mdash; no <code>Bash</code> and no network: discovery is static, and no running application is ever contacted.</dd>
+        <dt>Invoked by</dt><dd><code>/relay-auth-setup</code> command (Phase A) &mdash; adopted inline in the main conversation, never <code>Task</code>-dispatched.</dd>
+        <dt>Responsibility</dt><dd>Statically discovers a project's login endpoints, middleware and guards, session or token configuration, role and permission models and tenant scoping, and writes a DRAFT <code>PRPs/auth/auth-model.md</code> conforming to <code>${CLAUDE_PLUGIN_ROOT}/resources/auth-model-template.md</code>. Records environment variables by name only.</dd>
+        <dt>Never does</dt><dd>Approve its own output (<code>auth-model-reviewer</code> owns the DRAFT to APPROVED flip). Read secret files, or <code>.env</code> files other than examples. Record a credential value. Contact a network or a running application.</dd>
+      </div>
+
+      <h3 id="auth-model-reviewer">auth-model-reviewer <span class="badge badge--done">shipped</span></h3>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/agents/auth-model-reviewer.md</code></dd>
+        <dt>Model</dt><dd>sonnet</dd>
+        <dt>Color</dt><dd>red</dd>
+        <dt>Tools</dt><dd><code>Read, Edit, Write</code> &mdash; every check is validated against files already on disk.</dd>
+        <dt>Invoked by</dt><dd><code>/relay-auth-setup</code> command (Phase B, after <code>auth-model-writer</code>) &mdash; adopted inline in the main conversation with <code>invocation_context: main</code>, never <code>Task</code>-dispatched. This is the <strong>fourth</strong> place in relay where a reviewer dialogues with the user before flipping status.</dd>
+        <dt>Responsibility</dt><dd>Validates a DRAFT <code>auth-model.md</code> against a seven-item rubric (<code>R-AM1</code> mechanisms with <code>file:line</code> evidence, <code>R-AM2</code> a login flow per mechanism, <code>R-AM3</code> a complete role and permission matrix, <code>R-AM4</code> declared local user creation per role, <code>R-AM5</code> non-automatable items listed, <code>R-AM6</code> no credential-shaped values and local-only hosts, <code>R-AM7</code> no unresolved TBD). Flip ownership is scoped by an <code>invocation_context</code> input (default <code>subagent</code>, fail-safe): in main mode it owns the human-confirmed <code>*Status: DRAFT*</code> to <code>*Status: APPROVED*</code> flip after the rubric passes AND the user gives an explicit affirmative reply.</dd>
+        <dt>Never does</dt><dd>Accept a caller-relayed "the user approved" as the user's own approval. Flip in <code>subagent</code> mode. Flip on a failing rubric. Read a secret path. Write an auth model from scratch (that is <code>auth-model-writer</code>'s job). Edit the DRAFT silently to make it pass.</dd>
+      </div>
+
       <h2 id="planned">Planned</h2>
 
       <p>

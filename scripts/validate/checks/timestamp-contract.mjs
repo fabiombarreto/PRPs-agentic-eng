@@ -68,7 +68,7 @@ import { resolve } from 'node:path';
 const CHECK_NAME = 'timestamp-contract';
 
 /**
- * The seven jsonl-appending reviewers this contract covers. Every entry
+ * The eight jsonl-appending reviewers this contract covers. Every entry
  * both declares a `review_started_at` input and carries a
  * `### Timestamp discipline (mandatory)` section whose fallback branch
  * must match the reviewer's own capability.
@@ -83,10 +83,11 @@ const REVIEWERS = [
   'plugins/relay/agents/prd-reviewer.md',
   'plugins/relay/agents/design-map-reviewer.md',
   'plugins/relay/agents/design-spec-reviewer.md',
+  'plugins/relay/agents/auth-model-reviewer.md',
 ];
 
 /**
- * The eight dispatching commands that must capture the instant with
+ * The nine dispatching commands that must capture the instant with
  * `date -u +%Y-%m-%dT%H:%M:%SZ` and pass `review_started_at` through to
  * the reviewer they dispatch.
  *
@@ -101,6 +102,7 @@ const COMMANDS = [
   'plugins/relay/commands/relay-approve.md',
   'plugins/relay/commands/relay-design-map.md',
   'plugins/relay/commands/relay-design-spec.md',
+  'plugins/relay/commands/relay-auth-setup.md',
 ];
 
 /**

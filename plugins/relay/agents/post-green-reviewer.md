@@ -86,15 +86,43 @@ Run in the worktree:
 git diff --name-only <base_branch> -- \
     '**/test_*.py' '**/tests/**/*.py' '**/*.test.ts' '**/*.test.tsx' \
     '**/*.spec.ts' '**/*.spec.tsx' '**/*.test.js' '**/*.spec.js' \
+    '**/*.test.mjs' '**/*.test.cjs' '**/*.spec.mjs' '**/*.spec.cjs' \
     '**/*_test.go' '**/tests/**/*.rb' '**/*_spec.rb'
 ```
 
-The pathspecs cover pytest, Jest/Vitest, Playwright, Go test, and
-RSpec conventions. Adjust for detected stack if the project uses
-non-standard paths (rare).
+The pathspecs cover pytest, Jest/Vitest, Playwright, Node's built-in
+`node:test` (`.test.mjs` / `.test.cjs`, the only test format in the
+relay repository itself), Go test, and RSpec conventions. Adjust for
+detected stack if the project uses non-standard paths (rare).
 
-Record the list as `changed_test_files`. If empty, skip to Step 4
-with no file-level concerns.
+**An empty pathspec match is NOT evidence of "no test changes".** A
+pathspec list can silently match nothing for a project whose tests use
+a format it does not name, and "matched nothing, therefore nothing
+changed" is exactly the silent-vacuity defect this reviewer must not
+have. When the pathspec scan above returns an empty set, fall back to
+an unfiltered scan and judge by filename:
+
+```
+git diff --name-status <base_branch>
+```
+
+Select the entries whose path looks like a test (a `test`, `tests`,
+`spec`, or `__tests__` path segment, or a `test`/`spec` token in the
+filename) and treat them as `changed_test_files`. Record in `notes[]`
+which path was taken, as `{"type": "scan_path", "path":
+"pathspec" | "unfiltered_fallback"}`, so the verdict states whether
+the pathspec scan or the fallback produced the list.
+
+**Untracked files are invisible to `git diff`.** A brand-new test file
+that has not been `git add`ed does not appear in either command above.
+When the worktree carries untracked test files (check
+`git status --porcelain` for `??` entries naming test paths), say so
+in `notes[]` as `{"type": "untracked_test_files", "files": [...]}`
+rather than concluding they do not exist; they cannot be diffed for
+weakening, only named.
+
+Record the list as `changed_test_files`. Only if it is empty AFTER the
+unfiltered fallback, skip to Step 4 with no file-level concerns.
 
 ### Step 2.5 — Load the APPROVED lifecycle ledger
 
@@ -270,8 +298,13 @@ exactly):
 git diff --name-status <base_branch> -- \
     '**/test_*.py' '**/tests/**/*.py' '**/*.test.ts' '**/*.test.tsx' \
     '**/*.spec.ts' '**/*.spec.tsx' '**/*.test.js' '**/*.spec.js' \
+    '**/*.test.mjs' '**/*.test.cjs' '**/*.spec.mjs' '**/*.spec.cjs' \
     '**/*_test.go' '**/tests/**/*.rb' '**/*_spec.rb'
 ```
+
+If Step 2 took the `unfiltered_fallback` path, run
+`git diff --name-status <base_branch>` unfiltered here too and judge
+by filename, for the same reason.
 
 Take the entries whose status letter is `D` (deleted). For each
 deleted test file path:

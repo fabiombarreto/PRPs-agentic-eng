@@ -67,6 +67,27 @@ libraries, etc.).
 | Google OAuth2 access token | `ya29\.[A-Za-z0-9_-]{10,}` |
 | Google OAuth2 client secret | `GOCSPX-[A-Za-z0-9_-]{28,}` |
 
+### Credential stores, session files and storage-state paths
+
+The test-auth kit holds credentials and logged-in sessions that can impersonate
+a test account. A transcript, a prompt and a log are all leak surfaces, so these
+artifacts follow a stricter rule than the value regexes above.
+
+- **Referenced by path only.** `PRPs/auth/credentials.*` (except the tracked
+  placeholder `credentials.example.*`), `PRPs/auth/.sessions/` and any
+  `*.storage-state.json` or `*.session.json` file are never read into an
+  agent's context, never quoted, and never embedded in a report. Only the path
+  is written.
+- **Redact wholesale when encountered anyway.** If such a file's content
+  appears (an evidence artifact, a captured log, a response body), its values
+  are replaced with `[REDACTED]`: every cookie `value`, every `localStorage`
+  entry value of a Playwright storage-state file (its top-level keys are
+  `cookies` and `origins`), every `password` or `token` field, and the values
+  of the `Cookie`, `Set-Cookie` and `Authorization` headers.
+- **Applies to later auth-kit evidence and Test Runner output alike.**
+- **Path presence is informative.** A report may name a session file's path,
+  and `git check-ignore` output may be shown, but never the file's content.
+
 ---
 
 ## Layer 2 — Per-project extensions

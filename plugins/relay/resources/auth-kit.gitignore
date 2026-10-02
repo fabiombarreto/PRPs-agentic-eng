@@ -1,0 +1,31 @@
+# Tracked/ignored split for the test-auth kit under PRPs/auth/.
+#
+# Why this exists: a Playwright storage-state file, a session file or a
+# credential store can impersonate a test account. None of them may ever reach
+# git history or a PR-bound report.
+#
+# Why .gitignore alone is not enough: it does not cover an already-tracked file,
+# and a committed secret persists in history. auth-kit-secrecy.mjs therefore
+# proves every secret path ignored with `git check-ignore` before any secret is
+# written, and halts with FAILED_IGNORE_UNPROVEN otherwise.
+#
+# This file is copied to PRPs/auth/.gitignore, so every rule below is relative
+# to PRPs/auth/. The tracked side (auth-model.md, the generated scripts,
+# credentials.example.* and .gitignore itself) is deliberately not listed, so
+# nothing else in PRPs/auth/ is ignored.
+#
+# Why the re-include works: `credentials.*` is a filename pattern, not a parent
+# DIRECTORY exclusion, so git still reads the directory and the `!` rule takes
+# effect (git never descends into an excluded directory).
+
+# The credential store, in any format.
+credentials.*
+# The tracked placeholder that documents the credential store's shape.
+!credentials.example.*
+
+# Per-role session, storage-state and token artifacts.
+.sessions/
+
+# A storage-state or session file written outside .sessions/.
+*.storage-state.json
+*.session.json
