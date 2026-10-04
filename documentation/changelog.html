@@ -32,6 +32,92 @@
 
       <p>Nothing yet.</p>
 
+      <h2 id="v0-42-0">0.42.0 &#8212; 2026-10-04</h2>
+
+      <p>The reuse proof. The <code>super-ensino</code> dogfood proved an authenticated render, but reuse of a saved
+        session rested on a probe that answered 200 with and without a session, because the single-page app serves its
+        shell to everyone. Every saved or reused session is now proven in both directions before anything is written or
+        reused, by the HTTP probe or, for a single-page app, by an optional browser probe with an authenticated-only
+        marker. This is phase 7 of <code>PRPs/prds/manual-qa-runner-auth-kit.prd.md</code>; phase 5, the dogfood, is
+        still pending.</p>
+
+      <h3 id="v0-42-0-added">Added</h3>
+
+      <ul>
+        <li><strong>Reuse proof for kit sessions</strong> &mdash; a login script now proves every saved or reused
+          session in both directions. The HTTP probe must answer 2xx with the session and non-2xx without it, presenting
+          the session as the runner will; a probe that answers the same both ways halts
+          <code>FAILED_PROBE_NOT_PROTECTED</code>. A role may declare a browser probe, an authenticated-only marker that
+          must become visible with the session and stay absent in a fresh context for longer than the presence window,
+          plus an optional role marker whose absence halts <code>FAILED_PROBE_WRONG_ACCOUNT</code>; a page that fails to
+          load halts <code>FAILED_PROBE_PAGE_UNLOADABLE</code>. <code>/relay-qa-run</code> reports the three halts as
+          named <code>blocked</code> reasons, and <code>/relay-auth-scripts</code>, the auth model template, writer and
+          reviewer learn to declare the probes. This is phase 7 of
+          <code>PRPs/prds/manual-qa-runner-auth-kit.prd.md</code>. Reference pages now describe it: the
+          <code>/relay-auth-scripts</code> and <code>/relay-qa-run</code> entries in
+          <code>reference/commands.html</code> (the HTTP proof sends cookies plus the token header and the
+          without-session side sends neither; &ldquo;absent&rdquo; is concluded only after the full absence window on a page
+          that loaded; a declared browser probe replaces the HTTP probe and must pass both directions; reuse needs no login
+          and no visible browser), and the <code>auth-model-writer</code> (candidate markers with <code>file:line</code>
+          evidence) and <code>auth-model-reviewer</code> (<code>R-AM6</code> fails a credential-shaped marker) entries in
+          <code>reference/agents.html</code>.</li>
+      </ul>
+
+      <h3 id="v0-42-0-changed">Changed</h3>
+
+      <ul>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.41.0</code> &rarr; <code>0.42.0</code> to
+          match this release; users running <code>/plugin</code> after pulling
+          this version will get a fresh <code>relay/0.42.0/</code> cache directory
+          with all newly-shipped commands and agents registered.</li>
+      </ul>
+
+      <h2 id="v0-41-0">0.41.0 &#8212; 2026-10-04</h2>
+
+      <p>The dogfood corrections. The first real run of <code>/relay-qa-run</code>, in <code>praesto-sum</code>, returned no
+        automated outcome for any of its 23 cases — and authentication caused none of that. This release closes the three
+        gaps it exposed. <code>/relay-qa-run</code> now resolves an automated-coverage case from the Test Runner's own
+        schema-v1 record, verified per cited test file through the record's JUnit artifact; a record outside schema v1, a
+        run that executed nothing, an artifact newer than its record, or a cited path matching more than one file all leave
+        the case unresolved, because such a <code>pass</code> is one the runner never executed. The auth kit gains a
+        login-less <code>static-token</code> mechanism, proven against a protected endpoint before anything is saved. And
+        every saved session now carries IndexedDB. This is phase 6 of <code>PRPs/prds/manual-qa-runner-auth-kit.prd.md</code>;
+        phase 5, the dogfood, is still pending.</p>
+
+      <h3 id="v0-41-0-added">Added</h3>
+
+      <ul>
+        <li><strong>Record resolution in <code>/relay-qa-run</code></strong> &mdash; a case with
+          <code>automated</code> coverage is resolved from the Test Runner's schema-v1 record through the JUnit artifact
+          it points at, with reason code <code>AUTOMATED_EVIDENCE</code>. A record outside schema v1, a run that executed
+          nothing, a JUnit artifact written after the record, an unlisted file or a path matching more than one file
+          never resolves a case. <code>results.json</code> gains a separate <code>record_resolved</code> count and the
+          <code>qa-run-contract</code> check validates it; the summary line excludes these cases from the
+          driver-executed numbers.</li>
+        <li><strong><code>static-token</code> login mechanism</strong> &mdash; the login template, the
+          <code>/relay-auth-scripts</code> generator, the auth model template, writer and reviewer now handle an
+          application that authenticates with one shared token and has no login flow. The token source is a declared
+          environment-variable name, the ignored credential store or a terminal prompt; the script confirms it against the
+          protected endpoint with and without the token, and halts <code>FAILED_TOKEN_UNPROVEN</code> or
+          <code>FAILED_TOKEN_LOCATION_UNREACHABLE</code> rather than saving a session that proves nothing.</li>
+      </ul>
+
+      <h3 id="v0-41-0-changed">Changed</h3>
+
+      <ul>
+        <li><strong>IndexedDB in every saved session</strong> &mdash; each <code>storageState</code> call in the login
+          template passes <code>{ indexedDB: true }</code>, so an application that keeps its credential in IndexedDB
+          restores authenticated. A role that needs IndexedDB on a Playwright older than 1.51 halts
+          <code>FAILED_INDEXEDDB_UNSUPPORTED</code>, and the plugin's own Playwright floor is raised to
+          <code>^1.51.0</code>.</li>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.40.0</code> &rarr; <code>0.41.0</code> to
+          match this release; users running <code>/plugin</code> after pulling
+          this version will get a fresh <code>relay/0.41.0/</code> cache directory
+          with all newly-shipped commands and agents registered.</li>
+      </ul>
+
       <h2 id="v0-40-0">0.40.0 &#8212; 2026-10-02</h2>
 
       <p>The manual-QA runner and the local test-auth kit ship. <code>/relay-qa-report</code> has always listed, for every

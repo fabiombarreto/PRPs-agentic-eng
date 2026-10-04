@@ -59,6 +59,17 @@ export function validateResults(obj) {
     const counts = obj.counts && typeof obj.counts === 'object' ? obj.counts : {};
     const sum = OUTCOME_VALUES.reduce((n, k) => n + (Number.isInteger(counts[k]) ? counts[k] : 0), 0);
     if (sum !== cases.length) msgs.push(`cases.length (${cases.length}) does not equal the sum of counts (${sum})`);
+    const resolvedCases = cases.filter((c) => c !== null && typeof c === 'object' && c.reason_code === 'AUTOMATED_EVIDENCE');
+    if (obj.record_resolved !== undefined) {
+      if (!Number.isInteger(obj.record_resolved) || obj.record_resolved < 0 || obj.record_resolved !== resolvedCases.length) {
+        msgs.push(`record_resolved (${JSON.stringify(obj.record_resolved)}) does not equal the number of AUTOMATED_EVIDENCE cases (${resolvedCases.length})`);
+      }
+      for (const [i, c] of cases.entries()) {
+        if (c !== null && typeof c === 'object' && c.reason_code === 'AUTOMATED_EVIDENCE' && c.outcome !== 'pass' && c.outcome !== 'fail') {
+          msgs.push(`cases[${i}] carries AUTOMATED_EVIDENCE with outcome ${JSON.stringify(c.outcome)}`);
+        }
+      }
+    }
     for (const [i, c] of cases.entries()) {
       const label = `cases[${i}]`;
       if (c === null || typeof c !== 'object') {

@@ -150,8 +150,30 @@ filters), derive a config entry using the exact schema documented in the header
 of `${CLAUDE_PLUGIN_ROOT}/resources/auth-login.template.mjs`:
 
 - `mechanism` is `headed` when the role is named under `## Non-Automatable Items`
-  for SSO or MFA, `api` when `## Login Flow` names a scriptable API login
+  for SSO or MFA, `static-token` when `## Login Flow` or
+  `## Authentication Mechanisms` names a shared static token presented with no
+  login request, `api` when `## Login Flow` names a scriptable API login
   endpoint, otherwise `form`.
+- For a `static-token` role the `staticToken` block is filled only from the
+  model's evidence: `tokenEnv` is an environment-variable NAME taken from
+  `## Session and Token Model` (else null), `header` and `valuePrefix` come from
+  where the API expects the token, and `browser` comes from the declared storage
+  location (`localStorage`, or `indexedDB` with the declared database, object
+  store and key) and is otherwise null. Every field the model does not state is
+  the literal `TBD - needs validation`, never a guess. The generated script's own
+  halts for this mechanism are `FAILED_TOKEN_UNPROVEN`,
+  `FAILED_TOKEN_LOCATION_UNREACHABLE` and `FAILED_INDEXEDDB_UNSUPPORTED`.
+- `browserProbe` is filled only when `## Login Flow` states a browser probe for
+  the role: a same-origin route and an authenticated-only marker (visible text or
+  a selector), optionally a role marker. Otherwise it is absent (null). A route
+  stated without a marker, or a marker whose text or selector the model does not
+  give, is written as the literal `TBD - needs validation` so the generated
+  script halts `FAILED_LOGIN_CONFIG_INCOMPLETE` naming the field; never a guessed
+  selector or text. A declared browser probe is the role's proof for `form`,
+  `api` and `headed` (the HTTP `probe` is then not consulted); a `static-token`
+  role keeps `FAILED_TOKEN_UNPROVEN` and may also declare one. The generated
+  script's own halts for the probes are `FAILED_PROBE_NOT_PROTECTED`,
+  `FAILED_PROBE_WRONG_ACCOUNT` and `FAILED_PROBE_PAGE_UNLOADABLE`.
 - Every other field is filled only from evidence in the model and is otherwise
   the literal `TBD - needs validation` — never a guessed selector or path.
 - `credentials` holds environment-variable NAMES only, taken from the model's
