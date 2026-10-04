@@ -30,7 +30,18 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <h3 id="unreleased-added">Added</h3>
+      <p>Nothing yet.</p>
+
+      <h2 id="v0-42-0">0.42.0 &#8212; 2026-10-04</h2>
+
+      <p>The reuse proof. The <code>super-ensino</code> dogfood proved an authenticated render, but reuse of a saved
+        session rested on a probe that answered 200 with and without a session, because the single-page app serves its
+        shell to everyone. Every saved or reused session is now proven in both directions before anything is written or
+        reused, by the HTTP probe or, for a single-page app, by an optional browser probe with an authenticated-only
+        marker. This is phase 7 of <code>PRPs/prds/manual-qa-runner-auth-kit.prd.md</code>; phase 5, the dogfood, is
+        still pending.</p>
+
+      <h3 id="v0-42-0-added">Added</h3>
 
       <ul>
         <li><strong>Reuse proof for kit sessions</strong> &mdash; a login script now proves every saved or reused
@@ -50,6 +61,16 @@
           and no visible browser), and the <code>auth-model-writer</code> (candidate markers with <code>file:line</code>
           evidence) and <code>auth-model-reviewer</code> (<code>R-AM6</code> fails a credential-shaped marker) entries in
           <code>reference/agents.html</code>.</li>
+      </ul>
+
+      <h3 id="v0-42-0-changed">Changed</h3>
+
+      <ul>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.41.0</code> &rarr; <code>0.42.0</code> to
+          match this release; users running <code>/plugin</code> after pulling
+          this version will get a fresh <code>relay/0.42.0/</code> cache directory
+          with all newly-shipped commands and agents registered.</li>
       </ul>
 
       <h2 id="v0-41-0">0.41.0 &#8212; 2026-10-04</h2>
