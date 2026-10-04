@@ -94,6 +94,11 @@ Search the repository statically for:
   code that reads that token from `localStorage` or IndexedDB — record both with
   `file:line` evidence, the header name, the browser location and the token's
   environment-variable NAME only (never a secret file, never a value).
+- An element or greeting component that renders only when a user is signed in
+  (and, separately, one specific to a role): PROPOSE it as a candidate
+  authenticated-only marker with `file:line` evidence, never guess one; an
+  unknown is `TBD - needs validation` with a matching row under
+  `## Open Questions and Assumptions`.
 - SSO, MFA, captcha and email or SMS verification integrations.
 - Local targets: base URLs and ports from `.env.example`-style files and
   documented dev-server configuration.

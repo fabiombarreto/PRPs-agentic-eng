@@ -54,6 +54,8 @@ export const OUTCOMES = ['pass', 'fail', 'blocked', 'needs-human'];
 
 const FEATURE_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 const ROLE_PATTERN = /^[a-z0-9][a-z0-9-]{0,39}$/;
+/** Login-script halts surfaced as their own blocked reasons (a configuration or account problem). */
+const PROBE_BLOCK_CODES = ['FAILED_PROBE_NOT_PROTECTED', 'FAILED_PROBE_WRONG_ACCOUNT', 'FAILED_PROBE_PAGE_UNLOADABLE'];
 const HUMAN_GATE_SENTENCE =
   'HUMAN GATE STILL OPEN: a runner pass is evidence, not approval. No Manual status was changed and no phase status advanced.';
 
@@ -1411,6 +1413,9 @@ async function executeCase(ctxOrNull, kase, planByIndex, target, makeCtx, root, 
       return out(blocked('ROLE_UNDECLARED', `role ${role} is not declared in PRPs/auth/login.config.json`));
     }
     const s = obtainSession(ctx, role);
+    if (!s.ok && PROBE_BLOCK_CODES.includes(s.code)) {
+      return out(blocked(s.code, `the kit's session probe for role ${role} halted; nothing was saved or reused`));
+    }
     if (!s.ok) return out(blocked('SESSION_UNAVAILABLE', `the kit login script for role ${role} did not produce a session (${s.code})`));
     session = s.info;
   }

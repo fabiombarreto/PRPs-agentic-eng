@@ -93,7 +93,8 @@ Record `pass` or `fail` with a short rationale on failure. Run all seven.
   `file:line` evidence.
 - **R-AM2** — A login flow is present for every mechanism, each marked
   scriptable or not scriptable. A `static-token` flow states its declared
-  presentation and that no login request exists.
+  presentation and that no login request exists. A declared browser probe
+  states its route and its marker.
 - **R-AM3** — The role and permission matrix lists every role found in the
   evidence, each with guard evidence and tenant scope.
 - **R-AM4** — `## Local User Creation` names, per role, a declared creation path
@@ -107,7 +108,9 @@ Record `pass` or `fail` with a short rationale on failure. Run all seven.
   line of `PRPs/auth/local-hosts.txt`; a suffix form such as
   `localhost.evil.com` or a userinfo form such as `http://localhost@evil.com`
   fails the row. A model that names a `static-token` token VALUE (rather than its
-  environment-variable name) fails this row.
+  environment-variable name) fails this row, and so does a browser probe marker
+  or role marker that is a credential-shaped value (a JWT, a password literal, a
+  cookie value).
 - **R-AM7** — No unresolved `TBD - needs validation` remains without a matching
   row under `## Open Questions and Assumptions`.
 

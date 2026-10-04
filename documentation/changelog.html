@@ -30,7 +30,27 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <p>Nothing yet.</p>
+      <h3 id="unreleased-added">Added</h3>
+
+      <ul>
+        <li><strong>Reuse proof for kit sessions</strong> &mdash; a login script now proves every saved or reused
+          session in both directions. The HTTP probe must answer 2xx with the session and non-2xx without it, presenting
+          the session as the runner will; a probe that answers the same both ways halts
+          <code>FAILED_PROBE_NOT_PROTECTED</code>. A role may declare a browser probe, an authenticated-only marker that
+          must become visible with the session and stay absent in a fresh context for longer than the presence window,
+          plus an optional role marker whose absence halts <code>FAILED_PROBE_WRONG_ACCOUNT</code>; a page that fails to
+          load halts <code>FAILED_PROBE_PAGE_UNLOADABLE</code>. <code>/relay-qa-run</code> reports the three halts as
+          named <code>blocked</code> reasons, and <code>/relay-auth-scripts</code>, the auth model template, writer and
+          reviewer learn to declare the probes. This is phase 7 of
+          <code>PRPs/prds/manual-qa-runner-auth-kit.prd.md</code>. Reference pages now describe it: the
+          <code>/relay-auth-scripts</code> and <code>/relay-qa-run</code> entries in
+          <code>reference/commands.html</code> (the HTTP proof sends cookies plus the token header and the
+          without-session side sends neither; &ldquo;absent&rdquo; is concluded only after the full absence window on a page
+          that loaded; a declared browser probe replaces the HTTP probe and must pass both directions; reuse needs no login
+          and no visible browser), and the <code>auth-model-writer</code> (candidate markers with <code>file:line</code>
+          evidence) and <code>auth-model-reviewer</code> (<code>R-AM6</code> fails a credential-shaped marker) entries in
+          <code>reference/agents.html</code>.</li>
+      </ul>
 
       <h2 id="v0-41-0">0.41.0 &#8212; 2026-10-04</h2>
 

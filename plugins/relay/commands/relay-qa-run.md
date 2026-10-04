@@ -221,7 +221,10 @@ for an aborted run).
 
 Relay the script's summary: the four driver-executed counts, the separate
 `record-resolved` line, the `results.json` path and the evidence directory. List every `blocked` and `needs-human` case by its
-`reason_code`. Then state explicitly:
+`reason_code`. A kit login script that proves a session in both directions can halt with
+`FAILED_PROBE_NOT_PROTECTED`, `FAILED_PROBE_WRONG_ACCOUNT` or `FAILED_PROBE_PAGE_UNLOADABLE`; these appear as
+named `blocked` reasons and mean a configuration or account problem, not "could not log in". Every other session
+failure keeps `SESSION_UNAVAILABLE`. Then state explicitly:
 
 > HUMAN GATE STILL OPEN: a runner pass is evidence, not approval.
 

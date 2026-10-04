@@ -64,7 +64,10 @@ variable NAME, never its value)
 
 (one numbered flow per mechanism; mark each scriptable or not; a `static-token`
 flow has no login step: state the header or browser location that carries the
-token and that no login request exists)
+token and that no login request exists; a role may also state a browser probe as
+one line: the route, the authenticated-only marker as visible text or a selector,
+and optionally a role marker, recorded by description, never a credential or
+cookie value)
 
 ## Session and Token Model
 
