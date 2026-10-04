@@ -30,7 +30,21 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <h3 id="unreleased-added">Added</h3>
+      <p>Nothing yet.</p>
+
+      <h2 id="v0-41-0">0.41.0 &#8212; 2026-10-04</h2>
+
+      <p>The dogfood corrections. The first real run of <code>/relay-qa-run</code>, in <code>praesto-sum</code>, returned no
+        automated outcome for any of its 23 cases — and authentication caused none of that. This release closes the three
+        gaps it exposed. <code>/relay-qa-run</code> now resolves an automated-coverage case from the Test Runner's own
+        schema-v1 record, verified per cited test file through the record's JUnit artifact; a record outside schema v1, a
+        run that executed nothing, an artifact newer than its record, or a cited path matching more than one file all leave
+        the case unresolved, because such a <code>pass</code> is one the runner never executed. The auth kit gains a
+        login-less <code>static-token</code> mechanism, proven against a protected endpoint before anything is saved. And
+        every saved session now carries IndexedDB. This is phase 6 of <code>PRPs/prds/manual-qa-runner-auth-kit.prd.md</code>;
+        phase 5, the dogfood, is still pending.</p>
+
+      <h3 id="v0-41-0-added">Added</h3>
 
       <ul>
         <li><strong>Record resolution in <code>/relay-qa-run</code></strong> &mdash; a case with
@@ -48,7 +62,7 @@
           <code>FAILED_TOKEN_LOCATION_UNREACHABLE</code> rather than saving a session that proves nothing.</li>
       </ul>
 
-      <h3 id="unreleased-changed">Changed</h3>
+      <h3 id="v0-41-0-changed">Changed</h3>
 
       <ul>
         <li><strong>IndexedDB in every saved session</strong> &mdash; each <code>storageState</code> call in the login
@@ -56,6 +70,11 @@
           restores authenticated. A role that needs IndexedDB on a Playwright older than 1.51 halts
           <code>FAILED_INDEXEDDB_UNSUPPORTED</code>, and the plugin's own Playwright floor is raised to
           <code>^1.51.0</code>.</li>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.40.0</code> &rarr; <code>0.41.0</code> to
+          match this release; users running <code>/plugin</code> after pulling
+          this version will get a fresh <code>relay/0.41.0/</code> cache directory
+          with all newly-shipped commands and agents registered.</li>
       </ul>
 
       <h2 id="v0-40-0">0.40.0 &#8212; 2026-10-02</h2>
