@@ -52,11 +52,19 @@ path convention.
 |-----------|----------|----------------------|
 | <mechanism> | <what it authenticates> | <file:line> |
 
+(a login-less shared secret presented by the client with no login request is
+the `static-token` mechanism: record where the client presents it — an HTTP
+header, and for browser use `localStorage` or IndexedDB with the declared
+database, object store and key — and the token's source as an environment
+variable NAME, never its value)
+
 ## Login Flow
 
 1. <step> — <scriptable | not scriptable>
 
-(one numbered flow per mechanism; mark each scriptable or not)
+(one numbered flow per mechanism; mark each scriptable or not; a `static-token`
+flow has no login step: state the header or browser location that carries the
+token and that no login request exists)
 
 ## Session and Token Model
 

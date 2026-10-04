@@ -333,7 +333,7 @@
         <dt>Mode</dt>
         <dd>Deterministic generator with no writer/reviewer pair. Calls the guard and secrecy scripts rather than reimplementing them; the template is copied, never rewritten.</dd>
         <dt>Notes</dt>
-        <dd>Writes no credential value and creates no session; the operator runs each generated script at their own terminal.</dd>
+        <dd>Writes no credential value and creates no session; the operator runs each generated script at their own terminal. A login-less shared token is the <code>static-token</code> mechanism: the generated config declares a <code>staticToken</code> block (token environment-variable name, header, value prefix and an optional <code>localStorage</code> or IndexedDB location) filled only from the approved model, and the script confirms the token against the protected endpoint with and without it before saving. A role whose token lives in IndexedDB needs Playwright 1.51 or newer; otherwise the script halts <code>FAILED_INDEXEDDB_UNSUPPORTED</code>. Every saved session now includes IndexedDB.</dd>
       </div>
 
       <h3 id="relay-qa-run"><code>/relay-qa-run &lt;feature&gt; [--env-handle &lt;path&gt;]</code> <span class="badge badge--done">implemented</span></h3>
@@ -346,7 +346,7 @@
         <dt>Mode</dt>
         <dd>The command translates a case's manual steps into a closed plan only where they map onto the browser and HTTP drivers; the <code>qa-run.mjs</code> script owns the case list, the local-only guard, sessions from the kit's login scripts, redaction, timestamps and the one-entry-per-case invariant. The CLI and database drivers are not built, so those cases return <code>needs-human</code> with their steps verbatim.</dd>
         <dt>Notes</dt>
-        <dd>The report is never edited and no Manual status changes. A runner pass is evidence, not approval: the human validation gate stays open.</dd>
+        <dd>The report is never edited and no Manual status changes. A runner pass is evidence, not approval: the human validation gate stays open. A case with <code>automated</code> coverage is first resolved from the Test Runner's schema-v1 record through the JUnit artifact it points at, with reason code <code>AUTOMATED_EVIDENCE</code>; anything the record cannot prove routes as before. <code>results.json</code> reports these cases through a separate <code>record_resolved</code> count, and the summary line excludes them from the driver-executed numbers.</dd>
       </div>
 
       <h2 id="pillar3">Pillar 3 — Commit, PR &amp; Approval</h2>

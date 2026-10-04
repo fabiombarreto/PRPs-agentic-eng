@@ -30,7 +30,33 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <p>Nothing yet.</p>
+      <h3 id="unreleased-added">Added</h3>
+
+      <ul>
+        <li><strong>Record resolution in <code>/relay-qa-run</code></strong> &mdash; a case with
+          <code>automated</code> coverage is resolved from the Test Runner's schema-v1 record through the JUnit artifact
+          it points at, with reason code <code>AUTOMATED_EVIDENCE</code>. A record outside schema v1, a run that executed
+          nothing, a JUnit artifact written after the record, an unlisted file or a path matching more than one file
+          never resolves a case. <code>results.json</code> gains a separate <code>record_resolved</code> count and the
+          <code>qa-run-contract</code> check validates it; the summary line excludes these cases from the
+          driver-executed numbers.</li>
+        <li><strong><code>static-token</code> login mechanism</strong> &mdash; the login template, the
+          <code>/relay-auth-scripts</code> generator, the auth model template, writer and reviewer now handle an
+          application that authenticates with one shared token and has no login flow. The token source is a declared
+          environment-variable name, the ignored credential store or a terminal prompt; the script confirms it against the
+          protected endpoint with and without the token, and halts <code>FAILED_TOKEN_UNPROVEN</code> or
+          <code>FAILED_TOKEN_LOCATION_UNREACHABLE</code> rather than saving a session that proves nothing.</li>
+      </ul>
+
+      <h3 id="unreleased-changed">Changed</h3>
+
+      <ul>
+        <li><strong>IndexedDB in every saved session</strong> &mdash; each <code>storageState</code> call in the login
+          template passes <code>{ indexedDB: true }</code>, so an application that keeps its credential in IndexedDB
+          restores authenticated. A role that needs IndexedDB on a Playwright older than 1.51 halts
+          <code>FAILED_INDEXEDDB_UNSUPPORTED</code>, and the plugin's own Playwright floor is raised to
+          <code>^1.51.0</code>.</li>
+      </ul>
 
       <h2 id="v0-40-0">0.40.0 &#8212; 2026-10-02</h2>
 

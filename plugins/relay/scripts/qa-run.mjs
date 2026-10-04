@@ -30,7 +30,11 @@
  *
  * Drivers: `http` and `browser` are active. Any case that needs another driver,
  * or that the plan does not cover, is recorded `needs-human` with its manual
- * steps verbatim.
+ * steps verbatim. Before routing, a case whose coverage is `automated` is
+ * resolved from the Test Runner's schema-v1 record: the JUnit artifact the
+ * record points at decides pass or fail per cited test file, with reason_code
+ * AUTOMATED_EVIDENCE. Anything the record cannot prove routes as before, and
+ * results.json reports those cases separately through `record_resolved`.
  *
  * Redaction follows ${CLAUDE_PLUGIN_ROOT}/resources/redaction-policy.md and is
  * applied in memory before any evidence byte is written.
@@ -39,7 +43,7 @@
  * Node >=18, ESM.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, statSync, readdirSync } from 'node:fs';
 import { resolve, join, relative, dirname, isAbsolute, basename } from 'node:path';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
@@ -743,7 +747,7 @@ async function guardTarget(baseUrl, root) {
 /**
  * @typedef {{ outcome: string, reason_code: string | null, reason: string | null, evidence: string[] }} CaseResult
  * @typedef {{ root: string, runDirAbs: string, runDirRel: string, table: RedactionTable, target: NonNullable<Target>, playwright: any, loginConfig: any, sessions: Map<string, any>, seeds: Map<string, any>, seedConfig: any }} RunCtx
- * @typedef {{ path: string | null, token: string | null }} SessionInfo
+ * @typedef {{ path: string | null, token: string | null, header?: string | null, valuePrefix?: string | null }} SessionInfo
  */
 
 /** @type {Record<string, (ctx: RunCtx, kase: ReportCase, plan: any, session: SessionInfo | null) => Promise<CaseResult>>} */
@@ -877,6 +881,17 @@ function writeEvidence(ctx, name, payload) {
   return `${ctx.runDirRel}/evidence/${name}`;
 }
 
+/**
+ * The header a token artifact declares (a static-token role), else today's
+ * `Authorization: Bearer <token>`.
+ * @param {SessionInfo} session
+ * @returns {Record<string, string>}
+ */
+function sessionAuthHeaders(session) {
+  if (session.header) return { [session.header]: `${session.valuePrefix ?? ''}${session.token}` };
+  return { Authorization: `Bearer ${session.token}` };
+}
+
 const BODY_LIMIT = 65536;
 const EVIDENCE_HEADERS = ['content-type', 'content-length', 'location', 'cache-control'];
 
@@ -884,7 +899,7 @@ DRIVERS.http = async (ctx, kase, plan, session) => {
   const target = ctx.target;
   /** @type {any} */ const opts = { baseURL: target.origin };
   if (session && session.path) opts.storageState = session.path;
-  if (session && session.token) opts.extraHTTPHeaders = { Authorization: `Bearer ${session.token}` };
+  if (session && session.token) opts.extraHTTPHeaders = sessionAuthHeaders(session);
   /** @type {string[]} */ const evidence = [];
   /** @type {any} */ let reqCtx = null;
   try {
@@ -1073,7 +1088,9 @@ function obtainSession(ctx, role) {
         const token = tok && isStr(tok.token) && tok.token !== '' ? tok.token : null;
         if (token !== null) secrets.push(token);
         addSecretValues(ctx.table, secrets);
-        result = { ok: true, info: { path: sessionPath, token } };
+        const header = tok && isStr(tok.header) && /^[A-Za-z0-9-]+$/.test(tok.header) ? tok.header : null;
+        const valuePrefix = header !== null && tok && isStr(tok.value_prefix) ? tok.value_prefix : null;
+        result = { ok: true, info: { path: sessionPath, token, header, valuePrefix } };
       }
     } else {
       const m = /FAILED_[A-Z_]+/.exec(String(r.stderr ?? ''));
@@ -1134,6 +1151,206 @@ async function runSeed(ctx, argv) {
 }
 
 // ---------------------------------------------------------------------------
+// Record resolution: automated-coverage cases from the Test Runner's record
+// ---------------------------------------------------------------------------
+
+/** A later run overwriting a shared artifact path must not be credited to an older record. */
+const JUNIT_MTIME_SLACK_MS = 120000;
+const JUNIT_MAX_BYTES = 20 * 1024 * 1024;
+const RECORD_EXECUTED_OUTCOMES = ['PASSED', 'FAILED', 'FAILED_AFTER_N_RETRIES', 'FAILED_TIME_BUDGET_EXCEEDED'];
+const TEST_PATH_RE = /^[A-Za-z0-9_@./\\-]+\.[A-Za-z0-9]{1,5}$/;
+
+/**
+ * The discovery rule of /relay-qa-report: the top-level record.json, else the
+ * highest-numbered attempts/<N>/record.json. Only the first candidate that
+ * exists is ever examined.
+ * @param {string} root
+ * @param {string} feature
+ * @returns {{ abs: string, rel: string } | null}
+ */
+function findTestRunnerRecord(root, feature) {
+  const relDir = `PRPs/reports/${feature}`;
+  const dir = join(root, ...relDir.split('/'));
+  const top = join(dir, 'record.json');
+  if (existsSync(top)) return { abs: top, rel: `${relDir}/record.json` };
+  let best = -1;
+  try {
+    for (const ent of readdirSync(join(dir, 'attempts'), { withFileTypes: true })) {
+      if (ent.isDirectory() && /^\d+$/.test(ent.name) && existsSync(join(dir, 'attempts', ent.name, 'record.json'))) {
+        best = Math.max(best, Number(ent.name));
+      }
+    }
+  } catch {
+    return null;
+  }
+  return best >= 0 ? { abs: join(dir, 'attempts', String(best), 'record.json'), rel: `${relDir}/attempts/${best}/record.json` } : null;
+}
+
+/**
+ * Schema v1 of the Test Runner record. A record outside it, or one whose run
+ * executed nothing, is never evidence.
+ * @param {any} rec
+ * @returns {boolean}
+ */
+function isSchemaV1Record(rec) {
+  if (!isObj(rec)) return false;
+  if (!isStr(rec.run_id) || !Number.isInteger(rec.attempt) || rec.attempt < 1 || !isStr(rec.framework)) return false;
+  if (!isStr(rec.outcome) || !RECORD_EXECUTED_OUTCOMES.includes(rec.outcome)) return false;
+  const c = rec.counts;
+  if (!isObj(c)) return false;
+  for (const k of ['passed', 'failed', 'skipped', 'total']) if (!Number.isInteger(c[k]) || c[k] < 0) return false;
+  if (c.total !== c.passed + c.failed + c.skipped || c.total <= 0) return false;
+  if (rec.outcome === 'PASSED' && c.failed !== 0) return false;
+  if (!Array.isArray(rec.failures)) return false;
+  if (!isObj(rec.artifacts) || !isStr(rec.artifacts.junit_xml) || !isAbsolute(rec.artifacts.junit_xml)) return false;
+  return isStr(rec.generated_at);
+}
+
+/** @param {string} t @returns {boolean} */
+const looksPathLike = (t) => /[/\\]/.test(t) || /\.[A-Za-z0-9]+$/.test(t);
+
+/**
+ * The test files an `Automated test path` field cites. `refused` is set when a
+ * path-like token fails qualification: the required set is never shrunk
+ * silently, so the whole case is then not resolved.
+ * @param {string | null} field
+ * @returns {{ paths: string[], refused: boolean }}
+ */
+function extractTestPaths(field) {
+  if (!isStr(field)) return { paths: [], refused: false };
+  /** @type {string[]} */ const found = [];
+  let refused = false;
+  /** @param {string} tok */
+  const consider = (tok) => {
+    if (TEST_PATH_RE.test(tok)) found.push(tok.split('\\').join('/').replace(/^\.\//, ''));
+    else if (looksPathLike(tok)) refused = true;
+  };
+  const spans = [...field.matchAll(/`([^`]*)`/g)].map((m) => m[1].trim());
+  for (const s of spans) {
+    if (/[("']/.test(s) || s === '') continue; // plainly prose
+    if (/\s/.test(s) && !looksPathLike(s)) continue;
+    consider(s);
+  }
+  const plain = field.replace(/`[^`]*`/g, ' ');
+  const cut = plain.search(/ [—–-] |\(/);
+  const kept = cut >= 0 ? plain.slice(0, cut) : plain;
+  if (spans.length === 0 || kept.trim() !== '') {
+    for (const tok of kept.split(/[\s,;]+/)) if (tok !== '') consider(tok);
+  }
+  // The discarded tail is prose only if it carries no unquoted path-like token;
+  // otherwise a cited file was truncated away and the case must not resolve.
+  if (cut >= 0) {
+    for (const raw of plain.slice(cut).split(/[\s,;]+/)) {
+      const tok = raw.replace(/^[("'[]+/, '').replace(/[)"'\]:,.;]+$/, '');
+      if (tok !== '' && looksPathLike(tok)) refused = true;
+    }
+  }
+  return { paths: [...new Set(found)], refused };
+}
+
+/** @param {string} s @returns {string} */
+const xmlDecode = (s) =>
+  s
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+
+/**
+ * @param {string} xml
+ * @returns {{ name: string, file: string | null, classname: string | null, failed: boolean, skipped: boolean }[]}
+ */
+function readJunitTestcases(xml) {
+  /** @type {{ name: string, file: string | null, classname: string | null, failed: boolean, skipped: boolean }[]} */
+  const out = [];
+  const re = /<testcase\b((?:[^>"']|"[^"]*"|'[^']*')*)>/g;
+  let m;
+  while ((m = re.exec(xml)) !== null) {
+    const attrText = m[1];
+    /** @type {Record<string, string>} */ const attrs = {};
+    for (const a of attrText.matchAll(/([A-Za-z_:][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) attrs[a[1]] = xmlDecode(a[2] ?? a[3] ?? '');
+    let body = '';
+    if (!attrText.trimEnd().endsWith('/')) {
+      const end = xml.indexOf('</testcase>', re.lastIndex);
+      body = end >= 0 ? xml.slice(re.lastIndex, end) : '';
+    }
+    out.push({
+      name: attrs.name ?? '',
+      file: isStr(attrs.file) && attrs.file !== '' ? attrs.file : null,
+      classname: isStr(attrs.classname) && attrs.classname !== '' ? attrs.classname : null,
+      failed: /<(failure|error)\b/.test(body),
+      skipped: /<skipped\b/.test(body),
+    });
+  }
+  return out;
+}
+
+/**
+ * Resolves one `automated`-coverage case from the Test Runner's record, or
+ * returns null so the case routes exactly as before.
+ * @param {string} root
+ * @param {string} feature
+ * @param {ReportCase} kase
+ * @returns {{ outcome: 'pass' | 'fail', reason: string, value: any } | null}
+ */
+function resolveFromRecord(root, feature, kase) {
+  const cov = (kase.coverage ?? '').replace(/[`*]/g, '').trim().toLowerCase();
+  if (cov !== 'automated') return null;
+  const found = findTestRunnerRecord(root, feature);
+  if (found === null) return null;
+  const rec = readJsonOrNull(found.abs);
+  if (!isSchemaV1Record(rec)) return null;
+  const { paths, refused } = extractTestPaths(kase.automated_test_path);
+  if (refused || paths.length === 0) return null;
+  const generated = Date.parse(rec.generated_at);
+  if (Number.isNaN(generated)) return null;
+  const junit = rec.artifacts.junit_xml;
+  /** @type {string} */ let xml;
+  /** @type {string} */ let mtimeIso;
+  try {
+    const st = statSync(junit);
+    if (!st.isFile() || st.size > JUNIT_MAX_BYTES) return null;
+    if (st.mtimeMs > generated + JUNIT_MTIME_SLACK_MS) return null;
+    mtimeIso = new Date(st.mtimeMs).toISOString();
+    xml = readFileSync(junit, 'utf8');
+  } catch {
+    return null;
+  }
+  const cases = readJunitTestcases(xml).map((t) => {
+    const loc = t.file !== null ? t.file : t.classname;
+    return { ...t, loc: loc === null ? null : loc.split('\\').join('/') };
+  });
+  /** @type {{ cited: string, testcases: number, failed: string[] }[]} */ const files = [];
+  for (const p of paths) {
+    const hit = cases.filter((t) => t.loc !== null && (t.loc === p || t.loc.endsWith(`/${p}`)));
+    if (new Set(hit.map((t) => t.loc)).size !== 1) return null;
+    const ran = hit.filter((t) => !t.skipped);
+    if (ran.length === 0) return null;
+    files.push({ cited: p, testcases: ran.length, failed: ran.filter((t) => t.failed).map((t) => t.name) });
+  }
+  const total = files.reduce((n, f) => n + f.testcases, 0);
+  const failedCount = files.reduce((n, f) => n + f.failed.length, 0);
+  const head = `resolved from ${found.rel} (run ${rec.run_id}, attempt ${rec.attempt}, generated ${rec.generated_at}); ${total} test case(s) in ${files.length} file(s), `;
+  return {
+    outcome: failedCount > 0 ? 'fail' : 'pass',
+    reason: head + (failedCount > 0 ? `${failedCount} failed` : 'none failed'),
+    value: {
+      resolved_from: 'test-runner-record',
+      record: found.rel,
+      record_run_id: rec.run_id,
+      record_attempt: rec.attempt,
+      record_generated_at: rec.generated_at,
+      junit_artifact: junit,
+      junit_artifact_mtime: mtimeIso,
+      files,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Case classification
 // ---------------------------------------------------------------------------
 
@@ -1143,9 +1360,22 @@ async function runSeed(ctx, argv) {
  * @param {Map<number, any>} planByIndex
  * @param {Target} target
  * @param {() => RunCtx} makeCtx lazily builds the run context (loads Playwright once)
+ * @param {string} root
+ * @param {string} feature
  * @returns {Promise<{ result: CaseResult, driver: string | null, role: string | null }>}
  */
-async function executeCase(ctxOrNull, kase, planByIndex, target, makeCtx) {
+async function executeCase(ctxOrNull, kase, planByIndex, target, makeCtx, root, feature) {
+  const resolved = resolveFromRecord(root, feature, kase);
+  if (resolved !== null) {
+    // No driver runs for a resolved case, and a plan entry for it is ignored. Never a pass without evidence.
+    try {
+      const evCtx = ctxOrNull ?? makeCtx();
+      const evidence = writeEvidence(evCtx, `case-${kase.index}.record.json`, { kind: 'json', value: resolved.value });
+      return { result: { outcome: resolved.outcome, reason_code: 'AUTOMATED_EVIDENCE', reason: resolved.reason, evidence: [evidence] }, driver: null, role: null };
+    } catch {
+      return { result: blocked('EVIDENCE_WRITE_FAILED', 'the record-resolved evidence file could not be written; no outcome is claimed'), driver: null, role: null };
+    }
+  }
   const p = planByIndex.get(kase.index);
   if (!p) return { result: needsHuman('NO_PLAN_ENTRY', 'no plan entry covers this case; the manual steps are reproduced verbatim'), driver: null, role: null };
   const driver = isStr(p.driver) ? p.driver : null;
@@ -1309,7 +1539,7 @@ async function runRun(args) {
           // Counted, never dropped, and never executed: a case missing a label is not a case the runner can vouch for.
           result = blocked('CASE_INCOMPLETE', `the case section lacks the labeled field(s): ${missing.join(', ')}`);
         } else {
-          const r = await executeCase(ctx, c, planByIndex, target, makeCtx);
+          const r = await executeCase(ctx, c, planByIndex, target, makeCtx, root, feature);
           result = r.result;
           driver = r.driver;
           role = r.role;
@@ -1351,6 +1581,12 @@ async function runRun(args) {
     const finished = now();
     /** @type {Record<string, number>} */ const counts = { pass: 0, fail: 0, blocked: 0, 'needs-human': 0 };
     for (const e of entries) counts[e.outcome]++;
+    // Record-resolved cases are INSIDE counts.pass/fail (the four-key partition is unchanged) but were
+    // not executed by a driver: they are reported beside the driver-executed numbers, never added to them.
+    const recordEntries = entries.filter((e) => e.reason_code === 'AUTOMATED_EVIDENCE');
+    const recordResolved = recordEntries.length;
+    const recordPass = recordEntries.filter((e) => e.outcome === 'pass').length;
+    const recordFail = recordEntries.filter((e) => e.outcome === 'fail').length;
     // A report that is gone OR unreadable (e.g. replaced by a directory) yields null, which can
     // never equal shaBefore, so it surfaces below as FAILED_REPORT_MODIFIED instead of throwing
     // out of this finally and losing results.json.
@@ -1372,6 +1608,7 @@ async function runRun(args) {
       duration_ms: Math.max(0, Date.parse(finished) - Date.parse(runStart)),
       base_url_origin: target ? target.origin : null,
       counts,
+      record_resolved: recordResolved,
       aborted,
       warnings,
       human_gate: { status: 'open', review_file: reportRel },
@@ -1388,7 +1625,8 @@ async function runRun(args) {
       exitCode = 1;
     }
     const lines = [
-      `QA run finished: pass=${counts.pass} fail=${counts.fail} blocked=${counts.blocked} needs-human=${counts['needs-human']}`,
+      `QA run finished: pass=${counts.pass - recordPass} fail=${counts.fail - recordFail} blocked=${counts.blocked} needs-human=${counts['needs-human']}`,
+      `Record-resolved (not driver-executed): record-resolved=${recordResolved} (pass=${recordPass} fail=${recordFail})`,
       ...entries.filter((e) => e.outcome !== 'pass').map((e) => `  case ${e.index}: ${e.outcome}${e.reason_code ? ` (${e.reason_code})` : ''}`),
       `Results: ${runDirRel}/results.json`,
       `Evidence: ${runDirRel}/evidence/`,

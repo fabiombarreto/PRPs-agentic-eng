@@ -22,7 +22,7 @@
  * Config: <root>/PRPs/auth/login.config.json
  *   { "baseUrl": string,
  *     "roles": { "<role>": {
- *       "mechanism": "form" | "api" | "headed",
+ *       "mechanism": "form" | "api" | "headed" | "static-token",
  *       "loginPath": string | null,
  *       "form": { "usernameSelector", "passwordSelector", "submitSelector" } | null,
  *       "api": { "path", "method", "usernameField", "passwordField", "tokenPath": string | null } | null,
@@ -30,7 +30,17 @@
  *       "sessionCookie": string | null,
  *       "maxAgeMinutes": number,
  *       "credentials": { "usernameEnv": string | null, "passwordEnv": string | null },
- *       "userCreation": { "command": string[] | null } } } }
+ *       "userCreation": { "command": string[] | null },
+ *       "needsIndexedDb": boolean (optional, default false),
+ *       "staticToken": { "tokenEnv": string | null, "header": string, "valuePrefix": string,
+ *         "browser": null | { "kind": "localStorage" | "indexedDB", "originPath": string,
+ *           "key": string, "database": string | null, "store": string | null,
+ *           "valueField": string | null } } } } }
+ * The "static-token" mechanism sends no login request: the token comes from the
+ * environment variable named by staticToken.tokenEnv, else the ignored
+ * credentials store, else a terminal prompt; every staticToken field is
+ * declared, never guessed. It is saved only after the protected probe answers
+ * 2xx with the token and non-2xx without it.
  * A missing required field or a value equal to `TBD - needs validation`
  * halts FAILED_LOGIN_CONFIG_INCOMPLETE naming the field.
  *
@@ -149,6 +159,28 @@ function incompleteField(role) {
     required = required.concat(['api.path', 'api.method', 'api.usernameField', 'api.passwordField']);
   } else if (role.mechanism === 'headed') {
     required = required.concat(['loginPath']);
+  } else if (role.mechanism === 'static-token') {
+    required = required.concat(['staticToken.header']);
+    const st = role.staticToken;
+    if (!st || typeof st !== 'object' || typeof st.valuePrefix !== 'string') {
+      return `roles.${ROLE}.staticToken.valuePrefix`;
+    }
+    if (st.browser === undefined) return `roles.${ROLE}.staticToken.browser`;
+    if (st.browser !== null) {
+      const kind = st.browser.kind;
+      if (kind === 'localStorage') {
+        required = required.concat(['staticToken.browser.originPath', 'staticToken.browser.key']);
+      } else if (kind === 'indexedDB') {
+        required = required.concat([
+          'staticToken.browser.originPath',
+          'staticToken.browser.key',
+          'staticToken.browser.database',
+          'staticToken.browser.store',
+        ]);
+      } else {
+        return `roles.${ROLE}.staticToken.browser.kind`;
+      }
+    }
   } else {
     return `roles.${ROLE}.mechanism`;
   }
@@ -252,12 +284,59 @@ function resolveCredentials(root, role) {
 function loadPlaywright(root, pluginRoot) {
   for (const base of [join(root, 'package.json'), join(pluginRoot, 'scripts', 'visual', 'package.json')]) {
     try {
-      return createRequire(base)('playwright');
+      const mod = createRequire(base)('playwright');
+      pwBase = base;
+      return mod;
     } catch {
       // try the next resolution root
     }
   }
   return null;
+}
+
+/** The package.json base that resolved Playwright (null until it resolves). @type {string | null} */
+let pwBase = null;
+
+/**
+ * @returns {string | null} the resolved Playwright version, or null when unreadable
+ */
+function playwrightVersion() {
+  if (pwBase === null) return null;
+  try {
+    const v = createRequire(pwBase)('playwright/package.json').version;
+    return typeof v === 'string' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * IndexedDB capture needs Playwright >= 1.51; an unreadable version is
+ * unsupported (fail closed).
+ * @returns {boolean}
+ */
+function indexedDbSupported() {
+  const v = playwrightVersion();
+  if (v === null) return false;
+  const m = /^(\d+)\.(\d+)/.exec(v);
+  if (!m) return false;
+  const major = Number(m[1]);
+  const minor = Number(m[2]);
+  return major > 1 || (major === 1 && minor >= 51);
+}
+
+/**
+ * @param {any} role
+ * @returns {boolean} true when the role's session must carry IndexedDB
+ */
+function needsIndexedDb(role) {
+  if (role.needsIndexedDb === true) return true;
+  return (
+    role.mechanism === 'static-token' &&
+    !!role.staticToken &&
+    !!role.staticToken.browser &&
+    role.staticToken.browser.kind === 'indexedDB'
+  );
 }
 
 /**
@@ -354,7 +433,7 @@ async function loginApi(cfg, role, creds, pw) {
       }
       if (token === null) return null;
     }
-    const state = await ctx.storageState();
+    const state = await ctx.storageState({ indexedDB: true });
     return { state, token };
   } catch {
     return null;
@@ -395,7 +474,7 @@ async function loginForm(cfg, role, creds, pw, guard, root, allowedHosts) {
     );
     const final = await guard.checkTarget(page.url(), { root });
     if (!final.ok) return null;
-    return await context.storageState();
+    return await context.storageState({ indexedDB: true });
   } catch {
     return null;
   } finally {
@@ -422,9 +501,200 @@ async function loginHeaded(cfg, role, pw, guard, root) {
     await readLine('Complete the login in the browser, then press Enter here', true);
     const final = await guard.checkTarget(page.url(), { root });
     if (!final.ok) return { state: null, nonLocal: true };
-    return { state: await context.storageState(), nonLocal: false };
+    return { state: await context.storageState({ indexedDB: true }), nonLocal: false };
   } catch {
     return { state: null, nonLocal: false };
+  } finally {
+    await browser.close();
+  }
+}
+
+/**
+ * Token source for a static-token role: the environment variable NAMED by
+ * staticToken.tokenEnv, else the ignored credentials store, else a terminal
+ * prompt (never echoed, held in memory only). The caller persists a prompted
+ * token only after the proof and the browser step succeed.
+ * @param {string} root
+ * @param {any} role
+ * @returns {Promise<{ token: string, prompted: boolean } | null>}
+ */
+async function resolveStaticToken(root, role) {
+  const st = role.staticToken || {};
+  if (typeof st.tokenEnv === 'string' && st.tokenEnv !== '') {
+    const v = process.env[st.tokenEnv];
+    if (v) return { token: v, prompted: false };
+  }
+  const file = readJson(root, CREDENTIALS_REL);
+  const entry = file && typeof file === 'object' ? file[ROLE] : null;
+  if (entry && typeof entry.token === 'string' && entry.token !== '') {
+    return { token: entry.token, prompted: false };
+  }
+  if (process.stdin.isTTY) {
+    const typed = await readLine(`Token for role ${ROLE} (not echoed): `, false);
+    if (typed !== '') return { token: typed, prompted: true };
+  }
+  return null;
+}
+
+/**
+ * Confirm the token against the protected probe endpoint: 2xx with the
+ * declared header and non-2xx without it.
+ * @param {any} cfg
+ * @param {any} role
+ * @param {string} token
+ * @param {any} pw
+ * @returns {Promise<'proven' | 'unproven' | 'rejected'>}
+ */
+async function proveStaticToken(cfg, role, token, pw) {
+  const url = sameOriginUrl(cfg.baseUrl, role.probe.path);
+  if (!url) return 'rejected';
+  /**
+   * @param {Record<string, string> | undefined} headers
+   * @returns {Promise<number>}
+   */
+  const status = async (headers) => {
+    const ctx = await pw.request.newContext();
+    try {
+      const res = await ctx.fetch(url, { method: role.probe.method, headers, maxRedirects: 0 });
+      return res.status();
+    } finally {
+      await ctx.dispose();
+    }
+  };
+  try {
+    const withToken = await status({ [role.staticToken.header]: `${role.staticToken.valuePrefix}${token}` });
+    if (withToken < 200 || withToken >= 300) return 'rejected';
+    const without = await status(undefined);
+    return without >= 200 && without < 300 ? 'unproven' : 'proven';
+  } catch {
+    return 'rejected';
+  }
+}
+
+/**
+ * Static checks on an existing static-token session, then the with/without
+ * proof using the token read from the ignored token artifact (never printed).
+ * @param {string} root
+ * @param {any} cfg
+ * @param {any} role
+ * @param {() => any} getPlaywright
+ * @returns {Promise<boolean>}
+ */
+async function staticTokenReusable(root, cfg, role, getPlaywright) {
+  const file = join(root, SESSION_REL);
+  if (!existsSync(file)) return false;
+  const state = readJson(root, SESSION_REL);
+  if (!state || !Array.isArray(state.cookies) || !Array.isArray(state.origins)) return false;
+  if (Date.now() - statSync(file).mtimeMs >= role.maxAgeMinutes * 60000) return false;
+  const art = readJson(root, TOKEN_REL);
+  if (!art || typeof art.token !== 'string' || art.token === '') return false;
+  const pw = getPlaywright();
+  if (!pw) return false;
+  return (await proveStaticToken(cfg, role, art.token, pw)) === 'proven';
+}
+
+/**
+ * Put the token at the declared browser location and capture the storage
+ * state (IndexedDB included). The location is declared, never guessed.
+ * @param {any} cfg
+ * @param {any} role
+ * @param {string} token
+ * @param {any} pw
+ * @param {{ checkTarget: Function, isAllowedHost: Function }} guard
+ * @param {string} root
+ * @param {Set<string>} allowedHosts
+ * @returns {Promise<{ state: any | null, halt: string | null }>}
+ */
+async function placeStaticToken(cfg, role, token, pw, guard, root, allowedHosts) {
+  const loc = role.staticToken.browser;
+  const unreachable = (/** @type {string} */ what) => ({
+    state: null,
+    halt: `FAILED_TOKEN_LOCATION_UNREACHABLE: ${what}; nothing was saved`,
+  });
+  const browser = await pw.chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext();
+    await context.route('**/*', (/** @type {any} */ route) => {
+      const u = new URL(route.request().url());
+      if (['data:', 'about:', 'blob:'].includes(u.protocol)) return route.continue();
+      return guard.isAllowedHost(u.hostname, allowedHosts) ? route.continue() : route.abort();
+    });
+    const page = await context.newPage();
+    const appUrl = sameOriginUrl(cfg.baseUrl, loc.originPath);
+    if (!appUrl) return { state: null, halt: `FAILED_LOGIN_REJECTED: the login for role ${ROLE} yielded no session` };
+    await page.goto(appUrl);
+    const final = await guard.checkTarget(page.url(), { root });
+    if (!final.ok) return { state: null, halt: 'FAILED_NON_LOCAL_TARGET: final-page (nothing was saved)' };
+    if (loc.kind === 'localStorage') {
+      await page.evaluate((/** @type {{ key: string, token: string }} */ a) => localStorage.setItem(a.key, a.token), {
+        key: loc.key,
+        token,
+      });
+    } else {
+      try {
+        await page.waitForFunction(
+          async (/** @type {string} */ db) => {
+            const list = await indexedDB.databases();
+            return list.some((d) => d.name === db);
+          },
+          loc.database,
+          { timeout: 10000 },
+        );
+      } catch {
+        return unreachable(`IndexedDB database ${loc.database} did not appear on ${loc.originPath}`);
+      }
+      const outcome = await page.evaluate(
+        async (/** @type {{ db: string, store: string, key: string, valueField: string | null, token: string }} */ a) => {
+          /** @type {IDBDatabase} */
+          let conn;
+          try {
+            conn = await new Promise((ok, bad) => {
+              const r = indexedDB.open(a.db);
+              r.onupgradeneeded = () => r.transaction && r.transaction.abort();
+              r.onsuccess = () => ok(r.result);
+              r.onerror = () => bad(r.error);
+            });
+          } catch {
+            return 'no-database';
+          }
+          try {
+            if (!conn.objectStoreNames.contains(a.store)) return 'no-store';
+            const tx = conn.transaction(a.store, 'readwrite');
+            const os = tx.objectStore(a.store);
+            const kp = os.keyPath;
+            const done = new Promise((ok, bad) => {
+              tx.oncomplete = () => ok(true);
+              tx.onerror = () => bad(tx.error);
+              tx.onabort = () => bad(tx.error);
+            });
+            if (kp === null) {
+              os.put(a.token, a.key);
+            } else if (typeof kp === 'string' && a.valueField) {
+              os.put({ [kp]: a.key, [a.valueField]: a.token });
+            } else {
+              tx.abort();
+              return typeof kp === 'string' ? 'need-value-field' : 'no-store';
+            }
+            await done;
+            return 'ok';
+          } catch {
+            return 'no-store';
+          } finally {
+            conn.close();
+          }
+        },
+        { db: loc.database, store: loc.store, key: loc.key, valueField: loc.valueField || null, token },
+      );
+      if (outcome === 'need-value-field') {
+        return { state: null, halt: `FAILED_LOGIN_CONFIG_INCOMPLETE: roles.${ROLE}.staticToken.browser.valueField` };
+      }
+      if (outcome !== 'ok') {
+        return unreachable(`IndexedDB database ${loc.database} or object store ${loc.store} is not usable`);
+      }
+    }
+    return { state: await context.storageState({ indexedDB: true }), halt: null };
+  } catch {
+    return { state: null, halt: `FAILED_LOGIN_REJECTED: the login for role ${ROLE} yielded no session` };
   } finally {
     await browser.close();
   }
@@ -521,11 +791,21 @@ async function main(argv) {
     const p = getPlaywright();
     if (!p) {
       err('FAILED_PLAYWRIGHT_UNAVAILABLE: playwright is not resolvable; run `npm install` in plugins/relay/scripts/visual/');
+      return p;
+    }
+    if (needsIndexedDb(role) && !indexedDbSupported()) {
+      err('FAILED_INDEXEDDB_UNSUPPORTED: the resolved Playwright cannot capture IndexedDB (needs >= 1.51); nothing was saved');
+      return null;
     }
     return p;
   };
 
-  if (!args.force && (await sessionReusable(root, cfg, role, getPlaywright))) {
+  const reusable =
+    !args.force &&
+    (role.mechanism === 'static-token'
+      ? await staticTokenReusable(root, cfg, role, getPlaywright)
+      : await sessionReusable(root, cfg, role, getPlaywright));
+  if (reusable) {
     process.stdout.write(`SESSION_REUSED: ${SESSION_REL}\n`);
     process.stdout.write(`auth_mode: storage-state:${SESSION_REL}\n`);
     return 0;
@@ -533,6 +813,7 @@ async function main(argv) {
 
   /** @type {any | null} */ let state = null;
   /** @type {string | null} */ let token = null;
+  let promptedToken = false;
 
   if (role.mechanism === 'headed') {
     if (!process.stdin.isTTY) {
@@ -546,6 +827,34 @@ async function main(argv) {
       return 1;
     }
     state = r.state;
+  } else if (role.mechanism === 'static-token') {
+    if (!requirePlaywright()) return 1;
+    const source = await resolveStaticToken(root, role);
+    if (!source) {
+      err(`FAILED_CREDENTIALS_UNAVAILABLE: no token source for role ${ROLE} (environment variable, credentials file, terminal)`);
+      return 1;
+    }
+    const proof = await proveStaticToken(cfg, role, source.token, pw);
+    if (proof === 'unproven') {
+      err('FAILED_TOKEN_UNPROVEN: the protected endpoint answered 2xx with and without the token; no session was saved');
+      return 1;
+    }
+    if (proof !== 'proven') {
+      err(`FAILED_LOGIN_REJECTED: the login for role ${ROLE} yielded no session`);
+      return 1;
+    }
+    if (role.staticToken.browser === null) {
+      state = { cookies: [], origins: [] };
+    } else {
+      const placed = await placeStaticToken(cfg, role, source.token, pw, guard, root, target.allowedHosts);
+      if (placed.halt) {
+        err(placed.halt);
+        return 1;
+      }
+      state = placed.state;
+    }
+    token = source.token;
+    promptedToken = source.prompted;
   } else {
     let creds = resolveCredentials(root, role);
     if (!creds && role.userCreation && Array.isArray(role.userCreation.command) && role.userCreation.command.length > 0) {
@@ -590,15 +899,23 @@ async function main(argv) {
     return 1;
   }
 
+  if (promptedToken && token !== null) {
+    const existing = readJson(root, CREDENTIALS_REL);
+    const merged = existing && typeof existing === 'object' ? existing : {};
+    merged[ROLE] = { token };
+    writeSecret(root, CREDENTIALS_REL, `${JSON.stringify(merged, null, 2)}\n`);
+  }
   writeSecret(root, SESSION_REL, `${JSON.stringify(state, null, 2)}\n`);
   if (token !== null) {
     const exp = jwtExp(token);
     const expiresAt = exp !== null ? new Date(exp * 1000) : new Date(Date.now() + role.maxAgeMinutes * 60000);
-    writeSecret(
-      root,
-      TOKEN_REL,
-      `${JSON.stringify({ token, expires_at: expiresAt.toISOString(), obtained_at: new Date().toISOString() }, null, 2)}\n`,
-    );
+    /** @type {Record<string, string>} */
+    const artifact = { token, expires_at: expiresAt.toISOString(), obtained_at: new Date().toISOString() };
+    if (role.mechanism === 'static-token') {
+      artifact.header = role.staticToken.header;
+      artifact.value_prefix = role.staticToken.valuePrefix;
+    }
+    writeSecret(root, TOKEN_REL, `${JSON.stringify(artifact, null, 2)}\n`);
   }
   process.stdout.write(`SESSION_CREATED: ${SESSION_REL}\n`);
   process.stdout.write(`auth_mode: storage-state:${SESSION_REL}\n`);

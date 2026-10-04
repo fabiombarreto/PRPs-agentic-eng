@@ -175,6 +175,31 @@ Honesty rules:
 - Never put a credential or token value in `plan.json`.
 - Never infer a driver the steps do not need.
 
+### Record resolution (done by the script, not by you)
+
+Before it routes a case, the script checks every case whose coverage is
+`automated` against the Test Runner's schema-v1 record, found by the discovery
+rule of `/relay-qa-report` (the top-level `PRPs/reports/<feature>/record.json`,
+else the latest `attempts/<N>/record.json`). You write no plan entry for this and
+a plan entry for such a case is ignored once it resolves.
+
+- The outcome comes from the JUnit testcases of each cited test file in the
+  record's artifact: every cited file listed and none failed gives `pass`, any
+  failed testcase gives `fail`, and any cited file the artifact does not list
+  means the case is not resolved.
+- The reason_code is `AUTOMATED_EVIDENCE`. It is a reason_code, never an outcome:
+  the vocabulary stays `pass`, `fail`, `blocked`, `needs-human`.
+- A record outside schema v1 is never evidence, and the case routes as before. So
+  is a record whose run executed nothing (`SKIPPED_UPSTREAM_FAILURE` or zero
+  tests), a JUnit artifact written after the record, and a cited path that
+  matches more than one distinct file.
+- The evidence names the record's run id, attempt and `generated_at`, so a reader
+  can see whether the run predates the code.
+- `results.json` reports these cases through a separate `record_resolved` count.
+  `counts` stays the four-outcome partition and therefore still contains them, so
+  the summary line and the driver-executed rate exclude `AUTOMATED_EVIDENCE`
+  outcomes and `record_resolved` is reported beside them, never added to them.
+
 ---
 
 ## Phase B — Run
@@ -194,8 +219,8 @@ for an aborted run).
 
 ## Final output surface
 
-Relay the script's summary: the four counts, the `results.json` path and the
-evidence directory. List every `blocked` and `needs-human` case by its
+Relay the script's summary: the four driver-executed counts, the separate
+`record-resolved` line, the `results.json` path and the evidence directory. List every `blocked` and `needs-human` case by its
 `reason_code`. Then state explicitly:
 
 > HUMAN GATE STILL OPEN: a runner pass is evidence, not approval.

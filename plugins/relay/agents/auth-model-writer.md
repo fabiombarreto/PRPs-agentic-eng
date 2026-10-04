@@ -89,6 +89,11 @@ Search the repository statically for:
 - Seed, fixture and user-creation commands (migration seeds, admin CLIs,
   factories, documented setup scripts) — how a user with a given role is
   created locally.
+- A `static-token` mechanism: a middleware or guard that compares a request
+  header against a single configured secret with no login endpoint, and client
+  code that reads that token from `localStorage` or IndexedDB — record both with
+  `file:line` evidence, the header name, the browser location and the token's
+  environment-variable NAME only (never a secret file, never a value).
 - SSO, MFA, captcha and email or SMS verification integrations.
 - Local targets: base URLs and ports from `.env.example`-style files and
   documented dev-server configuration.

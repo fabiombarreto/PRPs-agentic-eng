@@ -150,8 +150,19 @@ filters), derive a config entry using the exact schema documented in the header
 of `${CLAUDE_PLUGIN_ROOT}/resources/auth-login.template.mjs`:
 
 - `mechanism` is `headed` when the role is named under `## Non-Automatable Items`
-  for SSO or MFA, `api` when `## Login Flow` names a scriptable API login
+  for SSO or MFA, `static-token` when `## Login Flow` or
+  `## Authentication Mechanisms` names a shared static token presented with no
+  login request, `api` when `## Login Flow` names a scriptable API login
   endpoint, otherwise `form`.
+- For a `static-token` role the `staticToken` block is filled only from the
+  model's evidence: `tokenEnv` is an environment-variable NAME taken from
+  `## Session and Token Model` (else null), `header` and `valuePrefix` come from
+  where the API expects the token, and `browser` comes from the declared storage
+  location (`localStorage`, or `indexedDB` with the declared database, object
+  store and key) and is otherwise null. Every field the model does not state is
+  the literal `TBD - needs validation`, never a guess. The generated script's own
+  halts for this mechanism are `FAILED_TOKEN_UNPROVEN`,
+  `FAILED_TOKEN_LOCATION_UNREACHABLE` and `FAILED_INDEXEDDB_UNSUPPORTED`.
 - Every other field is filled only from evidence in the model and is otherwise
   the literal `TBD - needs validation` — never a guessed selector or path.
 - `credentials` holds environment-variable NAMES only, taken from the model's
