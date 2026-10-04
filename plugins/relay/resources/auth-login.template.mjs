@@ -631,17 +631,24 @@ async function placeStaticToken(cfg, role, token, pw, guard, root, allowedHosts)
         token,
       });
     } else {
-      try {
-        await page.waitForFunction(
-          async (/** @type {string} */ db) => {
-            const list = await indexedDB.databases();
-            return list.some((d) => d.name === db);
-          },
-          loc.database,
-          { timeout: 10000 },
-        );
-      } catch {
-        return unreachable(`IndexedDB database ${loc.database} did not appear on ${loc.originPath}`);
+      // Poll from Node: page.evaluate awaits a promise, whereas waitForFunction does not
+      // await an async predicate (the Promise object is truthy and it resolves at once).
+      const dbDeadline = Date.now() + 10000;
+      let dbAppeared = false;
+      while (!dbAppeared) {
+        try {
+          dbAppeared = await page.evaluate(
+            async (/** @type {string} */ db) => (await indexedDB.databases()).some((d) => d.name === db),
+            loc.database,
+          );
+        } catch {
+          dbAppeared = false;
+        }
+        if (dbAppeared) break;
+        if (Date.now() >= dbDeadline) {
+          return unreachable(`IndexedDB database ${loc.database} did not appear on ${loc.originPath}`);
+        }
+        await new Promise((r) => setTimeout(r, 250));
       }
       const outcome = await page.evaluate(
         async (/** @type {{ db: string, store: string, key: string, valueField: string | null, token: string }} */ a) => {
