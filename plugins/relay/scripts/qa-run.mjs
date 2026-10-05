@@ -55,7 +55,19 @@ export const OUTCOMES = ['pass', 'fail', 'blocked', 'needs-human'];
 const FEATURE_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 const ROLE_PATTERN = /^[a-z0-9][a-z0-9-]{0,39}$/;
 /** Login-script halts surfaced as their own blocked reasons (a configuration or account problem). */
-const PROBE_BLOCK_CODES = ['FAILED_PROBE_NOT_PROTECTED', 'FAILED_PROBE_WRONG_ACCOUNT', 'FAILED_PROBE_PAGE_UNLOADABLE'];
+const PROBE_BLOCK_CODES = [
+  'FAILED_PROBE_NOT_PROTECTED',
+  'FAILED_PROBE_WRONG_ACCOUNT',
+  'FAILED_PROBE_PAGE_UNLOADABLE',
+  'FAILED_PROBE_MARKER_ABSENT',
+  'FAILED_KIT_SCRIPT_STALE',
+];
+/** The identity stamp line the login template carries and a generated script copies verbatim. */
+const KIT_STAMP_PATTERN = /^const KIT_TEMPLATE_ID = '([^']+)';$/m;
+/** A sentence only a template-generated login script contains (hand-written or stub scripts are not judged). */
+const KIT_SCRIPT_MARKER = 'Login script for one role of the test-auth kit';
+/** How long the anonymous check waits for the authenticated-only marker to (not) appear. */
+const ANONYMOUS_CHECK_MS = 20000;
 const HUMAN_GATE_SENTENCE =
   'HUMAN GATE STILL OPEN: a runner pass is evidence, not approval. No Manual status was changed and no phase status advanced.';
 
@@ -748,7 +760,7 @@ async function guardTarget(baseUrl, root) {
 
 /**
  * @typedef {{ outcome: string, reason_code: string | null, reason: string | null, evidence: string[] }} CaseResult
- * @typedef {{ root: string, runDirAbs: string, runDirRel: string, table: RedactionTable, target: NonNullable<Target>, playwright: any, loginConfig: any, sessions: Map<string, any>, seeds: Map<string, any>, seedConfig: any }} RunCtx
+ * @typedef {{ root: string, runDirAbs: string, runDirRel: string, table: RedactionTable, target: NonNullable<Target>, playwright: any, loginConfig: any, sessions: Map<string, any>, seeds: Map<string, any>, seedConfig: any, anonChecks: Map<string, any> }} RunCtx
  * @typedef {{ path: string | null, token: string | null, header?: string | null, valuePrefix?: string | null }} SessionInfo
  */
 
@@ -1056,17 +1068,45 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
 // ---------------------------------------------------------------------------
 
 /**
+ * Read-only stale pre-flight. A template-generated login script whose identity
+ * stamp differs from the installed template's, or that carries none (scripts
+ * generated before the stamp existed cannot check themselves), is stale.
+ * Fails open: an unreadable or unstamped installed template skips the check.
+ * @param {string} script absolute path of the login script
+ * @returns {string | null} "<script id or unstamped> vs <installed id>" when stale
+ */
+function staleKitScript(script) {
+  /** @type {string} */ let text;
+  /** @type {string} */ let installed;
+  try {
+    text = readFileSync(script, 'utf8');
+    installed = readFileSync(join(PLUGIN_ROOT, 'resources', 'auth-login.template.mjs'), 'utf8');
+  } catch {
+    return null;
+  }
+  if (!text.includes(KIT_SCRIPT_MARKER)) return null;
+  const want = KIT_STAMP_PATTERN.exec(installed);
+  if (!want) return null;
+  const have = KIT_STAMP_PATTERN.exec(text);
+  if (have && have[1] === want[1]) return null;
+  return `${have ? have[1] : 'unstamped'} vs ${want[1]}`;
+}
+
+/**
  * @param {RunCtx} ctx
  * @param {string} role
- * @returns {{ ok: true, info: SessionInfo } | { ok: false, code: string }}
+ * @returns {{ ok: true, info: SessionInfo } | { ok: false, code: string, detail?: string }}
  */
 function obtainSession(ctx, role) {
   const cached = ctx.sessions.get(role);
   if (cached) return cached;
-  /** @type {{ ok: true, info: SessionInfo } | { ok: false, code: string }} */ let result;
+  /** @type {{ ok: true, info: SessionInfo } | { ok: false, code: string, detail?: string }} */ let result;
   const script = join(ctx.root, 'PRPs', 'auth', `login-${role}.mjs`);
+  const stale = existsSync(script) ? staleKitScript(script) : null;
   if (!existsSync(script)) {
     result = { ok: false, code: 'FAILED_LOGIN_SCRIPT_MISSING' };
+  } else if (stale !== null) {
+    result = { ok: false, code: 'FAILED_KIT_SCRIPT_STALE', detail: stale };
   } else {
     const r = spawnSync(process.execPath, [script, '--root', ctx.root, '--plugin-root', PLUGIN_ROOT], {
       shell: false,
@@ -1357,6 +1397,94 @@ function resolveFromRecord(root, feature, kase) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Anonymous check for a target recorded as authenticating everyone: a fresh
+ * browser context with NO storage state, behind the same guard route, opens the
+ * role's browser-probe route on the target. The authenticated-only marker
+ * visible means the injection is present (not clean); absent for the whole
+ * window with the page loaded means clean. Cached per role.
+ * @param {RunCtx} ctx
+ * @param {string} role
+ * @param {NonNullable<Target>} alt
+ * @param {any} bp the role's browserProbe declaration
+ * @returns {Promise<'clean' | 'injected' | 'unreachable' | 'unavailable'>}
+ */
+async function anonymousCheck(ctx, role, alt, bp) {
+  const cached = ctx.anonChecks.get(role);
+  if (cached) return cached;
+  /** @type {'clean' | 'injected' | 'unreachable' | 'unavailable'} */ let verdict = 'unreachable';
+  const url = resolveStepUrl(bp.route, alt);
+  if (url !== null) {
+    /** @type {any} */ let browser = null;
+    try {
+      browser = await ctx.playwright.chromium.launch({ headless: true });
+    } catch {
+      verdict = 'unavailable';
+    }
+    if (browser !== null) {
+      try {
+        const context = await browser.newContext();
+        await context.route('**/*', (/** @type {any} */ route) => {
+          const u = new URL(route.request().url());
+          if (['data:', 'about:', 'blob:'].includes(u.protocol)) return route.continue();
+          return alt.guard.isAllowedHost(u.hostname, alt.allowedHosts) ? route.continue() : route.abort();
+        });
+        const page = await context.newPage();
+        const res = await page.goto(url, { waitUntil: 'load', timeout: 15000 }).catch(() => null);
+        if (res !== null && res.status() < 500) {
+          // A settle aid only; the decision is the visible wait below.
+          await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+          const m = bp.marker;
+          const loc = m.kind === 'text' ? page.getByText(m.value).first() : page.locator(m.value).first();
+          verdict = await loc.waitFor({ state: 'visible', timeout: ANONYMOUS_CHECK_MS }).then(
+            () => /** @type {const} */ ('injected'),
+            (/** @type {any} */ e) => (e && e.name === 'TimeoutError' ? /** @type {const} */ ('clean') : /** @type {const} */ ('unreachable')),
+          );
+        }
+      } catch {
+        verdict = 'unreachable';
+      } finally {
+        await browser.close().catch(() => {});
+      }
+    }
+  }
+  ctx.anonChecks.set(role, verdict);
+  return verdict;
+}
+
+/**
+ * The browser-case gate for a role recorded as authenticated for everyone.
+ * @param {RunCtx} ctx
+ * @param {string} role
+ * @param {any} record the role's authenticatesAnonymous object
+ * @returns {Promise<{ block: CaseResult } | { ctx: RunCtx }>} a blocking result, or the context to run the case with
+ */
+async function preAuthenticatedGate(ctx, role, record) {
+  const evidenceText = isStr(record.evidence) && record.evidence !== '' ? record.evidence : 'no evidence recorded';
+  const roles = ctx.loginConfig && isObj(ctx.loginConfig.roles) ? ctx.loginConfig.roles : {};
+  const bp = roles[role] && isObj(roles[role].browserProbe) ? roles[role].browserProbe : null;
+  const blockedPre = (/** @type {string} */ why) =>
+    ({ block: blocked('FAILED_TARGET_PRE_AUTHENTICATED', `the target authenticates every request for role ${role} (${evidenceText}); ${why}`) });
+  const altUrl = isStr(record.alternativeBaseUrl) && record.alternativeBaseUrl !== '' ? record.alternativeBaseUrl : null;
+  if (altUrl === null) return blockedPre('a browser case would pass without a session and no alternative local target is configured');
+  const r = await ctx.target.guard.checkTarget(altUrl, { root: ctx.root });
+  if (!r.ok) {
+    return { block: blocked('FAILED_NON_LOCAL_TARGET', `the alternative target is not local (${r.reason}); nothing was requested`) };
+  }
+  /** @type {NonNullable<Target>} */
+  const alt = { guard: ctx.target.guard, origin: r.origin, allowedHosts: r.allowedHosts };
+  if (bp === null || !isObj(bp.marker) || !isStr(bp.route)) {
+    return blockedPre('the role declares no browser probe, so the alternative target cannot be confirmed');
+  }
+  const verdict = await anonymousCheck(ctx, role, alt, bp);
+  if (verdict === 'clean') return { ctx: { ...ctx, target: alt } };
+  if (verdict === 'unreachable') return { block: blocked('TARGET_UNREACHABLE', 'the alternative target could not be loaded for the anonymous check') };
+  if (verdict === 'unavailable') {
+    return { block: blocked('FAILED_BROWSER_UNAVAILABLE', 'a headless Chromium could not be launched; run `npx playwright install chromium` in plugins/relay/scripts/visual/') };
+  }
+  return blockedPre('the alternative target still showed the authenticated-only marker with no session');
+}
+
+/**
  * @param {RunCtx | null} ctxOrNull
  * @param {ReportCase} kase
  * @param {Map<number, any>} planByIndex
@@ -1404,6 +1532,18 @@ async function executeCase(ctxOrNull, kase, planByIndex, target, makeCtx, root, 
       return out(blocked('FAILED_NON_LOCAL_TARGET', `step ${i + 1}: the path leaves the guard-approved origin; nothing was requested`));
     }
   }
+  // A browser case for a role whose target authenticates every request cannot
+  // prove anything: gate it before anything is seeded or logged in.
+  /** @type {RunCtx} */ let runCtx = ctx;
+  if (driver === 'browser' && role !== null && ROLE_PATTERN.test(role)) {
+    const cfgRoles = ctx.loginConfig && isObj(ctx.loginConfig.roles) ? ctx.loginConfig.roles : {};
+    const record = Object.hasOwn(cfgRoles, role) && isObj(cfgRoles[role]) ? cfgRoles[role].authenticatesAnonymous : null;
+    if (isObj(record)) {
+      const gate = await preAuthenticatedGate(ctx, role, record);
+      if ('block' in gate) return out(gate.block);
+      runCtx = gate.ctx;
+    }
+  }
   const stateBlock = await prepareState(ctx, kase, p);
   if (stateBlock) return out(stateBlock);
   /** @type {SessionInfo | null} */ let session = null;
@@ -1413,6 +1553,9 @@ async function executeCase(ctxOrNull, kase, planByIndex, target, makeCtx, root, 
       return out(blocked('ROLE_UNDECLARED', `role ${role} is not declared in PRPs/auth/login.config.json`));
     }
     const s = obtainSession(ctx, role);
+    if (!s.ok && s.code === 'FAILED_KIT_SCRIPT_STALE') {
+      return out(blocked(s.code, `the kit login script for role ${role} was generated from a different template than the installed one (${s.detail ?? 'identities unknown'}); nothing was saved or reused; run /relay-auth-scripts --refresh`));
+    }
     if (!s.ok && PROBE_BLOCK_CODES.includes(s.code)) {
       return out(blocked(s.code, `the kit's session probe for role ${role} halted; nothing was saved or reused`));
     }
@@ -1421,7 +1564,7 @@ async function executeCase(ctxOrNull, kase, planByIndex, target, makeCtx, root, 
   }
   const fn = DRIVERS[driver];
   if (!fn) return out(needsHuman('NO_ACTIVE_DRIVER', `no active driver handles ${JSON.stringify(driver)}`));
-  return out(await fn(ctx, kase, p, session));
+  return out(await fn(runCtx, kase, p, session));
 }
 
 // ---------------------------------------------------------------------------
@@ -1492,6 +1635,7 @@ async function runRun(args) {
       sessions: new Map(),
       seeds: new Map(),
       seedConfig: readJsonOrNull(join(root, 'PRPs', 'auth', 'qa-seed.json')),
+      anonChecks: new Map(),
     };
     return ctx;
   };

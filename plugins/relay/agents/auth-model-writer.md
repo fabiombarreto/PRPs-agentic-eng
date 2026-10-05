@@ -98,7 +98,17 @@ Search the repository statically for:
   (and, separately, one specific to a role): PROPOSE it as a candidate
   authenticated-only marker with `file:line` evidence, never guess one; an
   unknown is `TBD - needs validation` with a matching row under
-  `## Open Questions and Assumptions`.
+  `## Open Questions and Assumptions`. Prefer the server-backed kind — a marker
+  that appears only after a successful API response — over one drawn from layout
+  rendered from client-side state (which can stay visible for seconds with an
+  invalidated session), and say which kind the candidate is in its description.
+- A dev server or proxy that supplies a credential to every request (so the
+  origin treats every visitor as signed in): record a pre-authenticated target
+  line under `## Login Flow` in the template's one-line form, with the injecting
+  code's `file:line`. Never invent the evidence: an unknown is
+  `TBD - needs validation` with a matching row under
+  `## Open Questions and Assumptions`. Never record the injected credential's
+  value.
 - SSO, MFA, captcha and email or SMS verification integrations.
 - Local targets: base URLs and ports from `.env.example`-style files and
   documented dev-server configuration.

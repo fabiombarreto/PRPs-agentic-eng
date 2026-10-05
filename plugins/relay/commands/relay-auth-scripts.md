@@ -1,6 +1,6 @@
 ---
 description: 'Standalone, non-interactive generator of per-role login scripts, login.config.json and credentials.example.json from an APPROVED PRPs/auth/auth-model.md. Enforces the hard local-only guard and proves the PRPs/auth secrecy ignore rules before anything is written. Writes no credential value and creates no session; the operator runs each generated script at their own terminal. Never asks the user a question. Never invoked by /relay-execute.'
-argument-hint: [--role <role>]...
+argument-hint: [--role <role>]... [--refresh]
 ---
 
 # /relay-auth-scripts
@@ -62,11 +62,13 @@ shape:
 
 - `--role <role>` — optional and repeatable; restricts generation to the named
   roles (kebab-case slugs).
+- `--refresh` — optional; regenerates the selected roles' existing scripts from
+  the installed template (see Phase A). Without it an existing script is skipped.
 
 Any other argument HALTs:
 
-> Usage: `/relay-auth-scripts [--role <role>]...`
-> Example: `/relay-auth-scripts --role admin`
+> Usage: `/relay-auth-scripts [--role <role>]... [--refresh]`
+> Example: `/relay-auth-scripts --role admin --refresh`
 > Unrecognized argument: `<argument>`. Nothing has been read or written.
 
 Record `target_root` as the current working directory.
@@ -160,9 +162,13 @@ of `${CLAUDE_PLUGIN_ROOT}/resources/auth-login.template.mjs`:
   where the API expects the token, and `browser` comes from the declared storage
   location (`localStorage`, or `indexedDB` with the declared database, object
   store and key) and is otherwise null. Every field the model does not state is
-  the literal `TBD - needs validation`, never a guess. The generated script's own
-  halts for this mechanism are `FAILED_TOKEN_UNPROVEN`,
-  `FAILED_TOKEN_LOCATION_UNREACHABLE` and `FAILED_INDEXEDDB_UNSUPPORTED`.
+  the literal `TBD - needs validation`, never a guess. When the model states the
+  token does not expire, `maxAgeMinutes: null` is written (the script then
+  re-proves the token on every reuse); any other role requires a positive
+  `maxAgeMinutes`, and an unstated value stays `TBD - needs validation`. The
+  generated script's own halts for this mechanism are `FAILED_TOKEN_UNPROVEN`,
+  `FAILED_TOKEN_REJECTED`, `FAILED_TOKEN_TRANSPORT`, `FAILED_TOKEN_PLACEMENT` and
+  `FAILED_INDEXEDDB_UNSUPPORTED`.
 - `browserProbe` is filled only when `## Login Flow` states a browser probe for
   the role: a same-origin route and an authenticated-only marker (visible text or
   a selector), optionally a role marker. Otherwise it is absent (null). A route
@@ -171,9 +177,20 @@ of `${CLAUDE_PLUGIN_ROOT}/resources/auth-login.template.mjs`:
   script halts `FAILED_LOGIN_CONFIG_INCOMPLETE` naming the field; never a guessed
   selector or text. A declared browser probe is the role's proof for `form`,
   `api` and `headed` (the HTTP `probe` is then not consulted); a `static-token`
-  role keeps `FAILED_TOKEN_UNPROVEN` and may also declare one. The generated
-  script's own halts for the probes are `FAILED_PROBE_NOT_PROTECTED`,
-  `FAILED_PROBE_WRONG_ACCOUNT` and `FAILED_PROBE_PAGE_UNLOADABLE`.
+  role keeps `FAILED_TOKEN_UNPROVEN` and may also declare one. When a browser
+  probe is filled and the model states no protected endpoint on the
+  application's own origin, the HTTP `probe` is written as the JSON value `null`,
+  never `TBD - needs validation`; when neither a probe nor an endpoint is stated
+  it stays `TBD - needs validation`. The generated script's own halts for the
+  probes are `FAILED_PROBE_NOT_PROTECTED`, `FAILED_PROBE_WRONG_ACCOUNT`,
+  `FAILED_PROBE_PAGE_UNLOADABLE` and `FAILED_PROBE_MARKER_ABSENT` (the login
+  completed but the marker never became stably visible). A script generated from
+  a differently stamped template halts `FAILED_KIT_SCRIPT_STALE`.
+- `authenticatesAnonymous` is written only when `## Login Flow` records a
+  pre-authenticated target for the role (the one-line convention in the model
+  template): `{ "evidence": "<file:line from the record>", "alternativeBaseUrl":
+  <url or null> }`, the evidence being mandatory (a record with no `file:line` is
+  written as `TBD - needs validation`). Otherwise it is `null`.
 - Every other field is filled only from evidence in the model and is otherwise
   the literal `TBD - needs validation` — never a guessed selector or path.
 - `credentials` holds environment-variable NAMES only, taken from the model's
@@ -188,7 +205,17 @@ first `## Local Targets` URL when absent.
 For each role write `PRPs/auth/login-<role>.mjs` by `Read`-ing
 `${CLAUDE_PLUGIN_ROOT}/resources/auth-login.template.mjs` and replacing every
 occurrence of `__RELAY_ROLE__` with the slug — no other substitution and no edit.
-An existing script is skipped and reported, never overwritten.
+The template's identity stamp line (`KIT_TEMPLATE_ID`) is copied with it.
+Without `--refresh`, an existing script is skipped and reported, never
+overwritten, and the report says, per skipped script, whether its stamp line
+differs from the installed template's or is absent (stale). With `--refresh`,
+every selected role's script is regenerated from the installed template by the
+same single substitution and overwrites the existing file, each replaced script
+being reported. `--refresh` adds to the configuration only the fields a newer
+template introduces (`browserProbe` and `authenticatesAnonymous`, as `null`
+unless the model states them) on roles that lack them; no key that already
+exists, including a `TBD - needs validation` value, is ever changed. It never
+touches a session, a token, `credentials.json` or `credentials.example.json`.
 
 Write `PRPs/auth/credentials.example.json` with placeholder values only when
 absent:
@@ -241,5 +268,5 @@ explains the reason and states that nothing was written.
 - **Store a real credential, username or token**, anywhere, in any file.
 - **Reimplement the guard or the secrecy script.** You call them.
 - **Edit the script template while copying it.** One substitution only.
-- **Overwrite an existing role entry or an existing script.**
+- **Overwrite an existing role entry, or an existing script without `--refresh`.**
 - **Run the application or discover dynamically.** Generation is static.

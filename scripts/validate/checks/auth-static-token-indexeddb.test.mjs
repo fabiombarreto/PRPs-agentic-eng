@@ -423,11 +423,12 @@ test('static-token: with no token source the script halts FAILED_CREDENTIALS_UNA
   assertNothingSaved(d);
 });
 
-test('static-token: a token the server rejects halts FAILED_LOGIN_REJECTED and saves nothing', async () => {
+test('static-token: a token the server rejects halts FAILED_TOKEN_REJECTED naming the status and saves nothing', async () => {
   const d = await project(idbRole());
   const r = await login(d, { token: 'a-wrong-token' });
   assert.equal(r.code, 1);
-  assert.match(r.e, /FAILED_LOGIN_REJECTED/);
+  assert.match(r.e, /FAILED_TOKEN_REJECTED/);
+  assert.match(r.e, /answered 401/, 'the halt must name the status the server answered');
   assertNothingSaved(d);
   assert.ok(!(r.o + r.e).includes('a-wrong-token'), 'the rejected token was printed');
 });
@@ -445,15 +446,15 @@ test('static-token: an endpoint that answers 2xx with AND without the token halt
 // below sets an explicit timeout well above that deadline (the runner default would kill them).
 const SLOW = { timeout: 90000 };
 
-test('static-token: a declared IndexedDB database that never appears halts FAILED_TOKEN_LOCATION_UNREACHABLE only after waiting out the deadline, and the database is NOT created', SLOW, async () => {
+test('static-token: a declared IndexedDB database that never appears halts FAILED_TOKEN_PLACEMENT only after waiting out the deadline, and the database is NOT created', SLOW, async () => {
   dbSeen = new Set();
   const d = await project(idbRole({ database: 'ghostdb', originPath: '/app?observe=1' }));
   const t0 = Date.now();
   const r = await login(d);
   const elapsed = Date.now() - t0;
   assert.equal(r.code, 1, r.o);
-  assert.match(r.e, /FAILED_TOKEN_LOCATION_UNREACHABLE/);
-  assert.match(r.e, /ghostdb/, 'the halt must name the declared database');
+  assert.match(r.e, /FAILED_TOKEN_PLACEMENT/);
+  assert.match(r.e, /ghostdb/,'the halt must name the declared database');
   assertNothingSaved(d);
   assertTokenNotPrinted(r);
   // The 10 s deadline starts after the page loads, so a script that really waited takes at least 10 s.
@@ -472,18 +473,18 @@ test('static-token: a declared IndexedDB database the application creates ~3 s a
   const r = await login(d);
   const elapsed = Date.now() - t0;
   assert.equal(r.code, 0, `${r.o}\n${r.e}`);
-  assert.doesNotMatch(r.e, /FAILED_TOKEN_LOCATION_UNREACHABLE/);
+  assert.doesNotMatch(r.e, /FAILED_TOKEN_PLACEMENT/);
   assert.ok(elapsed >= 2500, `the script finished after ${elapsed} ms, before the database even existed`);
   assert.ok(existsSync(sessionPath(d)), 'no session file');
   assertTokenNotPrinted(r);
   assertLateDbHoldsToken(d);
 });
 
-test('static-token: a declared object store that does not exist halts FAILED_TOKEN_LOCATION_UNREACHABLE and saves nothing', async () => {
+test('static-token: a declared object store that does not exist halts FAILED_TOKEN_PLACEMENT and saves nothing', async () => {
   const d = await project(idbRole({ store: 'nostore' }));
   const r = await login(d);
   assert.equal(r.code, 1, r.o);
-  assert.match(r.e, /FAILED_TOKEN_LOCATION_UNREACHABLE/);
+  assert.match(r.e, /FAILED_TOKEN_PLACEMENT/);
   assert.match(r.e, /nostore/, 'the halt must name the declared store');
   assertNothingSaved(d);
   assertTokenNotPrinted(r);
@@ -639,7 +640,7 @@ test('mutation: a bare storageState() at the IndexedDB save site saves a state w
   assert.equal(dbs.length, 0, 'the mutated copy must lose the IndexedDB state');
 });
 
-test('mutation: restoring the inert async-predicate waitForFunction in place of the polling loop halts a late-database app FAILED_TOKEN_LOCATION_UNREACHABLE (the late-database test is what catches it)', SLOW, async () => {
+test('mutation: restoring the inert async-predicate waitForFunction in place of the polling loop halts a late-database app FAILED_TOKEN_PLACEMENT (the late-database test is what catches it)', SLOW, async () => {
   // Skip the polling loop (it starts as already-appeared) and put back the old wait, whose async
   // predicate Playwright does not await: it resolves at once, before the late database exists.
   let template = mutatedTemplate(
@@ -652,7 +653,7 @@ test('mutation: restoring the inert async-predicate waitForFunction in place of 
   const d = await project(idbRole({ database: 'latedb', originPath: '/late' }), { template });
   const r = await login(d);
   assert.equal(r.code, 1, `${r.o}\n${r.e}`);
-  assert.match(r.e, /FAILED_TOKEN_LOCATION_UNREACHABLE/, 'the mutated copy must wrongly halt on a late database');
+  assert.match(r.e, /FAILED_TOKEN_PLACEMENT/, 'the mutated copy must wrongly halt on a late database');
   assert.ok(!existsSync(sessionPath(d)), 'the mutated copy saved a session');
 });
 

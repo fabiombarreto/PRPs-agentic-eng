@@ -26,9 +26,9 @@
  *       "loginPath": string | null,
  *       "form": { "usernameSelector", "passwordSelector", "submitSelector" } | null,
  *       "api": { "path", "method", "usernameField", "passwordField", "tokenPath": string | null } | null,
- *       "probe": { "path", "method" },
+ *       "probe": { "path", "method" } | null,
  *       "sessionCookie": string | null,
- *       "maxAgeMinutes": number,
+ *       "maxAgeMinutes": number | null,
  *       "credentials": { "usernameEnv": string | null, "passwordEnv": string | null },
  *       "userCreation": { "command": string[] | null },
  *       "needsIndexedDb": boolean (optional, default false),
@@ -53,11 +53,32 @@
  * browserProbe has its HTTP probe checked in both directions, presenting the
  * session as the runner will (cookies plus the token header when a token
  * exists).
+ * On the session side the marker (and the role marker, checked only once the
+ * marker is stably present) counts as present only if it is still visible after
+ * the page settles and after a BROWSER_PROBE_DWELL_MS dwell, re-checked without
+ * blocking; one that vanishes is an expired session, never a wrong account. When
+ * the login completed but the declared marker never became stably visible at
+ * save time the halt is FAILED_PROBE_MARKER_ABSENT (naming the marker field and
+ * whether a matching element existed but was not visible); a role with no
+ * browserProbe keeps FAILED_LOGIN_REJECTED.
+ * Each script carries a template identity stamp; run against an installed
+ * template carrying a different stamp it halts FAILED_KIT_SCRIPT_STALE before
+ * anything is written (an unreadable or unstamped installed template skips the
+ * check). Regenerate with /relay-auth-scripts --refresh.
  * The "static-token" mechanism sends no login request: the token comes from the
  * environment variable named by staticToken.tokenEnv, else the ignored
  * credentials store, else a terminal prompt; every staticToken field is
  * declared, never guessed. It is saved only after the protected probe answers
- * 2xx with the token and non-2xx without it.
+ * 2xx with the token and non-2xx without it. A static-token failure names its
+ * step and never prints any part of the token: FAILED_TOKEN_REJECTED (the
+ * protected endpoint answered non-2xx with the token, naming the status),
+ * FAILED_TOKEN_TRANSPORT (the request itself failed), FAILED_TOKEN_UNPROVEN
+ * (2xx without the token too) and FAILED_TOKEN_PLACEMENT (the token could not
+ * be placed at the declared browser location).
+ * "probe" may be null (or absent) for a form, api or headed role that declares a
+ * browserProbe. "maxAgeMinutes" may be null for a static-token role only: the
+ * token never expires by age and is re-proven on every reuse; every other role
+ * needs a positive number.
  * A missing required field or a value equal to `TBD - needs validation`
  * halts FAILED_LOGIN_CONFIG_INCOMPLETE naming the field.
  *
@@ -77,6 +98,11 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
+// Template identity stamp. Bump the number in the same edit as any behaviour
+// change to this template. It is an explicit stamp and not a content hash
+// because every template test runs a deliberately mutated copy, which a hash
+// would make halt stale.
+const KIT_TEMPLATE_ID = 'auth-login/1';
 const ROLE = '__RELAY_ROLE__';
 const ROLE_PATTERN = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const TBD = 'TBD - needs validation';
@@ -90,6 +116,12 @@ const CREDENTIALS_REL = 'PRPs/auth/credentials.json';
 const BROWSER_PROBE_POSITIVE_MS = 15000;
 const BROWSER_PROBE_SETTLE_MS = 5000;
 const BROWSER_PROBE_NEGATIVE_MS = BROWSER_PROBE_POSITIVE_MS + BROWSER_PROBE_SETTLE_MS;
+// JUDGMENT, not a derived bound: on the session side a marker must still be
+// visible after this dwell. The value comes from one measurement (a layout
+// marker rendered from client-side state stayed visible 5.3 s with invalidated
+// tokens, sampled every 500 ms); it is a floor chosen to outlast that single
+// observation, and the settle step adds to it. Revisit after the next dogfood.
+const BROWSER_PROBE_DWELL_MS = 5000;
 
 const USAGE = `Usage:
   login-${ROLE}.mjs --plugin-root <dir> [--root <dir>] [--force]
@@ -168,10 +200,13 @@ function getPath(obj, dotted) {
  * @returns {string | null} the first missing or TBD field, or null
  */
 function incompleteField(role) {
-  const tbd = findTbd(role, `roles.${ROLE}`);
+  // A role that declares a browser probe does not consult the HTTP probe at all
+  // (form, api, headed), so probe.path and probe.method are optional for it.
+  const probeOptional = hasBrowserProbe(role) && ['form', 'api', 'headed'].includes(role.mechanism);
+  const tbd = findTbd(probeOptional ? { ...role, probe: undefined } : role, `roles.${ROLE}`);
   if (tbd) return tbd;
   /** @type {string[]} */
-  let required = ['mechanism', 'probe.path', 'probe.method'];
+  let required = probeOptional ? ['mechanism'] : ['mechanism', 'probe.path', 'probe.method'];
   if (role.mechanism === 'form') {
     required = required.concat([
       'loginPath',
@@ -233,10 +268,21 @@ function incompleteField(role) {
     const v = getPath(role, f);
     if (typeof v !== 'string' || v === '') return `roles.${ROLE}.${f}`;
   }
+  // maxAgeMinutes: null is accepted for a static-token role only (a token that
+  // never expires is re-proven on every reuse); every other role needs a positive number.
+  if (role.mechanism === 'static-token' && role.maxAgeMinutes === null) return null;
   if (typeof role.maxAgeMinutes !== 'number' || !(role.maxAgeMinutes > 0)) {
     return `roles.${ROLE}.maxAgeMinutes`;
   }
   return null;
+}
+
+/**
+ * @param {any} role
+ * @returns {boolean} true when the role declares a browser probe
+ */
+function hasBrowserProbe(role) {
+  return role.browserProbe !== undefined && role.browserProbe !== null;
 }
 
 /**
@@ -490,9 +536,10 @@ async function httpProbeProof(cfg, role, storage, tokenArt, pw) {
  * @param {any} pw
  * @param {{ isAllowedHost: Function }} guard
  * @param {Set<string>} allowedHosts
+ * @param {{ field?: 'marker' | 'roleMarker', existed?: boolean } | null} [detail] filled when the session side finds a marker not stably visible
  * @returns {Promise<'proven' | 'expired' | 'not-protected' | 'wrong-account' | 'unloadable'>}
  */
-async function browserProbeProof(cfg, role, storage, pw, guard, allowedHosts) {
+async function browserProbeProof(cfg, role, storage, pw, guard, allowedHosts, detail) {
   const bp = role.browserProbe;
   const url = sameOriginUrl(cfg.baseUrl, bp.route);
   if (!url) return 'unloadable';
@@ -536,15 +583,73 @@ async function browserProbeProof(cfg, role, storage, pw, guard, allowedHosts) {
       return context.newPage();
     };
 
+    /**
+     * Record which marker was not stably visible and whether any element matched.
+     * @param {any} page
+     * @param {{ kind: string, value: string }} m
+     * @param {'marker' | 'roleMarker'} field
+     */
+    const absent = async (page, m, field) => {
+      if (!detail) return;
+      let existed = false;
+      try {
+        existed = (await locate(page, m).count()) > 0;
+      } catch {
+        existed = false;
+      }
+      detail.field = field;
+      detail.existed = existed;
+    };
+    /** Non-blocking re-check. @param {any} page @param {{ kind: string, value: string }} m @returns {Promise<boolean>} */
+    const stillVisible = async (page, m) => {
+      try {
+        return (await locate(page, m).isVisible()) === true;
+      } catch {
+        return false;
+      }
+    };
+    const dwell = () => new Promise((done) => setTimeout(done, BROWSER_PROBE_DWELL_MS));
+
     const withPage = await openPage({ storageState: storage });
     if (!(await load(withPage))) return 'unloadable';
     const present = await visible(locate(withPage, bp.marker), BROWSER_PROBE_POSITIVE_MS);
-    if (present === 'timeout') return 'expired';
+    if (present === 'timeout') {
+      await absent(withPage, bp.marker, 'marker');
+      return 'expired';
+    }
     if (present !== 'visible') return 'unloadable';
+    // Presence is a stable state: settle, re-check without blocking, wait out the
+    // dwell, re-check again. A marker that vanishes is an expired session.
+    await withPage.waitForLoadState('networkidle', { timeout: BROWSER_PROBE_SETTLE_MS }).catch(() => {});
+    if (!(await stillVisible(withPage, bp.marker))) {
+      await absent(withPage, bp.marker, 'marker');
+      return 'expired';
+    }
+    await dwell();
+    if (!(await stillVisible(withPage, bp.marker))) {
+      await absent(withPage, bp.marker, 'marker');
+      return 'expired';
+    }
     if (bp.roleMarker) {
       const roleSeen = await visible(locate(withPage, bp.roleMarker), BROWSER_PROBE_POSITIVE_MS);
-      if (roleSeen === 'timeout') return 'wrong-account';
-      if (roleSeen !== 'visible') return 'unloadable';
+      if (roleSeen === 'timeout' || roleSeen === 'error') {
+        // The app may have rejected the session and logged out during the wait:
+        // re-check the auth marker first; only a still-visible one makes this a wrong account.
+        if (!(await stillVisible(withPage, bp.marker))) {
+          await absent(withPage, bp.marker, 'marker');
+          return 'expired';
+        }
+        return roleSeen === 'timeout' ? 'wrong-account' : 'unloadable';
+      }
+      await dwell();
+      if (!(await stillVisible(withPage, bp.marker))) {
+        await absent(withPage, bp.marker, 'marker');
+        return 'expired';
+      }
+      if (!(await stillVisible(withPage, bp.roleMarker))) {
+        await absent(withPage, bp.roleMarker, 'roleMarker');
+        return 'expired';
+      }
     }
 
     const freshPage = await openPage(undefined);
@@ -577,10 +682,11 @@ async function browserProbeProof(cfg, role, storage, pw, guard, allowedHosts) {
  * @param {any} pw
  * @param {{ isAllowedHost: Function }} guard
  * @param {Set<string>} allowedHosts
+ * @param {{ field?: 'marker' | 'roleMarker', existed?: boolean } | null} [detail]
  * @returns {Promise<'proven' | 'expired' | 'not-protected' | 'wrong-account' | 'unloadable' | 'error'>}
  */
-async function proveSession(cfg, role, storage, tokenArt, pw, guard, allowedHosts) {
-  if (role.browserProbe) return browserProbeProof(cfg, role, storage, pw, guard, allowedHosts);
+async function proveSession(cfg, role, storage, tokenArt, pw, guard, allowedHosts, detail) {
+  if (role.browserProbe) return browserProbeProof(cfg, role, storage, pw, guard, allowedHosts, detail);
   if (role.mechanism === 'static-token') return 'proven';
   return httpProbeProof(cfg, role, storage, tokenArt, pw);
 }
@@ -600,7 +706,7 @@ async function sessionReusable(root, cfg, role, getPlaywright, guard, allowedHos
   if (!existsSync(file)) return false;
   const state = readJson(root, SESSION_REL);
   if (!state || !Array.isArray(state.cookies) || !Array.isArray(state.origins)) return false;
-  if (Date.now() - statSync(file).mtimeMs >= role.maxAgeMinutes * 60000) return false;
+  if (role.maxAgeMinutes !== null && Date.now() - statSync(file).mtimeMs >= role.maxAgeMinutes * 60000) return false;
   if (role.sessionCookie) {
     const nowSec = Date.now() / 1000;
     const hit = state.cookies.find(
@@ -608,8 +714,10 @@ async function sessionReusable(root, cfg, role, getPlaywright, guard, allowedHos
     );
     if (!hit) return false;
   }
-  const url = sameOriginUrl(cfg.baseUrl, role.probe.path);
-  if (!url) return false;
+  if (!hasBrowserProbe(role)) {
+    const url = sameOriginUrl(cfg.baseUrl, role.probe.path);
+    if (!url) return false;
+  }
   const pw = getPlaywright();
   if (!pw) return false;
   const tokenArt = readTokenArtifact(root);
@@ -782,11 +890,11 @@ async function resolveStaticToken(root, role) {
  * @param {any} role
  * @param {string} token
  * @param {any} pw
- * @returns {Promise<'proven' | 'unproven' | 'rejected'>}
+ * @returns {Promise<'proven' | 'unproven' | 'transport' | { rejected: number }>}
  */
 async function proveStaticToken(cfg, role, token, pw) {
   const url = sameOriginUrl(cfg.baseUrl, role.probe.path);
-  if (!url) return 'rejected';
+  if (!url) return 'transport';
   /**
    * @param {Record<string, string> | undefined} headers
    * @returns {Promise<number>}
@@ -802,11 +910,11 @@ async function proveStaticToken(cfg, role, token, pw) {
   };
   try {
     const withToken = await status({ [role.staticToken.header]: `${role.staticToken.valuePrefix}${token}` });
-    if (withToken < 200 || withToken >= 300) return 'rejected';
+    if (withToken < 200 || withToken >= 300) return { rejected: withToken };
     const without = await status(undefined);
     return without >= 200 && without < 300 ? 'unproven' : 'proven';
   } catch {
-    return 'rejected';
+    return 'transport';
   }
 }
 
@@ -826,7 +934,8 @@ async function staticTokenReusable(root, cfg, role, getPlaywright, guard, allowe
   if (!existsSync(file)) return false;
   const state = readJson(root, SESSION_REL);
   if (!state || !Array.isArray(state.cookies) || !Array.isArray(state.origins)) return false;
-  if (Date.now() - statSync(file).mtimeMs >= role.maxAgeMinutes * 60000) return false;
+  // maxAgeMinutes: null never expires by age; the proof below re-proves the token.
+  if (role.maxAgeMinutes !== null && Date.now() - statSync(file).mtimeMs >= role.maxAgeMinutes * 60000) return false;
   const art = readJson(root, TOKEN_REL);
   if (!art || typeof art.token !== 'string' || art.token === '') return false;
   const pw = getPlaywright();
@@ -851,9 +960,11 @@ async function staticTokenReusable(root, cfg, role, getPlaywright, guard, allowe
  */
 async function placeStaticToken(cfg, role, token, pw, guard, root, allowedHosts) {
   const loc = role.staticToken.browser;
-  const unreachable = (/** @type {string} */ what) => ({
+  // Every failure to place the token at the declared location carries one code;
+  // the detail after it names the step and never contains the token.
+  const placementFailed = (/** @type {string} */ what) => ({
     state: null,
-    halt: `FAILED_TOKEN_LOCATION_UNREACHABLE: ${what}; nothing was saved`,
+    halt: `FAILED_TOKEN_PLACEMENT: the token could not be placed at the declared browser location (${what}); nothing was saved`,
   });
   const browser = await pw.chromium.launch({ headless: true });
   try {
@@ -865,7 +976,7 @@ async function placeStaticToken(cfg, role, token, pw, guard, root, allowedHosts)
     });
     const page = await context.newPage();
     const appUrl = sameOriginUrl(cfg.baseUrl, loc.originPath);
-    if (!appUrl) return { state: null, halt: `FAILED_LOGIN_REJECTED: the login for role ${ROLE} yielded no session` };
+    if (!appUrl) return placementFailed('the declared origin path is not on the target origin');
     await page.goto(appUrl);
     const final = await guard.checkTarget(page.url(), { root });
     if (!final.ok) return { state: null, halt: 'FAILED_NON_LOCAL_TARGET: final-page (nothing was saved)' };
@@ -890,7 +1001,7 @@ async function placeStaticToken(cfg, role, token, pw, guard, root, allowedHosts)
         }
         if (dbAppeared) break;
         if (Date.now() >= dbDeadline) {
-          return unreachable(`IndexedDB database ${loc.database} did not appear on ${loc.originPath}`);
+          return placementFailed(`IndexedDB database ${loc.database} did not appear on ${loc.originPath}`);
         }
         await new Promise((r) => setTimeout(r, 250));
       }
@@ -940,12 +1051,12 @@ async function placeStaticToken(cfg, role, token, pw, guard, root, allowedHosts)
         return { state: null, halt: `FAILED_LOGIN_CONFIG_INCOMPLETE: roles.${ROLE}.staticToken.browser.valueField` };
       }
       if (outcome !== 'ok') {
-        return unreachable(`IndexedDB database ${loc.database} or object store ${loc.store} is not usable`);
+        return placementFailed(`IndexedDB database ${loc.database} or object store ${loc.store} is not usable`);
       }
     }
     return { state: await context.storageState({ indexedDB: true }), halt: null };
   } catch {
-    return { state: null, halt: `FAILED_LOGIN_REJECTED: the login for role ${ROLE} yielded no session` };
+    return placementFailed('an unexpected failure while placing it');
   } finally {
     await browser.close();
   }
@@ -993,6 +1104,23 @@ async function main(argv) {
   if (!target.ok) {
     err(`FAILED_NON_LOCAL_TARGET: ${target.reason} (host: ${target.host})`);
     return 1;
+  }
+
+  // Read-only version check: a script generated from a differently stamped
+  // template halts before anything is written. Fails open when the installed
+  // template is unreadable or carries no stamp (a compatibility signal, not a
+  // safety guard; the guard, the secrecy proof and both proof directions still run).
+  try {
+    const installed = readFileSync(join(pluginRoot, 'resources', 'auth-login.template.mjs'), 'utf8');
+    const m = /^const KIT_TEMPLATE_ID = '([^']+)';$/m.exec(installed);
+    if (m && m[1] !== KIT_TEMPLATE_ID) {
+      err(
+        `FAILED_KIT_SCRIPT_STALE: this script was generated from template ${KIT_TEMPLATE_ID} but the installed template is ${m[1]}; nothing was saved or reused; regenerate it with /relay-auth-scripts --refresh`,
+      );
+      return 1;
+    }
+  } catch {
+    // unreadable installed template: skip the check
   }
 
   // SECRECY-SITE
@@ -1094,6 +1222,14 @@ async function main(argv) {
       err('FAILED_TOKEN_UNPROVEN: the protected endpoint answered 2xx with and without the token; no session was saved');
       return 1;
     }
+    if (typeof proof === 'object') {
+      err(`FAILED_TOKEN_REJECTED: the protected endpoint answered ${proof.rejected} with the token; no session was saved`);
+      return 1;
+    }
+    if (proof === 'transport') {
+      err('FAILED_TOKEN_TRANSPORT: the request to the protected endpoint failed; no session was saved');
+      return 1;
+    }
     if (proof !== 'proven') {
       err(`FAILED_LOGIN_REJECTED: the login for role ${ROLE} yielded no session`);
       return 1;
@@ -1155,7 +1291,17 @@ async function main(argv) {
   }
 
   // Prove the fresh state in both directions before anything is persisted.
-  const saveProof = await proveSession(cfg, role, state, token !== null ? { token } : null, pw, guard, target.allowedHosts);
+  /** @type {{ field?: 'marker' | 'roleMarker', existed?: boolean }} */
+  const probeDetail = {};
+  const saveProof = await proveSession(cfg, role, state, token !== null ? { token } : null, pw, guard, target.allowedHosts, probeDetail);
+  if (saveProof === 'expired' && hasBrowserProbe(role)) {
+    // The login completed; the declared browser probe is what failed, so name it.
+    const what = probeDetail.existed ? 'an element matching it existed but was not visible' : 'no element matched it';
+    err(
+      `FAILED_PROBE_MARKER_ABSENT: roles.${ROLE}.browserProbe.${probeDetail.field || 'marker'} never became stably visible after the login (${what}); nothing was saved`,
+    );
+    return 1;
+  }
   if (saveProof === 'expired' || saveProof === 'error') {
     err(`FAILED_LOGIN_REJECTED: the login for role ${ROLE} yielded no session`);
     return 1;
@@ -1174,9 +1320,13 @@ async function main(argv) {
   writeSecret(root, SESSION_REL, `${JSON.stringify(state, null, 2)}\n`);
   if (token !== null) {
     const exp = jwtExp(token);
-    const expiresAt = exp !== null ? new Date(exp * 1000) : new Date(Date.now() + role.maxAgeMinutes * 60000);
     /** @type {Record<string, string>} */
-    const artifact = { token, expires_at: expiresAt.toISOString(), obtained_at: new Date().toISOString() };
+    const artifact = { token };
+    if (exp !== null || role.maxAgeMinutes !== null) {
+      const expiresAt = exp !== null ? new Date(exp * 1000) : new Date(Date.now() + role.maxAgeMinutes * 60000);
+      artifact.expires_at = expiresAt.toISOString();
+    }
+    artifact.obtained_at = new Date().toISOString();
     if (role.mechanism === 'static-token') {
       artifact.header = role.staticToken.header;
       artifact.value_prefix = role.staticToken.valuePrefix;

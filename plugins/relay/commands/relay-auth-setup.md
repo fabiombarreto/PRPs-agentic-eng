@@ -1,6 +1,6 @@
 ---
 description: 'Standalone interactive entry point for describing how a project authenticates and authorizes — the fourth interactivity-boundary extension, confined to this command. Adopts auth-model-writer inline (Phase A) then auth-model-reviewer inline with invocation_context: main (Phase B), never Task-dispatched. Enforces a hard local-only guard and proves the PRPs/auth secrecy ignore rules before anything is written. Produces an APPROVED PRPs/auth/auth-model.md and nothing else — no login script, no credential file. Bounded max_auth_model_review_retries=2 exhaustion offers retry-or-abort, never a silent loop. Never invoked by /relay-execute.'
-argument-hint: [--base-url <local-url>]
+argument-hint: [--base-url <local-url>] [--fresh]
 ---
 
 # /relay-auth-setup
@@ -73,9 +73,13 @@ alone, before any file of the project is read, except the hostname declaration
 `$ARGUMENTS` may carry:
 
 - `--base-url <url>` — optional; the base URL of the local application.
+- `--fresh` — optional and combinable with `--base-url`; archives the existing
+  kit files (see P5) and authors the model from scratch.
+
 Any other argument HALTs:
 
-> Usage: `/relay-auth-setup [--base-url <local-url>]`
+> Usage: `/relay-auth-setup [--base-url <local-url>] [--fresh]`
+> Example: `/relay-auth-setup --fresh`
 > Example: `/relay-auth-setup --base-url http://localhost:3000`
 > Unrecognized argument: `<argument>`. Nothing has been read or written.
 
@@ -155,14 +159,47 @@ On any non-zero exit, HALT:
 
 Inspect `PRPs/auth/auth-model.md`:
 
+- If `--fresh` was given, run P5 and then run Phase A as if no model existed.
+  This is the one exception to the halt below.
 - If it ends with `*Status: APPROVED*`, HALT:
 
   > FAILED_AUTH_MODEL_ALREADY_APPROVED: `PRPs/auth/auth-model.md` is already
   > APPROVED. To re-author it, hand-edit its trailing `*Status:*` line back to
   > `DRAFT` and re-run `/relay-auth-setup`.
 
-- If it is a DRAFT, skip Phase A and go straight to Phase B.
+- If it is a DRAFT, skip Phase A and go straight to Phase B. Without `--fresh`,
+  first ask the user once whether to review the existing DRAFT (the default, as
+  before) or to re-run the writer; choosing the re-run archives the DRAFT model
+  and its review log by the P5 move and then runs Phase A instead.
 - If it is absent, run Phase A.
+
+### P5 — Archive on `--fresh`
+
+Runs only with `--fresh` (and for the DRAFT re-run choice above, which moves only
+the DRAFT model and its review log).
+
+1. Capture a UTC stamp, from a fenced bash block, exactly this line:
+
+   ```bash
+   date -u +%Y%m%dT%H%M%SZ
+   ```
+
+2. The archive directory is `archive/<stamp>/` inside the kit's ignored
+   `.sessions/` directory (both relative to the kit directory, `PRPs/auth/`). The
+   P3 `ensure` call has already proven that directory ignored, and it is the one
+   ignore rule every kit carries: an existing kit's `.gitignore` is never
+   overwritten, so a new ignore rule could not reach it.
+3. Move (with `mv`, never copy-then-keep) the model, its review log, every
+   `login-*.mjs` script and `login.config.json` into the archive directory, each
+   only when it exists.
+4. Never move, copy, read or print any other file of the ignored directory, any
+   credential file, or any session, storage-state or token file, and archive
+   nothing outside the kit directory.
+
+`--fresh` then proceeds as if no model existed. The new DRAFT still needs its own
+fresh, explicit approval in Phase B. A login script that carries no template
+identity counts as stale; once the new model is approved,
+`/relay-auth-scripts --refresh` replaces a hand-written script.
 
 ---
 
@@ -240,6 +277,8 @@ halt, the message explains the reason and names the DRAFT path if any.
 - **Never write anything under `.claude/`.** Artifacts live under `PRPs/auth/`.
 - **The only files written** are `PRPs/auth/.gitignore` (via the secrecy
   script), `PRPs/auth/auth-model.md` and `PRPs/auth/auth-model-review.jsonl`.
+  With `--fresh`, existing kit files are relocated into the P5 archive directory,
+  not rewritten.
 - **Never flip without the user's own explicit affirmative reply.**
 - **Never `Task`-dispatch either role.** Both are adopted inline.
 - **Never invoked by `/relay-execute`.** Standalone, human-triggered.
