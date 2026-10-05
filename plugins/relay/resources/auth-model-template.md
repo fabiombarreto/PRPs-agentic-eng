@@ -67,7 +67,14 @@ flow has no login step: state the header or browser location that carries the
 token and that no login request exists; a role may also state a browser probe as
 one line: the route, the authenticated-only marker as visible text or a selector,
 and optionally a role marker, recorded by description, never a credential or
-cookie value)
+cookie value; prefer a marker that appears only after a successful API response
+over one drawn from layout rendered from client-side state, because a
+client-rendered layout can stay visible for seconds with an invalidated session;
+a role may also state, as one line, a pre-authenticated target:
+`pre-authenticated target: <what the origin does>; injecting code: <file:line>;
+alternative local target: <url or none>`, recorded by description and never a
+credential, token or cookie value, the injecting code's `file:line` being
+mandatory)
 
 ## Session and Token Model
 

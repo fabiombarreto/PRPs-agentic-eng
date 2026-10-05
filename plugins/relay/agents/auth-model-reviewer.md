@@ -90,7 +90,8 @@ Record `pass` or `fail` with a short rationale on failure. Run all seven.
   `file:line` evidence (verify by `Read`). A `static-token` mechanism satisfies
   this row when it names the header or browser location that presents the token
   (`localStorage`, or IndexedDB with database, object store and key) with
-  `file:line` evidence.
+  `file:line` evidence. A recorded pre-authenticated target with no `file:line`
+  naming the injecting code fails this row.
 - **R-AM2** — A login flow is present for every mechanism, each marked
   scriptable or not scriptable. A `static-token` flow states its declared
   presentation and that no login request exists. A declared browser probe
@@ -110,7 +111,8 @@ Record `pass` or `fail` with a short rationale on failure. Run all seven.
   fails the row. A model that names a `static-token` token VALUE (rather than its
   environment-variable name) fails this row, and so does a browser probe marker
   or role marker that is a credential-shaped value (a JWT, a password literal, a
-  cookie value).
+  cookie value), and so does a pre-authenticated target line carrying a
+  credential-shaped value.
 - **R-AM7** — No unresolved `TBD - needs validation` remains without a matching
   row under `## Open Questions and Assumptions`.
 

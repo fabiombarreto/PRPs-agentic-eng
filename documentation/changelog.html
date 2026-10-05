@@ -30,7 +30,34 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <p>Nothing yet.</p>
+      <h3 id="unreleased-added">Added</h3>
+
+      <ul>
+        <li><strong>Probe and kit hardening</strong> &mdash; phase 8 of
+          <code>PRPs/prds/manual-qa-runner-auth-kit.prd.md</code>, closing the defects the 0.42.0 re-runs found. A
+          role that declares a browser probe no longer needs an HTTP probe (<code>probe</code> may be <code>null</code>);
+          on the session side a marker must stay visible after the page settles and after a dwell
+          (<code>BROWSER_PROBE_DWELL_MS</code>), so a layout marker that vanishes is an expired session and is never saved,
+          reused or reported as a wrong account; a probe that fails after a completed login halts
+          <code>FAILED_PROBE_MARKER_ABSENT</code> instead of <code>FAILED_LOGIN_REJECTED</code>. Every generated login
+          script carries a template identity stamp and halts <code>FAILED_KIT_SCRIPT_STALE</code> against a differently
+          stamped installed template; <code>/relay-qa-run</code> reports it, and detects an unstamped template-generated
+          script, as a named <code>blocked</code> reason, and <code>/relay-auth-scripts --refresh</code> regenerates the
+          scripts and adds new configuration fields without changing a set value. A <code>static-token</code> role may
+          declare <code>maxAgeMinutes: null</code>, and its failures halt with their own codes:
+          <code>FAILED_TOKEN_REJECTED</code> (naming the HTTP status), <code>FAILED_TOKEN_TRANSPORT</code> and
+          <code>FAILED_TOKEN_PLACEMENT</code> (also for a missing IndexedDB database or store).
+          <code>/relay-auth-setup --fresh</code> archives an existing kit's model, scripts and configuration under the
+          ignored <code>.sessions/</code> directory and authors the model from scratch, and a DRAFT model now offers a
+          writer re-run. A browser case against a target that authenticates every request is
+          <code>blocked</code> with <code>FAILED_TARGET_PRE_AUTHENTICATED</code> unless an alternative local target passes
+          the runner's anonymous check; the auth model template, writer and reviewer record the pre-authenticated target
+          with <code>file:line</code> evidence and prefer server-backed markers. Reference pages updated: the
+          <code>/relay-auth-setup</code>, <code>/relay-auth-scripts</code> and <code>/relay-qa-run</code> entries in
+          <code>reference/commands.html</code>, the <code>qa-run.mjs</code> session-proof entry in
+          <code>reference/scripts.html</code>, and the <code>auth-model-writer</code> and
+          <code>auth-model-reviewer</code> entries in <code>reference/agents.html</code>.</li>
+      </ul>
 
       <h2 id="v0-42-0">0.42.0 &#8212; 2026-10-04</h2>
 
