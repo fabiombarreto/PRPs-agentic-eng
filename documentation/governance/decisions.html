@@ -134,6 +134,7 @@
         <li><a href="#code-review-evaluation-outcome">Code-review evaluation outcome: improve</a></li>
         <li><a href="#manual-qa-runner">Manual-QA runner with a local test-auth kit: registered future capability</a></li>
         <li><a href="#hybrid-pass-operating-conditions">The hybrid <code>/code-review</code> pass: four named conditions, and a fail-open drift gate</a></li>
+        <li><a href="#visual-tooling-provisioning">Provisioning the visual tooling in every new plugin cache: registered backlog item (F10)</a></li>
       </ol>
 
       <h2 id="entries">Entries</h2>
@@ -1001,6 +1002,14 @@
           </ol>
         </dd>
         <dt>Reason</dt><dd>Each condition alone looks like an implementation choice; together they are the contract for letting an unversioned external tool touch a verdict, which is what future agents must not re-litigate. Promoting them as one entry also keeps the fail-open direction explicit &mdash; it appeared in none of the three proposed candidates, and a reader who saw only the gate's existence would assume the opposite. The two phase-1 candidates were not promoted: one is a status the PRD's own table already carries, and the other is a discoverability tweak to an anti-pattern entry whose wording already covers the key.</dd>
+      </div>
+
+      <h3 id="visual-tooling-provisioning">104. Provisioning the visual tooling in every new plugin cache: registered backlog item (F10)</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-10-06</dd>
+        <dt>Context</dt><dd>Each plugin update creates a fresh cache directory, and that copy never contains <code>scripts/visual/node_modules</code>. Every consumer that resolves <code>playwright</code> from the plugin therefore fails on a new version until someone runs <code>npm install</code> there by hand: <code>capture.mjs</code>, <code>compare.mjs</code>, the auth-kit login scripts, and <code>qa-run.mjs</code> when the target project has no <code>playwright</code> of its own. The halt names the repository path, not the cache path the operator must fix. The super-ensino dogfood recorded this as F10 on 0.40.0 and 0.42.0, and it recurred on the 0.44.0 install.</dd>
+        <dt>Decision</dt><dd>Making a freshly installed version resolve its visual-tooling dependencies without a manual step is a registered backlog item. Nothing is implemented. The fix must decide where the idempotent install happens (on-demand provisioning, a documented post-update command, or a load-time check), and it must never download packages inside the autonomous loop without the operator&#39;s consent. Every <code>FAILED_PLAYWRIGHT_UNAVAILABLE</code>-style halt must name the resolved cache path. A check or test must prove that a fresh cache copy resolves <code>playwright</code> or halts actionably, without passing merely because the repository has <code>node_modules</code> at its root.</dd>
+        <dt>Reason</dt><dd>Each release gets a new cache directory, so a manual workaround never sticks. The gap has cost a step in every dogfood since 0.40.0. Registering it records the three decisions the fix must make before anyone patches a single consumer.</dd>
       </div>
 
       <h2 id="how-to-add">Adding a new decision</h2>

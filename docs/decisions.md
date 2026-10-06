@@ -2487,6 +2487,20 @@ The PRD must decide:
 
 **Areas affected:** `plugins/relay/agents/code-reviewer.md` (the hybrid pass section, steps 0 and 9-11, and the R-SEM row); `scripts/validate/checks/hybrid-drift-gate.mjs`; `scripts/record-drift-gate-result.mjs`; `plugins/relay/resources/drift-gate-status.json`; `PRPs/reports/code-review-evaluation/drift-gate-expectations.json`; `docs/api-reference.md`; `documentation/` (governance/decisions, roadmap/status, changelog). Phase 5 of the PRD (the target-project dogfood and the before/after measurement) is still `pending` and may revise the threshold in condition 3, which is the one number here that measurement is expected to move.
 
+## [2026-10-06] Provisioning the visual tooling's `node_modules` in every new plugin cache is a registered backlog item (F10)
+
+**Context:** `claude plugin update` copies the plugin into a fresh `~/.claude/plugins/cache/relay-marketplace/relay/<version>/` directory, and the copy never contains a `node_modules` directory for the visual tooling: the `playwright`, `pixelmatch` and `pngjs` dependencies declared in `plugins/relay/scripts/visual/package.json` are never installed there. Every consumer that resolves `playwright` from the plugin therefore fails on a new version until someone runs `npm install` in that directory by hand. That covers `capture.mjs`, `compare.mjs`, the auth-kit login scripts and `qa-run.mjs`. `qa-run.mjs` resolves the target project's own `playwright` first and falls back to the plugin, so it fails only when the project has none; it then halts `FAILED_PLAYWRIGHT_UNAVAILABLE` with a message that names the repository path `plugins/relay/scripts/visual/`, not the cache path the operator must actually fix. The super-ensino dogfood recorded this as finding F10 on 0.40.0 and again on 0.42.0, and it recurred on the 0.44.0 install on 2026-10-06, fixed by hand each time. `provision.mjs` installs Chromium, but it assumes `playwright` itself is already present.
+
+**Decision:** Making a freshly installed plugin version able to resolve its visual-tooling dependencies without a manual step is a **registered backlog item**. It is NOT implemented. The fix that closes it MUST decide, explicitly:
+
+1. **Where the install happens.** Options are a provisioning step that `visual-verifier` and `/relay-qa-run` run on demand, a documented post-update command, or a check at plugin load. In every case the install must be idempotent and must not run inside the autonomous loop without the operator's consent, because it downloads packages.
+2. **What the halt says.** `FAILED_PLAYWRIGHT_UNAVAILABLE` and every equivalent message must name the resolved cache path, `${CLAUDE_PLUGIN_ROOT}/scripts/visual/`, rather than the repository path.
+3. **How it is verified.** A check or test must prove that a fresh cache copy either resolves `playwright` or halts with the actionable message. It must not pass merely because the developer's repository has `node_modules` at its root.
+
+**Reason:** The gap reappears on every release, so a manual workaround never sticks: each version gets a new cache directory. It has cost a step in every dogfood since 0.40.0, and the halt text points the operator at the wrong directory. Registering it now records the three decisions the fix must make before anyone patches only one consumer.
+
+**Areas affected:** `plugins/relay/scripts/visual/` (`package.json`, `provision.mjs`, `capture.mjs`, `compare.mjs`); `plugins/relay/scripts/qa-run.mjs` (`loadPlaywright` and its halt text); `plugins/relay/resources/auth-login.template.mjs`; `plugins/relay/agents/visual-verifier.md`; `plugins/relay/commands/relay-qa-run.md`; `documentation/` (governance/decisions, changelog).
+
 ---
 
 <!-- Template for future entries:
