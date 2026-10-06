@@ -566,10 +566,13 @@ test('AC-A4 (PRD AC-1): docs/api-reference.md\'s command count tracks the real c
 
   // Lifecycle update (2026-10-02, EXISTING_TEST_UPDATED): /relay-qa-run was
   // registered as the 22nd command (`ls plugins/relay/commands` = 22), so the
-  // source now says "22 commands" in both places. The superseded "21 commands"
+  // source then said "22 commands" in both places. The superseded "21 commands"
   // is pinned absent beside the older negatives. Same pin shape, retargeted.
-  const twentyTwoOccurrences = (content.match(/22 commands/g) || []).length;
-  assert.equal(twentyTwoOccurrences, 2, 'expected exactly two occurrences of "22 commands" (re-derived count, guarding the repo\'s own persistent count-drift defect class)');
+  // Lifecycle update (2026-10-06, EXISTING_TEST_UPDATED): /relay-qa-seed is the
+  // 23rd command, so both places now say "23 commands"; "22 commands" is pinned absent.
+  const twentyThreeOccurrences = (content.match(/23 commands/g) || []).length;
+  assert.equal(twentyThreeOccurrences, 2, 'expected exactly two occurrences of "23 commands"');
+  assert.doesNotMatch(content, /22 commands/);
   assert.doesNotMatch(content, /21 commands/, 'expected the superseded "21 commands" count to be entirely absent');
   assert.doesNotMatch(content, /19 commands/, 'expected the stale "19 commands" count to be entirely absent');
   assert.doesNotMatch(content, /18 commands/, 'expected the stale "18 commands" count to be entirely absent');
@@ -605,11 +608,14 @@ test('AC-A4 (PRD AC-1): docs/api-reference.md gains a new "#### Figma Visual-Fir
   );
 });
 
-test('AC-A4 (PRD AC-1): documentation/reference/commands.html\'s page-subtitle count tracks the real command total, "Twenty-two commands", with the superseded "Twenty-one commands" and the stale "Nineteen commands" and "Fifteen commands" entirely absent', () => {
+test('AC-A4 (PRD AC-1): documentation/reference/commands.html\'s page-subtitle count tracks the real command total, "Twenty-three commands", with the superseded "Twenty-two commands", "Twenty-one commands" and the stale "Nineteen commands" and "Fifteen commands" entirely absent', () => {
   const content = readRepoFile(COMMANDS_HTML_PATH);
   // Lifecycle update (2026-10-02, EXISTING_TEST_UPDATED): subtitle moved
   // Twenty-one -> Twenty-two to match `ls plugins/relay/commands` (22).
-  assert.match(content, /Twenty-two commands/);
+  // Lifecycle update (2026-10-06, EXISTING_TEST_UPDATED): /relay-qa-seed is the
+  // twenty-third command, so the subtitle moved Twenty-two -> Twenty-three.
+  assert.match(content, /Twenty-three commands/);
+  assert.doesNotMatch(content, /Twenty-two commands/);
   assert.doesNotMatch(content, /Twenty-one commands/);
   assert.doesNotMatch(content, /Nineteen commands/);
   assert.doesNotMatch(content, /Fifteen commands/);
@@ -661,7 +667,9 @@ test('AC-A4 (PRD AC-1, real JSON.parse): documentation/assets/data/search-index.
   // Lifecycle update (2026-10-02, EXISTING_TEST_UPDATED): /relay-qa-run is the
   // twenty-second command, so the prefix moved Twenty-one -> Twenty-two; the
   // superseded value is pinned absent.
-  assert.match(commandsEntry.excerpt, /^Twenty-two commands/);
+  // Lifecycle update (2026-10-06): /relay-qa-seed is the twenty-third command.
+  assert.match(commandsEntry.excerpt, /^Twenty-three commands/);
+  assert.doesNotMatch(commandsEntry.excerpt, /Twenty-two commands/);
   assert.doesNotMatch(commandsEntry.excerpt, /Twenty-one commands/);
   assert.doesNotMatch(commandsEntry.excerpt, /^Twenty commands/);
   assert.doesNotMatch(commandsEntry.excerpt, /Nineteen commands/);

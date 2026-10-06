@@ -54,6 +54,24 @@
     "excerpt": "Every component detects its preconditions at start. Missing infrastructure results in a clear skip with a reason — never a silent failure, never a crash. No Docker, no tests, no GitHub — each case has defined behavior."
   },
   {
+    "title": "Parallel lanes",
+    "path": "concepts/parallel-lanes.html",
+    "category": "Concepts",
+    "excerpt": "Parallel lanes: dependency chains of PRD phases run concurrently, each in its own worktree and branch; lane_runtime_safe gate, max_lanes_in_flight cap, serial fallback, lane integration at /relay-commit."
+  },
+  {
+    "title": "Multi-repo workspaces",
+    "path": "concepts/multi-repo-topology.html",
+    "category": "Concepts",
+    "excerpt": "Multi-repo workspaces: Repository topology table in docs/context/architecture.md, project_root, context_root and repo_root, editable and reference-only members, per-member methodology, FAILED_TOPOLOGY halts."
+  },
+  {
+    "title": "Usage metrics",
+    "path": "concepts/usage-metrics.html",
+    "category": "Concepts",
+    "excerpt": "Usage metrics: usage-metrics.mjs materializes PRPs/metrics TSV shards (verdict, rubric, run, scan) from existing artifacts; closed field contract, no free text, operator-run, no telemetry, automated emission deferred."
+  },
+  {
     "title": "Writing a PRD",
     "path": "guide/writing-a-prd.html",
     "category": "Guide",
@@ -93,7 +111,7 @@
     "title": "Commands",
     "path": "reference/commands.html",
     "category": "Reference",
-    "excerpt": "Twenty-two commands, no placeholder. Orchestrator /relay-execute composes /relay-plan, /relay-plan-review, /relay-worktree, /relay-write-test, /relay-test-write-review, /relay-implement, /relay-code-review, /relay-test, and /relay-test-review end to end. All Pillar 3 commands shipped: /relay-commit (v0.14.0), /relay-pr (v0.15.0), /relay-approve (v0.17.0). /relay-qa-report (v0.20.0) is the QA / Support command in the human validation gate. /relay-plan supports a description-only (PRD-less) mode in addition to the standard APPROVED-PRD mode. Full command surface by role: writers, reviewers, infra, orchestrator, QA / Support, and Pillar 3. /relay-visual-approve is the standalone, human-triggered infra command serving the Figma Visual-First Track's human-mode visual approval gate, never invoked by /relay-execute. /relay-auth-setup is a standalone, human-triggered command that produces the human-approved PRPs/auth/auth-model.md describing how the project authenticates and authorizes; it writes no login script and no credential file. /relay-auth-scripts is the standalone, non-interactive command that generates per-role login scripts, login.config.json and credentials.example.json from an approved PRPs/auth/auth-model.md. /relay-qa-run is the standalone, non-interactive runner that executes a QA report's cases through browser and HTTP drivers and writes results.json under PRPs/reports/<feature>/qa-run/."
+    "excerpt": "Twenty-three commands, no placeholder. Orchestrator /relay-execute composes /relay-plan, /relay-plan-review, /relay-worktree, /relay-write-test, /relay-test-write-review, /relay-implement, /relay-code-review, /relay-test, and /relay-test-review end to end. All Pillar 3 commands shipped: /relay-commit (v0.14.0), /relay-pr (v0.15.0), /relay-approve (v0.17.0). /relay-qa-report (v0.20.0) is the QA / Support command in the human validation gate. /relay-plan supports a description-only (PRD-less) mode in addition to the standard APPROVED-PRD mode. Full command surface by role: writers, reviewers, infra, orchestrator, QA / Support, and Pillar 3. /relay-visual-approve is the standalone, human-triggered infra command serving the Figma Visual-First Track's human-mode visual approval gate, never invoked by /relay-execute. /relay-auth-setup is a standalone, human-triggered command that produces the human-approved PRPs/auth/auth-model.md describing how the project authenticates and authorizes; it writes no login script and no credential file. /relay-auth-scripts is the standalone, non-interactive command that generates per-role login scripts, login.config.json and credentials.example.json from an approved PRPs/auth/auth-model.md. /relay-qa-run is the standalone, non-interactive runner that executes a QA report's cases through browser and HTTP drivers and writes results.json under PRPs/reports/<feature>/qa-run/."
   },
   {
     "title": "/relay-qa-seed",
@@ -117,7 +135,7 @@
     "title": "Scripts",
     "path": "reference/scripts.html",
     "category": "Reference",
-    "excerpt": "Helper scripts written in Node.js with zero npm dependencies. normalize-test-output.mjs (JUnit XML to canonical schema) and generate-final-report.mjs (assembles the PR-embeddable markdown report)."
+    "excerpt": "Helper scripts written in Node.js with zero npm dependencies: normalize-test-output, generate-final-report, qa-run, qa-query, qa-seed, auth-kit-secrecy, auth-local-guard, usage-metrics and executable-content-hash."
   },
   {
     "title": "Validation checks",

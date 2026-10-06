@@ -124,6 +124,28 @@ Once the PR is ready, the user triggers the approval flow.
 
 ---
 
+## 4. Manual QA flow (human validation gate — shipped)
+
+Between `/relay-execute` and the approval flow, a human validates the feature.
+These standalone commands support that gate; none is invoked by
+`/relay-execute`.
+
+1. User runs `/relay-qa-report` to list every case with its required state,
+   coverage and a manual step-by-step.
+2. Once per project, `/relay-auth-setup` produces an approved auth model and
+   `/relay-auth-scripts` generates one login script per role, all local-only.
+3. `/relay-qa-seed <feature>` proposes seed declarations for each required
+   state from commands the project already has; the human confirms entries by
+   hand.
+4. `/relay-qa-run <feature>` translates the manual steps into a closed plan
+   for the drivers it has (HTTP, browser, CLI, read-only database check),
+   resolves automated cases from the test record, and gives every case one of
+   `pass`, `fail`, `blocked` or `needs-human`, with redacted evidence under
+   `PRPs/reports/<feature>/qa-run/<run-id>/`.
+5. A `pass` is evidence, not approval: the human validation gate stays open.
+
+---
+
 ## Graceful-degradation variants
 
 - **No Docker available** → Test Runner falls back to local execution; the

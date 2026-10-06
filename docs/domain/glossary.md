@@ -139,6 +139,21 @@ relay component — see `docs/context/constraints.md`.
 Agent that turns an approved plan into code changes in the worktree. Does not
 run tests itself — hands off to the Test Runner.
 
+## Lane
+
+One independent dependency chain of an Implementation Phases table, derived
+from the `Depends` column restricted to a repository. Each lane gets its own
+worktree and `feature/` branch, so concurrent phases stop sharing a working
+tree and git index. The optional `Parallel` cell may force two chains into one
+lane (more serial) but can never split rows `Depends` ties together.
+`/relay-execute` runs lanes concurrently only when the project declares
+`lane_runtime_safe: true` in `docs/context/methodology.md`, up to
+`max_lanes_in_flight` (default 3); otherwise it runs serially and says why.
+Lanes return structured outcomes and the orchestrator alone writes the PRD
+table and `orchestrator-run.json`. `/relay-commit` integrates a repository's
+lane branches into its feature branch. See
+`PRPs/prds/parallel-phase-execution.prd.md`.
+
 ## Marketplace
 
 Claude Code's distribution container for plugins. In this repo, declared at
@@ -288,6 +303,17 @@ reviewed by the PRD Reviewer. Serves as input to the Plan Writer.
 Concept inherited from `prp-core`: PRD + repository intelligence + an
 executable runbook the AI can follow.
 
+## Repository topology
+
+The explicit declaration of a workspace's member repositories — a `## Repository
+topology` table in the workspace's own `docs/context/architecture.md` (columns
+Repo, Path, Git root, Role, Base). Declared, never detected: relay does not scan
+for `.git` directories. A member is `editable` or `reference-only`. Three roots
+are distinguished: `project_root` (artifact plane), `context_root` (a member's
+relay context) and `repo_root` (a member's git root). With no declaration all
+three collapse to the working directory. See
+`plugins/relay/resources/repository-topology.md`.
+
 ## Retry Convergence Ratchet
 
 A `plan-reviewer` mechanism (`### Step 1.5 — Prior-verdict ratchet
@@ -354,11 +380,30 @@ extension, an ambiguous source or a script that cannot run clears nothing.
 Added test content is out of scope by construction — that is
 `DISPUTE_UPHELD_NEW_COVERAGE`'s territory (2026-08-28).
 
+## Test-auth kit
+
+The project-local, tracked-vs-ignored set under `PRPs/auth/` that lets
+`/relay-qa-run` execute a QA report's cases against a locally running
+application: an approved `auth-model.md` (`/relay-auth-setup`), one login
+script per role plus `login.config.json` (`/relay-auth-scripts`), and the seed
+declarations in `qa-seed.json` (`/relay-qa-seed`). Everything is local-only,
+secrets are ignored by proven ignore rules, and no credential value is ever
+written into a tracked file or report.
+
 ## Test Runner
 
 Specialized agent that executes the test suite, interprets results,
 coordinates the auto-correction loop, and produces the execution report.
 Component B1 of the Phase 2 plan.
+
+## Usage metrics
+
+Per-project TSV shards under `PRPs/metrics/` that
+`plugins/relay/scripts/usage-metrics.mjs` regenerates by full rescan of
+artifacts relay already writes (relations `verdict`, `rubric`, `run`, `scan`).
+Cells are bare codes, integers, timestamps or `-`; no free text. Operator-run
+only; no agent, command or skill may reference `PRPs/metrics`. See
+`plugins/relay/resources/usage-metrics-schema.md`.
 
 ## Visual-First Approval
 

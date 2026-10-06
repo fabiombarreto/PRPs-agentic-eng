@@ -209,7 +209,12 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/auth-local-guard.mjs list-declared [--root &l
       <div class="kv">
         <dt>Path</dt><dd><code>plugins/relay/scripts/qa-run.mjs</code></dd>
         <dt>Purpose</dt><dd>The runner of the test-auth kit's consumer side. Parses a <code>qa-report.md</code>, gives every case exactly one of <code>pass</code>, <code>fail</code>, <code>blocked</code> or <code>needs-human</code>, captures redacted evidence and writes <code>results.json</code> under a fresh <code>PRPs/reports/&lt;feature&gt;/qa-run/&lt;run-id&gt;/</code> directory. It never edits the report and ends every run by stating that the human validation gate is still open.</dd>
-        <dt>Record resolution</dt><dd>Before routing, a case whose coverage is <code>automated</code> is resolved from the Test Runner's schema-v1 <code>record.json</code> (the top-level record, else the latest attempt): the JUnit artifact it points at decides <code>pass</code> or <code>fail</code> per cited test file, with reason code <code>AUTOMATED_EVIDENCE</code> and evidence naming the record's run. A record outside schema v1, a run that executed nothing, a JUnit artifact written after the record, an unlisted file or a path matching more than one file all leave the case routed as before. <code>results.json</code> carries a separate <code>record_resolved</code> count; <code>counts</code> stays the four-outcome partition and the summary line excludes record-resolved cases from the driver-executed numbers.</dd>
+        <dt>Record resolution</dt><dd>Before routing, a case whose coverage is <code>automated</code> is resolved from the Test Runner's schema-v1 <code>record.json</code> (the top-level record, else the latest attempt): the JUnit artifact it points at decides <code>pass</code> or <code>fail</code> per cited test file (a cited <code>describe</code> or test title is decided from only the JUnit testcases it names; evidence records its granularity as <code>file</code>, <code>test</code> or <code>mixed</code>), with reason code <code>AUTOMATED_EVIDENCE</code> and evidence naming the record's run. A record outside schema v1, a run that executed nothing, a JUnit artifact written after the record, an unlisted file or a path matching more than one file all leave the case routed as before. <code>results.json</code> carries a separate <code>record_resolved</code> count; <code>counts</code> stays the four-outcome partition and the summary line excludes record-resolved cases from the driver-executed numbers.</dd>
+        <dt>Plan contract</dt><dd>A plan holds literal step objects per driver, validated against the script before anything runs. A <code>{{name}}</code> variable that is not bound is refused before any side effect. Each step result is written into <code>results.json</code>. A plan may carry a <code>human_remainder</code> field: when every driver step of such a case passes, the case is <code>needs-human</code> with reason <code>PARTIAL_REMAINDER</code>, counted in <code>partially_executed</code> and never in the driver-executed rate.</dd>
+        <dt>Seeds</dt><dd>A seed declaration runs only when its status is exactly <code>confirmed</code> (otherwise the case is <code>blocked</code> with <code>STATE_UNCONFIRMED</code>); a <code>"command": null</code> entry is <code>blocked</code> with <code>STATE_COMMAND_MISSING</code>, and a runnable declaration must name a store the local-only guard can check. A declaration may capture values from its bounded JSON output into named variables (<code>captures</code>, optionally <code>redact</code>); a value that is missing is <code>CAPTURE_MISSING</code>, never invented.</dd>
+        <dt>Database driver</dt><dd>A <code>query</code> step runs over a declared <code>query_sources</code> entry (<code>wrangler-d1</code> or <code>sqlite3</code>), using the contract in <a href="#qa-query"><code>qa-query.mjs</code></a>. Only a single <code>SELECT</code> or <code>WITH ... SELECT</code> runs, a local invocation is required, and rows are redacted in evidence.</dd>
+        <dt>API origins</dt><dd><code>api_origins</code> in <code>login.config.json</code> lets an HTTP step name a second local origin. Every declared origin passes the local-only guard, the step path must be relative, and a header derived from the session of the role is registered for redaction and never printed.</dd>
+        <dt>UI grounding</dt><dd>The <code>ground</code> mode writes a redacted accessibility snapshot of one route for one role. Browser steps may use role-and-name and visible-text locators, which must match exactly one element at plan time and at run time, otherwise <code>STEP_UNGROUNDED</code>.</dd>
         <dt>Session proof</dt><dd>A kit login script now proves every saved or reused session in both directions: the probe must succeed with the session and fail without it, and a declared browser probe (an authenticated-only marker, optionally a role marker) is the proof for its role. <code>FAILED_PROBE_NOT_PROTECTED</code>, <code>FAILED_PROBE_WRONG_ACCOUNT</code>, <code>FAILED_PROBE_PAGE_UNLOADABLE</code>, <code>FAILED_PROBE_MARKER_ABSENT</code> and <code>FAILED_KIT_SCRIPT_STALE</code> reach the report as named <code>blocked</code> reasons (the runner's <code>PROBE_BLOCK_CODES</code>); every other session failure keeps <code>SESSION_UNAVAILABLE</code>. Before spawning a role's login script the runner runs a read-only stale pre-flight: it compares the script's template identity stamp with the installed template's and judges only template-generated scripts (a missing stamp counts as stale), failing open when the installed template is unreadable or unstamped. For a browser case whose role records <code>authenticatesAnonymous</code>, the runner blocks with <code>FAILED_TARGET_PRE_AUTHENTICATED</code> unless the record names an alternative local target; that target is passed through the local-only guard and confirmed by a 20 second anonymous check (a fresh context with no session must not show the authenticated-only marker), cached per role. HTTP cases are never gated.</dd>
         <dt>Invoked by</dt><dd><code>/relay-qa-run</code>. Also invocable directly.</dd>
         <dt>Runtime</dt><dd>Node.js &ge; 18.</dd>
@@ -220,6 +225,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/auth-local-guard.mjs list-declared [--root &l
 
       <pre><code class="language-bash">node ${CLAUDE_PLUGIN_ROOT}/scripts/qa-run.mjs parse --report &lt;path&gt;
 node ${CLAUDE_PLUGIN_ROOT}/scripts/qa-run.mjs init --root &lt;dir&gt; --feature &lt;slug&gt; [--env-handle &lt;path&gt;]
+node ${CLAUDE_PLUGIN_ROOT}/scripts/qa-run.mjs ground --root &lt;dir&gt; --feature &lt;slug&gt; --run-dir &lt;rel-dir&gt; --route &lt;path&gt; [--role &lt;role&gt;] [--env-handle &lt;path&gt;]
 node ${CLAUDE_PLUGIN_ROOT}/scripts/qa-run.mjs run --root &lt;dir&gt; --feature &lt;slug&gt; --run-dir &lt;rel-dir&gt; [--env-handle &lt;path&gt;] [--max-cases &lt;n&gt;]</code></pre>
 
       <p>The mode is mandatory. Exit code 0 when completed, 1 for a named <code>FAILED_*</code> halt or an aborted run, 2 for bad arguments. The local-only guard runs before any request, login or write; one marked write helper is the only writer and refuses any path outside the run directory; evidence is redacted in memory before it is written.</p>
@@ -240,6 +246,51 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/qa-run.mjs run --root &lt;dir&gt; --feature &
 node ${CLAUDE_PLUGIN_ROOT}/scripts/qa-seed.mjs merge --root &lt;dir&gt; --report &lt;path&gt; --proposals &lt;path&gt;</code></pre>
 
       <p>The mode is mandatory. Exit code 0 when completed, 1 for a named <code>FAILED_*</code> halt, 2 for bad arguments. One marked write helper is the only writer and refuses any path other than <code>PRPs/auth/qa-seed.json</code>.</p>
+
+      <h2 id="qa-query">qa-query.mjs <span class="badge badge--done">shipped</span></h2>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/scripts/qa-query.mjs</code></dd>
+        <dt>Purpose</dt><dd>The pure contract of the runner's read-only database driver. It performs no I/O and spawns nothing; every spawn lives in <code>qa-run.mjs</code>. The <code>qa-run-contract</code> check enforces this.</dd>
+        <dt>Statement guard</dt><dd>Exactly one <code>SELECT</code> or <code>WITH ... SELECT</code>. Any comment, second statement, <code>PRAGMA</code>, <code>ATTACH</code>, <code>VACUUM</code> or write is <code>QUERY_NOT_READ_ONLY</code>.</dd>
+        <dt>Source kinds</dt><dd>A closed table. <code>wrangler-d1</code> needs <code>--local</code> and refuses <code>--remote</code> and <code>--preview</code>; <code>sqlite3</code> needs <code>-readonly</code>. A violation is <code>FAILED_NON_LOCAL_TARGET</code> or <code>QUERY_SOURCE_INVALID</code>.</dd>
+        <dt>Also provides</dt><dd>Argv assembly, output parsing, row assertions (<code>expect_rows</code>, <code>expect_json</code>) and row redaction. Refusal reasons never carry a statement fragment, a row value or a source command.</dd>
+        <dt>Invoked by</dt><dd><code>/relay-qa-run</code>, imported lazily by <code>qa-run.mjs</code>. It has no command line.</dd>
+        <dt>Runtime</dt><dd>Node.js &ge; 18. No dependencies.</dd>
+      </div>
+
+      <h2 id="usage-metrics">usage-metrics.mjs <span class="badge badge--done">shipped</span></h2>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/scripts/usage-metrics.mjs</code></dd>
+        <dt>Purpose</dt><dd>Materializes the per-project usage-metrics artifact under <code>PRPs/metrics/</code> by a full rescan of artifacts relay already writes. Output is a pure function of input, so re-runs converge rather than duplicate. See <a href="../concepts/usage-metrics.html">Usage metrics</a>.</dd>
+        <dt>Invoked by</dt><dd>An operator, never the pipeline. No agent, command or skill may reference <code>PRPs/metrics</code> (enforced by the <code>metrics-isolation</code> check).</dd>
+        <dt>Runtime</dt><dd>Node.js &ge; 18. No dependencies.</dd>
+      </div>
+
+      <h3 id="usage-metrics-usage">Usage</h3>
+
+      <pre><code class="language-bash">node ${CLAUDE_PLUGIN_ROOT}/scripts/usage-metrics.mjs materialize [--root &lt;dir&gt;] [--out &lt;dir&gt;] [--project &lt;id&gt;]
+node ${CLAUDE_PLUGIN_ROOT}/scripts/usage-metrics.mjs --dry-run [--root &lt;dir&gt;] [--out &lt;dir&gt;] [--project &lt;id&gt;]
+node ${CLAUDE_PLUGIN_ROOT}/scripts/usage-metrics.mjs query [--root &lt;dir&gt;] [--out &lt;dir&gt;]</code></pre>
+
+      <p>The mode is mandatory and arguments are parsed strictly: <code>--help</code> prints usage, while an unknown argument, a flag without its value, or no mode exits 2 without writing. <code>materialize</code> also scaffolds <code>PRPs/metrics/.gitattributes</code> and <code>.gitignore</code> when absent; <code>--dry-run</code> reports row counts and destinations without writing; <code>query</code> prints per-stage counts, first-attempt failure rates and top failing rubric ids.</p>
+
+      <h2 id="executable-content-hash">executable-content-hash.mjs <span class="badge badge--done">shipped</span></h2>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/scripts/executable-content-hash.mjs</code></dd>
+        <dt>Purpose</dt><dd>Computes an auditable hash of a source file's executable content at two git revisions, so the code reviewer's R-X test-modification guard can tell a diff that changes what a test asserts from one that changes only what it says. Comments, Python docstrings and test-title string literals are removed before hashing; everything else is kept byte for byte.</dd>
+        <dt>Fail-closed</dt><dd>A path is reported <code>cleared: false</code> whenever anything is uncertain: an unsupported extension, a file absent on either side, an unterminated string or comment, or an ambiguous JavaScript <code>/</code>. A caller treats every non-cleared path as a plain R-X match.</dd>
+        <dt>Invoked by</dt><dd>The <code>code-reviewer</code> agent, in standard mode.</dd>
+        <dt>Runtime</dt><dd>Node.js &ge; 18. No dependencies.</dd>
+      </div>
+
+      <h3 id="executable-content-hash-usage">Usage</h3>
+
+      <pre><code class="language-bash">node ${CLAUDE_PLUGIN_ROOT}/scripts/executable-content-hash.mjs --base &lt;rev&gt; --head &lt;rev|WORKTREE&gt; [--repo &lt;dir&gt;] [--pretty] -- &lt;path&gt; [&lt;path&gt; ...]</code></pre>
+
+      <p>One JSON report on stdout. Exit 0 whenever a report was produced, including when every path was flagged: the verdict lives in the report. Exit 2 on a usage or internal error.</p>
 
       <h2 id="extension-pattern">How new scripts join the plugin</h2>
 

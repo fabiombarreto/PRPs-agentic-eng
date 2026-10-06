@@ -37,6 +37,9 @@
         { title: "Test pair",               path: "concepts/tdd-track.html" },
         { title: "PRP artifact paths",      path: "concepts/prp-artifacts.html" },
         { title: "Graceful degradation",    path: "concepts/graceful-degradation.html" },
+        { title: "Parallel lanes",          path: "concepts/parallel-lanes.html" },
+        { title: "Multi-repo workspaces",   path: "concepts/multi-repo-topology.html" },
+        { title: "Usage metrics",           path: "concepts/usage-metrics.html" },
       ],
     },
     {

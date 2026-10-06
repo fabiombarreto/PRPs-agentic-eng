@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Parallel lanes — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Concepts</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Parallel lanes</span>
+      </div>
+
+      <h1>Parallel lanes</h1>
+      <p class="page-subtitle">How /relay-execute runs independent chains of PRD phases at the same time: what a lane is, how it is derived, when concurrency is allowed, and how lanes come back together into one branch per repository.</p>
+
+      <h2 id="what-is-a-lane">What a lane is</h2>
+
+      <p>A lane is one independent dependency chain of a PRD's Implementation Phases table. Lanes are derived from the <code>Depends</code> column, restricted to one repository, so a lane can never contradict a stated dependency. Phases inside a lane stay sequential; only separate lanes can run together.</p>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Canonical source</div>
+        <p>The contract lives in <code>plugins/relay/resources/lane-model.md</code>; the decision record is in <a href="../governance/decisions.html">Decisions</a>. The feature shipped in 0.38.0 (<code>PRPs/prds/parallel-phase-execution.prd.md</code>, seven phases).</p>
+      </div>
+
+      <h2 id="parallel-cell">The Parallel cell</h2>
+
+      <p>The optional <code>Parallel</code> column of the phases table is an override in one direction only. A label such as <code>lane:qa-run</code> merges rows into a single sequential lane, which makes the run more serial. It can never split rows that <code>Depends</code> ties together, so a declaration that contradicts a dependency is refused by name instead of honored.</p>
+
+      <pre><code class="language-default">| # | Phase | Description | Status | Repo | Parallel | Depends | PRP Plan |
+| 1 | Plan contract | ... | pending | - | lane:qa-run | - | - |
+| 2 | Captured seeds | ... | pending | - | lane:qa-run | 1 | - |</code></pre>
+
+      <h2 id="isolation">Isolation: one worktree and branch per lane</h2>
+
+      <p>Each lane gets its own worktree and branch, so two concurrent phases stop sharing a working tree and a git index. The worktree slug is the feature name when no lane is supplied and <code>&lt;feature&gt;-lane-&lt;k&gt;</code> when one is. With a single lane the slug is the feature name, so a non-parallel run is byte-identical to a run before lanes existed.</p>
+
+      <h2 id="serialized-state">Lanes are read-only over shared state</h2>
+
+      <p>A lane never writes the source PRD table or <code>orchestrator-run.json</code>. It returns a structured outcome and the orchestrator applies every row transition and audit write serially. The design removes the shared write instead of guarding it with a lock. A registry of shared-state writers in the lane contract is checked by the <code>lane-state-writers</code> validation check.</p>
+
+      <h2 id="gate-and-cap">When concurrency is allowed</h2>
+
+      <div class="kv">
+        <dt><code>lane_runtime_safe</code></dt><dd>A declaration in the target project's <code>docs/context/methodology.md</code>. Only <code>true</code> permits concurrent lanes. <code>false</code> or an absent key forces serial execution. It is a declaration, never a scan.</dd>
+        <dt><code>max_lanes_in_flight</code></dt><dd>Session-level cap, default 3. Lanes beyond the cap queue; they are never dropped.</dd>
+        <dt>Serial fallback</dt><dd>The run is serial when the gate is false or absent, when fewer than two lanes exist, or when the cap is 1. Each reason is recorded by name in <code>orchestrator-run.json</code>, because "ran serially" without a cause is not auditable.</dd>
+      </div>
+
+      <div class="callout callout--warn">
+        <div class="callout__title">Why the gate defaults to false</div>
+        <p>Concurrent lanes share the machine. A project whose tests need a database, fixed ports or shared environment variables would collide. Making that safe automatically needs per-worktree environment provisioning, which is registered but not built (see <a href="../roadmap/status.html">Phase status</a>).</p>
+      </div>
+
+      <h2 id="budgets">Budgets and halts</h2>
+
+      <p>Retry, oscillation and dispute budgets are initialized per phase and therefore apply per lane. The wall-clock budget is one shared session clock. When one lane halts, every other lane reaches a named terminal state, so a halt never leaves a lane undescribed.</p>
+
+      <h2 id="integration">Integration in Pillar 3</h2>
+
+      <p><code>/relay-commit</code> integrates a repository's lane branches into its <code>feature/&lt;feature&gt;</code> branch before any PR is opened, so a feature built across three lanes still produces one PR per repository. For a single lane the step is a documented no-op. A merge conflict between lanes is a finding about the PRD, not something to resolve silently. <code>/relay-approve</code> presents concurrent pending approvals for the operator to choose instead of refusing them.</p>
+
+      <h2 id="proof">Proof</h2>
+
+      <p>A synthetic three-phase fixture runs both in parallel and serially, with per-lane and total durations recorded. A deliberately colliding fixture must be refused. The checks <code>lane-contract</code>, <code>lane-worktree-parity</code>, <code>lane-state-writers</code> and <code>lane-fixture</code> are listed in <a href="../reference/validation-checks.html">Validation checks</a>.</p>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>
