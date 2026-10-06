@@ -152,10 +152,199 @@ tool, into `<RUN_DIR>/plan.json`:
 { "schema_version": 1, "cases": [ { "index": 1, "title": "<copied exactly>", "driver": "http", "role": null, "state": "none", "steps": [] } ] }
 ```
 
-The closed vocabulary:
+Grounding browser steps. For a case whose browser steps name no selector (or whose labels
+you cannot trust), run, once per role and route and BEFORE writing the plan entry:
 
-- `http` steps: `request {method, path, body?, expect_status?, expect_body_contains?, expect_json?: {path, equals}}`
-- `browser` steps: `goto {path}`, `click {selector}`, `fill {selector, value}`, `expect_visible {selector}`, `expect_text {selector, contains}`, `expect_url {path}`
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/qa-run.mjs" ground --root "<target_root>" --feature "<feature>" --run-dir "<RUN_DIR>" --route "<route>"
+```
+
+Append ` --role "<role>"` when the plan entry names a role and ` --env-handle "<path>"` when
+the argument was given. It prints `GROUNDED: <path> entries=<n> withheld=<m>`; `Read` the
+written snapshot file under `<RUN_DIR>/grounding/`. It lists role-and-name and visible-text
+entries, each with the number of elements it `matches`. A non-zero exit is a named halt (for
+example `FAILED_PLAYWRIGHT_UNAVAILABLE`, `SESSION_UNAVAILABLE`, `TARGET_UNREACHABLE`): relay
+it, plan no locator step for that route, and leave the case to the script.
+
+The closed vocabulary. Every step is a FLAT JSON object with a string `action`. The
+nested form `{ "request": { ... } }` is rejected `PLAN_ENTRY_INVALID`, with a reason
+that names the flat shape `{"action": "<name>", ...}`.
+
+One literal `http` step (action `request`):
+
+<!-- qa-step-example driver=http -->
+```json
+{ "action": "request", "method": "GET", "path": "/api/x", "expect_status": 200 }
+```
+
+Optional `http` keys, on the same flat object: `body`, `expect_body_contains`
+(a string), and `expect_json` (`{ "path": "<dotted path>", "equals": <value> }`).
+
+One literal `browser` step (action `expect_text`):
+
+<!-- qa-step-example driver=browser -->
+```json
+{ "action": "expect_text", "selector": "h1", "contains": "Dashboard" }
+```
+
+The other `browser` actions, each flat: `{ "action": "goto", "path": ... }`,
+`{ "action": "click", "selector": ... }`, `{ "action": "fill", "selector": ..., "value": ... }`,
+`{ "action": "expect_visible", "selector": ... }` and `{ "action": "expect_url", "path": ... }`.
+
+A literal `browser` step that names its target by role and name instead of a selector:
+
+<!-- qa-step-example driver=browser -->
+```json
+{ "action": "click", "role": "button", "name": "Save" }
+```
+
+A literal `browser` step that names its target by visible text:
+
+<!-- qa-step-example driver=browser -->
+```json
+{ "action": "expect_visible", "text": "Welcome back" }
+```
+
+The browser actions `click`, `fill`, `expect_visible` and `expect_text` accept, instead of
+`selector`, either `role` plus `name` (matched exactly through the accessible role and name)
+or `text` (matched exactly against visible text). The forms are mutually exclusive. `role` is
+one of `button`, `link`, `textbox`, `checkbox`, `radio`, `combobox`, `heading`, `tab`,
+`menuitem`, `option`, `switch`, `searchbox`, `spinbutton`, `slider`, `dialog`, `alert`,
+`status`, `row`, `cell`, `columnheader`, `listitem`, `img`, `navigation`, `region`, `table`,
+`menu` or `tabpanel`, and an existing `selector` step is unchanged.
+
+Grounding rules. Write a locator step only for an entry of the snapshot of the step's own
+route and role whose `matches` is exactly `1`, copying its `role` and `name` or its `text`
+verbatim; the route of a step is the last `goto` or `expect_url` path before it. A step whose
+element is not in the snapshot, matches 0 or matches more than one element is not planned:
+omit the case, or the case is `needs-human` `STEP_UNGROUNDED` naming the step, before
+anything is seeded, authenticated or requested. At run time a locator that matches more than
+one element is never acted on and also ends the case `needs-human` `STEP_UNGROUNDED`.
+Elements that only appear after an interaction are not in the snapshot and cannot be
+grounded. The expectations always come from the report's own steps: an `expect_text`
+`contains` must appear in the case's manual steps (otherwise `PLAN_ENTRY_INVALID`), and the
+snapshot only supplies how to find an element, never what to expect.
+
+Personal data. The snapshot never stores raw page text; an entry whose text carries a secret
+known to the redaction table, an e-mail address or a match of a `regex:` line of
+`PRPs/redaction-extensions.txt` is withheld (counted in `withheld`) and cannot be used as a
+locator, so an operator whose pages show account names adds a `regex:` line for them to that
+file before grounding.
+
+One literal `query` step, a read-only database check:
+
+<!-- qa-step-example driver=http -->
+```json
+{ "action": "query", "source": "d1-local", "sql": "SELECT status FROM tasks WHERE id = 7", "expect_rows": 1 }
+```
+
+A `query` step is valid inside `http` and `browser` entries. It names a source declared
+in `query_sources` (never an argv, never a connection string) and supplies `sql`.
+`expect_rows` is an exact non-negative row count; `expect_json` is
+`{ "path": "<dotted path over the rows array, e.g. 0.status>", "equals": <value> }`; at
+least one of the two is required. `{{name}}` may appear in `sql`.
+
+One literal `origin` step, a request to a declared second local origin:
+
+<!-- qa-step-example driver=http -->
+```json
+{ "action": "request", "origin": "api", "method": "GET", "path": "/api/me", "expect_status": 200 }
+```
+
+An `http` `request` step may carry an optional `origin` naming an `api_origins` entry. The `path` must then be relative (an absolute URL to another origin is refused). Without `origin` the step goes to the target origin, unchanged.
+
+Statement rule: the statement must be one `SELECT` or `WITH ... SELECT`, with no
+comment, no second statement and no `PRAGMA`, `ATTACH`, `VACUUM` or write. Anything
+else blocks the case `QUERY_NOT_READ_ONLY` before anything is seeded, authenticated or
+executed, and a captured value substituted into `sql` is checked again after
+substitution.
+
+Variables: `{{name}}` may appear in a path, body, fill value or expectation, and every
+reference must be bound by a capture declared for the case's seed. An unbound
+reference makes the case `needs-human` with `PLAN_ENTRY_INVALID`, naming the
+variable, before anything is seeded, authenticated or requested. A variable is
+bound only when the case's `declared` required state has a `captures` entry of that
+name in `PRPs/auth/qa-seed.json`: write `{{name}}` only for names read there, never
+invent one and never write a value. The value arrives after the seed ran; a capture
+path that resolves to nothing, or seed output that is not JSON, blocks the case
+`CAPTURE_MISSING` with no step run.
+
+Partial plans: when a report's objective steps are separable from its subjective or
+outward-effect ones, the plan entry may carry
+`"human_remainder": { "reason": "<why the rest is human>" }`. The objective steps
+still need at least one expectation. When every planned step passes, the case is
+`needs-human` with `PARTIAL_REMAINDER`, keeps its objective evidence and reproduces
+the manual steps verbatim; when an objective step fails, the case is `fail`.
+Partially executed cases are counted in `partially_executed`, reported beside
+`record_resolved`, and never in the driver-executed rate.
+
+Per-step results: every case a driver executed lists a `steps` array in
+`results.json`, one item per step with `index`, `action`, `result` (`passed`,
+`failed`, `not-run` or `human`) and `evidence` (a path or null). Cases no driver
+executed carry an empty `steps`.
+
+Declaration schema. A `states[<exact required-state text>]` entry in
+`PRPs/auth/qa-seed.json` has `command` (an argv array, or `"command": null` when the
+project has no command for the state), `status` (`proposed` or `confirmed`; the runner
+executes an entry only when `status` is exactly `confirmed`, and an entry with no
+`status` key is treated as `proposed`), `evidence` (a `<path>:<line>` citation written
+by `/relay-qa-seed`, ignored by the runner), `gap` (why no command exists, used with
+`"command": null`), an optional `captures` map
+(`{ "<variable>": { "path": "<dotted path into the seed's JSON stdout>", "redact": true } }`,
+`redact` optional) and `store` (a URL or `host[:port]`, REQUIRED on every declaration
+that can run). Refusals, all `blocked` and all before any command runs:
+`STATE_UNCONFIRMED` (a declaration whose `status` is not `confirmed`; nothing runs),
+`STATE_COMMAND_MISSING` (`"command": null`, naming the gap; nothing runs) and
+`STATE_UNDECLARED`, which means only that no usable declaration exists for the exact
+required-state text. `/relay-qa-seed <feature>` proposes entries keyed by the report's
+literal text and never writes `confirmed`; only the operator's edit of the tracked file
+does. The store is checked by the local-only guard before the seed runs; a
+non-local or unreadable store blocks the case `FAILED_NON_LOCAL_TARGET` with nothing
+executed. Captured output is bounded to 65536 bytes of stdout and scalar values only
+(string, number or boolean). A `redact: true` value is never written in clear, and one
+shorter than 4 characters blocks the case `CAPTURE_UNREDACTABLE`. `api_origins` is a map in
+`PRPs/auth/login.config.json`, next to the roles; each entry is
+`{ "url": "<local origin>", "header": "<header name>", "cookie": "<cookie name in the role's saved session>", "value_prefix": "<optional, e.g. Bearer >" }`,
+where `header` and `cookie` go together or are both absent (an origin with neither only
+reaches a second local origin with the session's cookies). The runner builds the header
+value at run time from that cookie of the role's saved storage state and sends it only
+with steps naming that origin; the value is never written to evidence, a reason or the
+terminal. Every declared origin is checked by the local-only guard; an origin not
+declared in `api_origins`, or not local, blocks the case `FAILED_NON_LOCAL_TARGET` with
+nothing requested. Other refusals, all `blocked` and all before any request:
+`API_ORIGIN_INVALID` (a malformed declaration) and `API_HEADER_NO_SESSION` (a
+header-bearing origin in a case whose plan entry names no role); at run time
+`API_HEADER_SOURCE_MISSING` (the role session has no usable cookie of that name). These
+files hold declarations only, never captured values or credentials.
+
+Honesty rule for origins: plan a case that needs a second local origin only when the
+origin is already named in `PRPs/auth/login.config.json` `api_origins`; read the names
+from that file, never invent one and never write a URL, header value or token.
+
+Query sources. `query_sources` is a top-level map in `PRPs/auth/qa-seed.json`; each
+entry has `kind` (`wrangler-d1` or `sqlite3`), `command` (the argv PREFIX; the
+statement is appended as the final argument, so a `wrangler-d1` command ends with
+`--command`) and an optional `redact_columns` list of column names whose values are
+written as `[REDACTED]` in evidence. A `wrangler-d1` source must carry `--local` and
+`--json` and must not carry `--remote` or `--preview`; otherwise the case is blocked
+`FAILED_NON_LOCAL_TARGET` with nothing executed. A `sqlite3` source must carry
+`-readonly` and `-json`, and no URL or `file:` argument. Any argument naming a URL is
+also checked by the local-only guard. D1 offers no engine-level read-only control
+through `wrangler`, so a D1 source relies on the statement guard plus `--local`; an
+operator who wants the engine control declares the local SQLite file as a `sqlite3`
+source instead. The refusal codes, all `blocked` and all before any command runs:
+`QUERY_NOT_READ_ONLY`, `QUERY_SOURCE_UNDECLARED`, `QUERY_SOURCE_INVALID` and
+`FAILED_NON_LOCAL_TARGET`; at run time `QUERY_FAILED` and `QUERY_OUTPUT_UNPARSEABLE`.
+The runner loads its query module lazily, so a case whose module cannot be loaded is
+`blocked` `QUERY_MODULE_UNAVAILABLE`, never a crash.
+Rows are written as evidence after `${CLAUDE_PLUGIN_ROOT}/resources/redaction-policy.md` and `redact_columns` are
+applied, capped at 100 rows; a failed expectation is `fail` and its reason carries
+counts or a path, never a value. On Windows the `command` must start with `node` plus
+the tool's script path (or an executable), because commands run without a shell.
+
+```json
+{ "states": { "A teacher exists": { "command": ["node", "scripts/seed-teacher.mjs"], "status": "confirmed", "store": "localhost:5432", "captures": { "teacher_id": { "path": "teacher.id" } } } } }
+```
 
 `role` is a role slug declared in `PRPs/auth/login.config.json`, or null. `state`
 is `none` only when the report's required state is none, `role-only` only when the
@@ -166,11 +355,18 @@ required state is nothing but a logged-in user of that role, and otherwise
 Honesty rules:
 
 - Omit any case that needs an email inbox, SMS, a physical device, a third-party
-  payment, a subjective visual judgment, a CLI, a database query or any action
-  outside the vocabulary. The script records it `needs-human` with the steps
-  verbatim.
+  payment, a subjective visual judgment, a CLI or any action outside the
+  vocabulary. The script records it `needs-human` with the steps verbatim.
+- Plan a case that needs a database read only when its verification maps onto a
+  `SELECT` against a source already named in `PRPs/auth/qa-seed.json`
+  `query_sources`; read the source names from that file, never invent one, never
+  write a connection string or argv, and omit the case when no source is declared.
 - Never invent a selector, path, credential or expected value the steps do not
   state.
+- Plan a browser step by a role-and-name or text locator only from an entry of a
+  snapshot written by the `ground` mode with `matches` exactly 1; never write a
+  locator from the report's own wording or from the code, and never take an
+  expectation from the snapshot.
 - Every planned case must carry at least one expectation.
 - Never put a credential or token value in `plan.json`.
 - Never infer a driver the steps do not need.
@@ -199,6 +395,8 @@ a plan entry for such a case is ignored once it resolves.
   `counts` stays the four-outcome partition and therefore still contains them, so
   the summary line and the driver-executed rate exclude `AUTOMATED_EVIDENCE`
   outcomes and `record_resolved` is reported beside them, never added to them.
+- A cited test title narrows the decision to the testcases it names: a `describe("...")`, `it("...")` or `test("...")` citation (optionally followed by a `›` chain to a test title), or a `<path>::<title>` or `<path> > <title>` span, in the same field as the cited file. Each cited title must match a JUnit testcase of that file exactly (its name, its class name or an enclosing suite name, or one ` > `-separated segment of its name); only the matching testcases decide the outcome, and a cited title with no match, or one that follows no cited file, leaves the case not resolved.
+- When the field cites only a file, resolution stays per file and the evidence records `granularity: file`; a title-level resolution records `granularity: test`, and a case citing both kinds records `granularity: mixed`.
 
 ---
 
@@ -248,10 +446,11 @@ and state what was and was not written.
   outside the runner process: the kit's own login script, when the runner calls it
   for a role session, writes only under `PRPs/auth/.sessions/`, and a seed command
   declared in `PRPs/auth/qa-seed.json` writes to whatever store the project
-  declared.
+  declared; a capturing declaration must name that store and pass the local-only guard.
 - **Never edit `qa-report.md` or any Manual status.**
 - **Never run a command taken from the report or its steps.** Seed commands come
-  only from `PRPs/auth/qa-seed.json`, and sessions only from the kit's login scripts.
+  only from `PRPs/auth/qa-seed.json` and only when the declaration is `confirmed`,
+  and sessions only from the kit's login scripts.
 - **No credential value enters the conversation or any file this command writes.**
 - **Never `Task`-dispatch anything.**
 - **Never ask the user a question.**

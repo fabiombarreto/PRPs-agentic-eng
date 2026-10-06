@@ -49,6 +49,17 @@ import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+/**
+ * The query contract is loaded lazily: a runner copy that never meets a `query` step never needs the
+ * sibling module. A failed load is reported to the caller, never thrown.
+ */
+/** @type {Promise<any> | null} */
+let queryModulePromise = null;
+/** @returns {Promise<any>} */
+async function loadQueryModule() {
+  queryModulePromise ??= import('./qa-query.mjs').catch(() => null);
+  return queryModulePromise;
+}
 
 export const OUTCOMES = ['pass', 'fail', 'blocked', 'needs-human'];
 
@@ -759,7 +770,8 @@ async function guardTarget(baseUrl, root) {
 // ---------------------------------------------------------------------------
 
 /**
- * @typedef {{ outcome: string, reason_code: string | null, reason: string | null, evidence: string[] }} CaseResult
+ * @typedef {{ index: number, action: string, result: string, evidence: string | null }} StepRecord
+ * @typedef {{ outcome: string, reason_code: string | null, reason: string | null, evidence: string[], steps?: StepRecord[] }} CaseResult
  * @typedef {{ root: string, runDirAbs: string, runDirRel: string, table: RedactionTable, target: NonNullable<Target>, playwright: any, loginConfig: any, sessions: Map<string, any>, seeds: Map<string, any>, seedConfig: any, anonChecks: Map<string, any> }} RunCtx
  * @typedef {{ path: string | null, token: string | null, header?: string | null, valuePrefix?: string | null }} SessionInfo
  */
@@ -776,63 +788,386 @@ const HTTP_METHODS = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'];
 const isStr = (/** @type {any} */ v) => typeof v === 'string';
 const isObj = (/** @type {any} */ v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
+const HTTP_ACTIONS = ['request', 'query'];
+const API_ORIGIN_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/;
+const BROWSER_ACTIONS = ['goto', 'click', 'fill', 'expect_visible', 'expect_text', 'expect_url', 'query'];
+const API_HEADER_FORBIDDEN = ['host', 'content-length', 'cookie', 'transfer-encoding'];
+const LOCATOR_ACTIONS = ['click', 'fill', 'expect_visible', 'expect_text'];
+const LOCATOR_ROLES = ['button', 'link', 'textbox', 'checkbox', 'radio', 'combobox', 'heading', 'tab', 'menuitem', 'option', 'switch', 'searchbox', 'spinbutton', 'slider', 'dialog', 'alert', 'status', 'row', 'cell', 'columnheader', 'listitem', 'img', 'navigation', 'region', 'table', 'menu', 'tabpanel'];
+
+/**
+ * The strict locator form of a browser step: role plus name, or visible text. Pure, no I/O.
+ * Returns null when the step carries none of the keys role, name, text.
+ * @param {any} step
+ * @returns {null | { ok: false, why: string } | { ok: true, form: 'role', role: string, name: string } | { ok: true, form: 'text', text: string }}
+ */
+export function locatorOf(step) {
+  if (!isObj(step)) return null;
+  const hasRole = step.role !== undefined;
+  const hasName = step.name !== undefined;
+  const hasText = step.text !== undefined;
+  if (!hasRole && !hasName && !hasText) return null;
+  if (step.selector !== undefined || (hasText && (hasRole || hasName))) {
+    return { ok: false, why: 'a step names one locator form: selector, role and name, or text' };
+  }
+  if (hasText) {
+    if (!isStr(step.text) || step.text.trim() === '') return { ok: false, why: 'text must be a non-empty string' };
+    return { ok: true, form: 'text', text: step.text };
+  }
+  if (hasRole !== hasName) return { ok: false, why: 'role and name go together' };
+  if (!isStr(step.role) || !LOCATOR_ROLES.includes(step.role)) return { ok: false, why: 'role must be one of the supported roles' };
+  if (!isStr(step.name) || step.name.trim() === '') return { ok: false, why: 'name must be a non-empty string' };
+  return { ok: true, form: 'role', role: step.role, name: step.name };
+}
+
+/**
+ * Classifies a declared additional API origin. Pure, no I/O. Ordered refusals; a reason names the
+ * origin name only, never a URL or a value.
+ * @param {any} apiOrigins the api_origins map of login.config.json
+ * @param {any} name
+ * @returns {{ ok: false, code: string, reason: string } | { ok: true, name: string, url: string, header: string | null, cookie: string | null, valuePrefix: string }}
+ */
+export function classifyApiOrigin(apiOrigins, name) {
+  const entry = isObj(apiOrigins) && isStr(name) && Object.hasOwn(apiOrigins, name) ? apiOrigins[name] : undefined;
+  if (!isObj(entry)) {
+    return { ok: false, code: 'FAILED_NON_LOCAL_TARGET', reason: `the origin ${String(name)} is not declared in api_origins; nothing was requested` };
+  }
+  /** @param {string} why */
+  const bad = (why) => ({ ok: false, code: 'API_ORIGIN_INVALID', reason: `api_origins[${name}] is malformed: ${why}` });
+  if (!isStr(entry.url) || entry.url === '' || /\s/.test(entry.url)) return bad('url must be a non-empty string without whitespace');
+  const hasHeader = entry.header !== undefined;
+  const hasCookie = entry.cookie !== undefined;
+  if (hasHeader !== hasCookie) return bad('header and cookie must be declared together');
+  if (hasHeader) {
+    if (!isStr(entry.header) || !/^[A-Za-z0-9-]{1,64}$/.test(entry.header) || API_HEADER_FORBIDDEN.includes(entry.header.toLowerCase())) return bad('header is not an allowed header name');
+    if (!isStr(entry.cookie) || !/^[A-Za-z0-9._-]{1,128}$/.test(entry.cookie)) return bad('cookie is not a valid cookie name');
+  }
+  if (entry.value_prefix !== undefined && !(isStr(entry.value_prefix) && entry.value_prefix.length <= 32 && !/[\r\n]/.test(entry.value_prefix))) {
+    return bad('value_prefix must be a string of at most 32 characters without line breaks');
+  }
+  return {
+    ok: true,
+    name: /** @type {string} */ (name),
+    url: entry.url,
+    header: hasHeader ? entry.header : null,
+    cookie: hasCookie ? entry.cookie : null,
+    valuePrefix: entry.value_prefix === undefined ? '' : entry.value_prefix,
+  };
+}
+
+/**
+ * Builds the derived header from the named cookie of a saved storage state. Pure.
+ * @param {{ header: string | null, cookie: string | null, valuePrefix: string }} spec
+ * @param {any} state parsed storage-state
+ * @param {string} host the guarded origin's hostname
+ * @returns {{ ok: true, name: string, value: string, raw: string } | { ok: false, code: string, reason: string }}
+ */
+export function deriveApiHeader(spec, state, host) {
+  const cookies = isObj(state) && Array.isArray(state.cookies) ? state.cookies : [];
+  const usable = cookies.filter((/** @type {any} */ c) => isObj(c) && c.name === spec.cookie && isStr(c.value) && c.value !== '');
+  const want = String(host).toLowerCase();
+  const pick = usable.find((/** @type {any} */ c) => isStr(c.domain) && c.domain.toLowerCase().replace(/^\./, '') === want) ?? usable[0];
+  if (pick === undefined) {
+    return { ok: false, code: 'API_HEADER_SOURCE_MISSING', reason: `the role session has no usable cookie named ${spec.cookie}` };
+  }
+  return { ok: true, name: /** @type {string} */ (spec.header), value: `${spec.valuePrefix}${pick.value}`, raw: pick.value };
+}
+
+const VARIABLE_PATTERN = /\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
+
+/**
+ * The per-step rules of the closed vocabulary. Returns the rejection text, or the number of expectations the step carries.
+ * @param {string} driver
+ * @param {any} s
+ * @returns {{ why: string } | { expectations: number }}
+ */
+function stepRules(driver, s) {
+  const bad = (/** @type {string} */ why) => ({ why });
+  let expectations = 0;
+  if (!isObj(s) || !isStr(s.action)) {
+    const keys = isObj(s) ? Object.keys(s) : [];
+    const known = driver === 'http' ? HTTP_ACTIONS : BROWSER_ACTIONS;
+    if (keys.length === 1 && known.includes(keys[0]) && isObj(s[keys[0]])) {
+      return bad('nested step form is not accepted; use the flat shape {"action": "<name>", ...}');
+    }
+    return bad('not an object with a string action');
+  }
+  if (s.action === 'query') {
+    if (!isStr(s.source) || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/.test(s.source)) return bad('query needs a source name of letters, digits, _ or -');
+    if (!isStr(s.sql) || s.sql === '') return bad('query needs a string sql');
+    if (s.expect_rows !== undefined) {
+      if (!Number.isInteger(s.expect_rows) || s.expect_rows < 0) return bad('expect_rows must be a non-negative integer');
+      expectations++;
+    }
+    if (s.expect_json !== undefined) {
+      if (!isObj(s.expect_json) || !isStr(s.expect_json.path) || !('equals' in s.expect_json)) return bad('expect_json needs path and equals');
+      expectations++;
+    }
+    if (expectations === 0) return bad('query needs expect_rows or expect_json');
+    return { expectations };
+  }
+  if (driver === 'http') {
+    if (s.action !== 'request') return bad(`unknown http action ${JSON.stringify(s.action)}`);
+    if (!HTTP_METHODS.includes(s.method)) return bad('method must be one of GET, HEAD, POST, PUT, PATCH, DELETE');
+    if (!isStr(s.path)) return bad('path must be a string');
+    if (s.origin !== undefined && !(isStr(s.origin) && API_ORIGIN_NAME.test(s.origin))) return bad('origin must be a declared api_origins name of letters, digits, _ or -');
+    if (s.expect_status !== undefined) {
+      if (!Number.isInteger(s.expect_status)) return bad('expect_status must be an integer');
+      expectations++;
+    }
+    if (s.expect_body_contains !== undefined) {
+      if (!isStr(s.expect_body_contains)) return bad('expect_body_contains must be a string');
+      expectations++;
+    }
+    if (s.expect_json !== undefined) {
+      if (!isObj(s.expect_json) || !isStr(s.expect_json.path) || !('equals' in s.expect_json)) return bad('expect_json needs path and equals');
+      expectations++;
+    }
+  } else {
+    const loc = LOCATOR_ACTIONS.includes(s.action) ? locatorOf(s) : null;
+    if (loc !== null) {
+      if (!loc.ok) return bad(`${s.action}: ${loc.why}`);
+      if (s.action === 'fill' && !isStr(s.value)) return bad('fill needs a string value');
+      if (s.action === 'expect_text' && !isStr(s.contains)) return bad('expect_text needs a string contains');
+      return { expectations: s.action === 'expect_visible' || s.action === 'expect_text' ? 1 : 0 };
+    }
+    switch (s.action) {
+      case 'goto':
+        if (!isStr(s.path)) return bad('goto needs a string path');
+        break;
+      case 'click':
+        if (!isStr(s.selector)) return bad('click needs a string selector');
+        break;
+      case 'fill':
+        if (!isStr(s.selector) || !isStr(s.value)) return bad('fill needs a string selector and value');
+        break;
+      case 'expect_visible':
+        if (!isStr(s.selector)) return bad('expect_visible needs a string selector');
+        expectations++;
+        break;
+      case 'expect_text':
+        if (!isStr(s.selector) || !isStr(s.contains)) return bad('expect_text needs a string selector and contains');
+        expectations++;
+        break;
+      case 'expect_url':
+        if (!isStr(s.path)) return bad('expect_url needs a string path');
+        expectations++;
+        break;
+      default:
+        return bad(`unknown browser action ${JSON.stringify(s.action)}`);
+    }
+  }
+  return { expectations };
+}
+
+/**
+ * Every {{name}} reference in the string leaves of a step (any depth), the action key excluded.
+ * @param {any} step
+ * @returns {string[]}
+ */
+function stepVariables(step) {
+  /** @type {string[]} */ const names = [];
+  /** @param {any} v */
+  const walk = (v) => {
+    if (isStr(v)) {
+      for (const m of v.matchAll(VARIABLE_PATTERN)) names.push(m[1]);
+    } else if (Array.isArray(v)) {
+      for (const x of v) walk(x);
+    } else if (isObj(v)) {
+      for (const x of Object.values(v)) walk(x);
+    }
+  };
+  if (isObj(step)) for (const [k, v] of Object.entries(step)) if (k !== 'action') walk(v);
+  return names;
+}
+
+/**
+ * Validates one plan step against the closed vocabulary (reason text carries no step prefix).
+ * @param {string} driver
+ * @param {any} step
+ * @returns {{ code: string, reason: string } | null}
+ */
+export function validateStep(driver, step) {
+  const r = stepRules(driver, step);
+  return 'why' in r ? { code: 'PLAN_ENTRY_INVALID', reason: r.why } : null;
+}
+
 /**
  * Validates a plan entry's steps against the closed vocabulary.
  * @param {string} driver
  * @param {any[]} steps
+ * @param {string[]} [boundNames] variable names a declared capture binds for this case
  * @returns {{ code: string, reason: string } | null}
  */
-function validateSteps(driver, steps) {
+export function validateSteps(driver, steps, boundNames = []) {
   let expectations = 0;
   for (const [i, s] of steps.entries()) {
-    const bad = (/** @type {string} */ why) => ({ code: 'PLAN_ENTRY_INVALID', reason: `step ${i + 1}: ${why}` });
-    if (!isObj(s) || !isStr(s.action)) return bad('not an object with a string action');
-    if (driver === 'http') {
-      if (s.action !== 'request') return bad(`unknown http action ${JSON.stringify(s.action)}`);
-      if (!HTTP_METHODS.includes(s.method)) return bad('method must be one of GET, HEAD, POST, PUT, PATCH, DELETE');
-      if (!isStr(s.path)) return bad('path must be a string');
-      if (s.expect_status !== undefined) {
-        if (!Number.isInteger(s.expect_status)) return bad('expect_status must be an integer');
-        expectations++;
-      }
-      if (s.expect_body_contains !== undefined) {
-        if (!isStr(s.expect_body_contains)) return bad('expect_body_contains must be a string');
-        expectations++;
-      }
-      if (s.expect_json !== undefined) {
-        if (!isObj(s.expect_json) || !isStr(s.expect_json.path) || !('equals' in s.expect_json)) return bad('expect_json needs path and equals');
-        expectations++;
-      }
-    } else {
-      switch (s.action) {
-        case 'goto':
-          if (!isStr(s.path)) return bad('goto needs a string path');
-          break;
-        case 'click':
-          if (!isStr(s.selector)) return bad('click needs a string selector');
-          break;
-        case 'fill':
-          if (!isStr(s.selector) || !isStr(s.value)) return bad('fill needs a string selector and value');
-          break;
-        case 'expect_visible':
-          if (!isStr(s.selector)) return bad('expect_visible needs a string selector');
-          expectations++;
-          break;
-        case 'expect_text':
-          if (!isStr(s.selector) || !isStr(s.contains)) return bad('expect_text needs a string selector and contains');
-          expectations++;
-          break;
-        case 'expect_url':
-          if (!isStr(s.path)) return bad('expect_url needs a string path');
-          expectations++;
-          break;
-        default:
-          return bad(`unknown browser action ${JSON.stringify(s.action)}`);
+    const r = stepRules(driver, s);
+    if ('why' in r) return { code: 'PLAN_ENTRY_INVALID', reason: `step ${i + 1}: ${r.why}` };
+    expectations += r.expectations;
+    for (const name of stepVariables(s)) {
+      if (!boundNames.includes(name)) {
+        return { code: 'PLAN_ENTRY_INVALID', reason: `step ${i + 1}: variable ${name} is not bound by a capture declared for this case` };
       }
     }
   }
   if (expectations === 0) return { code: 'NO_EXPECTATION', reason: 'the plan entry carries no expectation step, so no pass could be earned' };
   return null;
+}
+
+/**
+ * One per-step record per plan step: ran-and-passed, the step that ended the case, or not-run.
+ * Carries only the action name, the index and an evidence path, never a value.
+ * @param {any[]} planSteps
+ * @param {number} ran how many steps started (the first `ran` steps ran)
+ * @param {number} failedAt zero-based index of the step that ended the case, or -1
+ * @param {(i: number) => string | null} evidenceFor
+ * @returns {StepRecord[]}
+ */
+function recordSteps(planSteps, ran, failedAt, evidenceFor) {
+  return planSteps.map((s, i) => ({
+    index: i + 1,
+    action: isObj(s) && isStr(s.action) ? s.action : 'unknown',
+    result: i >= ran ? 'not-run' : i === failedAt ? 'failed' : 'passed',
+    evidence: i < ran ? evidenceFor(i) : null,
+  }));
+}
+
+/**
+ * A partial plan whose objective steps all passed is not a pass: the remainder is human work.
+ * A failed (or blocked) objective step is returned unchanged.
+ * @param {CaseResult} result
+ * @param {any} entry the plan entry
+ * @returns {CaseResult}
+ */
+export function applyPartialRemainder(result, entry) {
+  if (!isObj(entry) || !isObj(entry.human_remainder) || result.outcome !== 'pass') return result;
+  const prior = Array.isArray(result.steps) ? result.steps : [];
+  const last = prior.length > 0 ? prior[prior.length - 1].index : 0;
+  return {
+    ...result,
+    outcome: 'needs-human',
+    reason_code: 'PARTIAL_REMAINDER',
+    reason: 'the objective steps passed; the remaining steps are human work and are reproduced verbatim',
+    evidence: result.evidence,
+    steps: [...prior, { index: last + 1, action: 'human_remainder', result: 'human', evidence: null }],
+  };
+}
+
+/**
+ * The URL pathname of a route, resolved against a placeholder origin. Pure.
+ * @param {any} path
+ * @returns {string | null}
+ */
+export function routeKey(path) {
+  if (!isStr(path)) return null;
+  try {
+    return new URL(path, 'http://route.invalid').pathname;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Role-and-name and text candidates from the text `locator.ariaSnapshot()` returns. Pure.
+ * @param {any} yaml
+ * @returns {({ kind: 'role', role: string, name: string } | { kind: 'text', text: string })[]}
+ */
+export function parseAriaSnapshot(yaml) {
+  if (!isStr(yaml)) return [];
+  /** @type {({ kind: 'role', role: string, name: string } | { kind: 'text', text: string })[]} */ const out = [];
+  const seen = new Set();
+  for (const line of yaml.split(/\r?\n/)) {
+    if (out.length >= 300) break;
+    /** @type {any} */ let cand = null;
+    const m = /^\s*-\s+([a-z]+)\s+"((?:[^"\\]|\\.)*)"/.exec(line);
+    if (m !== null) {
+      const name = m[2].replace(/\\(["\\])/g, '$1');
+      if (LOCATOR_ROLES.includes(m[1]) && name.trim() !== '') cand = { kind: 'role', role: m[1], name };
+    } else {
+      const t = /^\s*-\s+text:\s*(.+?)\s*$/.exec(line);
+      if (t !== null && t[1].trim() !== '' && t[1].length <= 200) cand = { kind: 'text', text: t[1] };
+    }
+    if (cand === null) continue;
+    const key = JSON.stringify(cand);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(cand);
+  }
+  return out;
+}
+
+const SNAPSHOT_EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+
+/**
+ * Splits snapshot entries into those safe to write and a count of those withheld (a secret known to
+ * the table, an e-mail address or a declared pattern). A withheld entry is never written redacted.
+ * @param {any[]} entries
+ * @param {RedactionTable} table
+ * @returns {{ kept: any[], withheld: number }}
+ */
+export function partitionSnapshotEntries(entries, table) {
+  /** @type {any[]} */ const kept = [];
+  let withheld = 0;
+  for (const e of entries) {
+    const value = isStr(e.name) ? e.name : isStr(e.text) ? e.text : '';
+    if (containsSecret(value, table) || SNAPSHOT_EMAIL_PATTERN.test(value)) withheld++;
+    else kept.push(e);
+  }
+  return { kept, withheld };
+}
+
+/**
+ * Plan-time grounding pre-check. Returns null when every locator step is acceptable, else the first
+ * refusal. A reason names a step position, never a locator value.
+ * @param {any[]} steps
+ * @param {any[]} snapshots
+ * @param {any} manualText
+ * @param {string | null} role
+ * @returns {{ code: string, reason: string } | null}
+ */
+export function precheckGroundedSteps(steps, snapshots, manualText, role) {
+  const wantRole = role === null ? 'anonymous' : role;
+  const collapse = (/** @type {string} */ t) => t.replace(/\s+/g, ' ').trim().toLowerCase();
+  /** @type {string | null} */ let route = null;
+  for (const [i, step] of steps.entries()) {
+    const n = i + 1;
+    if (!isObj(step)) continue;
+    if (step.action === 'goto' || step.action === 'expect_url') route = routeKey(step.path);
+    if (!LOCATOR_ACTIONS.includes(step.action)) continue;
+    const loc = locatorOf(step);
+    if (loc === null || !loc.ok) continue;
+    const snap = route === null ? undefined : snapshots.find((s) => isObj(s) && s.role === wantRole && s.route === route);
+    if (snap === undefined) {
+      return { code: 'STEP_UNGROUNDED', reason: `step ${n}: no plan-time snapshot covers this role and route; run the ground mode for the route before planning this step` };
+    }
+    const entry = (Array.isArray(snap.entries) ? snap.entries : []).find((/** @type {any} */ e) =>
+      isObj(e) && (loc.form === 'role' ? e.kind === 'role' && e.role === loc.role && e.name === loc.name : e.kind === 'text' && e.text === loc.text));
+    if (entry === undefined) return { code: 'STEP_UNGROUNDED', reason: `step ${n}: the locator is not a snapshot entry` };
+    if (entry.matches !== 1) {
+      return { code: 'STEP_UNGROUNDED', reason: `step ${n}: the locator matched ${entry.matches} elements in the snapshot; a locator must match exactly one` };
+    }
+    if (step.action === 'expect_text') {
+      const ok = isStr(manualText) && isStr(step.contains) && collapse(manualText).includes(collapse(step.contains));
+      if (!ok) return { code: 'PLAN_ENTRY_INVALID', reason: `step ${n}: expect_text contains must come from the report's own steps, not from the snapshot` };
+    }
+  }
+  return null;
+}
+
+/**
+ * The four-key partition plus the two beside-the-rate counters.
+ * @param {{ outcome: string, reason_code?: string | null }[]} entries
+ * @returns {{ counts: Record<string, number>, record_resolved: number, partially_executed: number }}
+ */
+export function summarizeEntries(entries) {
+  /** @type {Record<string, number>} */ const counts = { pass: 0, fail: 0, blocked: 0, 'needs-human': 0 };
+  for (const e of entries) counts[e.outcome]++;
+  return {
+    counts,
+    record_resolved: entries.filter((e) => e.reason_code === 'AUTOMATED_EVIDENCE').length,
+    partially_executed: entries.filter((e) => e.reason_code === 'PARTIAL_REMAINDER').length,
+  };
 }
 
 /**
@@ -883,6 +1218,118 @@ function getPath(obj, path) {
   return cur;
 }
 
+const CAPTURE_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * The variable names a declared seed binds (well-formed `captures` entries only).
+ * @param {any} seedConfig
+ * @param {string} requiredStateText
+ * @param {any} planState
+ * @returns {string[]}
+ */
+export function declaredCaptureNames(seedConfig, requiredStateText, planState) {
+  if (planState !== 'declared') return [];
+  const states = isObj(seedConfig) && isObj(seedConfig.states) ? seedConfig.states : null;
+  if (states === null || !Object.hasOwn(states, requiredStateText)) return [];
+  const decl = states[requiredStateText];
+  if (!isObj(decl) || !isObj(decl.captures)) return [];
+  return Object.entries(decl.captures)
+    .filter(([name, entry]) => CAPTURE_NAME_PATTERN.test(name) && isObj(entry) && isStr(entry.path) && entry.path !== '')
+    .map(([name]) => name);
+}
+
+/**
+ * Decides whether a seed declaration may run. Pure: no I/O. Null means it may run;
+ * otherwise the first refusal wins (undeclared, command gap, unconfirmed, no checkable store).
+ * @param {any} decl
+ * @param {string} text the required-state text the declaration is keyed by
+ * @returns {{ code: string, reason: string } | null}
+ */
+export function classifySeedDeclaration(decl, text) {
+  const wellFormed = (/** @type {any} */ c) => Array.isArray(c) && c.length > 0 && c.every((a) => isStr(a) && a !== '');
+  if (!isObj(decl) || (decl.command !== null && !wellFormed(decl.command))) {
+    return { code: 'STATE_UNDECLARED', reason: `the required state is not declared: PRPs/auth/qa-seed.json states[${JSON.stringify(text)}]` };
+  }
+  if (decl.command === null) {
+    const gap = isStr(decl.gap) && decl.gap !== '' ? `: ${decl.gap.slice(0, 200)}` : '';
+    return { code: 'STATE_COMMAND_MISSING', reason: `no project command is declared for the required state ${JSON.stringify(text)}${gap}` };
+  }
+  if (decl.status !== 'confirmed') {
+    return { code: 'STATE_UNCONFIRMED', reason: `the seed declaration for the required state ${JSON.stringify(text)} is not confirmed; review the entry and set "status": "confirmed" in PRPs/auth/qa-seed.json` };
+  }
+  if (normalizeStore(decl.store) === null) {
+    return { code: 'FAILED_NON_LOCAL_TARGET', reason: 'the seed declaration names no checkable store; the command was not executed' };
+  }
+  return null;
+}
+
+/**
+ * Parses a seed's stdout as JSON and resolves each declared capture path. Never echoes an output value.
+ * @param {string} stdoutText
+ * @param {any} captures
+ * @returns {{ ok: true, values: Record<string, { value: string, redact: boolean }> } | { ok: false, code: 'CAPTURE_MISSING', reason: string }}
+ */
+export function parseSeedCaptures(stdoutText, captures) {
+  const entries = isObj(captures) ? Object.entries(captures) : [];
+  const names = entries.map(([name]) => name);
+  /** @param {string[]} list */
+  const missing = (list) => ({ ok: /** @type {const} */ (false), code: /** @type {const} */ ('CAPTURE_MISSING'), reason: `the seed output did not provide the declared capture ${list.map((n) => JSON.stringify(n)).join(', ')}; no step was run` });
+  /** @type {any} */ let doc;
+  try {
+    doc = JSON.parse(String(stdoutText ?? '').trim());
+  } catch {
+    return missing(names);
+  }
+  /** @type {Record<string, { value: string, redact: boolean }>} */ const values = {};
+  /** @type {string[]} */ const bad = [];
+  for (const [name, entry] of entries) {
+    if (!CAPTURE_NAME_PATTERN.test(name) || !isObj(entry) || !isStr(entry.path) || entry.path === '') {
+      bad.push(name);
+      continue;
+    }
+    const v = getPath(doc, entry.path);
+    if (typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v))) {
+      values[name] = { value: String(v), redact: entry.redact === true };
+    } else {
+      bad.push(name);
+    }
+  }
+  if (bad.length > 0) return missing(bad);
+  return { ok: true, values };
+}
+
+/**
+ * Deep copy of a plan step with every {{name}} replaced by its captured value (the `action` key is skipped).
+ * @param {any} step
+ * @param {Record<string, { value: string, redact: boolean }>} values
+ * @returns {any}
+ */
+export function substituteVariables(step, values) {
+  /** @param {any} v */
+  const walk = (v) => {
+    if (isStr(v)) {
+      return v.replace(VARIABLE_PATTERN, (whole, name) => (Object.hasOwn(values, name) ? values[name].value : whole));
+    }
+    if (Array.isArray(v)) return v.map(walk);
+    if (isObj(v)) return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)]));
+    return v;
+  };
+  if (!isObj(step)) return step;
+  return Object.fromEntries(Object.entries(step).map(([k, v]) => [k, k === 'action' ? v : walk(v)]));
+}
+
+/**
+ * The string the local-only guard should check for a declared store, or null.
+ * @param {any} store
+ * @returns {string | null}
+ */
+export function normalizeStore(store) {
+  if (!isStr(store) || store === '' || /\s/.test(store)) return null;
+  if (store.includes('://')) return store;
+  if (/^[A-Za-z0-9._-]+(:\d+)?$/.test(store)) return `http://${store}`;
+  return null;
+}
+
 /**
  * @param {RunCtx} ctx
  * @param {string} name
@@ -893,6 +1340,120 @@ function writeEvidence(ctx, name, payload) {
   const abs = join(ctx.runDirAbs, 'evidence', name);
   writeRunFile(ctx, abs, payload);
   return `${ctx.runDirRel}/evidence/${name}`;
+}
+
+/**
+ * True when every URL-shaped argument of a query source passes the local-target guard.
+
+ * @param {RunCtx} ctx
+ * @param {string[]} argv
+ * @returns {Promise<boolean>}
+ */
+async function queryArgvIsLocal(ctx, argv) {
+  for (const a of argv.filter((x) => x.includes('://'))) {
+    const g = await ctx.target.guard.checkTarget(a, { root: ctx.root });
+    if (!g.ok) return false;
+  }
+  return true;
+}
+
+/**
+ * Guards a declared API origin and resolves the step path against it.
+ * @param {RunCtx} ctx
+ * @param {any} step
+ * @param {number} n one-based step number
+ * @returns {Promise<{ ok: true, spec: any, url: string, host: string } | { ok: false, result: CaseResult }>}
+ */
+async function resolveApiOrigin(ctx, step, n) {
+  const spec = classifyApiOrigin(ctx.loginConfig && isObj(ctx.loginConfig) ? ctx.loginConfig.api_origins : undefined, step.origin);
+  if (!spec.ok) return { ok: false, result: blocked(spec.code, `step ${n}: ${spec.reason}`) };
+  const g = await ctx.target.guard.checkTarget(spec.url, { root: ctx.root });
+  if (!g.ok) {
+    return { ok: false, result: blocked('FAILED_NON_LOCAL_TARGET', `step ${n}: the declared origin ${spec.name} is not local (${g.reason}); nothing was requested`) };
+  }
+  const apiTarget = { guard: ctx.target.guard, origin: g.origin, allowedHosts: g.allowedHosts };
+  const url = resolveStepUrl(step.path, /** @type {any} */ (apiTarget));
+  if (url === null) return { ok: false, result: blocked('FAILED_NON_LOCAL_TARGET', `step ${n}: the path leaves the declared origin; nothing was requested`) };
+  return { ok: true, spec, url, host: g.host };
+}
+
+/**
+ * Prepares one origin-bearing request step: guard, resolve, derive the header and register it for redaction.
+ * @param {RunCtx} ctx
+ * @param {any} step
+ * @param {number} n one-based step number
+ * @param {any} session
+ * @returns {Promise<{ ok: true, url: string, headers: Record<string, string> | null } | { ok: false, result: CaseResult }>}
+ */
+export async function prepareApiStep(ctx, step, n, session) {
+  const r = await resolveApiOrigin(ctx, step, n);
+  if (!r.ok) return r;
+  if (r.spec.header === null) return { ok: true, url: r.url, headers: null };
+  if (!session || !isStr(session.path)) {
+    return { ok: false, result: blocked('API_HEADER_NO_SESSION', `step ${n}: the origin ${r.spec.name} derives a header from the role session, but this case has no session`) };
+  }
+  const derived = deriveApiHeader(r.spec, readJsonOrNull(session.path), r.host);
+  if (!derived.ok) return { ok: false, result: blocked(derived.code, `step ${n}: ${derived.reason}`) };
+  addSecretValues(ctx.table, [derived.value, derived.raw]);
+  return { ok: true, url: r.url, headers: { [derived.name]: derived.value } };
+}
+
+/**
+ * Runs one read-only query step against a declared source. Self-sufficient: it re-validates the
+ * final (substituted) statement and the source, so a direct call is as safe as one through executeCase.
+ * No reason carries a statement fragment, a row value or an expected value.
+ * @param {RunCtx} ctx
+ * @param {{ index: number }} kase
+ * @param {any} step
+ * @param {number} n the one-based step number
+ * @returns {Promise<{ ok: true, evidence: string } | { ok: false, result: CaseResult }>}
+ */
+export async function runQueryStep(ctx, kase, step, n) {
+  /** @param {CaseResult} result @returns {{ ok: false, result: CaseResult }} */
+  const stop = (result) => ({ ok: false, result });
+  const Q = await loadQueryModule();
+  if (Q === null) return stop(blocked('QUERY_MODULE_UNAVAILABLE', `step ${n}: the query module could not be loaded; nothing was executed`));
+  const sql = Q.checkReadOnlySql(step.sql);
+  if (!sql.ok) return stop(blocked('QUERY_NOT_READ_ONLY', `step ${n}: ${sql.reason}`));
+  const src = Q.classifyQuerySource(ctx.seedConfig && isObj(ctx.seedConfig) ? ctx.seedConfig.query_sources : undefined, step.source);
+  if (!src.ok) return stop(blocked(src.code, `step ${n}: ${src.reason}`));
+  if (!(await queryArgvIsLocal(ctx, src.argv))) return stop(blocked('FAILED_NON_LOCAL_TARGET', `step ${n}: a query source argument names a non-local URL; nothing was executed`));
+  const argv = Q.buildQueryArgv(src, step.sql);
+  const r = spawnSync(argv[0], argv.slice(1), { shell: false, cwd: ctx.root, stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf8', maxBuffer: 1048576, timeout: 60000 });
+  if (r.error || r.status !== 0) {
+    const exit = !r.error && typeof r.status === 'number' ? ` (exit status ${r.status})` : '';
+    return stop(blocked('QUERY_FAILED', `step ${n}: the query command failed, timed out or exceeded the output bound${exit}`));
+  }
+  const parsed = Q.parseQueryOutput(src.kind, String(r.stdout ?? ''));
+  if (!parsed.ok) return stop(blocked('QUERY_OUTPUT_UNPARSEABLE', `step ${n}: the query output could not be parsed as rows`));
+  const rows = parsed.rows;
+  /** @type {string[]} */ const secrets = [];
+  for (const row of rows) {
+    for (const c of src.redactColumns) {
+      if (Object.hasOwn(row, c) && isStr(row[c])) secrets.push(row[c]);
+    }
+  }
+  addSecretValues(ctx.table, secrets);
+  /** @type {string} */ let evidencePath;
+  try {
+    evidencePath = writeEvidence(ctx, `case-${kase.index}.query-${n}.json`, {
+      kind: 'json',
+      value: {
+        source: step.source,
+        kind: src.kind,
+        read_only_control: src.readOnlyControl,
+        statement: step.sql,
+        row_count: rows.length,
+        truncated: rows.length > 100,
+        rows: Q.redactRows(rows.slice(0, 100), src.redactColumns),
+      },
+    });
+  } catch {
+    return stop(blocked('EVIDENCE_WRITE_FAILED', `step ${n}: the evidence could not be written`));
+  }
+  const verdict = Q.checkRows(rows, step);
+  if (!verdict.ok) return stop({ outcome: 'fail', reason_code: null, reason: `step ${n}: ${verdict.reason}`, evidence: [evidencePath] });
+  return { ok: true, evidence: evidencePath };
 }
 
 /**
@@ -916,18 +1477,32 @@ DRIVERS.http = async (ctx, kase, plan, session) => {
   if (session && session.token) opts.extraHTTPHeaders = sessionAuthHeaders(session);
   /** @type {string[]} */ const evidence = [];
   /** @type {any} */ let reqCtx = null;
+  /** @param {CaseResult} res @param {number} at zero-based index of the step that ended the case @returns {CaseResult} */
+  const ended = (res, at) => ({ ...res, steps: recordSteps(plan.steps, at + 1, at, (j) => evidence[j] ?? null) });
   try {
     reqCtx = await ctx.playwright.request.newContext(opts);
     for (const [i, step] of plan.steps.entries()) {
-      const url = resolveStepUrl(step.path, target);
-      if (url === null) return blocked('FAILED_NON_LOCAL_TARGET', `step ${i + 1}: the path leaves the guard-approved origin; nothing was requested`, evidence);
+      if (step.action === 'query') {
+        const q = await runQueryStep(ctx, kase, step, i + 1);
+        if (!q.ok) {
+          for (const e of q.result.evidence) evidence.push(e);
+          return ended({ ...q.result, evidence }, i);
+        }
+        evidence.push(q.evidence);
+        continue;
+      }
+      const apiStep = isStr(step.origin) ? await prepareApiStep(ctx, step, i + 1, session) : null;
+      if (apiStep !== null && !apiStep.ok) return ended({ ...apiStep.result, evidence }, i);
+      const url = apiStep !== null ? apiStep.url : resolveStepUrl(step.path, target);
+      if (url === null) return ended(blocked('FAILED_NON_LOCAL_TARGET', `step ${i + 1}: the path leaves the guard-approved origin; nothing was requested`, evidence), i);
       /** @type {any} */ let resp;
       try {
         /** @type {any} */ const fo = { method: step.method, maxRedirects: 0, timeout: 10000, failOnStatusCode: false };
         if (step.body !== undefined) fo.data = step.body;
+        if (apiStep !== null && apiStep.headers !== null) fo.headers = apiStep.headers;
         resp = await reqCtx.fetch(url, fo);
       } catch (err) {
-        return blocked('TARGET_UNREACHABLE', `step ${i + 1}: the request failed or timed out`, evidence);
+        return ended(blocked('TARGET_UNREACHABLE', `step ${i + 1}: the request failed or timed out`, evidence), i);
       }
       const status = resp.status();
       const bodyText = await resp.text().catch(() => '');
@@ -946,17 +1521,17 @@ DRIVERS.http = async (ctx, kase, plan, session) => {
         evidence.push(
           writeEvidence(ctx, i === 0 ? `case-${kase.index}.http.json` : `case-${kase.index}.http-${i + 1}.json`, {
             kind: 'json',
-            value: { request: { method: step.method, path: step.path }, response: { status, headers: keptHeaders, body } },
+            value: { request: { method: step.method, path: step.path }, response: { status, headers: keptHeaders, body }, ...(apiStep !== null ? { origin: step.origin } : {}) },
           }),
         );
       } catch {
-        return blocked('EVIDENCE_WRITE_FAILED', `step ${i + 1}: the evidence could not be written`, evidence);
+        return ended(blocked('EVIDENCE_WRITE_FAILED', `step ${i + 1}: the evidence could not be written`, evidence), i);
       }
       if (step.expect_status !== undefined && status !== step.expect_status) {
-        return { outcome: 'fail', reason_code: null, reason: `step ${i + 1}: expected status ${step.expect_status}, got ${status}`, evidence };
+        return ended({ outcome: 'fail', reason_code: null, reason: `step ${i + 1}: expected status ${step.expect_status}, got ${status}`, evidence }, i);
       }
       if (step.expect_body_contains !== undefined && !bodyText.includes(step.expect_body_contains)) {
-        return { outcome: 'fail', reason_code: null, reason: `step ${i + 1}: the expected body text was not present`, evidence };
+        return ended({ outcome: 'fail', reason_code: null, reason: `step ${i + 1}: the expected body text was not present`, evidence }, i);
       }
       if (step.expect_json !== undefined) {
         /** @type {any} */ let parsed;
@@ -967,7 +1542,7 @@ DRIVERS.http = async (ctx, kase, plan, session) => {
         }
         const got = getPath(parsed, step.expect_json.path);
         if (JSON.stringify(got) !== JSON.stringify(step.expect_json.equals)) {
-          return { outcome: 'fail', reason_code: null, reason: `step ${i + 1}: the JSON value at ${step.expect_json.path} did not equal the expected value`, evidence };
+          return ended({ outcome: 'fail', reason_code: null, reason: `step ${i + 1}: the JSON value at ${step.expect_json.path} did not equal the expected value`, evidence }, i);
         }
       }
     }
@@ -976,6 +1551,50 @@ DRIVERS.http = async (ctx, kase, plan, session) => {
     if (reqCtx) await reqCtx.dispose().catch(() => {});
   }
 };
+
+/**
+ * One role-and-name or text locator step. The locator must match exactly one element at run time;
+ * it never passes through first(), nth() or last() for the decision. Returns a result that ends the
+ * case, or null when the step passed. A reason never carries a locator value, a fill value or page text.
+ * @param {any} page
+ * @param {any} step
+ * @param {{ ok: true, form: 'role', role: string, name: string } | { ok: true, form: 'text', text: string }} loc
+ * @param {number} n
+ * @returns {Promise<CaseResult | null>}
+ */
+async function runLocatorStep(page, step, loc, n) {
+  const target = loc.form === 'role' ? page.getByRole(loc.role, { name: loc.name, exact: true }) : page.getByText(loc.text, { exact: true });
+  // The wait only gives the page time to render; the decision is the count.
+  await target.first().waitFor({ state: 'attached', timeout: 10000 }).catch(() => {});
+  const count = await target.count().catch(() => 0);
+  if (count > 1) {
+    return needsHuman('STEP_UNGROUNDED', `step ${n}: the locator matched ${count} elements at run time; a locator must match exactly one, so nothing was acted on`);
+  }
+  const expects = step.action === 'expect_visible' || step.action === 'expect_text';
+  if (count === 0) {
+    if (expects) return { outcome: 'fail', reason_code: null, reason: `step ${n}: the expected element was not found`, evidence: [] };
+    return blocked('STEP_NOT_PERFORMABLE', `step ${n}: the ${step.action} target could not be found or acted on`);
+  }
+  if (step.action === 'click' || step.action === 'fill') {
+    try {
+      if (step.action === 'click') await target.click();
+      else await target.fill(step.value);
+    } catch {
+      return blocked('STEP_NOT_PERFORMABLE', `step ${n}: the ${step.action} target could not be found or acted on`);
+    }
+    return null;
+  }
+  if (step.action === 'expect_visible') {
+    const ok = await target.waitFor({ state: 'visible', timeout: 10000 }).then(() => true, () => false);
+    if (!ok) return { outcome: 'fail', reason_code: null, reason: `step ${n}: the expected element was not visible`, evidence: [] };
+    return null;
+  }
+  const text = await target.textContent({ timeout: 10000 }).catch(() => null);
+  if (text === null || !text.includes(step.contains)) {
+    return { outcome: 'fail', reason_code: null, reason: `step ${n}: the expected text was not present`, evidence: [] };
+  }
+  return null;
+}
 
 DRIVERS.browser = async (ctx, kase, plan, session) => {
   const target = ctx.target;
@@ -987,6 +1606,7 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
   }
   /** @type {any} */ let context = null;
   /** @type {string[]} */ const evidence = [];
+  /** @type {Map<number, string>} */ const queryEvidence = new Map();
   try {
     context = await browser.newContext(session && session.path ? { storageState: session.path } : {});
     await context.route('**/*', (/** @type {any} */ route) => {
@@ -997,8 +1617,19 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
     const page = await context.newPage();
     page.setDefaultTimeout(10000);
     /** @type {CaseResult | null} */ let verdict = null;
+    let ranTo = -1;
     for (const [i, step] of plan.steps.entries()) {
       const n = i + 1;
+      ranTo = i;
+      const lstep = LOCATOR_ACTIONS.includes(step.action) ? locatorOf(step) : null;
+      if (lstep !== null && lstep.ok) {
+        const lr = await runLocatorStep(page, step, lstep, n);
+        if (lr !== null) {
+          verdict = lr;
+          break;
+        }
+        continue;
+      }
       if (step.action === 'goto') {
         const url = resolveStepUrl(step.path, target);
         if (url === null) {
@@ -1019,6 +1650,14 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
           verdict = blocked('STEP_NOT_PERFORMABLE', `step ${n}: the ${step.action} target could not be found or acted on`);
           break;
         }
+      } else if (step.action === 'query') {
+        const q = await runQueryStep(ctx, kase, step, n);
+        if (!q.ok) {
+          if (q.result.evidence.length > 0) queryEvidence.set(i, q.result.evidence[0]);
+          verdict = q.result;
+          break;
+        }
+        queryEvidence.set(i, q.evidence);
       } else if (step.action === 'expect_visible') {
         const ok = await page.locator(step.selector).first().waitFor({ state: 'visible', timeout: 10000 }).then(() => true, () => false);
         if (!ok) {
@@ -1055,8 +1694,11 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
         return blocked('EVIDENCE_WRITE_FAILED', 'the browser evidence could not be captured or written', evidence);
       }
     }
-    if (verdict !== null) return { ...verdict, evidence };
-    return { outcome: 'pass', reason_code: null, reason: null, evidence };
+    // The final capture reflects the state after the last step that ran, so it is attributed to that step.
+    const stepsOut = recordSteps(plan.steps, ranTo + 1, verdict !== null ? ranTo : -1, (j) => queryEvidence.get(j) ?? (j === ranTo ? evidence[0] ?? null : null));
+    const allEvidence = [...queryEvidence.values(), ...evidence];
+    if (verdict !== null) return { ...verdict, evidence: allEvidence, steps: stepsOut };
+    return { outcome: 'pass', reason_code: null, reason: null, evidence: allEvidence, steps: stepsOut };
   } finally {
     if (context) await context.close().catch(() => {});
     if (browser) await browser.close().catch(() => {});
@@ -1164,32 +1806,61 @@ async function prepareState(ctx, kase, plan) {
   if (stateKind !== 'declared') return blocked('STATE_UNDECLARED', missing);
   const states = ctx.seedConfig && isObj(ctx.seedConfig.states) ? ctx.seedConfig.states : {};
   const decl = Object.hasOwn(states, text) ? states[text] : null;
-  const argv = decl && Array.isArray(decl.command) ? decl.command : null;
-  if (argv === null || argv.length === 0 || !argv.every((a) => isStr(a) && a !== '')) return blocked('STATE_UNDECLARED', missing);
+  const verdict = classifySeedDeclaration(decl, text);
+  if (verdict !== null) return blocked(verdict.code, verdict.reason);
+  const argv = decl.command;
   let seeded = ctx.seeds.get(text);
   if (!seeded) {
-    seeded = await runSeed(ctx, argv);
+    seeded = await runSeed(ctx, argv, decl);
     ctx.seeds.set(text, seeded);
   }
   if (!seeded.ok) return blocked(seeded.code, seeded.reason);
+  // Register every redact-marked capture before any later write can carry it.
+  if (seeded.captures) addSecretValues(ctx.table, Object.values(seeded.captures).filter((c) => c.redact).map((c) => c.value));
   return null;
 }
 
 /**
  * @param {RunCtx} ctx
  * @param {string[]} argv
- * @returns {Promise<{ ok: true } | { ok: false, code: string, reason: string }>}
+ * @param {any} [decl] the seed declaration (`captures` / `store` keys are optional)
+ * @returns {Promise<{ ok: true, captures?: Record<string, { value: string, redact: boolean }> } | { ok: false, code: string, reason: string }>}
  */
-async function runSeed(ctx, argv) {
+export async function runSeed(ctx, argv, decl = {}) {
   for (const a of argv) {
     if (!a.includes('://')) continue;
     const r = await ctx.target.guard.checkTarget(a, { root: ctx.root });
     if (!r.ok) return { ok: false, code: 'FAILED_NON_LOCAL_TARGET', reason: `a seed command argument names a non-local URL (${r.reason}); the command was not executed` };
   }
-  const r = spawnSync(argv[0], argv.slice(1), { shell: false, cwd: ctx.root, stdio: 'ignore', timeout: 120000 });
-  if (r.error) return { ok: false, code: 'SEED_FAILED', reason: 'the declared seed command could not be run or timed out' };
+  const captures = isObj(decl) && isObj(decl.captures) && Object.keys(decl.captures).length > 0 ? decl.captures : null;
+  const hasStore = isObj(decl) && decl.store !== undefined;
+  if (captures !== null || hasStore) {
+    const normalized = normalizeStore(isObj(decl) ? decl.store : undefined);
+    if (normalized === null) {
+      return { ok: false, code: 'FAILED_NON_LOCAL_TARGET', reason: 'the seed declaration names no checkable store; the command was not executed' };
+    }
+    const r = await ctx.target.guard.checkTarget(normalized, { root: ctx.root });
+    if (!r.ok) return { ok: false, code: 'FAILED_NON_LOCAL_TARGET', reason: `the seed's declared store is not local (${r.reason}); the command was not executed` };
+  }
+  const r = captures === null
+    ? spawnSync(argv[0], argv.slice(1), { shell: false, cwd: ctx.root, stdio: 'ignore', timeout: 120000 })
+    : spawnSync(argv[0], argv.slice(1), { shell: false, cwd: ctx.root, stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf8', maxBuffer: 65536, timeout: 120000 });
+  if (r.error) {
+    if (captures !== null && /** @type {any} */ (r.error).code === 'ENOBUFS') {
+      return { ok: false, code: 'CAPTURE_MISSING', reason: 'the seed output exceeded the 65536-byte capture bound' };
+    }
+    return { ok: false, code: 'SEED_FAILED', reason: 'the declared seed command could not be run or timed out' };
+  }
   if (r.status !== 0) return { ok: false, code: 'SEED_FAILED', reason: `the declared seed command exited with status ${r.status}` };
-  return { ok: true };
+  if (captures === null) return { ok: true };
+  const parsed = parseSeedCaptures(String(r.stdout ?? ''), captures);
+  if (!parsed.ok) return { ok: false, code: parsed.code, reason: parsed.reason };
+  for (const [name, c] of Object.entries(parsed.values)) {
+    if (c.redact && c.value.length < 4) {
+      return { ok: false, code: 'CAPTURE_UNREDACTABLE', reason: `the capture ${JSON.stringify(name)} is marked redact but is too short to redact; no step was run` };
+    }
+  }
+  return { ok: true, captures: parsed.values };
 }
 
 // ---------------------------------------------------------------------------
@@ -1291,6 +1962,102 @@ function extractTestPaths(field) {
 }
 
 /** @param {string} s @returns {string} */
+const collapseTitle = (s) => s.replace(/\s+/g, ' ').trim();
+
+/** A backticked `<path>::<title>` or `<path> > <title>` span. */
+const TITLED_SPAN_RE = /^([A-Za-z0-9_@./\\-]+\.[A-Za-z0-9]{1,5})(?:::|\s+[>›]\s+)(.+)$/;
+
+/**
+ * Rewrites every backticked `<path>::<title>` / `<path> > <title>` span to a span
+ * holding only the path, so `extractTestPaths` reads the cited file. Every other
+ * character of the field is left exactly as it was.
+ * @param {string | null} field
+ * @returns {string | null}
+ */
+export function normalizeTestCitation(field) {
+  if (!isStr(field)) return field;
+  return field.replace(/`([^`]*)`/g, (whole, inner) => {
+    const m = TITLED_SPAN_RE.exec(inner.trim());
+    return m === null ? whole : `\`${m[1]}\``;
+  });
+}
+
+/** @param {string} p @returns {string} */
+const normalizeCitedPath = (p) => p.split('\\').join('/').replace(/^\.\//, '');
+
+/**
+ * The test titles an `Automated test path` field cites. One item is one cited
+ * unit; its segments must all match the same testcase.
+ * @param {string | null} field
+ * @returns {{ items: { segments: string[], path: string | null }[] }}
+ */
+export function extractCitedTitles(field) {
+  if (!isStr(field)) return { items: [] };
+  /** @type {{ index: number, path: string }[]} */ const spans = [];
+  /** @type {{ index: number, segments: string[], path: string | null }[]} */ const found = [];
+  for (const m of field.matchAll(/`([^`]*)`/g)) {
+    const text = m[1].trim();
+    const titled = TITLED_SPAN_RE.exec(text);
+    const base = titled !== null ? titled[1] : text;
+    if (!TEST_PATH_RE.test(base)) continue;
+    const path = normalizeCitedPath(base);
+    spans.push({ index: m.index ?? 0, path });
+    if (titled !== null) {
+      const segments = titled[2].split(/\s+[>›]\s+/).map(collapseTitle).filter((s) => s !== '');
+      if (segments.length > 0) found.push({ index: m.index ?? 0, segments, path });
+    }
+  }
+  const quoted = '("(?:[^"\\\\]|\\\\.)*"|\'(?:[^\'\\\\]|\\\\.)*\')';
+  /** @param {string} q @returns {string} */
+  const unquote = (q) => collapseTitle(q.slice(1, -1).replace(/\\(["'\\])/g, '$1'));
+  const callRe = new RegExp(`\\b(?:describe|it|test|suite)\\s*\\(\\s*${quoted}`, 'g');
+  const chainRe = new RegExp(`^\\s*\\)?\\s*[›>]\\s*${quoted}`);
+  let cm;
+  while ((cm = callRe.exec(field)) !== null) {
+    const index = cm.index;
+    const segments = [unquote(cm[1])];
+    let rest = field.slice(callRe.lastIndex);
+    let ch;
+    while ((ch = chainRe.exec(rest)) !== null) {
+      segments.push(unquote(ch[1]));
+      rest = rest.slice(ch[0].length);
+    }
+    callRe.lastIndex = field.length - rest.length;
+    const before = spans.filter((s) => s.index < index);
+    const path = before.length > 0 ? before[before.length - 1].path : null;
+    const kept = segments.filter((s) => s !== '');
+    if (kept.length > 0) found.push({ index, segments: kept, path });
+  }
+  found.sort((a, b) => a.index - b.index);
+  /** @type {{ segments: string[], path: string | null }[]} */ const items = [];
+  const seen = new Set();
+  for (const f of found) {
+    const key = JSON.stringify([f.path, f.segments]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push({ segments: f.segments, path: f.path });
+  }
+  return { items };
+}
+
+/**
+ * Exact, case-sensitive title match (whitespace-collapsed) against a testcase's
+ * name, class name, enclosing suite name or one ` > `-separated piece of its name.
+ * @param {string} segment
+ * @param {{ name: string, classname?: string | null, suites?: string[] }} tc
+ * @returns {boolean}
+ */
+export function titleMatchesTestcase(segment, tc) {
+  const want = collapseTitle(segment);
+  if (want === '') return false;
+  const name = collapseTitle(tc.name ?? '');
+  if (want === name) return true;
+  if (isStr(tc.classname) && want === collapseTitle(tc.classname)) return true;
+  if (Array.isArray(tc.suites) && tc.suites.some((s) => want === collapseTitle(s))) return true;
+  return name.split(/\s+[>›]\s+/).some((piece) => want === piece);
+}
+
+/** @param {string} s @returns {string} */
 const xmlDecode = (s) =>
   s
     .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
@@ -1331,6 +2098,38 @@ function readJunitTestcases(xml) {
 }
 
 /**
+ * One entry per `<testcase` of the document, in document order: the names of its
+ * enclosing `<testsuite>` elements, outermost first.
+ * @param {string} xml
+ * @returns {string[][]}
+ */
+export function readJunitSuiteChains(xml) {
+  /** @type {string[][]} */ const out = [];
+  if (!isStr(xml)) return out;
+  try {
+    /** @type {string[]} */ const stack = [];
+    const re = /<(\/?)(testsuite|testcase)\b((?:[^>"']|"[^"]*"|'[^']*')*)>/g;
+    let m;
+    while ((m = re.exec(xml)) !== null) {
+      const closing = m[1] === '/';
+      const selfClosing = m[3].trimEnd().endsWith('/');
+      if (m[2] === 'testcase') {
+        if (!closing) out.push([...stack]);
+      } else if (closing) {
+        stack.pop();
+      } else if (!selfClosing) {
+        /** @type {Record<string, string>} */ const attrs = {};
+        for (const a of m[3].matchAll(/([A-Za-z_:][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) attrs[a[1]] = xmlDecode(a[2] ?? a[3] ?? '');
+        stack.push(attrs.name ?? '');
+      }
+    }
+  } catch {
+    return out;
+  }
+  return out;
+}
+
+/**
  * Resolves one `automated`-coverage case from the Test Runner's record, or
  * returns null so the case routes exactly as before.
  * @param {string} root
@@ -1345,8 +2144,10 @@ function resolveFromRecord(root, feature, kase) {
   if (found === null) return null;
   const rec = readJsonOrNull(found.abs);
   if (!isSchemaV1Record(rec)) return null;
-  const { paths, refused } = extractTestPaths(kase.automated_test_path);
+  const { paths, refused } = extractTestPaths(normalizeTestCitation(kase.automated_test_path));
   if (refused || paths.length === 0) return null;
+  const cited = extractCitedTitles(kase.automated_test_path).items;
+  if (cited.some((c) => c.path === null || !paths.includes(c.path))) return null;
   const generated = Date.parse(rec.generated_at);
   if (Number.isNaN(generated)) return null;
   const junit = rec.artifacts.junit_xml;
@@ -1361,16 +2162,30 @@ function resolveFromRecord(root, feature, kase) {
   } catch {
     return null;
   }
-  const cases = readJunitTestcases(xml).map((t) => {
+  const all = readJunitTestcases(xml);
+  const chains = readJunitSuiteChains(xml);
+  const cases = all.map((t, ti) => {
     const loc = t.file !== null ? t.file : t.classname;
-    return { ...t, loc: loc === null ? null : loc.split('\\').join('/') };
+    return { ...t, loc: loc === null ? null : loc.split('\\').join('/'), suites: chains.length === all.length ? chains[ti] : [] };
   });
-  /** @type {{ cited: string, testcases: number, failed: string[] }[]} */ const files = [];
+  /** @type {{ cited: string, testcases: number, failed: string[], granularity?: 'test', titles?: string[] }[]} */ const files = [];
   for (const p of paths) {
     const hit = cases.filter((t) => t.loc !== null && (t.loc === p || t.loc.endsWith(`/${p}`)));
     if (new Set(hit.map((t) => t.loc)).size !== 1) return null;
     const ran = hit.filter((t) => !t.skipped);
     if (ran.length === 0) return null;
+    const mine = cited.filter((c) => c.path === p);
+    if (mine.length > 0) {
+      /** @type {Set<typeof ran[number]>} */ const pooled = new Set();
+      for (const c of mine) {
+        const matched = ran.filter((t) => c.segments.every((seg) => titleMatchesTestcase(seg, { name: t.name, classname: t.classname, suites: t.suites })));
+        if (matched.length === 0) return null;
+        for (const t of matched) pooled.add(t);
+      }
+      const scoped = [...pooled];
+      files.push({ cited: p, testcases: scoped.length, failed: scoped.filter((t) => t.failed).map((t) => t.name), granularity: 'test', titles: mine.map((c) => c.segments.join(' > ')) });
+      continue;
+    }
     files.push({ cited: p, testcases: ran.length, failed: ran.filter((t) => t.failed).map((t) => t.name) });
   }
   const total = files.reduce((n, f) => n + f.testcases, 0);
@@ -1388,6 +2203,7 @@ function resolveFromRecord(root, feature, kase) {
       junit_artifact: junit,
       junit_artifact_mtime: mtimeIso,
       files,
+      granularity: files.every((f) => f.granularity === 'test') ? 'test' : files.some((f) => f.granularity === 'test') ? 'mixed' : 'file',
     },
   };
 }
@@ -1485,6 +2301,26 @@ async function preAuthenticatedGate(ctx, role, record) {
 }
 
 /**
+ * The plan-time grounding snapshots written by the ground mode under <run-dir>/grounding.
+ * @param {string} runDirAbs
+ * @returns {any[]}
+ */
+function loadGroundingSnapshots(runDirAbs) {
+  /** @type {string[]} */ let names = [];
+  try {
+    names = readdirSync(join(runDirAbs, 'grounding'));
+  } catch {
+    return [];
+  }
+  /** @type {any[]} */ const docs = [];
+  for (const name of names.filter((n) => n.endsWith('.snapshot.json')).sort()) {
+    const d = readJsonOrNull(join(runDirAbs, 'grounding', name));
+    if (isObj(d) && d.schema_version === 1 && isStr(d.role) && isStr(d.route) && Array.isArray(d.entries)) docs.push(d);
+  }
+  return docs;
+}
+
+/**
  * @param {RunCtx | null} ctxOrNull
  * @param {ReportCase} kase
  * @param {Map<number, any>} planByIndex
@@ -1518,12 +2354,36 @@ async function executeCase(ctxOrNull, kase, planByIndex, target, makeCtx, root, 
     return out(needsHuman('NO_ACTIVE_DRIVER', `no active driver handles ${JSON.stringify(driver)}; the manual steps are reproduced verbatim`));
   }
   if (!Array.isArray(p.steps) || p.steps.length === 0) return out(needsHuman('PLAN_ENTRY_INVALID', 'the plan entry carries no steps'));
-  const invalid = validateSteps(driver, p.steps);
+  // A seed declaration binds names; the values only arrive after the seed ran. A reference no declaration
+  // binds is refused here, before any state is seeded, session obtained or request sent.
+  const seedConfig = ctxOrNull ? ctxOrNull.seedConfig : readJsonOrNull(join(root, 'PRPs', 'auth', 'qa-seed.json'));
+  const stateText = (kase.required_state ?? '').trim();
+  const invalid = validateSteps(driver, p.steps, declaredCaptureNames(seedConfig, stateText, p.state));
   if (invalid) return out(needsHuman(invalid.code, invalid.reason));
+  if (p.human_remainder !== undefined && !(isObj(p.human_remainder) && isStr(p.human_remainder.reason) && p.human_remainder.reason.trim() !== '')) {
+    return out(needsHuman('PLAN_ENTRY_INVALID', 'human_remainder must be an object with a non-empty string reason'));
+  }
+  const hasQuery = p.steps.some((/** @type {any} */ s) => isObj(s) && s.action === 'query');
+  const Q = hasQuery ? await loadQueryModule() : null;
+  if (hasQuery && Q === null) return out(blocked('QUERY_MODULE_UNAVAILABLE', 'the query module could not be loaded; nothing was executed'));
+  const unsafeQuery = Q === null ? null : Q.precheckQuerySteps(p.steps, seedConfig && isObj(seedConfig) ? seedConfig.query_sources : undefined);
+  if (unsafeQuery) return out(blocked(unsafeQuery.code, unsafeQuery.reason));
   if (target === null) {
     return out(blocked('TARGET_UNDECLARED', 'no target is declared: set baseUrl in PRPs/auth/login.config.json or pass --env-handle <path>'));
   }
   const ctx = ctxOrNull ?? makeCtx();
+  for (const [i, s] of p.steps.entries()) {
+    if (!isObj(s) || s.action !== 'request' || s.origin === undefined) continue;
+    const r = await resolveApiOrigin(ctx, s, i + 1);
+    if (!r.ok) return out(r.result);
+    if (r.spec.header !== null && role === null) {
+      return out(blocked('API_HEADER_NO_SESSION', `step ${i + 1}: the origin ${r.spec.name} derives a header from the role session, but the plan entry names no role`));
+    }
+  }
+  if (driver === 'browser' && p.steps.some((/** @type {any} */ s) => isObj(s) && LOCATOR_ACTIONS.includes(s.action) && locatorOf(s) !== null)) {
+    const grounded = precheckGroundedSteps(p.steps, loadGroundingSnapshots(ctx.runDirAbs), kase.manual_steps_verbatim, role);
+    if (grounded !== null) return out(needsHuman(grounded.code, grounded.reason));
+  }
   if (ctx.playwright === null) {
     return out(blocked('FAILED_PLAYWRIGHT_UNAVAILABLE', 'playwright is not resolvable; run `npm install` in plugins/relay/scripts/visual/'));
   }
@@ -1532,6 +2392,14 @@ async function executeCase(ctxOrNull, kase, planByIndex, target, makeCtx, root, 
       return out(blocked('FAILED_NON_LOCAL_TARGET', `step ${i + 1}: the path leaves the guard-approved origin; nothing was requested`));
     }
   }
+  const querySources = seedConfig && isObj(seedConfig) ? seedConfig.query_sources : undefined;
+  for (const [i, s] of p.steps.entries()) {
+    if (!isObj(s) || s.action !== 'query') continue;
+    const src = /** @type {any} */ (Q).classifyQuerySource(querySources, s.source);
+    if (!src.ok) return out(blocked(src.code, `step ${i + 1}: ${src.reason}`));
+    if (!(await queryArgvIsLocal(ctx, src.argv))) return out(blocked('FAILED_NON_LOCAL_TARGET', `step ${i + 1}: a query source argument names a non-local URL; nothing was executed`));
+  }
+  /** @type {any[]} */ let steps = p.steps;
   // A browser case for a role whose target authenticates every request cannot
   // prove anything: gate it before anything is seeded or logged in.
   /** @type {RunCtx} */ let runCtx = ctx;
@@ -1546,6 +2414,15 @@ async function executeCase(ctxOrNull, kase, planByIndex, target, makeCtx, root, 
   }
   const stateBlock = await prepareState(ctx, kase, p);
   if (stateBlock) return out(stateBlock);
+  const seededValues = ctx.seeds.get(stateText)?.captures;
+  if (seededValues) {
+    steps = p.steps.map((/** @type {any} */ s) => substituteVariables(s, seededValues));
+    for (const [i, s] of steps.entries()) {
+      if (typeof s.path === 'string' && resolveStepUrl(s.path, target) === null) {
+        return out(blocked('FAILED_NON_LOCAL_TARGET', `step ${i + 1}: the path leaves the guard-approved origin; nothing was requested`));
+      }
+    }
+  }
   /** @type {SessionInfo | null} */ let session = null;
   if (role !== null) {
     const roles = ctx.loginConfig && isObj(ctx.loginConfig.roles) ? ctx.loginConfig.roles : {};
@@ -1564,7 +2441,12 @@ async function executeCase(ctxOrNull, kase, planByIndex, target, makeCtx, root, 
   }
   const fn = DRIVERS[driver];
   if (!fn) return out(needsHuman('NO_ACTIVE_DRIVER', `no active driver handles ${JSON.stringify(driver)}`));
-  return out(await fn(runCtx, kase, p, session));
+  const ran = await fn(runCtx, kase, { ...p, steps }, session);
+  // A driver that passed every step has all of them passed; a driver that ended the case early already recorded its steps.
+  const withSteps = ran.outcome === 'pass' && ran.steps === undefined
+    ? { ...ran, steps: recordSteps(p.steps, p.steps.length, -1, (j) => (driver === 'http' ? ran.evidence[j] ?? null : j === p.steps.length - 1 ? ran.evidence[0] ?? null : null)) }
+    : ran;
+  return out(applyPartialRemainder(withSteps, p));
 }
 
 // ---------------------------------------------------------------------------
@@ -1666,6 +2548,7 @@ async function runRun(args) {
       finished_at: t,
       duration_ms: 0,
       evidence: [],
+      steps: [],
       manual_steps_verbatim: c.manual_steps_verbatim,
     };
   };
@@ -1712,6 +2595,7 @@ async function runRun(args) {
         finished_at: finishedAt,
         duration_ms: Math.max(0, Date.parse(finishedAt) - Date.parse(startedAt)),
         evidence: result.evidence,
+        steps: Array.isArray(result.steps) ? result.steps : [],
         manual_steps_verbatim: keepSteps ? c.manual_steps_verbatim : null,
       });
     }
@@ -1728,12 +2612,10 @@ async function runRun(args) {
       entries.push(abortedEntry(cases[entries.length], reason));
     }
     const finished = now();
-    /** @type {Record<string, number>} */ const counts = { pass: 0, fail: 0, blocked: 0, 'needs-human': 0 };
-    for (const e of entries) counts[e.outcome]++;
+    const { counts, record_resolved: recordResolved, partially_executed: partiallyExecuted } = summarizeEntries(entries);
     // Record-resolved cases are INSIDE counts.pass/fail (the four-key partition is unchanged) but were
     // not executed by a driver: they are reported beside the driver-executed numbers, never added to them.
     const recordEntries = entries.filter((e) => e.reason_code === 'AUTOMATED_EVIDENCE');
-    const recordResolved = recordEntries.length;
     const recordPass = recordEntries.filter((e) => e.outcome === 'pass').length;
     const recordFail = recordEntries.filter((e) => e.outcome === 'fail').length;
     // A report that is gone OR unreadable (e.g. replaced by a directory) yields null, which can
@@ -1758,6 +2640,7 @@ async function runRun(args) {
       base_url_origin: target ? target.origin : null,
       counts,
       record_resolved: recordResolved,
+      partially_executed: partiallyExecuted,
       aborted,
       warnings,
       human_gate: { status: 'open', review_file: reportRel },
@@ -1776,6 +2659,7 @@ async function runRun(args) {
     const lines = [
       `QA run finished: pass=${counts.pass - recordPass} fail=${counts.fail - recordFail} blocked=${counts.blocked} needs-human=${counts['needs-human']}`,
       `Record-resolved (not driver-executed): record-resolved=${recordResolved} (pass=${recordPass} fail=${recordFail})`,
+      `Partially executed (not in the driver-executed rate): partially-executed=${partiallyExecuted}`,
       ...entries.filter((e) => e.outcome !== 'pass').map((e) => `  case ${e.index}: ${e.outcome}${e.reason_code ? ` (${e.reason_code})` : ''}`),
       `Results: ${runDirRel}/results.json`,
       `Evidence: ${runDirRel}/evidence/`,
@@ -1817,11 +2701,169 @@ function runParse(args) {
   return 0;
 }
 
+const GROUND_USAGE = `Usage:
+  qa-run.mjs ground --root <dir> --feature <slug> --run-dir <rel-dir> --route </path> [--role <slug>] [--env-handle <path>]
+`;
+
+/**
+ * @param {string[]} argv
+ * @returns {{ root: string, feature: string, runDir: string, route: string, role: string | null, envHandle: string | null } | null}
+ */
+function parseGroundArgs(argv) {
+  let root = process.cwd();
+  /** @type {string | null} */ let feature = null;
+  /** @type {string | null} */ let runDir = null;
+  /** @type {string | null} */ let route = null;
+  /** @type {string | null} */ let role = null;
+  /** @type {string | null} */ let envHandle = null;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (!['--root', '--feature', '--run-dir', '--route', '--role', '--env-handle'].includes(a)) return null;
+    const v = argv[i + 1];
+    if (v === undefined || v.startsWith('--')) return null;
+    i++;
+    if (a === '--root') root = resolve(v);
+    else if (a === '--feature') feature = v;
+    else if (a === '--run-dir') runDir = v;
+    else if (a === '--route') route = v;
+    else if (a === '--role') role = v;
+    else envHandle = v;
+  }
+  if (feature === null || !FEATURE_PATTERN.test(feature)) return null;
+  if (runDir === null || route === null || !/^\/(?!\/)/.test(route)) return null;
+  if (role !== null && !ROLE_PATTERN.test(role)) return null;
+  return { root, feature, runDir, route, role, envHandle };
+}
+
+// The ground mode: `qa-run.mjs ground` takes a redacted accessibility snapshot of one route, with one
+// role's saved session, behind the local-only guard, and writes the role-and-name and text candidates of
+// the page (each with its real match count) to <run-dir>/grounding/<role>--<slug>.snapshot.json.
+// Sensitive entries are withheld, never written; the raw snapshot is never persisted or printed.
+/**
+ * @param {string[]} argv
+ * @returns {Promise<number>}
+ */
+async function runGround(argv) {
+  const a = parseGroundArgs(argv);
+  if (a === null) {
+    process.stderr.write(GROUND_USAGE);
+    return 2;
+  }
+  const { root, feature, route, role, envHandle } = a;
+  const base = join(root, 'PRPs', 'reports', feature, 'qa-run');
+  const runDirAbs = resolve(root, a.runDir);
+  const within = relative(base, runDirAbs);
+  if (within === '' || within.startsWith('..') || isAbsolute(within) || !existsSync(runDirAbs) || !statSync(runDirAbs).isDirectory()) {
+    process.stderr.write(`--run-dir must be an existing directory inside PRPs/reports/${feature}/qa-run/\n${GROUND_USAGE}`);
+    return 2;
+  }
+  const runDirRel = fwd(relative(root, runDirAbs));
+  const target = await guardTarget(resolveTarget(root, envHandle), root);
+  if (target === null) throw new Halt('TARGET_UNDECLARED', 'no target is declared: set baseUrl in PRPs/auth/login.config.json or pass --env-handle <path>');
+  const url = resolveStepUrl(route, target);
+  if (url === null) throw new Halt('FAILED_NON_LOCAL_TARGET', 'the route leaves the guard-approved origin; nothing was requested');
+  const playwright = loadPlaywright(root, PLUGIN_ROOT);
+  if (playwright === null) throw new Halt('FAILED_PLAYWRIGHT_UNAVAILABLE', 'playwright could not be resolved from the target or the plugin');
+  const table = buildRedactionTable({ root, env: process.env, secretValues: [] });
+  /** @type {RunCtx} */ const ctx = {
+    root,
+    runDirAbs,
+    runDirRel,
+    table,
+    target,
+    playwright,
+    loginConfig: readJsonOrNull(join(root, 'PRPs', 'auth', 'login.config.json')),
+    sessions: new Map(),
+    seeds: new Map(),
+    seedConfig: null,
+    anonChecks: new Map(),
+  };
+  /** @type {string | null} */ let storagePath = null;
+  if (role !== null) {
+    const roles = ctx.loginConfig && isObj(ctx.loginConfig.roles) ? ctx.loginConfig.roles : {};
+    if (!Object.hasOwn(roles, role)) throw new Halt('ROLE_UNDECLARED', `role ${role} is not declared in PRPs/auth/login.config.json`);
+    const s = obtainSession(ctx, role);
+    if (!s.ok) throw new Halt('SESSION_UNAVAILABLE', `the kit login script for role ${role} did not produce a session (${s.code})`);
+    storagePath = s.info.path;
+  }
+  /** @type {any} */ let browser = null;
+  try {
+    browser = await playwright.chromium.launch({ headless: true });
+  } catch {
+    throw new Halt('FAILED_BROWSER_UNAVAILABLE', 'a headless Chromium could not be launched; run `npx playwright install chromium` in plugins/relay/scripts/visual/');
+  }
+  try {
+    const context = await browser.newContext(storagePath !== null ? { storageState: storagePath } : {});
+    await context.route('**/*', (/** @type {any} */ r) => {
+      const u = new URL(r.request().url());
+      if (['data:', 'about:', 'blob:'].includes(u.protocol)) return r.continue();
+      if (!target.guard.isAllowedHost(u.hostname, target.allowedHosts)) return r.abort();
+      return r.continue();
+    });
+    const page = await context.newPage();
+    page.setDefaultTimeout(10000);
+    try {
+      const resp = await page.goto(url, { waitUntil: 'load', timeout: 15000 });
+      if (resp !== null && resp.status() >= 500) throw new Error('server error');
+    } catch {
+      throw new Halt('TARGET_UNREACHABLE', 'the route could not be loaded');
+    }
+    await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+    const yaml = await page.locator('body').ariaSnapshot().catch(() => null);
+    if (!isStr(yaml)) throw new Halt('GROUND_SNAPSHOT_UNAVAILABLE', 'the installed Playwright cannot produce an accessibility snapshot');
+    /** @type {any[]} */ const entries = [];
+    for (const c of parseAriaSnapshot(yaml)) {
+      try {
+        if (c.kind === 'role') {
+          const matches = await page.getByRole(c.role, { name: c.name, exact: true }).count();
+          entries.push({ kind: 'role', role: c.role, name: c.name, matches });
+        } else {
+          const matches = await page.getByText(c.text, { exact: true }).count();
+          entries.push({ kind: 'text', text: c.text, matches });
+        }
+      } catch {
+        // a candidate whose count fails is dropped
+      }
+    }
+    const { kept, withheld } = partitionSnapshotEntries(entries, table);
+    const key = routeKey(route) ?? '/';
+    const slug = key.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'root';
+    const dest = join(runDirAbs, 'grounding', `${role ?? 'anonymous'}--${slug}.snapshot.json`);
+    try {
+      writeRunFile({ runDirAbs, table }, dest, { kind: 'json', value: { schema_version: 1, role: role ?? 'anonymous', route: key, entries: kept, withheld } });
+    } catch {
+      throw new Halt('EVIDENCE_WRITE_FAILED', 'the snapshot could not be written');
+    }
+    process.stdout.write(`GROUNDED: ${fwd(relative(runDirAbs, dest))} entries=${kept.length} withheld=${withheld}\n`);
+    return 0;
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+  }
+}
+
+/**
+ * @param {string[]} argv
+ * @returns {Promise<number>}
+ */
+async function runGroundGuarded(argv) {
+  try {
+    return await runGround(argv);
+  } catch (err) {
+    if (err instanceof Halt) {
+      process.stderr.write(`${err.message}\n`);
+      return 1;
+    }
+    process.stderr.write('FAILED_RUNNER_ERROR: the runner stopped on an unexpected error\n');
+    return 1;
+  }
+}
+
 /**
  * @param {string[]} argv
  * @returns {Promise<number>} exit code
  */
 async function main(argv) {
+  if (argv[0] === 'ground') return await runGroundGuarded(argv.slice(1));
   const args = parseArgs(argv);
   if (args === null) {
     process.stderr.write(USAGE);

@@ -72,6 +72,11 @@ export const GUARD_SITES = [
     required: ['auth-local-guard.mjs', 'FAILED_NON_LOCAL_TARGET'],
     forbidden: ['--local-host'],
   },
+  {
+    file: 'plugins/relay/scripts/qa-query.mjs',
+    required: ['FAILED_NON_LOCAL_TARGET', 'QUERY_NOT_READ_ONLY', '--local', '--remote', '--preview', '-readonly'],
+    forbidden: ['--local-host'],
+  },
 ];
 
 /**

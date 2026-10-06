@@ -42,7 +42,12 @@ const IGNORE = 'plugins/relay/resources/auth-kit.gitignore';
 const QA_RUN = 'plugins/relay/scripts/qa-run.mjs';
 const QA_RUN_CMD = 'plugins/relay/commands/relay-qa-run.md';
 
-const ALL_SITES = [GUARD, TEMPLATE, SETUP, SCRIPTS, WRITER, REVIEWER, IGNORE, QA_RUN, QA_RUN_CMD];
+// Lifecycle update (2026-10-06, EXISTING_TEST_UPDATED): qa-runner-case-vocabulary
+// Phase 4 appended the pure query module as the tenth guard site; the baseline and
+// ALL_SITES cover it so the per-site mutation classes fire for it too.
+const QA_QUERY = 'plugins/relay/scripts/qa-query.mjs';
+
+const ALL_SITES = [GUARD, TEMPLATE, SETUP, SCRIPTS, WRITER, REVIEWER, IGNORE, QA_RUN, QA_RUN_CMD, QA_QUERY];
 
 const TEMPLATE_BODY =
   "import './auth-local-guard.mjs';\nimport './auth-kit-secrecy.mjs';\n// FAILED_NON_LOCAL_TARGET\n" +
@@ -61,6 +66,7 @@ function baseline() {
     [IGNORE]: 'PRPs/auth/*.json\n',
     [QA_RUN]: "import('./auth-local-guard.mjs'); // GUARD-SITE\ncheckTarget(url); FAILED_NON_LOCAL_TARGET\n",
     [QA_RUN_CMD]: 'run qa-run.mjs, which uses auth-local-guard.mjs; on failure FAILED_NON_LOCAL_TARGET',
+    [QA_QUERY]: 'FAILED_NON_LOCAL_TARGET QUERY_NOT_READ_ONLY --local --remote --preview -readonly',
   };
   return files;
 }
@@ -75,8 +81,8 @@ test('baseline: a file map satisfying every site passes with zero findings and t
   assert.deepEqual(r.findings, []);
 });
 
-test('the check enumerates exactly the nine guard-site files (a later phase may append, never silently drop)', () => {
-  assert.equal(GUARD_SITES.length, ALL_SITES.length, 'expected the enumerated sites to equal the nine this test baselines');
+test('the check enumerates exactly the ten guard-site files (a later phase may append, never silently drop)', () => {
+  assert.equal(GUARD_SITES.length, ALL_SITES.length, 'expected the enumerated sites to equal the ten this test baselines');
   const listed = GUARD_SITES.map((s) => s.file);
   for (const f of ALL_SITES) assert.ok(listed.includes(f), `expected ${f} to be an enumerated guard site`);
   assert.equal(listed.length, new Set(listed).size, 'expected no duplicate site entries');
@@ -116,6 +122,7 @@ const REQUIRED_NON_MARKER = [
   [SCRIPTS, ['auth-local-guard.mjs', 'FAILED_NON_LOCAL_TARGET']],
   [QA_RUN, ['auth-local-guard.mjs', 'checkTarget', 'FAILED_NON_LOCAL_TARGET', '// GUARD-SITE']],
   [QA_RUN_CMD, ['auth-local-guard.mjs', 'FAILED_NON_LOCAL_TARGET']],
+  [QA_QUERY, ['FAILED_NON_LOCAL_TARGET', 'QUERY_NOT_READ_ONLY', '--local', '--remote', '--preview', '-readonly']],
 ];
 
 for (const [file, tokens] of REQUIRED_NON_MARKER) {

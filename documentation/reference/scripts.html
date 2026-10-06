@@ -224,6 +224,23 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/qa-run.mjs run --root &lt;dir&gt; --feature &
 
       <p>The mode is mandatory. Exit code 0 when completed, 1 for a named <code>FAILED_*</code> halt or an aborted run, 2 for bad arguments. The local-only guard runs before any request, login or write; one marked write helper is the only writer and refuses any path outside the run directory; evidence is redacted in memory before it is written.</p>
 
+      <h2 id="qa-seed">qa-seed.mjs <span class="badge badge--done">shipped</span></h2>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/scripts/qa-seed.mjs</code></dd>
+        <dt>Purpose</dt><dd>The deterministic half of <code>/relay-qa-seed</code>. Lists a report's distinct required-state texts and merges validated proposals into <code>PRPs/auth/qa-seed.json</code> as <code>proposed</code> entries, keyed by the report's text byte-for-byte. Existing entries are never changed, a proposal whose evidence does not resolve to a real <code>file:line</code> naming the command is refused with nothing written, and a state with no proposal becomes a named gap. It executes nothing and never writes a confirmed status.</dd>
+        <dt>Invoked by</dt><dd><code>/relay-qa-seed</code>. Also invocable directly.</dd>
+        <dt>Runtime</dt><dd>Node.js &ge; 18.</dd>
+        <dt>Dependencies</dt><dd>None of its own: <code>node:</code> built-ins and the report parser exported by <code>qa-run.mjs</code>.</dd>
+      </div>
+
+      <h3 id="qa-seed-usage">Usage</h3>
+
+      <pre><code class="language-bash">node ${CLAUDE_PLUGIN_ROOT}/scripts/qa-seed.mjs states --report &lt;path&gt;
+node ${CLAUDE_PLUGIN_ROOT}/scripts/qa-seed.mjs merge --root &lt;dir&gt; --report &lt;path&gt; --proposals &lt;path&gt;</code></pre>
+
+      <p>The mode is mandatory. Exit code 0 when completed, 1 for a named <code>FAILED_*</code> halt, 2 for bad arguments. One marked write helper is the only writer and refuses any path other than <code>PRPs/auth/qa-seed.json</code>.</p>
+
       <h2 id="extension-pattern">How new scripts join the plugin</h2>
 
       <p>If a future stage needs a new helper script (e.g., a coverage-differ, a mutation-tester wrapper), it should follow the same pattern:</p>
