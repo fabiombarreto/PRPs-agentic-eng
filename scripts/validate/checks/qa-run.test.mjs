@@ -920,7 +920,7 @@ function seedFixture(o = {}) {
   });
   const marker = join(fx.root, 'seed-marker.txt');
   if (o.seed !== null) {
-    const seed = o.seed ?? { states: { [STATE_TEXT]: { command: [process.execPath, join(fx.root, 'seed.mjs'), marker, ...(o.seedArgs ?? [])] } } };
+    const seed = o.seed ?? { states: { [STATE_TEXT]: { command: [process.execPath, join(fx.root, 'seed.mjs'), marker, ...(o.seedArgs ?? [])], status: 'confirmed', store: 'localhost:5432' } } };
     writeFileSync(join(fx.root, 'PRPs', 'auth', 'qa-seed.json'), JSON.stringify(seed));
   }
   return { fx, marker };
@@ -953,7 +953,7 @@ test('AC-14: undeclared states are blocked STATE_UNDECLARED naming the missing d
 });
 
 test('AC-14: a failing declared seed command is blocked SEED_FAILED (and the case is not run)', async () => {
-  const { fx } = seedFixture({ seed: { states: { [STATE_TEXT]: { command: [process.execPath, '-e', 'process.exit(3)'] } } } });
+  const { fx } = seedFixture({ seed: { states: { [STATE_TEXT]: { command: [process.execPath, '-e', 'process.exit(3)'], status: 'confirmed', store: 'localhost:5432' } } } });
   hits = {};
   const r = await runRun(fx);
   assert.equal(r.results.cases[0].reason_code, 'SEED_FAILED');

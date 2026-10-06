@@ -13,15 +13,22 @@
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { validateStep } from '../../../plugins/relay/scripts/qa-run.mjs';
 
 const CHECK_NAME = 'qa-run-contract';
 
 const SCRIPT_FILE = 'plugins/relay/scripts/qa-run.mjs';
 const COMMAND_FILE = 'plugins/relay/commands/relay-qa-run.md';
+const SEED_SCRIPT_FILE = 'plugins/relay/scripts/qa-seed.mjs';
+const QUERY_MODULE_FILE = 'plugins/relay/scripts/qa-query.mjs';
+const SEED_COMMAND_FILE = 'plugins/relay/commands/relay-qa-seed.md';
 
 const OUTCOMES_LITERAL = "export const OUTCOMES = ['pass', 'fail', 'blocked', 'needs-human'];";
 const OUTCOME_VALUES = ['pass', 'fail', 'blocked', 'needs-human'];
 const BANNED_IN_COMMAND = ['design-spec', 'relay-auth-setup', '.claude/PRPs', 'subagent_type']; // .claude/PRPs MUST NOT appear in the command
+const STEP_RESULTS = ['passed', 'failed', 'not-run', 'human'];
+const STEP_EXAMPLE_DRIVERS = ['http', 'browser'];
+const STEP_EXAMPLE_PATTERN = /<!-- qa-step-example driver=(\w+) -->[ \t]*\r?\n```json\r?\n([\s\S]*?)\r?\n```/g;
 const ISO_MS =/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 
 /**
@@ -70,11 +77,31 @@ export function validateResults(obj) {
         }
       }
     }
+    const partialCases = cases.filter((c) => c !== null && typeof c === 'object' && c.reason_code === 'PARTIAL_REMAINDER');
+    if (obj.partially_executed !== undefined) {
+      if (!Number.isInteger(obj.partially_executed) || obj.partially_executed < 0 || obj.partially_executed !== partialCases.length) {
+        msgs.push(`partially_executed (${JSON.stringify(obj.partially_executed)}) does not equal the number of PARTIAL_REMAINDER cases (${partialCases.length})`);
+      }
+    }
     for (const [i, c] of cases.entries()) {
       const label = `cases[${i}]`;
       if (c === null || typeof c !== 'object') {
         msgs.push(`${label} is not an object`);
         continue;
+      }
+      if (c.reason_code === 'PARTIAL_REMAINDER' && c.outcome !== 'needs-human') {
+        msgs.push(`${label} carries PARTIAL_REMAINDER with outcome ${JSON.stringify(c.outcome)}`);
+      }
+      if (c.steps !== undefined) {
+        if (!Array.isArray(c.steps)) {
+          msgs.push(`${label}.steps is not an array`);
+        } else {
+          for (const [j, s] of c.steps.entries()) {
+            if (s === null || typeof s !== 'object' || !STEP_RESULTS.includes(s.result)) {
+              msgs.push(`${label}.steps[${j}].result ${JSON.stringify(s && typeof s === 'object' ? s.result : s)} is outside passed, failed, not-run, human`);
+            }
+          }
+        }
       }
       if (!OUTCOME_VALUES.includes(c.outcome)) msgs.push(`${label}.outcome ${JSON.stringify(c.outcome)} is outside the closed vocabulary`);
       stamp(c.started_at, `${label}.started_at`);
@@ -88,10 +115,10 @@ export function validateResults(obj) {
 }
 
 /**
- * @param {{ scriptText?: string | null, commandText?: string | null, results?: { file: string, value: any }[] }} input
+ * @param {{ scriptText?: string | null, commandText?: string | null, seedScriptText?: string | null, seedCommandText?: string | null, queryModuleText?: string | null, results?: { file: string, value: any }[], requireStepExamples?: boolean }} input
  * @returns {{ name: string, ok: boolean, findings: Finding[] }}
  */
-export function checkQaRunContract({ scriptText, commandText, results }) {
+export function checkQaRunContract({ scriptText, commandText, seedScriptText, seedCommandText, queryModuleText, results, requireStepExamples = false }) {
   /** @type {Finding[]} */
   const findings = [];
   /** @param {string} message @param {string} file @param {number} [line] */
@@ -131,6 +158,71 @@ export function checkQaRunContract({ scriptText, commandText, results }) {
     }
     for (const banned of BANNED_IN_COMMAND) {
       if (commandText.includes(banned)) add(`the runner command must not contain ${banned}; .claude/PRPs MUST NOT appear anywhere in it`, COMMAND_FILE);
+    }
+    // Each literal step example in the doc must validate against the runner's own per-step validator.
+    /** @type {Set<string>} */ const seen = new Set();
+    for (const m of commandText.matchAll(STEP_EXAMPLE_PATTERN)) {
+      const driver = m[1];
+      seen.add(driver);
+      /** @type {any} */ let step;
+      try {
+        step = JSON.parse(m[2]);
+      } catch {
+        add(`the ${driver} step example in the runner command is not valid JSON`, COMMAND_FILE);
+        continue;
+      }
+      const bad = validateStep(driver, step);
+      if (bad) add(`the ${driver} step example in the runner command does not validate: ${bad.reason}`, COMMAND_FILE);
+    }
+    if (requireStepExamples) {
+      for (const driver of STEP_EXAMPLE_DRIVERS) {
+        if (!seen.has(driver)) add(`the runner command must carry a literal ${driver} step example marked <!-- qa-step-example driver=${driver} -->`, COMMAND_FILE);
+      }
+    }
+  }
+
+  if (seedScriptText === null) {
+    add(`missing or unreadable file: ${SEED_SCRIPT_FILE}`, SEED_SCRIPT_FILE);
+  } else if (typeof seedScriptText === 'string') {
+    const marker = '// WRITE-SITE';
+    const nMarker = occurrences(seedScriptText, marker);
+    if (nMarker !== 1) add(`the seed script must contain ${marker} exactly once, found ${nMarker}`, SEED_SCRIPT_FILE);
+    for (const call of ['writeFileSync(', 'renameSync(']) {
+      const n = occurrences(seedScriptText, call);
+      if (n !== 1) add(`the seed script single-write-helper rule: ${call} must appear exactly once, found ${n}`, SEED_SCRIPT_FILE);
+    }
+    if (seedScriptText.includes('child_process')) add('the seed script must not use child_process: the generator executes nothing', SEED_SCRIPT_FILE);
+    seedScriptText.split(/\r?\n/).forEach((l, i) => {
+      if (/(writeFileSync|appendFileSync|writeFile|rmSync|unlinkSync)\(/.test(l) && l.includes('qa-report.md')) {
+        add('a write call in the seed script names qa-report.md: the generator must never write the report', SEED_SCRIPT_FILE, i + 1);
+      }
+    });
+    if (seedScriptText.includes("'confirmed'") || seedScriptText.includes('"confirmed"')) {
+      add('the seed script must not contain the quoted word confirmed: no relay component writes it', SEED_SCRIPT_FILE);
+    }
+    if (!seedScriptText.includes("'proposed'") && !seedScriptText.includes('"proposed"')) {
+      add('the seed script must write proposed entries', SEED_SCRIPT_FILE);
+    }
+  }
+
+  if (queryModuleText === null) {
+    add(`missing or unreadable file: ${QUERY_MODULE_FILE}`, QUERY_MODULE_FILE);
+  } else if (typeof queryModuleText === 'string') {
+    for (const banned of ['child_process', 'writeFileSync(', 'renameSync(', 'appendFileSync(', 'fetch(']) {
+      if (queryModuleText.includes(banned)) add(`the query module must stay pure: it must not contain ${banned}`, QUERY_MODULE_FILE);
+    }
+    for (const token of ['QUERY_NOT_READ_ONLY', 'FAILED_NON_LOCAL_TARGET', '--remote', '-readonly']) {
+      if (!queryModuleText.includes(token)) add(`the query module must contain ${token}`, QUERY_MODULE_FILE);
+    }
+  }
+
+  if (seedCommandText === null) {
+    add(`missing or unreadable file: ${SEED_COMMAND_FILE}`, SEED_COMMAND_FILE);
+  } else if (typeof seedCommandText === 'string') {
+    if (!seedCommandText.includes('qa-seed.mjs')) add('the seed command must contain qa-seed.mjs', SEED_COMMAND_FILE);
+    if (!seedCommandText.includes('proposed')) add('the seed command must contain proposed', SEED_COMMAND_FILE);
+    for (const banned of ['subagent_type', '.claude/PRPs', '"status": "confirmed"']) { // .claude/PRPs MUST NOT appear in the command
+      if (seedCommandText.includes(banned)) add(`the seed command must not contain ${banned}; .claude/PRPs MUST NOT appear anywhere in it`, SEED_COMMAND_FILE);
     }
   }
 
@@ -190,5 +282,13 @@ function walkResults() {
 
 /** @returns {{ name: string, ok: boolean, findings: Finding[] }} */
 export function runQaRunContractCheck() {
-  return checkQaRunContract({ scriptText: readOrNull(SCRIPT_FILE), commandText: readOrNull(COMMAND_FILE), results: walkResults() });
+  return checkQaRunContract({
+    scriptText: readOrNull(SCRIPT_FILE),
+    commandText: readOrNull(COMMAND_FILE),
+    seedScriptText: readOrNull(SEED_SCRIPT_FILE),
+    seedCommandText: readOrNull(SEED_COMMAND_FILE),
+    queryModuleText: readOrNull(QUERY_MODULE_FILE),
+    results: walkResults(),
+    requireStepExamples: true,
+  });
 }

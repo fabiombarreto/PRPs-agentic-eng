@@ -349,6 +349,19 @@
         <dd>The report is never edited and no Manual status changes. A runner pass is evidence, not approval: the human validation gate stays open. A case with <code>automated</code> coverage is first resolved from the Test Runner's schema-v1 record through the JUnit artifact it points at, with reason code <code>AUTOMATED_EVIDENCE</code>; anything the record cannot prove routes as before. <code>results.json</code> reports these cases through a separate <code>record_resolved</code> count, and the summary line excludes them from the driver-executed numbers. When the kit's session probe halts, the case is <code>blocked</code> with the named reason <code>FAILED_PROBE_NOT_PROTECTED</code>, <code>FAILED_PROBE_WRONG_ACCOUNT</code>, <code>FAILED_PROBE_PAGE_UNLOADABLE</code> or <code>FAILED_PROBE_MARKER_ABSENT</code>; a login script generated from a different template than the installed one is <code>blocked</code> with <code>FAILED_KIT_SCRIPT_STALE</code> (run <code>/relay-auth-scripts --refresh</code>); a browser case for a role whose model records a pre-authenticated target is <code>blocked</code> with <code>FAILED_TARGET_PRE_AUTHENTICATED</code> unless the configuration names an alternative local target that the runner's anonymous check confirms clean (HTTP cases are never gated); every other session failure keeps <code>SESSION_UNAVAILABLE</code>. Reusing a saved session needs no login and no visible browser: the proof runs headless against the saved state.</dd>
       </div>
 
+      <h3 id="relay-qa-seed"><code>/relay-qa-seed &lt;feature&gt;</code> <span class="badge badge--done">implemented</span></h3>
+
+      <div class="kv">
+        <dt>Input</dt>
+        <dd>A feature slug or the path to an existing <code>PRPs/reports/&lt;feature&gt;/qa-report.md</code>. Non-interactive &mdash; never asks the user a question and is never invoked by <code>/relay-execute</code>.</dd>
+        <dt>Output</dt>
+        <dd><code>PRPs/auth/qa-seed.json</code> entries, all <code>proposed</code>, plus <code>PRPs/reports/&lt;feature&gt;/qa-seed-proposals.json</code>.</dd>
+        <dt>Mode</dt>
+        <dd>Standalone and non-interactive. The command finds commands the project already declares for each required state and cites them with <code>file:line</code> evidence; a state with no existing command is written as <code>"command": null</code> with a named gap. The <code>qa-seed.mjs</code> script lists the state texts and merges the validated proposals; it executes nothing and writes no seed script.</dd>
+        <dt>Notes</dt>
+        <dd>The operator sets <code>confirmed</code> by hand in the tracked file. The runner refuses an unconfirmed entry with <code>STATE_UNCONFIRMED</code> and a <code>null</code> command with <code>STATE_COMMAND_MISSING</code> before any command runs.</dd>
+      </div>
+
       <h2 id="pillar3">Pillar 3 — Commit, PR &amp; Approval</h2>
 
       <p>Pillar 3 commands are triggered by the human after reviewing <code>/relay-execute</code>&rsquo;s output and running any manual tests. Each command is local and reversible before the next one is run.</p>

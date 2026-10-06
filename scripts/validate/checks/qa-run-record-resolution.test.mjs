@@ -240,6 +240,8 @@ const ONE = (/** @type {string} */ path) => [{ cov: 'automated', path }];
 
 test('resolves pass, fail and unresolved per cited test file, with evidence, a separate record_resolved count and driver-executed numbers that exclude them', async () => {
   const s = await scenario({
+    // The testcases of a.test.mjs are named under the cited describe ("AC-1 > t1"), so the title cited by case 1 matches them (PRD AC-14).
+    junit: [tc('/proj/test/a.test.mjs', 'AC-1 &gt; t1'), tc('/proj/test/a.test.mjs', 'AC-1 &gt; t2'), tc('/proj/test/b.test.mjs', 't3', 'fail')],
     cases: [
       { cov: 'automated', path: `\`test/a.test.mjs\` ${DASH} describe("AC-1")` },
       { cov: 'automated', path: '`test/b.test.mjs`' },
@@ -265,7 +267,8 @@ test('resolves pass, fail and unresolved per cited test file, with evidence, a s
   assert.equal(ev.record_generated_at, REC_GEN);
   assert.match(ev.junit_artifact, /junit\.xml$/);
   assert.ok(Math.abs(Date.parse(ev.junit_artifact_mtime) - (GEN_MS - 60000)) <= 2, `junit_artifact_mtime ${ev.junit_artifact_mtime}`);
-  assert.deepEqual(ev.files, [{ cited: 'test/a.test.mjs', testcases: 2, failed: [] }]);
+  // a titled citation records the title-level entry (granularity + titles); the same two testcases still decide it
+  assert.deepEqual(ev.files, [{ cited: 'test/a.test.mjs', testcases: 2, failed: [], granularity: 'test', titles: ['AC-1'] }]);
   const failEv = evidenceOf(s, 1);
   assert.deepEqual(failEv.files, [{ cited: 'test/b.test.mjs', testcases: 1, failed: ['t3'] }]);
   assert.doesNotMatch(JSON.stringify(failEv), /secret-ish-detail|boom/, 'a failure message must not be copied into evidence');
@@ -485,7 +488,8 @@ test('multi-path: all files listed and none failing gives pass', async () => {
 // ---------------------------------------------------------------------------
 
 test('path extraction: unparseable or truncated citations leave the case unresolved, well-formed ones resolve', async () => {
-  const junit = [tc('/proj/tests/a.spec.ts', 't1'), tc('/proj/tests/b.spec.ts', 't2'), tc('/proj/test/missed-sweep.test.ts', 't3')];
+  // the missed-sweep testcase is named after the cited describe and test titles, so the titled row still resolves (PRD AC-14)
+  const junit = [tc('/proj/tests/a.spec.ts', 't1'), tc('/proj/tests/b.spec.ts', 't2'), tc('/proj/test/missed-sweep.test.ts', 'AC-1 … &gt; …')];
   /** @type {[string, string][]} */
   const table = [
     ['`tests/a.spec.ts`', RESOLVED_PASS],

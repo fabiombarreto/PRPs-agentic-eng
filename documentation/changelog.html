@@ -30,7 +30,28 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <p>Nothing yet.</p>
+      <p>The seed declaration path, phase 3 of <code>PRPs/prds/qa-runner-case-vocabulary.prd.md</code>. The seed file stops
+        being hand-written and gains a trust gate.</p>
+
+      <h3 id="unreleased-added">Added</h3>
+
+      <ul>
+        <li><strong><code>/relay-qa-seed</code> and <code>qa-seed.mjs</code></strong> &mdash; a standalone,
+          non-interactive command that proposes <code>PRPs/auth/qa-seed.json</code> entries from a QA report. Every state
+          text becomes a byte-equal key, each entry cites an existing project command with <code>file:line</code>
+          evidence, a state with no command is written as a named gap, and every entry is <code>proposed</code>. The
+          script executes nothing and never writes a confirmed status.</li>
+      </ul>
+
+      <h3 id="unreleased-changed">Changed</h3>
+
+      <ul>
+        <li><strong><code>/relay-qa-run</code> seed refusals</strong> &mdash; a declaration runs only when its
+          <code>status</code> is exactly <code>confirmed</code>; otherwise the case is <code>blocked</code> with
+          <code>STATE_UNCONFIRMED</code>. A <code>"command": null</code> entry is <code>blocked</code> with
+          <code>STATE_COMMAND_MISSING</code>, naming the gap. A runnable declaration must name a store the local-only
+          guard can check.</li>
+      </ul>
 
       <h2 id="v0-43-0">0.43.0 &#8212; 2026-10-05</h2>
 

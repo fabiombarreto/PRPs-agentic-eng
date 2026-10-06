@@ -96,6 +96,12 @@
     "excerpt": "Twenty-two commands, no placeholder. Orchestrator /relay-execute composes /relay-plan, /relay-plan-review, /relay-worktree, /relay-write-test, /relay-test-write-review, /relay-implement, /relay-code-review, /relay-test, and /relay-test-review end to end. All Pillar 3 commands shipped: /relay-commit (v0.14.0), /relay-pr (v0.15.0), /relay-approve (v0.17.0). /relay-qa-report (v0.20.0) is the QA / Support command in the human validation gate. /relay-plan supports a description-only (PRD-less) mode in addition to the standard APPROVED-PRD mode. Full command surface by role: writers, reviewers, infra, orchestrator, QA / Support, and Pillar 3. /relay-visual-approve is the standalone, human-triggered infra command serving the Figma Visual-First Track's human-mode visual approval gate, never invoked by /relay-execute. /relay-auth-setup is a standalone, human-triggered command that produces the human-approved PRPs/auth/auth-model.md describing how the project authenticates and authorizes; it writes no login script and no credential file. /relay-auth-scripts is the standalone, non-interactive command that generates per-role login scripts, login.config.json and credentials.example.json from an approved PRPs/auth/auth-model.md. /relay-qa-run is the standalone, non-interactive runner that executes a QA report's cases through browser and HTTP drivers and writes results.json under PRPs/reports/<feature>/qa-run/."
   },
   {
+    "title": "/relay-qa-seed",
+    "path": "reference/commands.html#relay-qa-seed",
+    "category": "Reference",
+    "excerpt": "Standalone command that proposes qa-seed.json entries from a QA report: byte-equal state keys, existing project commands cited with file:line, gaps named, every entry proposed until the operator confirms."
+  },
+  {
     "title": "Agents",
     "path": "reference/agents.html",
     "category": "Reference",
