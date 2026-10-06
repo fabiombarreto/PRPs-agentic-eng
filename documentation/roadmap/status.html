@@ -139,6 +139,102 @@
         </tbody>
       </table>
 
+      <h2 id="feature-prds">Feature PRD status</h2>
+
+      <p>Every other PRD under <code>PRPs/prds/</code> has all phases <code>complete</code>; the earlier pipeline PRDs (PRD, plan, implementation, TDD, worktree, commit, PR, approve, execute) are covered by the project-level phases above. The table lists the later feature PRDs. Status is read from each PRD's Implementation Phases table.</p>
+
+      <table>
+        <thead>
+          <tr><th>PRD</th><th>Phases</th><th>Status</th><th>Release</th><th>Scope</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>implement-phase-docs-sync</code></td>
+            <td>4</td>
+            <td><span class="badge badge--done">complete</span></td>
+            <td>0.22.0</td>
+            <td>Docs sync at implement time; Pillar 3 pass becomes a safety net</td>
+          </tr>
+          <tr>
+            <td><code>figma-implementation-track</code></td>
+            <td>7</td>
+            <td><span class="badge badge--done">complete</span></td>
+            <td>&mdash;</td>
+            <td>Opt-in Figma track: component map, Design Spec, visual loop</td>
+          </tr>
+          <tr>
+            <td><code>figma-visual-first-track</code></td>
+            <td>7</td>
+            <td><span class="badge badge--done">complete</span></td>
+            <td>&mdash;</td>
+            <td>Visual-first phases with a blocking gate</td>
+          </tr>
+          <tr>
+            <td><code>figma-quota-resilience</code></td>
+            <td>6</td>
+            <td><span class="badge badge--partial">5 complete, 1 implemented</span></td>
+            <td>&mdash;</td>
+            <td>Scoped scan, call budgets, quota detection, checkpoint and resume</td>
+          </tr>
+          <tr>
+            <td><code>plan-review-materiality</code></td>
+            <td>4</td>
+            <td><span class="badge badge--done">complete</span></td>
+            <td>&mdash;</td>
+            <td>BLOCKING and ADVISORY classes, retry ratchet</td>
+          </tr>
+          <tr>
+            <td><code>usage-metrics</code></td>
+            <td>4 (phase 5 deferred)</td>
+            <td><span class="badge badge--done">complete</span></td>
+            <td>0.32.0</td>
+            <td>Operator-run usage-metrics shards</td>
+          </tr>
+          <tr>
+            <td><code>test-formatting-prevention-preflight</code></td>
+            <td>5</td>
+            <td><span class="badge badge--done">complete</span></td>
+            <td>0.35.0</td>
+            <td>Formatter-clean test suites, preflight precondition</td>
+          </tr>
+          <tr>
+            <td><code>multi-repo-topology</code></td>
+            <td>8</td>
+            <td><span class="badge badge--done">complete</span></td>
+            <td>0.37.0</td>
+            <td>Declared workspace of sibling repositories</td>
+          </tr>
+          <tr>
+            <td><code>parallel-phase-execution</code></td>
+            <td>7</td>
+            <td><span class="badge badge--done">complete</span></td>
+            <td>0.38.0</td>
+            <td>Lanes, per-lane worktrees, concurrent dispatch</td>
+          </tr>
+          <tr>
+            <td><code>hybrid-code-review</code></td>
+            <td>5</td>
+            <td><span class="badge badge--partial">4 complete, 1 pending</span></td>
+            <td>0.39.0</td>
+            <td>Opt-in <code>/code-review</code> evidence for R-SEM; dogfood pending</td>
+          </tr>
+          <tr>
+            <td><code>manual-qa-runner-auth-kit</code></td>
+            <td>8</td>
+            <td><span class="badge badge--done">complete</span></td>
+            <td>0.40.0 &ndash; 0.43.0</td>
+            <td>Test-auth kit and QA runner</td>
+          </tr>
+          <tr>
+            <td><code>qa-runner-case-vocabulary</code></td>
+            <td>8</td>
+            <td><span class="badge badge--partial">7 complete, 1 pending</span></td>
+            <td>0.44.0</td>
+            <td>Case vocabulary and drivers; dogfood pending</td>
+          </tr>
+        </tbody>
+      </table>
+
       <h2 id="whats-shipped">What's shipped, concretely</h2>
 
       <h3 id="plugin-artifacts">Plugin artifacts</h3>
@@ -151,26 +247,31 @@
         <li><strong>Commands:</strong> <code>commands/relay-test.md</code>, <code>commands/relay-test-review.md</code>, <code>commands/relay-prd.md</code>, <code>commands/relay-plan.md</code> (v0.7.0), <code>commands/relay-plan-review.md</code> (v0.7.0), <code>commands/relay-implement.md</code> (v0.8.0), <code>commands/relay-code-review.md</code> (v0.8.0), <code>commands/relay-execute.md</code> (v0.9.0), <code>commands/relay-write-test.md</code> (v0.10.0; renamed from <code>relay-tdd.md</code> v0.19.0), <code>commands/relay-test-write-review.md</code> (v0.10.0; renamed from <code>relay-tdd-review.md</code> v0.19.0), <code>commands/relay-worktree.md</code> (v0.11.0), <code>commands/relay-commit.md</code> (v0.14.0), <code>commands/relay-pr.md</code> (v0.15.0), <code>commands/relay-approve.md</code> (v0.17.0)</li>
       </ul>
 
-      <p>Of the 14-command surface (<a href="../reference/commands.html">Commands</a>), all 14 shipped. The three Pillar 3 commands &mdash; <code>/relay-commit</code> (v0.14.0), <code>/relay-pr</code> (v0.15.0), and <code>/relay-approve</code> (v0.17.0) &mdash; complete the commit &rarr; push &rarr; PR &rarr; merge lifecycle. The Docs Updater and Docs Reviewer agents (v0.17.0) close out the automated knowledge-base sync. Since <code>implement-phase-docs-sync</code> (2026-07-16), the same pair also runs during <code>/relay-implement</code> (Pillar 2, immediately after code-review approval) as the primary sync point, with this Phase-4/Approval-roadmap invocation recast as a low-delta safety-net pass.</p>
+      <p>Of the 23-command surface (<a href="../reference/commands.html">Commands</a>), all 23 shipped (the Figma, test-auth kit and QA runner commands arrived after the Pillar 3 commands; see the per-PRD status above). The three Pillar 3 commands &mdash; <code>/relay-commit</code> (v0.14.0), <code>/relay-pr</code> (v0.15.0), and <code>/relay-approve</code> (v0.17.0) &mdash; complete the commit &rarr; push &rarr; PR &rarr; merge lifecycle. The Docs Updater and Docs Reviewer agents (v0.17.0) close out the automated knowledge-base sync. Since <code>implement-phase-docs-sync</code> (2026-07-16), the same pair also runs during <code>/relay-implement</code> (Pillar 2, immediately after code-review approval) as the primary sync point, with this Phase-4/Approval-roadmap invocation recast as a low-delta safety-net pass.</p>
 
       <h3 id="shared-scripts">Shared scripts</h3>
 
-      <p>In <code>plugins/relay/scripts/</code>, inside the plugin tree:</p>
+      <p>In <code>plugins/relay/scripts/</code>, inside the plugin tree (see <a href="../reference/scripts.html">Scripts</a>):</p>
 
       <ul>
         <li><code>normalize-test-output.mjs</code> — parses JUnit XML (pytest, Playwright, Vitest) into the canonical schema</li>
         <li><code>generate-final-report.mjs</code> — assembles the AC-10 compliant final-report.md from run.json + test-review.json + per-attempt records</li>
+        <li><code>executable-content-hash.mjs</code> — the computed equivalence report behind the code reviewer's R-X test-modification guard</li>
+        <li><code>usage-metrics.mjs</code> — operator-run materializer for the per-project usage-metrics shards</li>
+        <li><code>auth-kit-secrecy.mjs</code> and <code>auth-local-guard.mjs</code> — the test-auth kit's secrecy and local-only gates</li>
+        <li><code>qa-run.mjs</code>, <code>qa-query.mjs</code> and <code>qa-seed.mjs</code> — the manual-QA runner, its read-only database contract and the seed proposer</li>
+        <li><code>visual/</code> — the self-contained provision, capture and compare tooling of the Figma visual loop</li>
       </ul>
 
-      <p>Both are Node.js with no npm dependencies. Claude Code ships with Node, so these work on every host running relay regardless of the target project's own language stack.</p>
+      <p>All are Node.js with no npm dependencies of their own (the visual tooling resolves <code>playwright</code> from its own folder). Claude Code ships with Node, so these work on every host running relay regardless of the target project's own language stack.</p>
 
       <h3 id="governance-artifacts">Governance artifacts</h3>
 
       <p>In <code>docs/</code> at the plugin repo root:</p>
 
       <ul>
-        <li><code>decisions.md</code> — 14 stable decisions (see <a href="../governance/decisions.html">Decisions</a>)</li>
-        <li><code>anti-patterns.md</code> — 7 forbidden patterns (see <a href="../governance/anti-patterns.html">Anti-patterns</a>)</li>
+        <li><code>decisions.md</code> — 104 recorded decisions (see <a href="../governance/decisions.html">Decisions</a>)</li>
+        <li><code>anti-patterns.md</code> — 17 forbidden patterns (see <a href="../governance/anti-patterns.html">Anti-patterns</a>)</li>
         <li><code>decision-gate.md</code> — the mandatory control mechanism</li>
         <li><code>context/architecture.md</code>, <code>conventions.md</code>, <code>constraints.md</code>, <code>integrations.md</code>, <code>methodology.md</code></li>
       </ul>
@@ -446,28 +547,20 @@
         <p>Recorded in <code>docs/decisions.md</code> (2026-09-21, "Parallel test environments extend the runnable-worktree-environments registration"). Not implemented. <code>lane_runtime_safe</code> stays a hand-declared boolean, and no command provisions or tears down environments, until a dedicated PRD is authored via <code>/relay-prd</code> and approved.</p>
       </div>
 
-      <h3 id="planned-manual-qa-runner">Planned: manual-QA runner and local test-auth kit <span class="badge badge--pending">planned</span></h3>
+      <h3 id="shipped-manual-qa-runner">Shipped: manual-QA runner and local test-auth kit <span class="badge badge--done">phases 1&ndash;8 shipped</span></h3>
 
-      <p><code>/relay-qa-report</code> lists, for every case, the required state and a manual step-by-step, and leaves each status at <code>pending</code>. Nothing executes those steps; the human validator runs each case by hand. Most cases need a logged-in user in a specific role, and relay cannot produce one: <code>capture.mjs</code> accepts a Playwright storage-state file through <code>auth_mode</code> but never logs in, and nothing creates that file.</p>
-
-      <p>A registered future capability adds a runner that gives every case of any project's <code>qa-report.md</code> an outcome, and a test-auth kit under <code>PRPs/auth/</code> that it depends on. Everything runs locally. The PRD must decide:</p>
+      <p><code>/relay-qa-report</code> lists, for every case, the required state and a manual step-by-step. The manual-QA runner gives every case of a project's <code>qa-report.md</code> an outcome by executing what it can against a locally running application, and the test-auth kit under <code>PRPs/auth/</code> supplies the sessions it needs. Everything runs locally, and a runner <code>pass</code> is evidence the human signs off on, never approval.</p>
 
       <div class="kv">
-        <dt>Coverage</dt><dd>Every case gets an outcome. Each is routed to a driver (browser, HTTP, CLI, read-only DB check). A case no driver can perform returns <code>needs-human</code> with its steps, never a silent pass.</dd>
-        <dt>Evidence</dt><dd>A closed outcome set (for example pass, fail, blocked, needs-human), each backed by redacted evidence under <code>PRPs/reports/&lt;feature&gt;/</code>.</dd>
-        <dt>Write-back</dt><dd>Whether the runner edits only the Manual status field or writes a separate results file, and whether a runner pass satisfies the human gate or stays evidence the human signs off on.</dd>
-        <dt>Setup</dt><dd>Required state comes from the project's declared seed commands, the kit's user creation, and the <a href="#planned-parallel-test-envs">environment handle</a> when it exists.</dd>
-        <dt>Local only</dt><dd>Any host that is not loopback or a declared local hostname is refused as a hard failure. This is permanent, not an MVP limit.</dd>
-        <dt>Auth model</dt><dd>An agent reads the project's auth and permission code and writes a tracked <code>PRPs/auth/auth-model.md</code>: mechanisms, login flow, role matrix, and how to create a user per role locally. The human confirms it before scripts are generated.</dd>
-        <dt>Credentials</dt><dd>Test-only accounts per role, created by a kit script or typed by the user in a local terminal prompt, never in the conversation. Ignore rules are proven with <code>git check-ignore</code> before any secret is written. Agents reference credential files by path, never by value.</dd>
-        <dt>Login scripts</dt><dd>One per role, idempotent, producing a Playwright storage-state file (the format the visual track already reads) or a token. SSO and MFA fall back to a headed browser where the user logs in once.</dd>
-        <dt>Invocation</dt><dd>Standalone commands, not run by <code>/relay-execute</code>. Auth setup is an interactivity-boundary extension.</dd>
-        <dt>Proof</dt><dd>A target project with at least two roles runs a real report end to end, with no credential value in any tracked file or report.</dd>
+        <dt>Kit commands</dt><dd><code>/relay-auth-setup</code> (an approved <code>auth-model.md</code>), <code>/relay-auth-scripts</code> (one login script per role, <code>login.config.json</code>, placeholder credentials) and <code>/relay-qa-seed</code> (seed declarations proposed from commands the project already has).</dd>
+        <dt>Runner</dt><dd><code>/relay-qa-run</code> with the <code>qa-run.mjs</code>, <code>qa-query.mjs</code> and <code>qa-seed.mjs</code> scripts: four outcomes (<code>pass</code>, <code>fail</code>, <code>blocked</code>, <code>needs-human</code>), redacted evidence, a hard local-only guard.</dd>
+        <dt>Case vocabulary</dt><dd>Since 0.44.0: literal step objects per driver, partial plans with a human remainder, captured seeds, a read-only database driver, declared API origins, UI grounding and per-test record resolution. Phases 1&ndash;7 of <code>qa-runner-case-vocabulary.prd.md</code> shipped; the phase 8 dogfood on the same two reports is still <span class="badge badge--pending">pending</span>.</dd>
+        <dt>Proof so far</dt><dd>The 0.42.0 re-runs on <code>super-ensino</code> and <code>praesto-sum</code> proved the kit reusable but drove only 1 of 14 reachable cases; the diagnosed cause was the case vocabulary, which is what 0.44.0 addresses.</dd>
       </div>
 
       <div class="callout callout--note">
-        <div class="callout__title">Registered, not scheduled</div>
-        <p>Recorded in <code>docs/decisions.md</code> (2026-09-25, "Executing a QA report's cases, backed by a project-local test-auth kit"). No command, agent, or script executes QA cases, logs into a target application, or stores a credential until a dedicated PRD is authored via <code>/relay-prd</code> and approved.</p>
+        <div class="callout__title">Recorded</div>
+        <p>Decision of 2026-09-25 in <code>docs/decisions.md</code> ("Executing a QA report's cases, backed by a project-local test-auth kit"); PRDs <code>manual-qa-runner-auth-kit.prd.md</code> (8 phases, all complete) and <code>qa-runner-case-vocabulary.prd.md</code> (phases 1&ndash;7 complete).</p>
       </div>
 
       <h2 id="dogfood-status">Dogfood status</h2>

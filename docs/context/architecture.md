@@ -243,7 +243,7 @@ consumes it at precondition P6.
 
 ## Command surface
 
-Relay exposes **22 commands**, organized by role. Full
+Relay exposes **23 commands**, organized by role. Full
 table and contracts in `docs/api-reference.md`; rationale in
 `docs/decisions.md`. Summary of the philosophy:
 

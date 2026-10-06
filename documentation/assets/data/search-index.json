@@ -54,6 +54,24 @@
     "excerpt": "Every component detects its preconditions at start. Missing infrastructure results in a clear skip with a reason — never a silent failure, never a crash. No Docker, no tests, no GitHub — each case has defined behavior."
   },
   {
+    "title": "Parallel lanes",
+    "path": "concepts/parallel-lanes.html",
+    "category": "Concepts",
+    "excerpt": "Parallel lanes: dependency chains of PRD phases run concurrently, each in its own worktree and branch; lane_runtime_safe gate, max_lanes_in_flight cap, serial fallback, lane integration at /relay-commit."
+  },
+  {
+    "title": "Multi-repo workspaces",
+    "path": "concepts/multi-repo-topology.html",
+    "category": "Concepts",
+    "excerpt": "Multi-repo workspaces: Repository topology table in docs/context/architecture.md, project_root, context_root and repo_root, editable and reference-only members, per-member methodology, FAILED_TOPOLOGY halts."
+  },
+  {
+    "title": "Usage metrics",
+    "path": "concepts/usage-metrics.html",
+    "category": "Concepts",
+    "excerpt": "Usage metrics: usage-metrics.mjs materializes PRPs/metrics TSV shards (verdict, rubric, run, scan) from existing artifacts; closed field contract, no free text, operator-run, no telemetry, automated emission deferred."
+  },
+  {
     "title": "Writing a PRD",
     "path": "guide/writing-a-prd.html",
     "category": "Guide",
@@ -117,7 +135,7 @@
     "title": "Scripts",
     "path": "reference/scripts.html",
     "category": "Reference",
-    "excerpt": "Helper scripts written in Node.js with zero npm dependencies. normalize-test-output.mjs (JUnit XML to canonical schema) and generate-final-report.mjs (assembles the PR-embeddable markdown report)."
+    "excerpt": "Helper scripts written in Node.js with zero npm dependencies: normalize-test-output, generate-final-report, qa-run, qa-query, qa-seed, auth-kit-secrecy, auth-local-guard, usage-metrics and executable-content-hash."
   },
   {
     "title": "Validation checks",

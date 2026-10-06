@@ -30,6 +30,27 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
+      <h3 id="unreleased-added">Added</h3>
+
+      <ul>
+        <li><strong><a href="concepts/parallel-lanes.html">Concepts &mdash; Parallel lanes</a></strong> &mdash; what a
+          lane is, the <code>Parallel</code> cell, per-lane worktrees, the <code>lane_runtime_safe</code> gate and
+          <code>max_lanes_in_flight</code> cap, and lane integration at <code>/relay-commit</code>. The feature shipped
+          in 0.38.0 and had no page outside the decision record.</li>
+        <li><strong><a href="concepts/multi-repo-topology.html">Concepts &mdash; Multi-repo workspaces</a></strong>
+          &mdash; the three roots, the <code>## Repository topology</code> table, per-member context and the six
+          <code>FAILED_TOPOLOGY_*</code> halts. Shipped in 0.37.0.</li>
+        <li><strong><a href="concepts/usage-metrics.html">Concepts &mdash; Usage metrics</a></strong> &mdash; the
+          <code>PRPs/metrics</code> shards, the closed field contract, how to run
+          <code>usage-metrics.mjs</code>, and what is deferred. Shipped in 0.32.0.</li>
+        <li><strong><code>reference/scripts.html</code></strong> &mdash; sections for <code>qa-query.mjs</code>,
+          <code>usage-metrics.mjs</code> and <code>executable-content-hash.mjs</code>, which were missing from the page.</li>
+        <li><strong><code>roadmap/status.html</code></strong> &mdash; a &ldquo;Feature PRD status&rdquo; table covering
+          the twelve later feature PRDs, read from each PRD's Implementation Phases table.</li>
+        <li><strong><code>assets/js/app.js</code> and <code>search-index.json</code></strong> &mdash; NAV and search
+          entries for the three new Concepts pages.</li>
+      </ul>
+
       <h3 id="unreleased-changed">Changed</h3>
 
       <ul>
@@ -37,6 +58,16 @@
           a new plugin cache never has <code>scripts/visual/node_modules</code>, so <code>playwright</code> fails to
           resolve until someone runs <code>npm install</code> by hand. Not implemented; the entry fixes what the
           eventual fix must decide.</li>
+        <li><strong><code>reference/commands.html</code></strong> &mdash; the <code>/relay-qa-run</code> entry no longer
+          says the database driver is not built, and now describes the 0.44.0 vocabulary: literal step objects,
+          partial plans, captured seeds, the read-only <code>query</code> step, <code>api_origins</code>, UI grounding
+          and per-test record resolution. The page subtitle now says twenty-three commands.</li>
+        <li><strong><code>reference/scripts.html</code></strong> &mdash; the <code>qa-run.mjs</code> section gains the
+          same vocabulary and the <code>ground</code> mode in its usage block.</li>
+        <li><strong><code>roadmap/status.html</code></strong> &mdash; the manual-QA runner section moves from
+          &ldquo;Planned&rdquo; to &ldquo;Shipped&rdquo; (anchor <code>shipped-manual-qa-runner</code>; the link from the
+          0.40.0 entry is updated). &ldquo;14-command surface&rdquo; corrected to 23; the shared-scripts list now
+          names all scripts; decision and anti-pattern counts corrected to 104 and 17.</li>
       </ul>
 
       <h2 id="v0-44-0">0.44.0 &#8212; 2026-10-06</h2>
@@ -347,7 +378,7 @@
           verdict, R-X, arbitration, and the log. A <code>/code-review</code> pass at <code>medium</code> or <code>high</code> becomes an
           advisory-by-default evidence source for R-SEM inside <code>/relay-implement</code>. <code>/relay-code-review</code> is kept.
           <code>xhigh</code>, <code>max</code>, and <code>ultra</code> stay outside the pipeline. Nothing changes until a PRD is approved.</li>
-        <li><strong><a href="roadmap/status.html#planned-manual-qa-runner">Phase status &mdash; Planned: manual-QA runner and local test-auth kit</a></strong>
+        <li><strong><a href="roadmap/status.html#shipped-manual-qa-runner">Phase status &mdash; Planned: manual-QA runner and local test-auth kit</a></strong>
           &mdash; registers a runner that gives every case of any project's <code>qa-report.md</code> an outcome, and a
           <code>PRPs/auth/</code> kit that documents the project's auth and permission model, stores test-only credentials
           outside git and outside the model's context, and ships per-role login scripts. Local hosts only. Mirrored as

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Multi-repo workspaces — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Concepts</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Multi-repo workspaces</span>
+      </div>
+
+      <h1>Multi-repo workspaces</h1>
+      <p class="page-subtitle">How relay addresses a project directory that holds several sibling git repositories: the three roots, the declared topology table, per-member context, and the named halts for topologies it cannot serve.</p>
+
+      <h2 id="three-roots">The three roots</h2>
+
+      <p>Relay used to treat one variable as both the artifact plane and the code plane. A workspace separates them.</p>
+
+      <div class="kv">
+        <dt><code>project_root</code></dt><dd>The directory a command is invoked from. Holds the single artifact plane: <code>PRPs/prds/</code>, <code>PRPs/plans/</code>, <code>PRPs/reports/</code> and the workspace's own <code>docs/</code>.</dd>
+        <dt><code>context_root</code></dt><dd>A member's relay context: its <code>CLAUDE.md</code> and <code>docs/</code>, including <code>decisions.md</code>, <code>anti-patterns.md</code>, <code>context/architecture.md</code> and <code>context/methodology.md</code>.</dd>
+        <dt><code>repo_root</code></dt><dd>A member's git repository root. Worktrees are created at <code>&lt;repo_root&gt;/.worktrees/&lt;feature&gt;/</code>.</dd>
+      </div>
+
+      <p>In most members <code>context_root</code> and <code>repo_root</code> are the same directory. They are not always, so both are expressed.</p>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Canonical source</div>
+        <p><code>plugins/relay/resources/repository-topology.md</code> holds the exact header, the parsing rules and the halt codes. The feature shipped in 0.37.0 (<code>PRPs/prds/multi-repo-topology.prd.md</code>, eight phases).</p>
+      </div>
+
+      <h2 id="declaration">Declaration, never detection</h2>
+
+      <p>A workspace declares its members in its own <code>docs/context/architecture.md</code>. Relay never scans for <code>.git</code> directories and never infers a role or a base. The section heading and the table header must match byte for byte.</p>
+
+      <pre><code class="language-default">## Repository topology
+
+| Repo | Path | Git root | Role | Base |
+|------|------|----------|------|------|
+| spe-services | spe-services | - | editable | current |
+| api-escola | api-escola | api-escola/apiescola | editable | origin/develop |
+| spe-ui | spe-ui | - | reference-only | - |</code></pre>
+
+      <div class="kv">
+        <dt>Repo</dt><dd>The member's name, unique in the table. A phase names its target repository with it (the <code>Repo</code> column of the PRD phases table).</dd>
+        <dt>Path</dt><dd>The member's <code>context_root</code>, relative to <code>project_root</code>.</dd>
+        <dt>Git root</dt><dd>The member's <code>repo_root</code>; <code>-</code> means the same as <code>Path</code>.</dd>
+        <dt>Role</dt><dd><code>editable</code> members may be written to and get a worktree. <code>reference-only</code> members are never written to and never get a worktree.</dd>
+        <dt>Base</dt><dd>The ref a worktree is created from. <code>current</code> or empty resolves to the member's checked-out commit.</dd>
+      </div>
+
+      <h2 id="per-member-context">Per-member context</h2>
+
+      <p>A member's governing context is read from its own <code>context_root</code>, never from the workspace. There is no inheritance and no overlay: a member's own declaration wins outright. This matters because declarations diverge in practice; in one measured workspace, jest, vitest and pytest coexisted, <code>tdd</code> was true in half the members and false in the rest, and <code>figma_track</code> held in exactly one.</p>
+
+      <h2 id="compatibility">Compatibility clause</h2>
+
+      <p>When the <code>## Repository topology</code> section is absent the project is single-repo. All three roots collapse to the working directory, nothing is emitted, and every stage behaves exactly as it did before the contract existed. No existing project needs to migrate. This repository is single-repo and declares no such section.</p>
+
+      <h2 id="halts">Named halts</h2>
+
+      <p>Every unserviceable topology stops the run before any phase work, with an actionable message. None degrades to "proceed anyway".</p>
+
+      <div class="kv">
+        <dt><code>FAILED_TOPOLOGY_MALFORMED_ROW</code></dt><dd>Wrong cell count, empty <code>Repo</code> or <code>Path</code>, or an unrecognized <code>Role</code>.</dd>
+        <dt><code>FAILED_TOPOLOGY_PATH_UNRESOLVED</code></dt><dd>A declared <code>Path</code> or <code>Git root</code> is not an existing directory.</dd>
+        <dt><code>FAILED_TOPOLOGY_NOT_A_GIT_REPO</code></dt><dd>A resolved <code>repo_root</code> is not a git repository.</dd>
+        <dt><code>FAILED_TOPOLOGY_ORPHANED_GITLINK</code></dt><dd>A member is a mode-160000 gitlink with no <code>.gitmodules</code> entry; a worktree of the parent would come up empty.</dd>
+        <dt><code>FAILED_TOPOLOGY_BASE_UNRESOLVED</code></dt><dd>A declared <code>Base</code> does not resolve in that member.</dd>
+        <dt><code>FAILED_TOPOLOGY_REFERENCE_ONLY_TARGET</code></dt><dd>A phase targets a <code>reference-only</code> member.</dd>
+      </div>
+
+      <h2 id="consumers">Who consumes it</h2>
+
+      <p><code>/relay-execute</code> reads the declaration at precondition P6. Worktrees, branches and PRs are then created per editable member. Combined with <a href="parallel-lanes.html">parallel lanes</a>, the lane dimension composes with the per-repository one rather than replacing it. The <code>topology-contract</code> check keeps the header consistent across consumers.</p>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>

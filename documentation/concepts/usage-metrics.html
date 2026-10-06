@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Usage metrics — relay</title>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <header class="topbar"></header>
+  <div class="layout">
+    <aside class="sidebar"></aside>
+    <main class="content">
+
+      <div class="breadcrumb">
+        <a href="../index.html">Home</a>
+        <span class="breadcrumb__sep">›</span>
+        <span>Concepts</span>
+        <span class="breadcrumb__sep">›</span>
+        <span>Usage metrics</span>
+      </div>
+
+      <h1>Usage metrics</h1>
+      <p class="page-subtitle">The per-project, local-only metrics artifact relay can materialize from the audit trail it already writes: what it contains, why every cell is a bare code, how to generate it, and what is deliberately not built.</p>
+
+      <h2 id="purpose">Purpose</h2>
+
+      <p>relay already writes an audit trail in every target project: <code>orchestrator-run.json</code>, <code>run.json</code>, <code>test-review.json</code>, per-attempt diffs and the <code>*.review.jsonl</code> verdict logs. Improving the plugin from that evidence used to mean assembling it by hand across repositories. The usage-metrics artifact turns the trail into a small, versioned, portable set of files that a human, an AI or a script can read when deciding what to improve next.</p>
+
+      <div class="callout callout--warn">
+        <div class="callout__title">Local files, no telemetry</div>
+        <p>Nothing transmits data anywhere. Metrics sit inside the repository that produced them; combining projects is a manual, human-initiated act of collecting files.</p>
+      </div>
+
+      <h2 id="layout">File layout</h2>
+
+      <p>Shards live in <code>PRPs/metrics/</code>, one file per relation per calendar month, named <code>&lt;relation&gt;-v&lt;MAJOR&gt;-&lt;YYYY-MM&gt;.tsv</code>, plus one <code>-undated</code> file per relation and a single <code>scan-v1.tsv</code>.</p>
+
+      <pre><code class="language-default">PRPs/metrics/verdict-v1-2026-08.tsv
+PRPs/metrics/verdict-v1-undated.tsv
+PRPs/metrics/rubric-v1-2026-08.tsv
+PRPs/metrics/run-v1-2026-08.tsv
+PRPs/metrics/scan-v1.tsv</code></pre>
+
+      <p>There are four relations: <code>verdict</code>, <code>rubric</code>, <code>run</code> and <code>scan</code>. The codebook is <code>plugins/relay/resources/usage-metrics-schema.md</code>.</p>
+
+      <h2 id="closed-contract">Closed field contract</h2>
+
+      <p>A cell is a bare enumerated code, a non-negative integer, an ISO-8601 UTC instant or the single sentinel <code>-</code>. Never a label, a sentence or a path. All meaning lives in the schema document, and a reader resolves codes against it. Rubric ids are an open set resolved against the reviewer agent files, so an unknown id is treated as new, not corrupt. Free text is excluded on purpose: it is the privacy mechanism, not a filter.</p>
+
+      <h2 id="running">Running it</h2>
+
+      <pre><code class="language-bash">node ${CLAUDE_PLUGIN_ROOT}/scripts/usage-metrics.mjs materialize
+node ${CLAUDE_PLUGIN_ROOT}/scripts/usage-metrics.mjs --dry-run
+node ${CLAUDE_PLUGIN_ROOT}/scripts/usage-metrics.mjs query</code></pre>
+
+      <p><code>materialize</code> regenerates every shard by full rescan, so re-runs converge and never duplicate. <code>--dry-run</code> reports row counts and destinations without writing. <code>query</code> prints per-stage counts, first-attempt failure rates and the top failing rubric ids. The mode is mandatory and arguments are parsed strictly, so a typo cannot fall through to rewriting shards. See <a href="../reference/scripts.html#usage-metrics">Scripts</a>.</p>
+
+      <h2 id="isolation">Isolated from the pipeline</h2>
+
+      <p>It is operator-run, never part of a pipeline stage. No agent, command or skill may reference <code>PRPs/metrics</code>; the <code>metrics-isolation</code> check enforces it. A reviewer that knows its own pass rate has an incentive to approve leniently.</p>
+
+      <h2 id="status">Status</h2>
+
+      <div class="kv">
+        <dt>Shipped</dt><dd>Phases 1&ndash;4 of <code>PRPs/prds/usage-metrics.prd.md</code> (0.32.0): schema, materializer, scaffolding, query.</dd>
+        <dt>Deferred</dt><dd>Phase 5, automated emission via hooks, is marked <code>deferred</code> rather than pending. It is gated on evidence of need, not on cost.</dd>
+        <dt>Known gap</dt><dd>The corpus holds one project, so the cross-project value is untested against real data.</dd>
+      </div>
+
+      <div class="page-footer"></div>
+    </main>
+    <aside class="toc"></aside>
+  </div>
+  <script src="../assets/js/app.js"></script>
+</body>
+</html>
