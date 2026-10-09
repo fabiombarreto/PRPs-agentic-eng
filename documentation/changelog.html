@@ -30,9 +30,31 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <h3 id="unreleased-added">Added</h3>
+      <p>Nothing yet.</p>
+
+      <h2 id="v0-45-0">0.45.0 &#8212; 2026-10-09</h2>
+
+      <p>Minted sessions. In <code>super-ensino</code> every QA run needed a manual headed login per role, so the runner
+        could not start without a human typing a password. This release ships phases 1&ndash;3 of
+        <code>PRPs/prds/test-auth-minted-session.prd.md</code>: a fifth test-auth kit mechanism in which no login happens
+        at all. Phase 4, the <code>super-ensino</code> dogfood, follows on this release. The local-only guard, the
+        secrecy rules, the review loop and <code>capture.mjs</code> are unchanged.</p>
+
+      <h3 id="v0-45-0-added">Added</h3>
 
       <ul>
+        <li><strong>The <code>minted</code> login mechanism</strong> &mdash; a role declares a <code>mint</code> block
+          in <code>PRPs/auth/login.config.json</code> (an argv command, the local store it touches, and a
+          <code>status</code> only the operator sets to <code>confirmed</code>). The login script runs the confirmed
+          command with <code>shell: false</code>, a 120-second timeout and a 64 KiB stdout bound, after the local-only
+          guard accepts the base URL, every URL-bearing argument and the store. The command prints one JSON object
+          (<code>cookies</code>, <code>localStorage</code>, <code>token</code>, <code>expires_at</code>); the kit places
+          the values, proves them with the existing probes before saving, prints <code>SESSION_MINTED</code>, and mints
+          again by itself on expiry or a failed proof. It never falls back to a headed login or a prompt. New halts:
+          <code>FAILED_MINT_UNCONFIRMED</code>, <code>FAILED_MINT_COMMAND_MISSING</code>, <code>FAILED_MINT_COMMAND</code>,
+          <code>FAILED_MINT_OUTPUT</code>. The template stamp becomes <code>auth-login/2</code>, so existing login
+          scripts halt <code>FAILED_KIT_SCRIPT_STALE</code> until <code>/relay-auth-scripts --refresh</code>
+          regenerates them.</li>
         <li><strong>Runner integration of minted sessions</strong> &mdash; <code>/relay-qa-run</code> re-mints a
           <code>minted</code> role's session before the first case when its recorded expiry is within 240 seconds of
           the run start (the runner passes the kit login script <code>--force</code>), registers IndexedDB record keys
@@ -58,7 +80,7 @@
           entries for the three new Concepts pages.</li>
       </ul>
 
-      <h3 id="unreleased-changed">Changed</h3>
+      <h3 id="v0-45-0-changed">Changed</h3>
 
       <ul>
         <li><strong><code>governance/decisions.html</code></strong> &mdash; entry 104 registers F10 as a backlog item:
