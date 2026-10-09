@@ -61,6 +61,21 @@ Partial plans let the objective half of mixed cases run and leave evidence.
 
 We'll know we're right when re-running the same two reports drives at least 9 of their 14 reachable cases to `pass` or `fail`, against 1 of 14 on 0.42.0. Every remaining case must carry a named reason other than an inexpressible state, value or driver, and every `pass` must check out against its evidence.
 
+*Result 2026-10-09, after both projects were re-run.* `praesto-sum` ran on 0.44.0 (2026-10-06). `super-ensino` ran on 0.45.0 (2026-10-09), because on 0.44.0 every role still needed a manual headed login; the minted sessions of `PRPs/prds/test-auth-minted-session.prd.md` removed that.
+- **The target was not met: 1 of 14 driver-executed.** `praesto-sum` reached 1 of 2: case 23 passed, and case 20 was `PARTIAL_REMAINDER`. `super-ensino` reached 0 of 12. The 0.42.0 baseline was also 1 of 14.
+- **What held:**
+  - zero false `pass`;
+  - zero `blocked` cases (0.42.0 had 3 `STATE_UNDECLARED`);
+  - every seed declaration ran;
+  - 5 cases were partially executed with every objective step passed;
+  - both reports stayed byte-identical;
+  - the secrecy scans found 0 values.
+- **Why the rate stayed flat.** The new vocabulary reached the cases, but it carried none of them all the way to a driver-executed outcome:
+  - **Grounding defects (`super-ensino` F1, F2).** `ground` snapshots the SPA before it renders: 2 entries where the settled page has 66. It also ignores `- paragraph:` text, so T-1, T-2 and A-1 have no plan, and A-1 regressed from `pass` to `needs-human`.
+  - **Vocabulary gaps (`super-ensino` F4, `praesto-sum` PS16).** There is no request sent without the session (A-2, S-2), no input-value assertion (S-1), no absence or state assertion, and no grounding after an interaction (S-4, case 20).
+  - **Cases no local driver reaches.** An e-mail inbox (T-3), SMS or e-mail (S-3), counting network requests (S-6) and a visual preview (S-5's remainder). X-1 hits a product defect: the page shows an error, not the login form.
+- **Next:** the target itself is under review (2026-10-09): which part of the 14 is reachable at all, and what the metric should measure. The grounding and redaction defects (F1, F2, F3) are candidates for a separate PRD.
+
 ## What We're NOT Building
 
 - **Any change to `/relay-qa-report` or to the reports themselves** — the metric depends on re-running byte-identical reports; every improvement lives on the plan and runner side.
@@ -230,7 +245,7 @@ Current value of `tdd` in `docs/context/methodology.md`: **false**. Test-after o
 | 5 | Declared API origins | Additional local API origins and a session-derived header for the HTTP driver; guard on each origin; header value never printed (AC-12) | complete | - | lane:qa-run | 1 | PRPs/plans/qa-runner-case-vocabulary-phase-5-declared-api-origins.plan.md |
 | 6 | UI grounding | Plan-time redacted accessibility snapshot per route and role; strict role-and-name locators in the browser vocabulary; `STEP_UNGROUNDED` (AC-13) | complete | - | lane:qa-run | 1 | PRPs/plans/qa-runner-case-vocabulary-phase-6-ui-grounding.plan.md |
 | 7 | Per-test record resolution | Match a cited `describe`/test title against JUnit classname/name; file-level fallback recorded as `granularity: file` (AC-14) | complete | - | lane:qa-run | 1 | PRPs/plans/qa-runner-case-vocabulary-phase-7-per-test-record-resolution.plan.md |
-| 8 | Dogfood | Re-run the same byte-identical reports in `super-ensino` (`portal`) and `praesto-sum` (`missed-sweep`) on the release that ships phases 1–6; per-case comparison against the 0.42.0 tables; secrecy scan (AC-15, AC-16) | pending | - | - | 3, 4, 5, 6 | - |
+| 8 | Dogfood | Re-run the same byte-identical reports in `super-ensino` (`portal`) and `praesto-sum` (`missed-sweep`) on the release that ships phases 1–6; per-case comparison against the 0.42.0 tables; secrecy scan (AC-15, AC-16). Ran 2026-10-09 (`praesto-sum` on 0.44.0, `super-ensino` on 0.45.0): 1/14 driver-executed against the ≥ 9/14 target, 0 false pass, 0 blocked, 5 partially executed, 0 secret values; target under review (see the Key Hypothesis result) | complete | - | - | 3, 4, 5, 6 | - |
 
 Every phase from 1 to 7 edits `plugins/relay/scripts/qa-run.mjs` and `plugins/relay/commands/relay-qa-run.md`, so they share `lane:qa-run` and run serially even where `Depends` would allow parallel lanes.
 
@@ -300,6 +315,16 @@ Every phase from 1 to 7 edits `plugins/relay/scripts/qa-run.mjs` and `plugins/re
   - zero false `pass`, and zero credential values found;
   - both reports are byte-identical;
   - every remaining case carries a named reason other than an inexpressible state, value or driver.
+- **Result 2026-10-09** (`super-ensino` `PRPs/reports/qa-runner-dogfood/dogfood-report-0.45.0.md`; `praesto-sum` `PRPs/reports/missed-sweep/dogfood-report-0.44.0.md`):
+
+  | Signal | Result | Met |
+  |---|---|---|
+  | ≥ 9 of 14 driver-executed | 1 of 14 (`praesto-sum` 1/2, `super-ensino` 0/12) | No |
+  | `praesto-sum` case 23 driver-executed | `pass`, holds against its evidence | Yes |
+  | One case converted per `super-ensino` cause (F8, F2, F9) | Each cause's objective steps now run (seeds pass; the `api` origin request passes for A-2 and S-2; grounded steps pass for S-1 and S-5), but none of those cases completes | No |
+  | Zero false `pass`, zero credential values | 0 and 0 | Yes |
+  | Reports byte-identical | Both | Yes |
+  | No remaining inexpressible-state, value or driver reason | `NO_PLAN_ENTRY` remains on T-1, T-2, A-1 and S-4 (grounding) and on S-6 (network counting) | No |
 
 ---
 
