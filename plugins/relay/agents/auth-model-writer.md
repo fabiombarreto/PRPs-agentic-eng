@@ -94,6 +94,7 @@ Search the repository statically for:
   code that reads that token from `localStorage` or IndexedDB — record both with
   `file:line` evidence, the header name, the browser location and the token's
   environment-variable NAME only (never a secret file, never a value).
+- A `minted` mechanism: code that issues a session or its tokens for an existing user without a login request (a management or seed script, a test-only token helper, or a framework shell script) — record it with `file:line` evidence, the command the project declares for it as an argv list when one is documented (else "none declared" with a matching row under `## Open Questions and Assumptions`), and the local store it touches; never a token, cookie or credential value, and never a secret file.
 - An element or greeting component that renders only when a user is signed in
   (and, separately, one specific to a role): PROPOSE it as a candidate
   authenticated-only marker with `file:line` evidence, never guess one; an

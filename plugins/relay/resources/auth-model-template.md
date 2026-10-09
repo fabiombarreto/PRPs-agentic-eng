@@ -58,6 +58,8 @@ header, and for browser use `localStorage` or IndexedDB with the declared
 database, object store and key — and the token's source as an environment
 variable NAME, never its value)
 
+(a session issued by a local project command with no login request at all is the `minted` mechanism: record the file:line of the code that issues the session or its tokens, the command the project declares for it as an argv list or "none declared", and the local store it touches; never a token, cookie or credential value)
+
 ## Login Flow
 
 1. <step> — <scriptable | not scriptable>
@@ -75,6 +77,8 @@ a role may also state, as one line, a pre-authenticated target:
 alternative local target: <url or none>`, recorded by description and never a
 credential, token or cookie value, the injecting code's `file:line` being
 mandatory)
+
+(a `minted` flow has no login step: state that the session is issued by the declared command, mark it scriptable, and cite the issuing code's file:line)
 
 ## Session and Token Model
 

@@ -91,11 +91,11 @@ Record `pass` or `fail` with a short rationale on failure. Run all seven.
   this row when it names the header or browser location that presents the token
   (`localStorage`, or IndexedDB with database, object store and key) with
   `file:line` evidence. A recorded pre-authenticated target with no `file:line`
-  naming the injecting code fails this row.
+  naming the injecting code fails this row. A `minted` mechanism satisfies this row when it names the code that issues the session or its tokens with `file:line` evidence (verify by `Read`), the declared command or an explicit "none declared", and the local store it touches.
 - **R-AM2** — A login flow is present for every mechanism, each marked
   scriptable or not scriptable. A `static-token` flow states its declared
   presentation and that no login request exists. A declared browser probe
-  states its route and its marker.
+  states its route and its marker. A `minted` flow states that no login request exists and marks the flow scriptable.
 - **R-AM3** — The role and permission matrix lists every role found in the
   evidence, each with guard evidence and tenant scope.
 - **R-AM4** — `## Local User Creation` names, per role, a declared creation path
@@ -112,7 +112,7 @@ Record `pass` or `fail` with a short rationale on failure. Run all seven.
   environment-variable name) fails this row, and so does a browser probe marker
   or role marker that is a credential-shaped value (a JWT, a password literal, a
   cookie value), and so does a pre-authenticated target line carrying a
-  credential-shaped value.
+  credential-shaped value. A model that names a `minted` token, cookie or localStorage VALUE (rather than the issuing code and store) fails this row.
 - **R-AM7** — No unresolved `TBD - needs validation` remains without a matching
   row under `## Open Questions and Assumptions`.
 

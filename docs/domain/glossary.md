@@ -388,7 +388,14 @@ application: an approved `auth-model.md` (`/relay-auth-setup`), one login
 script per role plus `login.config.json` (`/relay-auth-scripts`), and the seed
 declarations in `qa-seed.json` (`/relay-qa-seed`). Everything is local-only,
 secrets are ignored by proven ignore rules, and no credential value is ever
-written into a tracked file or report.
+written into a tracked file or report. An auth model may also declare a
+`minted` mechanism: the session is issued by a local project command with no
+login request, and the model records only the issuing code's file:line, the
+declared argv command and the local store it touches, never a credential.
+For a `minted` role `/relay-qa-run` passes the login script `--force` when the
+recorded expiry is within 240 seconds of the run start, registers IndexedDB
+values as secrets, and reports the five minted login halts as named `blocked`
+reasons.
 
 ## Test Runner
 

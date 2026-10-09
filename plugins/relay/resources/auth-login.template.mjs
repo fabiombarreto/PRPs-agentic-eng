@@ -22,7 +22,7 @@
  * Config: <root>/PRPs/auth/login.config.json
  *   { "baseUrl": string,
  *     "roles": { "<role>": {
- *       "mechanism": "form" | "api" | "headed" | "static-token",
+ *       "mechanism": "form" | "api" | "headed" | "static-token" | "minted",
  *       "loginPath": string | null,
  *       "form": { "usernameSelector", "passwordSelector", "submitSelector" } | null,
  *       "api": { "path", "method", "usernameField", "passwordField", "tokenPath": string | null } | null,
@@ -32,6 +32,8 @@
  *       "credentials": { "usernameEnv": string | null, "passwordEnv": string | null },
  *       "userCreation": { "command": string[] | null },
  *       "needsIndexedDb": boolean (optional, default false),
+ *       "mint": null | { "command": string[] | null, "store": string, "status": "proposed" | "confirmed",
+ *         "header": string (optional, default "Authorization"), "valuePrefix": string (optional, default "Bearer ") },
  *       "staticToken": { "tokenEnv": string | null, "header": string, "valuePrefix": string,
  *         "browser": null | { "kind": "localStorage" | "indexedDB", "originPath": string,
  *           "key": string, "database": string | null, "store": string | null,
@@ -75,6 +77,21 @@
  * FAILED_TOKEN_TRANSPORT (the request itself failed), FAILED_TOKEN_UNPROVEN
  * (2xx without the token too) and FAILED_TOKEN_PLACEMENT (the token could not
  * be placed at the declared browser location).
+ * The "minted" mechanism performs no login: the session is issued by a local
+ * project command the operator confirmed. The script runs mint.command (an argv
+ * array, shell:false, 120 s timeout, 65536-byte stdout bound, stderr never
+ * captured) only when mint.status is exactly "confirmed", after the local-only
+ * guard has accepted baseUrl, every URL-bearing argument and mint.store. The
+ * command prints one JSON object with the optional keys "cookies" (name to
+ * string), "localStorage" (key to string), "token" (string) and "expires_at"
+ * (ISO-8601 instant); at least one of cookies, localStorage or token must be
+ * non-empty and nothing else is allowed. The values are placed on the baseUrl
+ * origin, proven in both directions before anything is saved, and saved
+ * atomically; a value-free expiry sidecar is kept beside the session. Halts:
+ * FAILED_MINT_UNCONFIRMED, FAILED_MINT_COMMAND_MISSING, FAILED_NON_LOCAL_TARGET,
+ * FAILED_MINT_COMMAND and FAILED_MINT_OUTPUT; none prints a value. Success
+ * prints SESSION_MINTED. An expired or unproven saved session is re-minted by
+ * the same command; there is never a headed fallback or a prompt.
  * "probe" may be null (or absent) for a form, api or headed role that declares a
  * browserProbe. "maxAgeMinutes" may be null for a static-token role only: the
  * token never expires by age and is re-proven on every reuse; every other role
@@ -82,7 +99,7 @@
  * A missing required field or a value equal to `TBD - needs validation`
  * halts FAILED_LOGIN_CONFIG_INCOMPLETE naming the field.
  *
- * Exit codes: 0 SESSION_REUSED or SESSION_CREATED, 1 a named FAILED_* halt,
+ * Exit codes: 0 SESSION_REUSED, SESSION_CREATED or SESSION_MINTED, 1 a named FAILED_* halt,
  * 2 bad arguments.
  *
  * The consumer contract: the printed value `auth_mode: storage-state:<path>`
@@ -92,7 +109,7 @@
  * Node >=18, ESM.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, statSync, unlinkSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
@@ -102,13 +119,17 @@ import { spawnSync } from 'node:child_process';
 // change to this template. It is an explicit stamp and not a content hash
 // because every template test runs a deliberately mutated copy, which a hash
 // would make halt stale.
-const KIT_TEMPLATE_ID = 'auth-login/1';
+const KIT_TEMPLATE_ID = 'auth-login/2';
 const ROLE = '__RELAY_ROLE__';
 const ROLE_PATTERN = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const TBD = 'TBD - needs validation';
 const SESSION_REL = `PRPs/auth/.sessions/${ROLE}.json`;
 const TOKEN_REL = `PRPs/auth/.sessions/${ROLE}.token.json`;
 const CREDENTIALS_REL = 'PRPs/auth/credentials.json';
+const MINT_REL = `PRPs/auth/.sessions/${ROLE}.mint.json`;
+const MINT_TIMEOUT_MS = 120000;
+const MINT_MAX_STDOUT_BYTES = 65536;
+const MINT_EXPIRY_FLOOR_MS = 60000;
 
 // The absence check must wait at least the full presence window plus a settle
 // margin, never less: concluding "absent" earlier would let a page that has not
@@ -202,7 +223,7 @@ function getPath(obj, dotted) {
 function incompleteField(role) {
   // A role that declares a browser probe does not consult the HTTP probe at all
   // (form, api, headed), so probe.path and probe.method are optional for it.
-  const probeOptional = hasBrowserProbe(role) && ['form', 'api', 'headed'].includes(role.mechanism);
+  const probeOptional = hasBrowserProbe(role) && ['form', 'api', 'headed', 'minted'].includes(role.mechanism);
   const tbd = findTbd(probeOptional ? { ...role, probe: undefined } : role, `roles.${ROLE}`);
   if (tbd) return tbd;
   /** @type {string[]} */
@@ -240,6 +261,16 @@ function incompleteField(role) {
         return `roles.${ROLE}.staticToken.browser.kind`;
       }
     }
+  } else if (role.mechanism === 'minted') {
+    const mint = role.mint;
+    if (!mint || typeof mint !== 'object' || Array.isArray(mint)) return `roles.${ROLE}.mint`;
+    const cmd = mint.command;
+    if (cmd === undefined) return `roles.${ROLE}.mint.command`;
+    if (cmd !== null && (!Array.isArray(cmd) || cmd.length === 0 || cmd.some((/** @type {any} */ a) => typeof a !== 'string' || a === ''))) {
+      return `roles.${ROLE}.mint.command`;
+    }
+    if (mint.header !== undefined && typeof mint.header !== 'string') return `roles.${ROLE}.mint.header`;
+    if (mint.valuePrefix !== undefined && typeof mint.valuePrefix !== 'string') return `roles.${ROLE}.mint.valuePrefix`;
   } else {
     return `roles.${ROLE}.mechanism`;
   }
@@ -1063,6 +1094,230 @@ async function placeStaticToken(cfg, role, token, pw, guard, root, allowedHosts)
 }
 
 /**
+ * The gate for a minted role: the declared command runs only when the operator
+ * set mint.status to exactly "confirmed". A missing command is reported before
+ * an unconfirmed status (there is nothing to confirm).
+ * @param {any} role
+ * @returns {string | null} a halt line, or null when the command may run
+ */
+function mintGate(role) {
+  if (role.mint.command === null) {
+    return `FAILED_MINT_COMMAND_MISSING: roles.${ROLE}.mint.command in PRPs/auth/login.config.json declares no command; nothing was run`;
+  }
+  if (role.mint.status !== 'confirmed') {
+    return `FAILED_MINT_UNCONFIRMED: roles.${ROLE}.mint.status in PRPs/auth/login.config.json is not "confirmed"; the command was not run`;
+  }
+  return null;
+}
+
+/**
+ * Local equivalent of the runner's store normalizer (the template imports nothing from it).
+ * @param {any} store
+ * @returns {string | null} a URL string to hand to the guard, or null when unevaluable
+ */
+function normalizeMintStore(store) {
+  if (typeof store !== 'string' || store === '' || /\s/.test(store)) return null;
+  if (store.includes('://')) return store;
+  if (/^[A-Za-z0-9._-]+(:\d+)?$/.test(store)) return `http://${store}`;
+  return null;
+}
+
+/**
+ * The local-only guard on every URL-bearing argument of the mint command and on
+ * the declared store. A store the guard cannot evaluate is refused.
+ * @param {any} role
+ * @param {{ checkTarget: Function }} guard
+ * @param {string} root
+ * @returns {Promise<string | null>} a halt line, or null when everything is local
+ */
+async function guardMint(role, guard, root) {
+  for (const a of role.mint.command) {
+    const scheme = a.indexOf('://');
+    if (scheme < 0) continue;
+    // A flag form such as --url=<URL> carries the URL after its first "=".
+    const eq = a.indexOf('=');
+    const candidate = eq >= 0 && eq < scheme ? a.slice(eq + 1) : a;
+    const r = await guard.checkTarget(candidate, { root });
+    if (!r.ok) {
+      return `FAILED_NON_LOCAL_TARGET: a mint command argument names a non-local URL (${r.reason}); the command was not run`;
+    }
+  }
+  const store = normalizeMintStore(role.mint.store);
+  if (store === null) {
+    return 'FAILED_NON_LOCAL_TARGET: the mint block names no checkable store; the command was not run';
+  }
+  const r = await guard.checkTarget(store, { root });
+  if (!r.ok) {
+    return `FAILED_NON_LOCAL_TARGET: the declared mint store is not local (${r.reason}); the command was not run`;
+  }
+  return null;
+}
+
+/**
+ * Run the declared mint command: no shell, bounded time and stdout, stderr never captured.
+ * @param {string} root
+ * @param {string[]} argv
+ * @returns {{ ok: true, text: string } | { ok: false, halt: string }}
+ */
+function runMintCommand(root, argv) {
+  const r = spawnSync(argv[0], argv.slice(1), {
+    shell: false,
+    cwd: root,
+    stdio: ['ignore', 'pipe', 'ignore'],
+    encoding: 'utf8',
+    maxBuffer: MINT_MAX_STDOUT_BYTES,
+    timeout: MINT_TIMEOUT_MS,
+  });
+  if (r.error) {
+    if (/** @type {any} */ (r.error).code === 'ENOBUFS') {
+      return { ok: false, halt: 'FAILED_MINT_COMMAND: the output exceeded the 65536-byte bound' };
+    }
+    return { ok: false, halt: 'FAILED_MINT_COMMAND: the command could not be run or timed out' };
+  }
+  if (r.status !== 0) {
+    return { ok: false, halt: `FAILED_MINT_COMMAND: the command exited with status ${r.status}` };
+  }
+  return { ok: true, text: String(r.stdout || '') };
+}
+
+/**
+ * Enforce the closed output contract. Every halt names a key or a type, never a value.
+ * @param {string} text
+ * @returns {{ ok: true, out: { cookies: Record<string, string>, localStorage: Record<string, string>, token: string | null, expiresAtMs: number | null } } | { ok: false, halt: string }}
+ */
+function parseMintOutput(text) {
+  /** @param {string} what */
+  const bad = (what) => ({ ok: /** @type {false} */ (false), halt: `FAILED_MINT_OUTPUT: ${what}` });
+  /** @type {any} */ let obj;
+  try {
+    obj = JSON.parse(text);
+  } catch {
+    return bad('the output is not one JSON object');
+  }
+  if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) return bad('the output is not one JSON object');
+  for (const k of Object.keys(obj)) {
+    if (!['cookies', 'localStorage', 'token', 'expires_at'].includes(k)) {
+      return bad(`the output has an unexpected key ${JSON.stringify(k)}`);
+    }
+  }
+  /** @type {Record<string, Record<string, string>>} */
+  const maps = { cookies: {}, localStorage: {} };
+  for (const name of ['cookies', 'localStorage']) {
+    if (obj[name] === undefined) continue;
+    const m = obj[name];
+    if (m === null || typeof m !== 'object' || Array.isArray(m)) return bad(`${JSON.stringify(name)} must map names to strings`);
+    for (const k of Object.keys(m)) {
+      if (k === '' || typeof m[k] !== 'string') return bad(`${JSON.stringify(name)} must map names to strings`);
+    }
+    maps[name] = m;
+  }
+  /** @type {string | null} */ let token = null;
+  if (obj.token !== undefined) {
+    if (typeof obj.token !== 'string' || obj.token === '') return bad('"token" must be a non-empty string');
+    token = obj.token;
+  }
+  /** @type {number | null} */ let expiresAtMs = null;
+  if (obj.expires_at !== undefined) {
+    const ms = typeof obj.expires_at === 'string' ? Date.parse(obj.expires_at) : NaN;
+    if (!Number.isFinite(ms) || ms <= Date.now()) return bad('"expires_at" must be an ISO-8601 instant in the future');
+    expiresAtMs = ms;
+  }
+  if (Object.keys(maps.cookies).length === 0 && Object.keys(maps.localStorage).length === 0 && token === null) {
+    return bad('the output carries no cookies, localStorage entries or token');
+  }
+  return { ok: true, out: { cookies: maps.cookies, localStorage: maps.localStorage, token, expiresAtMs } };
+}
+
+/**
+ * Build a Playwright storage state directly from the parsed output (no browser):
+ * cookies on the baseUrl host with path "/", localStorage on the baseUrl origin.
+ * @param {any} cfg
+ * @param {{ cookies: Record<string, string>, localStorage: Record<string, string>, expiresAtMs: number | null }} out
+ * @returns {{ cookies: any[], origins: any[] }}
+ */
+function buildMintedState(cfg, out) {
+  const base = new URL(cfg.baseUrl);
+  const expires = out.expiresAtMs !== null ? Math.floor(out.expiresAtMs / 1000) : -1;
+  const cookies = Object.keys(out.cookies).map((name) => ({
+    name,
+    value: out.cookies[name],
+    domain: base.hostname,
+    path: '/',
+    expires,
+    httpOnly: false,
+    secure: base.protocol === 'https:',
+    sameSite: 'Lax',
+  }));
+  const entries = Object.keys(out.localStorage).map((name) => ({ name, value: out.localStorage[name] }));
+  return { cookies, origins: entries.length > 0 ? [{ origin: base.origin, localStorage: entries }] : [] };
+}
+
+/**
+ * The token artifact shape for a minted role, so the proof presents the token
+ * exactly as the runner will.
+ * @param {any} role
+ * @param {string} token
+ * @returns {{ token: string, header: string, value_prefix: string }}
+ */
+function mintTokenArt(role, token) {
+  if (typeof role.mint.header === 'string') {
+    return { token, header: role.mint.header, value_prefix: typeof role.mint.valuePrefix === 'string' ? role.mint.valuePrefix : '' };
+  }
+  return { token, header: 'Authorization', value_prefix: typeof role.mint.valuePrefix === 'string' ? role.mint.valuePrefix : 'Bearer ' };
+}
+
+/**
+ * Reuse check for a minted session: expiry by sidecar, token artifact, token exp
+ * claim or maxAgeMinutes means re-mint; otherwise the two-direction proof decides.
+ * @param {string} root
+ * @param {any} cfg
+ * @param {any} role
+ * @param {() => any} getPlaywright
+ * @param {{ isAllowedHost: Function }} guard
+ * @param {Set<string>} allowedHosts
+ * @returns {Promise<boolean | { halt: string }>} a failed proof re-mints; a halting class keeps its halt
+ */
+async function mintedReusable(root, cfg, role, getPlaywright, guard, allowedHosts) {
+  const file = join(root, SESSION_REL);
+  if (!existsSync(file)) return false;
+  const state = readJson(root, SESSION_REL);
+  if (!state || !Array.isArray(state.cookies) || !Array.isArray(state.origins)) return false;
+  if (role.maxAgeMinutes !== null && Date.now() - statSync(file).mtimeMs >= role.maxAgeMinutes * 60000) return false;
+  const horizon = Date.now() + MINT_EXPIRY_FLOOR_MS;
+  const sidecar = readJson(root, MINT_REL);
+  if (sidecar && typeof sidecar.expires_at === 'string') {
+    const ms = Date.parse(sidecar.expires_at);
+    if (Number.isFinite(ms) && ms <= horizon) return false;
+  }
+  const art = readJson(root, TOKEN_REL);
+  if (art) {
+    if (typeof art.expires_at === 'string') {
+      const ms = Date.parse(art.expires_at);
+      if (Number.isFinite(ms) && ms <= horizon) return false;
+    }
+    if (typeof art.token === 'string') {
+      const exp = jwtExp(art.token);
+      if (exp !== null && exp * 1000 <= horizon) return false;
+    }
+  }
+  if (role.sessionCookie) {
+    const nowSec = Date.now() / 1000;
+    const hit = state.cookies.find(
+      (/** @type {any} */ c) => c.name === role.sessionCookie && (c.expires === -1 || c.expires > nowSec + 60),
+    );
+    if (!hit) return false;
+  }
+  if (!hasBrowserProbe(role)) {
+    const url = sameOriginUrl(cfg.baseUrl, role.probe.path);
+    if (!url) return false;
+  }
+  const pw = getPlaywright();
+  if (!pw) return false;
+  const proof = await proveSession(cfg, role, file, readTokenArtifact(root), pw, guard, allowedHosts);
+  return reuseDecision(proof);
+}
+
+/**
  * @param {string[]} argv
  * @returns {Promise<number>} exit code
  */
@@ -1156,6 +1411,13 @@ async function main(argv) {
     err(`FAILED_LOGIN_CONFIG_INCOMPLETE: ${missing}`);
     return 1;
   }
+  if (role.mechanism === 'minted') {
+    const gateHalt = mintGate(role);
+    if (gateHalt) {
+      err(gateHalt);
+      return 1;
+    }
+  }
 
   /** @type {any} */ let pw = null;
   let pwTried = false;
@@ -1183,7 +1445,9 @@ async function main(argv) {
     ? false
     : role.mechanism === 'static-token'
       ? await staticTokenReusable(root, cfg, role, getPlaywright, guard, target.allowedHosts)
-      : await sessionReusable(root, cfg, role, getPlaywright, guard, target.allowedHosts);
+      : role.mechanism === 'minted'
+        ? await mintedReusable(root, cfg, role, getPlaywright, guard, target.allowedHosts)
+        : await sessionReusable(root, cfg, role, getPlaywright, guard, target.allowedHosts);
   if (typeof reuse === 'object') {
     err(reuse.halt);
     return 1;
@@ -1197,6 +1461,7 @@ async function main(argv) {
   /** @type {any | null} */ let state = null;
   /** @type {string | null} */ let token = null;
   let promptedToken = false;
+  /** @type {number | null} */ let mintExpiresAtMs = null;
 
   if (role.mechanism === 'headed') {
     if (!process.stdin.isTTY) {
@@ -1246,6 +1511,26 @@ async function main(argv) {
     }
     token = source.token;
     promptedToken = source.prompted;
+  } else if (role.mechanism === 'minted') {
+    const refused = await guardMint(role, guard, root);
+    if (refused) {
+      err(refused);
+      return 1;
+    }
+    if (!requirePlaywright()) return 1;
+    const ran = runMintCommand(root, role.mint.command);
+    if (!ran.ok) {
+      err(ran.halt);
+      return 1;
+    }
+    const parsed = parseMintOutput(ran.text);
+    if (!parsed.ok) {
+      err(parsed.halt);
+      return 1;
+    }
+    state = buildMintedState(cfg, parsed.out);
+    token = parsed.out.token;
+    mintExpiresAtMs = parsed.out.expiresAtMs;
   } else {
     let creds = resolveCredentials(root, role);
     if (!creds && role.userCreation && Array.isArray(role.userCreation.command) && role.userCreation.command.length > 0) {
@@ -1281,7 +1566,8 @@ async function main(argv) {
   }
 
   const hasCookies = state && Array.isArray(state.cookies) && state.cookies.length > 0;
-  if (!state || !Array.isArray(state.cookies) || !Array.isArray(state.origins) || (!hasCookies && token === null)) {
+  const hasLocalStorage = state && Array.isArray(state.origins) && state.origins.some((/** @type {any} */ o) => o && Array.isArray(o.localStorage) && o.localStorage.length > 0);
+  if (!state || !Array.isArray(state.cookies) || !Array.isArray(state.origins) || (!hasCookies && token === null && !hasLocalStorage)) {
     err(`FAILED_LOGIN_REJECTED: the login for role ${ROLE} yielded no session`);
     return 1;
   }
@@ -1293,7 +1579,7 @@ async function main(argv) {
   // Prove the fresh state in both directions before anything is persisted.
   /** @type {{ field?: 'marker' | 'roleMarker', existed?: boolean }} */
   const probeDetail = {};
-  const saveProof = await proveSession(cfg, role, state, token !== null ? { token } : null, pw, guard, target.allowedHosts, probeDetail);
+  const saveProof = await proveSession(cfg, role, state, role.mechanism === 'minted' && token !== null ? mintTokenArt(role, token) : (token !== null ? { token } : null), pw, guard, target.allowedHosts, probeDetail);
   if (saveProof === 'expired' && hasBrowserProbe(role)) {
     // The login completed; the declared browser probe is what failed, so name it.
     const what = probeDetail.existed ? 'an element matching it existed but was not visible' : 'no element matched it';
@@ -1331,7 +1617,28 @@ async function main(argv) {
       artifact.header = role.staticToken.header;
       artifact.value_prefix = role.staticToken.valuePrefix;
     }
+    if (role.mechanism === 'minted') {
+      const art = mintTokenArt(role, token);
+      artifact.header = art.header;
+      artifact.value_prefix = art.value_prefix;
+      if (mintExpiresAtMs !== null) artifact.expires_at = new Date(mintExpiresAtMs).toISOString();
+    }
     writeSecret(root, TOKEN_REL, `${JSON.stringify(artifact, null, 2)}\n`);
+  } else if (role.mechanism === 'minted') {
+    // A token artifact left by an earlier mint must not outlive a mint that issued none.
+    try {
+      unlinkSync(join(root, TOKEN_REL));
+    } catch {
+      // no earlier artifact
+    }
+  }
+  if (role.mechanism === 'minted') {
+    const jwt = token !== null ? jwtExp(token) : null;
+    const sidecarExpiry = mintExpiresAtMs !== null ? new Date(mintExpiresAtMs).toISOString() : jwt !== null ? new Date(jwt * 1000).toISOString() : null;
+    writeSecret(root, MINT_REL, `${JSON.stringify({ minted_at: new Date().toISOString(), expires_at: sidecarExpiry }, null, 2)}\n`);
+    process.stdout.write(`SESSION_MINTED: ${SESSION_REL}\n`);
+    process.stdout.write(`auth_mode: storage-state:${SESSION_REL}\n`);
+    return 0;
   }
   process.stdout.write(`SESSION_CREATED: ${SESSION_REL}\n`);
   process.stdout.write(`auth_mode: storage-state:${SESSION_REL}\n`);

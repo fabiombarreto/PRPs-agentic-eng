@@ -33,6 +33,13 @@
       <h3 id="unreleased-added">Added</h3>
 
       <ul>
+        <li><strong>Runner integration of minted sessions</strong> &mdash; <code>/relay-qa-run</code> re-mints a
+          <code>minted</code> role's session before the first case when its recorded expiry is within 240 seconds of
+          the run start (the runner passes the kit login script <code>--force</code>), registers IndexedDB record keys
+          and values as secrets beside cookie, localStorage and token values, and reports the five minted login halts
+          (<code>FAILED_MINT_UNCONFIRMED</code>, <code>FAILED_MINT_COMMAND_MISSING</code>,
+          <code>FAILED_NON_LOCAL_TARGET</code>, <code>FAILED_MINT_COMMAND</code>, <code>FAILED_MINT_OUTPUT</code>) as
+          named <code>blocked</code> reasons.</li>
         <li><strong><a href="concepts/parallel-lanes.html">Concepts &mdash; Parallel lanes</a></strong> &mdash; what a
           lane is, the <code>Parallel</code> cell, per-lane worktrees, the <code>lane_runtime_safe</code> gate and
           <code>max_lanes_in_flight</code> cap, and lane integration at <code>/relay-commit</code>. The feature shipped
@@ -68,6 +75,11 @@
           &ldquo;Planned&rdquo; to &ldquo;Shipped&rdquo; (anchor <code>shipped-manual-qa-runner</code>; the link from the
           0.40.0 entry is updated). &ldquo;14-command surface&rdquo; corrected to 23; the shared-scripts list now
           names all scripts; decision and anti-pattern counts corrected to 104 and 17.</li>
+        <li><strong><code>reference/commands.html</code>, <code>reference/agents.html</code></strong> &mdash;
+          Kit authoring for the <code>minted</code> mechanism: the auth-model template, writer and reviewer record and
+          accept a minted mechanism with <code>file:line</code> evidence, and <code>/relay-auth-scripts</code> writes
+          the role&rsquo;s <code>mint</code> block as <code>proposed</code> (never <code>confirmed</code>) and adds
+          <code>mint</code> to roles lacking it on <code>--refresh</code>.</li>
       </ul>
 
       <h2 id="v0-44-0">0.44.0 &#8212; 2026-10-06</h2>
