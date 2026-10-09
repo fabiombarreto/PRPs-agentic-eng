@@ -554,6 +554,26 @@
         <p>Recorded in <code>docs/decisions.md</code> (2026-09-21, "Parallel test environments extend the runnable-worktree-environments registration"). Not implemented. <code>lane_runtime_safe</code> stays a hand-declared boolean, and no command provisions or tears down environments, until a dedicated PRD is authored via <code>/relay-prd</code> and approved.</p>
       </div>
 
+      <h3 id="planned-separate-from-upstream">Planned: separate relay from the upstream repository <span class="badge badge--pending">planned</span></h3>
+
+      <p>This repository is a GitHub fork of <code>Wirasm/PRPs-agentic-eng</code> and still carries the upstream plugin in <code>plugins/prp-core/</code>: 30 files, a stale snapshot of upstream commit <code>9581e15</code>. relay never imports it, but 50 tracked files cite its paths, three templates descend from it, and the history holds 75 upstream commits.</p>
+
+      <p>The operator fixed three outcomes: relay moves to a new repository that is not a fork, the copy of the upstream files is deleted, and only citations to the upstream repository remain. Before the deletion, the PRD must decide:</p>
+
+      <div class="kv">
+        <dt>Citation form</dt><dd>A permalink pinned to a full commit SHA, with line ranges valid only against that SHA. Whether the 65 historical plan and report files and the APPROVED PRDs keep their paths with one mapping, or are rewritten.</dd>
+        <dt>History</dt><dd>Carry it over, rewrite it to drop the directory (every cited commit SHA changes), or start fresh and archive this repository.</dd>
+        <dt>Licence</dt><dd>This repository has no <code>LICENSE</code> file, and upstream&rsquo;s is MIT. The new repository needs its own, and the PRD decides whether a notice carries upstream&rsquo;s text for the three adapted templates.</dd>
+        <dt>Identity and migration</dt><dd>The new repository&rsquo;s name and owner, repository metadata in the two manifests, removal of the <code>upstream</code> remote, and re-adding the directory marketplace from the new location.</dd>
+        <dt>Rewrite set</dt><dd>The superseded 2026-04-19 entry, the counterpart anti-pattern, the README section, and the validation-check scope assertions. Citations are rewritten and verified before the directory is removed.</dd>
+        <dt>Proof</dt><dd>A check that fails on a tracked <code>plugins/prp-core/</code> file and on an unpinned upstream URL, so it cannot pass on a tree that never had the directory.</dd>
+      </div>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Registered, not scheduled</div>
+        <p>Recorded in <code>docs/decisions.md</code> (2026-10-09, "Separating relay from the upstream Wirasm repository"). Not implemented and not yet placed in a numbered project phase. The 2026-04-19 reference-only entry stays operative, and <code>plugins/prp-core/</code> stays on disk, until a dedicated PRD is authored via <code>/relay-prd</code> and approved.</p>
+      </div>
+
       <h3 id="shipped-manual-qa-runner">Shipped: manual-QA runner and local test-auth kit <span class="badge badge--done">shipped</span></h3>
 
       <p><code>/relay-qa-report</code> lists, for every case, the required state and a manual step-by-step. The manual-QA runner gives every case of a project's <code>qa-report.md</code> an outcome by executing what it can against a locally running application, and the test-auth kit under <code>PRPs/auth/</code> supplies the sessions it needs. Everything runs locally, and a runner <code>pass</code> is evidence the human signs off on, never approval.</p>
