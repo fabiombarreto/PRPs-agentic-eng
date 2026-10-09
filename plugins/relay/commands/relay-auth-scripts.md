@@ -151,7 +151,9 @@ kebab-case, de-duplicated, matching `^[a-z0-9][a-z0-9-]{0,39}$`; `--role`
 filters), derive a config entry using the exact schema documented in the header
 of `${CLAUDE_PLUGIN_ROOT}/resources/auth-login.template.mjs`:
 
-- `mechanism` is `headed` when the role is named under `## Non-Automatable Items`
+- `mechanism` is `minted` when `## Authentication Mechanisms`
+  records a `minted` mechanism for the role, `headed` when the role is named
+  under `## Non-Automatable Items`
   for SSO or MFA, `static-token` when `## Login Flow` or
   `## Authentication Mechanisms` names a shared static token presented with no
   login request, `api` when `## Login Flow` names a scriptable API login
@@ -169,6 +171,19 @@ of `${CLAUDE_PLUGIN_ROOT}/resources/auth-login.template.mjs`:
   generated script's own halts for this mechanism are `FAILED_TOKEN_UNPROVEN`,
   `FAILED_TOKEN_REJECTED`, `FAILED_TOKEN_TRANSPORT`, `FAILED_TOKEN_PLACEMENT` and
   `FAILED_INDEXEDDB_UNSUPPORTED`.
+- For a `minted` role the `mint` block is `{ "command", "store", "status" }`,
+  filled only from the model's evidence. `status` is the literal `"proposed"`
+  and is never `"confirmed"`. `command` is the argv array the model's
+  `## Authentication Mechanisms` or `## Local User Creation` records for issuing
+  the session, else the JSON value `null`. `store` is the local store the model
+  records (a local host:port or URL), else `TBD - needs validation`. `header`
+  and `valuePrefix` are written only when the model states where the API expects
+  the token. The model's `file:line` evidence of where sessions or tokens are
+  issued is reported in the final output surface beside any role whose `command`
+  is `null`, and is never written into the configuration. The generated
+  script's own halts for this mechanism are `FAILED_MINT_UNCONFIRMED`,
+  `FAILED_MINT_COMMAND_MISSING`, `FAILED_NON_LOCAL_TARGET`, `FAILED_MINT_COMMAND`
+  and `FAILED_MINT_OUTPUT`.
 - `browserProbe` is filled only when `## Login Flow` states a browser probe for
   the role: a same-origin route and an authenticated-only marker (visible text or
   a selector), optionally a role marker. Otherwise it is absent (null). A route
@@ -213,7 +228,11 @@ every selected role's script is regenerated from the installed template by the
 same single substitution and overwrites the existing file, each replaced script
 being reported. `--refresh` adds to the configuration only the fields a newer
 template introduces (`browserProbe` and `authenticatesAnonymous`, as `null`
-unless the model states them) on roles that lack them; no key that already
+unless the model states them, and `mint`, written as the proposed block
+described above for a role whose `mechanism` is already `minted` and as `null`
+for every other role) on roles that lack them. `--refresh` never changes a set
+`mechanism`, so moving a role to `minted` on an existing kit is an operator edit
+of that tracked value followed by `--refresh`; no key that already
 exists, including a `TBD - needs validation` value, is ever changed. It never
 touches a session, a token, `credentials.json` or `credentials.example.json`.
 
@@ -235,7 +254,11 @@ Report, per role:
 - the exact run line, to be run by the operator at their own terminal, where any
   credential prompt happens: `node PRPs/auth/login-<role>.mjs --plugin-root "${CLAUDE_PLUGIN_ROOT}"`;
 - the config fields still `TBD - needs validation` (each script halts on them);
-- the value the visual track consumes: `auth_mode: storage-state:PRPs/auth/.sessions/<role>.json`.
+- the value the visual track consumes: `auth_mode: storage-state:PRPs/auth/.sessions/<role>.json`;
+- for each `minted` role, that `mint.status` is `proposed`, that the operator
+  must write or review `mint.command` and set `mint.status` to `confirmed` in
+  the tracked file before the script runs anything, and the issuing code's
+  `file:line` evidence when `command` is `null`.
 
 Close with an explicit statement that no session and no credential value was
 created and that the human validation gate is unchanged. On halt, the message
@@ -254,6 +277,8 @@ explains the reason and states that nothing was written.
 - **No network request**, ever, from this command.
 - **No credential value enters the conversation.** Secret files are referenced
   by path only.
+- **Never write `confirmed`.** The generator writes `mint.status` as `proposed`
+  only; confirming a mint command is the operator's edit of a tracked file.
 - **Never `Task`-dispatch anything.**
 - **Never ask the user a question.** Unresolved fields are written as
   `TBD - needs validation`.
@@ -265,6 +290,7 @@ explains the reason and states that nothing was written.
 ## What you do NOT do
 
 - **Create a session or run a generated script.** The operator does that.
+- **Run, confirm or compose a mint command.**
 - **Store a real credential, username or token**, anywhere, in any file.
 - **Reimplement the guard or the secrecy script.** You call them.
 - **Edit the script template while copying it.** One substitution only.

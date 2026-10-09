@@ -162,7 +162,7 @@ test('AC-24: --refresh regenerates every selected script from the installed temp
     ['stamp copied', "The template's identity stamp line (`KIT_TEMPLATE_ID`) is copied with it."],
     ['skip and report staleness', 'Without `--refresh`, an existing script is skipped and reported, never overwritten, and the report says, per skipped script, whether its stamp line differs from the installed template\'s or is absent (stale).'],
     ['regenerate and overwrite', "With `--refresh`, every selected role's script is regenerated from the installed template by the same single substitution and overwrites the existing file, each replaced script being reported."],
-    ['only new fields, as null', 'adds to the configuration only the fields a newer template introduces (`browserProbe` and `authenticatesAnonymous`, as `null` unless the model states them) on roles that lack them'],
+    ['only new fields, as null', 'adds to the configuration only the fields a newer template introduces (`browserProbe` and `authenticatesAnonymous`, as `null` unless the model states them, and `mint`, written as the proposed block described above for a role whose `mechanism` is already `minted` and as `null` for every other role) on roles that lack them'],
     ['no existing key changed', 'no key that already exists, including a `TBD - needs validation` value, is ever changed'],
     ['secrets untouched', 'It never touches a session, a token, `credentials.json` or `credentials.example.json`.'],
     ['overwrite rule', 'Overwrite an existing role entry, or an existing script without `--refresh`.'],

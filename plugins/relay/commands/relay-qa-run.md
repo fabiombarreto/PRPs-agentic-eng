@@ -413,6 +413,13 @@ append ` --env-handle "<path>"` to that line verbatim. Exit 0 means every case h
 an outcome; exit 1 is an aborted run or a named halt (results are still written
 for an aborted run).
 
+For a role whose mechanism is `minted`, the runner reads the expiry the login script recorded in the
+value-free `PRPs/auth/.sessions/<role>.mint.json` (else the token artifact's `expires_at`). When that
+expiry is within 240 seconds of the run start, the runner passes the login script `--force`, so the
+script mints and proves a new session before the first case uses it. The runner never runs the mint
+command itself: the kit script does, behind its own `confirmed` gate and local-only guard. Cookie,
+localStorage, token and IndexedDB session values are all registered for redaction.
+
 ---
 
 ## Final output surface
@@ -424,7 +431,10 @@ Relay the script's summary: the four driver-executed counts, the separate
 `FAILED_PROBE_MARKER_ABSENT` (the login completed but the declared marker never became stably visible); these appear as
 named `blocked` reasons and mean a configuration or account problem, not "could not log in". A login script
 generated from a different template than the installed one is reported as `FAILED_KIT_SCRIPT_STALE`, also a named
-`blocked` reason, and the operator should run `/relay-auth-scripts --refresh`. A browser case for a role whose model
+`blocked` reason, and the operator should run `/relay-auth-scripts --refresh`. For a role whose mechanism is `minted`, the
+login halts `FAILED_MINT_UNCONFIRMED`, `FAILED_MINT_COMMAND_MISSING`, `FAILED_NON_LOCAL_TARGET`,
+`FAILED_MINT_COMMAND` and `FAILED_MINT_OUTPUT` are also named `blocked` reasons (the first two are fixed by
+the operator editing `PRPs/auth/login.config.json`). A browser case for a role whose model
 records a pre-authenticated target (a target that authenticates every request) is `blocked` with
 `FAILED_TARGET_PRE_AUTHENTICATED` unless the configuration names an alternative local target that the runner's
 anonymous check confirms clean. Every other session failure keeps `SESSION_UNAVAILABLE`. Then state explicitly:

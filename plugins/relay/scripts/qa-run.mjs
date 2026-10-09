@@ -73,6 +73,15 @@ const PROBE_BLOCK_CODES = [
   'FAILED_PROBE_MARKER_ABSENT',
   'FAILED_KIT_SCRIPT_STALE',
 ];
+/**
+ * A minted role whose recorded expiry is at most this far ahead of the run start is re-minted by the
+ * kit login script (through its existing --force flag) before any case uses it: a five-minute access
+ * token leaves at least four minutes of runway after a fresh mint, and a token minted earlier with
+ * under four minutes left is replaced. Larger than the template's own 60 s floor on purpose.
+ */
+const RUN_REMINT_MARGIN_MS = 240000;
+/** The login-script halts of the `minted` mechanism, surfaced as named blocked reasons for a minted role. */
+const MINT_BLOCK_CODES = ['FAILED_MINT_UNCONFIRMED', 'FAILED_MINT_COMMAND_MISSING', 'FAILED_NON_LOCAL_TARGET', 'FAILED_MINT_COMMAND', 'FAILED_MINT_OUTPUT'];
 /** The identity stamp line the login template carries and a generated script copies verbatim. */
 const KIT_STAMP_PATTERN = /^const KIT_TEMPLATE_ID = '([^']+)';$/m;
 /** A sentence only a template-generated login script contains (hand-written or stub scripts are not judged). */
@@ -1710,6 +1719,99 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
 // ---------------------------------------------------------------------------
 
 /**
+ * Whether a recorded session expiry is inside the pre-run re-mint margin. Anything absent,
+ * non-string or unparseable is not due: a missing sidecar must not force a re-mint.
+ * @param {any} expiresAt
+ * @param {number} nowMs
+ * @param {number} [marginMs]
+ * @returns {boolean}
+ */
+export function mintExpiryDue(expiresAt, nowMs, marginMs = RUN_REMINT_MARGIN_MS) {
+  if (typeof expiresAt !== 'string') return false;
+  const parsed = Date.parse(expiresAt);
+  if (!Number.isFinite(parsed)) return false;
+  return parsed - nowMs <= marginMs;
+}
+
+/**
+ * Every string held by IndexedDB records (keys and values, nested values included) of a saved
+ * storage-state, for secret registration. Database and store names are never collected.
+ * @param {any} state
+ * @returns {string[]}
+ */
+export function collectIndexedDbSecrets(state) {
+  /** @type {string[]} */ const found = [];
+  /** @param {any} v */
+  const walk = (v) => {
+    if (typeof v === 'string') found.push(v);
+    else if (Array.isArray(v)) for (const x of v) walk(x);
+    else if (isObj(v)) for (const x of Object.values(v)) walk(x);
+  };
+  const origins = state && Array.isArray(state.origins) ? state.origins : [];
+  for (const o of origins) {
+    for (const db of Array.isArray(o && o.indexedDB) ? o.indexedDB : []) {
+      const stores = Array.isArray(db && db.stores) ? db.stores : Array.isArray(db && db.objectStores) ? db.objectStores : [];
+      for (const store of stores) {
+        for (const rec of Array.isArray(store && store.records) ? store.records : []) {
+          if (!isObj(rec)) continue;
+          for (const field of ['key', 'value', 'keyEncoded', 'valueEncoded']) {
+            walk(rec[field]);
+            if (field === 'value' && (Array.isArray(rec[field]) || isObj(rec[field]))) found.push(JSON.stringify(rec[field]));
+          }
+        }
+      }
+    }
+  }
+  return found;
+}
+
+/**
+ * True iff the role is declared with the `minted` mechanism.
+ * @param {RunCtx} ctx
+ * @param {string} role
+ * @returns {boolean}
+ */
+function isMintedRole(ctx, role) {
+  const roles = ctx.loginConfig && isObj(ctx.loginConfig.roles) ? ctx.loginConfig.roles : null;
+  return roles !== null && Object.hasOwn(roles, role) && isObj(roles[role]) && roles[role].mechanism === 'minted';
+}
+
+/**
+ * The expiry the login script recorded for a role: the value-free mint sidecar first, then the token artifact.
+ * @param {string} root
+ * @param {string} role
+ * @returns {string | null}
+ */
+function readMintExpiry(root, role) {
+  const dir = join(root, 'PRPs', 'auth', '.sessions');
+  const side = readJsonOrNull(join(dir, `${role}.mint.json`));
+  if (side && isStr(side.expires_at)) return side.expires_at;
+  const tok = readJsonOrNull(join(dir, `${role}.token.json`));
+  return tok && isStr(tok.expires_at) ? tok.expires_at : null;
+}
+
+/**
+ * A value-free sentence for a minted login halt: only the role name and the code are interpolated.
+ * @param {string} code
+ * @param {string} role
+ * @returns {string}
+ */
+function mintBlockReason(code, role) {
+  switch (code) {
+    case 'FAILED_MINT_UNCONFIRMED':
+      return `the mint block of role ${role} is not confirmed; review it and set "status": "confirmed" in PRPs/auth/login.config.json; nothing was run, nothing was saved or reused`;
+    case 'FAILED_MINT_COMMAND_MISSING':
+      return `roles.${role}.mint.command in PRPs/auth/login.config.json declares no command; nothing was run, nothing was saved or reused`;
+    case 'FAILED_NON_LOCAL_TARGET':
+      return `the baseUrl, a URL argument or the mint store of role ${role} is not local; nothing was run, nothing was saved or reused`;
+    case 'FAILED_MINT_COMMAND':
+      return `the declared mint command of role ${role} failed, timed out or exceeded its output bound; nothing was saved or reused`;
+    default:
+      return `the mint command output of role ${role} did not match the contract (cookies, localStorage, token, expires_at); nothing was saved or reused`;
+  }
+}
+
+/**
  * Read-only stale pre-flight. A template-generated login script whose identity
  * stamp differs from the installed template's, or that carries none (scripts
  * generated before the stamp existed cannot check themselves), is stale.
@@ -1750,7 +1852,8 @@ function obtainSession(ctx, role) {
   } else if (stale !== null) {
     result = { ok: false, code: 'FAILED_KIT_SCRIPT_STALE', detail: stale };
   } else {
-    const r = spawnSync(process.execPath, [script, '--root', ctx.root, '--plugin-root', PLUGIN_ROOT], {
+    const force = isMintedRole(ctx, role) && mintExpiryDue(readMintExpiry(ctx.root, role), Date.now());
+    const r = spawnSync(process.execPath, [script, '--root', ctx.root, '--plugin-root', PLUGIN_ROOT, ...(force ? ['--force'] : [])], {
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: process.env,
@@ -1771,6 +1874,7 @@ function obtainSession(ctx, role) {
         const tok = readJsonOrNull(join(ctx.root, 'PRPs', 'auth', '.sessions', `${role}.token.json`));
         const token = tok && isStr(tok.token) && tok.token !== '' ? tok.token : null;
         if (token !== null) secrets.push(token);
+        secrets.push(...collectIndexedDbSecrets(state));
         addSecretValues(ctx.table, secrets);
         const header = tok && isStr(tok.header) && /^[A-Za-z0-9-]+$/.test(tok.header) ? tok.header : null;
         const valuePrefix = header !== null && tok && isStr(tok.value_prefix) ? tok.value_prefix : null;
@@ -2435,6 +2539,9 @@ async function executeCase(ctxOrNull, kase, planByIndex, target, makeCtx, root, 
     }
     if (!s.ok && PROBE_BLOCK_CODES.includes(s.code)) {
       return out(blocked(s.code, `the kit's session probe for role ${role} halted; nothing was saved or reused`));
+    }
+    if (!s.ok && MINT_BLOCK_CODES.includes(s.code) && isMintedRole(ctx, role)) {
+      return out(blocked(s.code, mintBlockReason(s.code, role)));
     }
     if (!s.ok) return out(blocked('SESSION_UNAVAILABLE', `the kit login script for role ${role} did not produce a session (${s.code})`));
     session = s.info;
