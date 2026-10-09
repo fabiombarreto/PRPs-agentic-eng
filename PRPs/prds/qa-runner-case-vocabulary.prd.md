@@ -61,6 +61,30 @@ Partial plans let the objective half of mixed cases run and leave evidence.
 
 We'll know we're right when re-running the same two reports drives at least 9 of their 14 reachable cases to `pass` or `fail`, against 1 of 14 on 0.42.0. Every remaining case must carry a named reason other than an inexpressible state, value or driver, and every `pass` must check out against its evidence.
 
+*Result 2026-10-09, after both projects were re-run.* `praesto-sum` ran on 0.44.0 (2026-10-06). `super-ensino` ran on 0.45.0 (2026-10-09), because on 0.44.0 every role still needed a manual headed login; the minted sessions of `PRPs/prds/test-auth-minted-session.prd.md` removed that.
+- **The target was not met: 1 of 14 driver-executed.** `praesto-sum` reached 1 of 2: case 23 passed, and case 20 was `PARTIAL_REMAINDER`. `super-ensino` reached 0 of 12. The 0.42.0 baseline was also 1 of 14.
+- **What held:**
+  - zero false `pass`;
+  - zero `blocked` cases (0.42.0 had 3 `STATE_UNDECLARED`);
+  - every seed declaration ran;
+  - 5 cases were partially executed with every objective step passed;
+  - both reports stayed byte-identical;
+  - the secrecy scans found 0 values.
+- **Why the rate stayed flat.** The new vocabulary reached the cases, but it carried none of them all the way to a driver-executed outcome:
+  - **Grounding defects (`super-ensino` F1, F2).** `ground` snapshots the SPA before it renders: 2 entries where the settled page has 66. It also ignores `- paragraph:` text, so T-1, T-2 and A-1 have no plan, and A-1 regressed from `pass` to `needs-human`.
+  - **Vocabulary gaps (`super-ensino` F4, `praesto-sum` PS16).** There is no request sent without the session (A-2, S-2), no input-value assertion (S-1), no absence or state assertion, and no grounding after an interaction (S-4, case 20).
+  - **Cases no local driver reaches.** An e-mail inbox (T-3), SMS or e-mail (S-3), counting network requests (S-6) and a visual preview (S-5's remainder). X-1 hits a product defect: the page shows an error, not the login form.
+- **Ceiling of the original target.** Classifying the 14 cases by what each lacks gives this split:
+  - 1 is done (case 23);
+  - 2 need only the grounding fixes (T-1, A-1);
+  - 6 need small vocabulary extensions (A-2, S-2, S-1, S-4, T-2, case 20);
+  - 1 needs a network driver (S-6);
+  - 3 are human by nature (T-3, S-3, S-5's preview);
+  - 1 is blocked by the product (X-1).
+
+  So 9 of 14 was reachable only if every fix and extension landed.
+- **Amended 2026-10-09 (operator-approved).** "≥ 9 of 14" is replaced by a driver-executed rate over the automatable cases (≥ 80%) plus an objective-step coverage (≥ 70%). "One case converted per named cause" is dropped. "Zero remaining vocabulary reasons" becomes "every non-executed case carries a specific, catalogued reason code". See the amendment under Success Metrics. The grounding, vocabulary and redaction work (`super-ensino` F1–F4, `praesto-sum` PS16) moves to a separate PRD that measures against the amended metrics.
+
 ## What We're NOT Building
 
 - **Any change to `/relay-qa-report` or to the reports themselves** — the metric depends on re-running byte-identical reports; every improvement lives on the plan and runner side.
@@ -88,6 +112,21 @@ The denominator is 14 reachable cases: the 12 cases of `super-ensino`'s `portal`
 | False `pass` | 0 | each `pass` read against its evidence in the dogfood report |
 | Remaining cases with a vocabulary reason (`NO_PLAN_ENTRY` for an inexpressible state, value or driver; `STATE_UNDECLARED`) | 0 | reason codes of the non-executed cases; every one names a concrete gap (`STATE_UNCONFIRMED`, `STATE_COMMAND_MISSING`, `STEP_UNGROUNDED`, `PARTIAL_REMAINDER`, an e-mail effect, …) |
 | Credential values in any tracked file or report | 0 | the parent PRD's scan, extended to captured values and accessibility snapshots |
+
+**Amendment 2026-10-09 (operator-approved).** The phase 8 result is recorded in the Key Hypothesis. The table above is kept as written. Its first row ("≥ 9 of 14"), its fourth row ("one case converted per named cause") and its sixth row ("zero remaining vocabulary reasons") are amended as follows:
+
+| Metric | Target | How Measured | Replaces |
+|--------|--------|--------------|----------|
+| Driver-executed rate over the automatable cases | ≥ 80% | Before the run, every case in the reports is classified once into one of four classes. **Automatable:** every step maps to an existing driver step. **Needs a new driver:** a named missing step or driver. **Human by nature:** an external channel such as e-mail or SMS, or a visual judgment. **Blocked by the product:** a defect in the target application. The rate is `pass`/`fail` from a driver over the automatable class, read from `results.json` of one counted run per project on the same byte-identical reports | "≥ 9 of 14" |
+| Objective-step coverage | ≥ 70% | Objective steps executed by a driver over all objective steps of the automatable and needs-a-new-driver cases. Steps of partially executed cases count. This is a separate metric, so the driver-executed rate still never counts a partial case | — (new) |
+| Driver-executed cases over all reachable cases | reported, no target | The raw `x of 14`, kept for continuity with the 0.42.0 and 2026-10-09 readings | — (continuity) |
+| Every non-executed case carries a specific, catalogued reason code | 100% | The reason code of each `needs-human` and `blocked` case. A generic `NO_PLAN_ENTRY` does not count; the reason must name the gap, for example `UNGROUNDABLE_AFTER_INTERACTION`, `EXTERNAL_CHANNEL`, `VISUAL_JUDGEMENT`, `PRODUCT_DEFECT` or `STATE_UNCONFIRMED` | "zero remaining vocabulary reasons" |
+
+The "one case converted per named cause (F8, F2, F9)" row is **dropped**: every 0.42.0 cause now runs its objective steps, and the automatable-rate metric covers what it measured. The zero false `pass` and zero credential values rows stand unchanged. Out of scope for every metric above: e-mail and SMS channels, unless a project provides a local catcher, and visual judgment.
+
+**Why.** The original denominator mixed cases no local runner can reach (an e-mail inbox, SMS, a visual preview) with a product defect. It therefore penalised the runner for causes outside its control. It also scored a partially executed case as zero, although S-1 ran 7 of 7 objective steps. And at 14 cases, each case moves the rate by 7 points.
+
+The new metrics are measured by the follow-up grounding and vocabulary PRD. They are recorded here so the basis is fixed before that work starts.
 
 ## Acceptance Criteria (test scenarios)
 
@@ -230,7 +269,7 @@ Current value of `tdd` in `docs/context/methodology.md`: **false**. Test-after o
 | 5 | Declared API origins | Additional local API origins and a session-derived header for the HTTP driver; guard on each origin; header value never printed (AC-12) | complete | - | lane:qa-run | 1 | PRPs/plans/qa-runner-case-vocabulary-phase-5-declared-api-origins.plan.md |
 | 6 | UI grounding | Plan-time redacted accessibility snapshot per route and role; strict role-and-name locators in the browser vocabulary; `STEP_UNGROUNDED` (AC-13) | complete | - | lane:qa-run | 1 | PRPs/plans/qa-runner-case-vocabulary-phase-6-ui-grounding.plan.md |
 | 7 | Per-test record resolution | Match a cited `describe`/test title against JUnit classname/name; file-level fallback recorded as `granularity: file` (AC-14) | complete | - | lane:qa-run | 1 | PRPs/plans/qa-runner-case-vocabulary-phase-7-per-test-record-resolution.plan.md |
-| 8 | Dogfood | Re-run the same byte-identical reports in `super-ensino` (`portal`) and `praesto-sum` (`missed-sweep`) on the release that ships phases 1–6; per-case comparison against the 0.42.0 tables; secrecy scan (AC-15, AC-16) | pending | - | - | 3, 4, 5, 6 | - |
+| 8 | Dogfood | Re-run the same byte-identical reports in `super-ensino` (`portal`) and `praesto-sum` (`missed-sweep`) on the release that ships phases 1–6; per-case comparison against the 0.42.0 tables; secrecy scan (AC-15, AC-16). Ran 2026-10-09 (`praesto-sum` on 0.44.0, `super-ensino` on 0.45.0): 1/14 driver-executed against the ≥ 9/14 target, 0 false pass, 0 blocked, 5 partially executed, 0 secret values; success signal amended 2026-10-09 (see Phase 8 and Success Metrics) | complete | - | - | 3, 4, 5, 6 | - |
 
 Every phase from 1 to 7 edits `plugins/relay/scripts/qa-run.mjs` and `plugins/relay/commands/relay-qa-run.md`, so they share `lane:qa-run` and run serially even where `Depends` would allow parallel lanes.
 
@@ -300,6 +339,18 @@ Every phase from 1 to 7 edits `plugins/relay/scripts/qa-run.mjs` and `plugins/re
   - zero false `pass`, and zero credential values found;
   - both reports are byte-identical;
   - every remaining case carries a named reason other than an inexpressible state, value or driver.
+- **Result 2026-10-09** (`super-ensino` `PRPs/reports/qa-runner-dogfood/dogfood-report-0.45.0.md`; `praesto-sum` `PRPs/reports/missed-sweep/dogfood-report-0.44.0.md`):
+
+  | Signal | Result | Met |
+  |---|---|---|
+  | ≥ 9 of 14 driver-executed | 1 of 14 (`praesto-sum` 1/2, `super-ensino` 0/12) | No |
+  | `praesto-sum` case 23 driver-executed | `pass`, holds against its evidence | Yes |
+  | One case converted per `super-ensino` cause (F8, F2, F9) | Each cause's objective steps now run (seeds pass; the `api` origin request passes for A-2 and S-2; grounded steps pass for S-1 and S-5), but none of those cases completes | No |
+  | Zero false `pass`, zero credential values | 0 and 0 | Yes |
+  | Reports byte-identical | Both | Yes |
+  | No remaining inexpressible-state, value or driver reason | `NO_PLAN_ENTRY` remains on T-1, T-2, A-1 and S-4 (grounding) and on S-6 (network counting) | No |
+
+- **Success signal amended 2026-10-09 (operator-approved).** The signal above stays as written, and the phase closes on the result recorded here. Driver-executed coverage is no longer a target of this phase. The amended metrics under Success Metrics (≥ 80% over the automatable cases, ≥ 70% objective-step coverage, and a specific reason code for every non-executed case) are measured by the follow-up grounding and vocabulary PRD on the same two reports.
 
 ---
 
@@ -310,6 +361,7 @@ Every phase from 1 to 7 edits `plugins/relay/scripts/qa-run.mjs` and `plugins/re
 | Origin of this PRD (2026-10-05) | A separate PRD for the case vocabulary and drivers, as the parent PRD's operator-approved row "Phase 5 closed on an amended success signal; case vocabulary to a separate PRD" directs | New phases in the parent PRD | The parent PRD's scope is the session; both 0.42.0 re-runs showed the residue lies outside authentication |
 | Metric basis | The same two byte-identical reports; denominator of 14 reachable cases (`super-ensino` 12; `praesto-sum` cases 20 and 23); target ≥ 9 of 14 | Per-project ≥ 60%; regenerated reports; new reports | Before and after are only comparable on the same input. `praesto-sum` has 2 reachable cases, so a per-project 60% is a coin flip. Cases 21 (device and production) and 22 (fault injection) are excluded by the operator as out of reach for any local driver |
 | Partial plans and the outcome vocabulary | A mixed case stays `needs-human` with `PARTIAL_REMAINDER` and per-step evidence; a failed objective step makes it `fail`; `partially_executed` is reported apart from the rate | A fifth outcome (`partial`); counting partial cases toward the rate | The four-outcome vocabulary is pinned by the parent PRD and `qa-run-contract`. Counting partial work toward the rate would inflate it exactly as record-resolved cases would have, and the parent PRD already reports those apart |
+| Phase 8 result and metric amendment (2026-10-09, operator-approved) | Close phase 8 on its recorded 1/14 result. Replace "≥ 9 of 14" with a driver-executed rate over pre-classified automatable cases (≥ 80%) plus objective-step coverage (≥ 70%). Drop "one case converted per cause". Reword "zero vocabulary reasons" as "every non-executed case carries a specific, catalogued reason code". The grounding, vocabulary and redaction work moves to a separate PRD | Keep ≥ 9 of 14 and keep phase 8 open; lower the number; count partial cases toward the rate | The ceiling of the original target was exactly 9 of 14, and only if every extension landed. Its denominator penalised causes outside the runner's control (external channels, visual judgment, a product defect). The step-coverage metric credits partial work without inflating the driver-executed rate, which still never counts a partial case, as the "Partial plans" decision requires |
 | Plan side only | Every improvement lives in the planning stage, the runner and tracked declarations; `/relay-qa-report` and the reports are untouched | Make `/relay-qa-report` emit structured states and grounded steps | The success metric depends on re-running byte-identical reports; changing the producer would also reopen a contract the parent PRD protected |
 | Seed declaration approval (D1) | `/relay-qa-seed` is non-interactive and writes `proposed` entries; the operator sets `confirmed` by editing the tracked file; the runner refuses anything else | A writer/reviewer pair with a human-confirmed flip, as `auth-model.md` | A seed executes a command, so the trust decision must be the human's. A tracked-file edit reviewed in `git diff` keeps it there without adding another interactivity-boundary extension. The declaration is a small list of existing commands, not a judgment document the size of an auth model |
 | CLI scope (D2) | Commands run only through confirmed seed declarations and declared query sources; no free `run` step in the plan | A CLI step whose argv the planning agent writes | Model judgment must never choose a command that the runner then executes. The only reachable case that needs a CLI (`praesto-sum` 23) needs it to create state, which a seed covers |

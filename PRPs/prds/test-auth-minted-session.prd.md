@@ -54,6 +54,17 @@ We believe a `minted` login mechanism will remove every human authentication ste
 
 We'll know we're right when `super-ensino`'s three roles each get a session proven by the browser probe with zero operator actions, and the 0.44.0 `portal` QA report runs from start to finish without any authentication step by a human.
 
+*Result 2026-10-09, `super-ensino` dogfood on 0.45.0 (report `portal/PRPs/reports/qa-runner-dogfood/dogfood-report-0.45.0.md`, counted run `20261009T145351915Z`).*
+- **The hypothesis held.** All three roles minted a session proven by the browser probe and the role marker (`SESSION_MINTED`, then `SESSION_REUSED`). The operator's only act was the trust decision of setting `mint.status` to `confirmed`. No credential was typed, no login was run and no terminal was attached.
+- **Recovery:** 9 of 9 forced controls recovered by themselves: an expired sidecar, an `authentication_token` rotated server-side and a deleted session file, for each of the three roles.
+- **The QA run:** the byte-identical report (`45f549d9…c071`) ran end to end with no case blocked by authentication. The secrecy scan found 0 of the 13 high-entropy session values in 2904 files.
+- **Not exercised:** the 240 s pre-run re-mint (AC-9). The local `ACCESS_TOKEN_LIFETIME_MINUTES` is 1440, not the 5 minutes this PRD assumed, so the tokens had about 24 h left. The margin is covered by `qa-run-minted-session.test.mjs` only.
+- **Findings for relay:**
+  - **F3, medium:** every session cookie value of 4 or more characters is registered as a secret, including `localhost`, `MIDDLE` and `false`. All 23 `localhost` URLs in the manual steps written to `results.json` became `http://[REDACTED]:3000/…`. The `collectIndexedDbSecrets` key concern was not exercised, because no saved state carried IndexedDB.
+  - **F5, low:** a proof that fails right after minting is not retried; a cold dev server cost the admin one mint.
+  - **F7, low:** `/relay-auth-scripts --refresh` does not define its role set for a kit narrower than the model's matrix.
+- **Operational note:** `qa.aluno` and `qa.professor.scan` are shared with `spe-simulados-v2`'s QA kit. Every mint therefore rotates that kit's sessions too, so dedicated per-project QA accounts are needed for the "touches no one else" assumption to hold.
+
 ## What We're NOT Building
 
 - **The project-side issuing command.** Writing a project's minting script is project work, agreed with the operator, exactly as seed scripts are. Relay never generates Django, Rails or any framework code, and no backend file changes.
@@ -126,9 +137,9 @@ We'll know we're right when `super-ensino`'s three roles each get a session prov
 
 ## Open Questions
 
-- [ ] What the `super-ensino` mint script must put in `user-cookie` (the profile JSON) and the other session cookies (`tenant`, `has_term_accepted`, `level`) for the SPA to render the authenticated shell. It must match what `useLogin.ts` writes; to settle in the phase 4 dogfood.
-- [ ] The re-mint margin before expiry for AC-9, given a 5-minute access token and runs that take tens of seconds per case. Set in the phase 3 plan.
-- [ ] Whether a minted role may also declare IndexedDB placement (the Could-item), reusing the `static-token` code. Decided by phase 1's plan scope.
+- [x] What the `super-ensino` mint script must put in `user-cookie` (the profile JSON) and the other session cookies (`tenant`, `has_term_accepted`, `level`) for the SPA to render the authenticated shell. It must match what `useLogin.ts` writes; to settle in the phase 4 dogfood. **Resolved 2026-10-09:** the mint writes what `useLogin.ts` writes at login: `access-token`, `refresh-token`, the notification and welcome cookies, `user-cookie` (the `/user/profile/data/` JSON), `tenant`, `has_term_accepted`, `level`, and `current-grade` for a student. The SPA's profile HOC enriches `user-cookie` later, as it does after a real login.
+- [x] The re-mint margin before expiry for AC-9, given a 5-minute access token and runs that take tens of seconds per case. Set in the phase 3 plan. **Resolved:** 240 s (`RUN_REMINT_MARGIN_MS`). The runner passes `--force` to a minted role's login script when the recorded expiry falls inside the margin.
+- [x] Whether a minted role may also declare IndexedDB placement (the Could-item), reusing the `static-token` code. Decided by phase 1's plan scope. **Resolved:** not built. The output contract stays closed at four keys, and `super-ensino` does not need IndexedDB.
 
 ---
 
@@ -235,7 +246,7 @@ Current value of `tdd` in `docs/context/methodology.md`: **false**. Test-after o
 | 1 | Minted mechanism | `minted` in `auth-login.template.mjs`: the `mint` block schema, the `confirmed` gate, the guarded and bounded spawn, the output contract, cookie, localStorage and token placement, proof before save, re-mint on expiry or failed proof, `KIT_TEMPLATE_ID` → `auth-login/2` (AC-1..AC-8, AC-13) | complete | - | lane:auth-kit | - | PRPs/plans/test-auth-minted-session-phase-1-minted-mechanism.plan.md |
 | 2 | Kit authoring | Auth-model template, writer and reviewer recognise `minted` (nine sections kept). `/relay-auth-scripts` generates the `mint` block as `proposed`, and `--refresh` adds it. Command docs and `documentation/` registration (AC-11, AC-12) | complete | - | lane:auth-kit | 1 | PRPs/plans/test-auth-minted-session-phase-2-kit-authoring.plan.md |
 | 3 | Runner integration | `/relay-qa-run` re-mints before an imminent expiry, registers minted, localStorage and IndexedDB values as secrets, and surfaces the new halt codes as named `blocked` reasons (AC-9, AC-10) | complete | - | lane:auth-kit | 1 | PRPs/plans/test-auth-minted-session-phase-3-runner-integration.plan.md |
-| 4 | Dogfood | `super-ensino`: the project mint script under `portal/PRPs/auth/seeds/` (operator-agreed), confirmed `mint` blocks for admin, teacher and student, forced-expiry controls, then `/relay-qa-run` on the `portal` report under 0.45.0 (AC-14) | pending | - | - | 2, 3 | - |
+| 4 | Dogfood | `super-ensino`: the project mint script under `portal/PRPs/auth/seeds/` (operator-agreed), confirmed `mint` blocks for admin, teacher and student, forced-expiry controls, then `/relay-qa-run` on the `portal` report under 0.45.0 (AC-14). Ran 2026-10-09: 3/3 roles proven with 0 human authentication actions, 9/9 forced controls recovered, report byte-identical, secrecy scan 0 (see the Key Hypothesis result) | complete | - | - | 2, 3 | - |
 
 Phases 1–3 edit the same template and runner files, so they share `lane:auth-kit` and run serially.
 
