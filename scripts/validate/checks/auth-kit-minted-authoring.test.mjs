@@ -442,13 +442,17 @@ test('AC-11 / AC-12: the command and agent reference pages describe the minted a
   ]);
 });
 
-test('AC-11 / AC-12: the changelog records the kit authoring under Unreleased, not under a released version', () => {
-  const html = read(CHANGELOG_HTML);
-  const a = html.indexOf('id="unreleased"');
-  assert.notEqual(a, -1, 'an Unreleased block must exist');
-  const next = html.indexOf('<h2 id=', a + 1);
-  assert.notEqual(next, -1, 'a released section must follow Unreleased');
+test('AC-11 / AC-12: the changelog records the kit authoring exactly once, under a Changed subsection', () => {
+  // Release-cut-resilient (documentation/AGENTS.md 7.3/7.5): a cut renames the
+  // Unreleased content to a dated version section, so locate the entry by its
+  // own text, not by the Unreleased heading, and match the preceding <h3>'s
+  // text rather than its id.
+  const html = collapse(read(CHANGELOG_HTML));
   const marker = 'Kit authoring for the <code>minted</code> mechanism';
-  assert.ok(collapse(html.slice(a, next)).includes(marker), 'the entry must sit inside the Unreleased block');
-  assert.ok(!collapse(html.slice(next)).includes(marker), 'the entry must not also appear in a released section');
+  const at = html.indexOf(marker);
+  assert.notEqual(at, -1, 'the kit-authoring entry must exist in the changelog');
+  assert.equal(html.indexOf(marker, at + 1), -1, 'the entry must appear exactly once');
+  const h3 = html.lastIndexOf('<h3 id="', at);
+  assert.notEqual(h3, -1, 'the entry must sit under a subsection heading');
+  assert.match(html.slice(h3, html.indexOf('</h3>', h3)), /-changed">Changed$/, 'the entry must be filed under Changed');
 });
