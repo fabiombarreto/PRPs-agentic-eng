@@ -228,9 +228,16 @@
           <tr>
             <td><code>qa-runner-case-vocabulary</code></td>
             <td>8</td>
-            <td><span class="badge badge--partial">7 complete, 1 pending</span></td>
+            <td><span class="badge badge--done">complete</span></td>
             <td>0.44.0</td>
-            <td>Case vocabulary and drivers; dogfood pending</td>
+            <td>Case vocabulary and drivers; dogfood closed on an amended success signal</td>
+          </tr>
+          <tr>
+            <td><code>test-auth-minted-session</code></td>
+            <td>4</td>
+            <td><span class="badge badge--done">complete</span></td>
+            <td>0.45.0</td>
+            <td>Minted sessions: a confirmed local command issues each role's session, no login</td>
           </tr>
         </tbody>
       </table>
@@ -547,20 +554,21 @@
         <p>Recorded in <code>docs/decisions.md</code> (2026-09-21, "Parallel test environments extend the runnable-worktree-environments registration"). Not implemented. <code>lane_runtime_safe</code> stays a hand-declared boolean, and no command provisions or tears down environments, until a dedicated PRD is authored via <code>/relay-prd</code> and approved.</p>
       </div>
 
-      <h3 id="shipped-manual-qa-runner">Shipped: manual-QA runner and local test-auth kit <span class="badge badge--done">phases 1&ndash;8 shipped</span></h3>
+      <h3 id="shipped-manual-qa-runner">Shipped: manual-QA runner and local test-auth kit <span class="badge badge--done">shipped</span></h3>
 
       <p><code>/relay-qa-report</code> lists, for every case, the required state and a manual step-by-step. The manual-QA runner gives every case of a project's <code>qa-report.md</code> an outcome by executing what it can against a locally running application, and the test-auth kit under <code>PRPs/auth/</code> supplies the sessions it needs. Everything runs locally, and a runner <code>pass</code> is evidence the human signs off on, never approval.</p>
 
       <div class="kv">
+        <dt>Login mechanisms</dt><dd><code>form</code>, <code>api</code>, <code>headed</code>, <code>static-token</code> and, since 0.45.0, <code>minted</code>. A minted role declares a <code>mint</code> block whose project command runs only once the operator sets its status to <code>confirmed</code>. The command issues the session's cookies, localStorage and token, and the kit proves and saves them with no login and no typed credential.</dd>
         <dt>Kit commands</dt><dd><code>/relay-auth-setup</code> (an approved <code>auth-model.md</code>), <code>/relay-auth-scripts</code> (one login script per role, <code>login.config.json</code>, placeholder credentials) and <code>/relay-qa-seed</code> (seed declarations proposed from commands the project already has).</dd>
         <dt>Runner</dt><dd><code>/relay-qa-run</code> with the <code>qa-run.mjs</code>, <code>qa-query.mjs</code> and <code>qa-seed.mjs</code> scripts: four outcomes (<code>pass</code>, <code>fail</code>, <code>blocked</code>, <code>needs-human</code>), redacted evidence, a hard local-only guard.</dd>
-        <dt>Case vocabulary</dt><dd>Since 0.44.0: literal step objects per driver, partial plans with a human remainder, captured seeds, a read-only database driver, declared API origins, UI grounding and per-test record resolution. Phases 1&ndash;7 of <code>qa-runner-case-vocabulary.prd.md</code> shipped; the phase 8 dogfood on the same two reports is still <span class="badge badge--pending">pending</span>.</dd>
-        <dt>Proof so far</dt><dd>The 0.42.0 re-runs on <code>super-ensino</code> and <code>praesto-sum</code> proved the kit reusable but drove only 1 of 14 reachable cases; the diagnosed cause was the case vocabulary, which is what 0.44.0 addresses.</dd>
+        <dt>Case vocabulary</dt><dd>Since 0.44.0: literal step objects per driver, partial plans with a human remainder, captured seeds, a read-only database driver, declared API origins, UI grounding and per-test record resolution. All eight phases of <code>qa-runner-case-vocabulary.prd.md</code> are complete. The phase 8 dogfood closed on an amended success signal.</dd>
+        <dt>Proof so far</dt><dd>The 2026-10-09 dogfoods proved authentication solved: in <code>super-ensino</code>, 3 of 3 roles held minted sessions with 0 human authentication actions, and 9 of 9 forced-expiry controls recovered by themselves. Driver execution stayed at 1 of 14 reachable cases, with 0 false <code>pass</code>, 0 <code>blocked</code> and 5 partially executed cases. The residue comes from grounding defects, vocabulary gaps and cases no local driver reaches. The metric was amended to a driver-executed rate over the automatable cases (&ge; 80%) plus objective-step coverage (&ge; 70%), and a follow-up PRD carries the fixes.</dd>
       </div>
 
       <div class="callout callout--note">
         <div class="callout__title">Recorded</div>
-        <p>Decision of 2026-09-25 in <code>docs/decisions.md</code> ("Executing a QA report's cases, backed by a project-local test-auth kit"); PRDs <code>manual-qa-runner-auth-kit.prd.md</code> (8 phases, all complete) and <code>qa-runner-case-vocabulary.prd.md</code> (phases 1&ndash;7 complete).</p>
+        <p>Decision of 2026-09-25 in <code>docs/decisions.md</code> ("Executing a QA report's cases, backed by a project-local test-auth kit"); PRDs <code>manual-qa-runner-auth-kit.prd.md</code> (8 phases, all complete) and <code>qa-runner-case-vocabulary.prd.md</code> (8 phases, all complete; metrics amended 2026-10-09) and <code>test-auth-minted-session.prd.md</code> (4 phases, all complete).</p>
       </div>
 
       <h2 id="dogfood-status">Dogfood status</h2>
