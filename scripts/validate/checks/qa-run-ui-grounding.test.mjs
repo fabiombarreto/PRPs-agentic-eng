@@ -204,12 +204,17 @@ test('AC-13 parseAriaSnapshot extracts role-and-name and text candidates from th
   assert.ok(has({ kind: 'text', text: 'Hello there' }));
 });
 
-test('AC-13 parseAriaSnapshot unescapes quotes, drops unsupported roles, prose, blank names and duplicates', () => {
+test('AC-13 parseAriaSnapshot unescapes quotes, drops unsupported roles, blank names and duplicates, and keeps a paragraph line as one text candidate', () => {
   const got = parseAriaSnapshot(ARIA);
   assert.ok(got.some((e) => /** @type {any} */ (e).name === 'Logo "big"'), 'an escaped quote was not unescaped');
   assert.equal(got.filter((e) => /** @type {any} */ (e).name === 'Delete').length, 1, 'candidates are de-duplicated');
   assert.ok(!got.some((e) => /** @type {any} */ (e).role === 'banana'), 'an unsupported role leaked in');
-  assert.ok(!got.some((e) => /** @type {any} */ (e).text === 'ignored prose'), 'a paragraph leaked in');
+  // PRPs/prds/qa-runner-grounding-vocabulary-v2.prd.md AC-2: a paragraph line is a text candidate (it was dropped before that PRD).
+  assert.deepEqual(
+    got.filter((e) => /** @type {any} */ (e).text === 'ignored prose'),
+    [{ kind: 'text', text: 'ignored prose' }],
+    'a paragraph line must yield exactly one text candidate',
+  );
   assert.ok(!got.some((e) => e.kind === 'role' && e.name.trim() === ''), 'a blank name leaked in');
   assert.ok(!got.some((e) => /** @type {any} */ (e).text !== undefined && /url/.test(/** @type {any} */ (e).text)), 'a /url line leaked in');
 });

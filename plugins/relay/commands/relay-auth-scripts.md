@@ -236,6 +236,13 @@ of that tracked value followed by `--refresh`; no key that already
 exists, including a `TBD - needs validation` value, is ever changed. It never
 touches a session, a token, `credentials.json` or `credentials.example.json`.
 
+Which roles `--refresh` covers. A run selects the roles of the model's matrix, narrowed by
+`--role`, and `--refresh` regenerates only the scripts of those roles that already exist: a
+selected role with no `PRPs/auth/login-<role>.mjs` script is generated exactly as without
+`--refresh` and is not reported as refreshed, so a kit narrower than the matrix is
+refreshed for its own roles only. A role the kit holds that the model's matrix does not
+list is not selected, and its script is left as it is.
+
 Write `PRPs/auth/credentials.example.json` with placeholder values only when
 absent:
 

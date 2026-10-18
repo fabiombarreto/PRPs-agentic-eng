@@ -174,6 +174,99 @@ logs there are not written to a versioned report.
 
 ---
 
+## QA runner evidence: session values, snapshots, screenshots and personal data
+
+The QA runner keeps its own redaction table in memory and writes evidence under
+`PRPs/reports/<feature>/qa-run/<run-id>/`. Substring redaction is only as
+precise as the values registered, and a snapshot or a screenshot can show data
+no table knows. This section states what the runner registers, why, and what
+keeps the rest out of git.
+
+### Session values are registered source-first
+
+Registering every string of a saved session corrupts the evidence the operator
+reads: on a recorded run `localhost`, `false` and `MIDDLE` became `[REDACTED]`
+inside 23 URLs. The runner therefore registers a session value by its source:
+
+- **Always registered** (any entropy; the table's absolute 4-character minimum
+  still applies): the token artifact, the cookie the role declares as its
+  `sessionCookie`, the cookie named by each `api_origins` entry, env values
+  selected by Layer 1 or Layer 2 names, `redact: true` captures and
+  `redact_columns` values.
+- **Registered above a floor**: every other cookie, `localStorage` and
+  IndexedDB string, record keys included, only when it is at least
+  12 characters long and has a Shannon entropy of at least
+  3.0 bits per character.
+- **Never registered**: a part of the target origin (scheme, host, port, host
+  and port, the origin or a URL on it) and short literals such as `true`,
+  `false`, `null` and small integers (the length gate refuses them).
+
+The floor is a judgment, not a measurement. No scanner documents a minimum
+length (detect-secrets documents entropy limits of 4.5 for base64 and 3.0 for
+hex, gitleaks an example of 3.5). The numbers are calibrated on the recorded
+values of a real scan, whose six non-secrets were all shorter than the floor
+and below its entropy.
+
+**Failure mode.** A short or low-entropy secret held by a cookie nobody
+declared is not masked by value. Four things back it: the Layer 1 value
+regexes; the structural masking of every cookie and `localStorage` `value`
+field and of every secret-named property in each JSON evidence file; the
+ignore rule below; and the secrecy scan of the dogfood. The remedy is to
+declare such a cookie as `sessionCookie` or in `api_origins`, or to add a
+`regex:` line to `PRPs/redaction-extensions.txt`.
+
+### Snapshots, screenshots and personal data
+
+An accessibility snapshot lists locator names and visible text, a screenshot
+is pixels, and a response or row body is whatever the application returned for
+the test account. Any of them can hold personal data (a task title, a person's
+name, an e-mail address) that no secret table recognizes.
+
+- **What the runner withholds.** A snapshot entry that carries a registered
+  secret, an e-mail address or a `regex:` match is withheld, and a screenshot
+  is withheld (redacted text is written instead) when the page text carries a
+  registered secret. The runner cannot recognize free-text personal data.
+- **Where the evidence lives.** Every grounding snapshot, screenshot,
+  redacted-text file and evidence body lives under the run directory's
+  `grounding/` and `evidence/`. The run's own `.gitignore` ignores both. It is
+  written through the runner's single write helper and proven with
+  `git check-ignore -q` for a path of each kind before anything is written.
+  `results.json` and `plan.json` stay tracked and hold no page text and no
+  input value.
+- **When the proof does not hold.** With git present and the proof unproven,
+  the runner halts `FAILED_IGNORE_UNPROVEN` and writes no snapshot and no
+  screenshot. When the run directory is not inside a git work tree, nothing
+  there can be committed and the proof is recorded as `not-applicable`.
+- **Input values.** An input value asserted by the runner is never written,
+  only the result of the comparison: the evidence names which comparison ran
+  and whether it passed, and the final screenshot masks the located field, so
+  the value reaches no evidence file, no result, no reason and no terminal line.
+- **Post-interaction snapshots.** A snapshot written after the `ground` mode replayed
+  a prefix of `goto`, `click` and `fill` steps lives under `grounding/` beside the plain
+  snapshot of its route and is withheld by the same rules, entry by entry. A prefix
+  locator that names a withheld value is refused before the browser starts. The recorded
+  `prefix` holds no typed value, only a SHA-256 digest, never in clear, and `ground`
+  prints the value on no terminal line and writes it to no other file. The `entries`
+  are page text read after the interaction, so they can echo a typed value the page
+  renders back: an entry is withheld only for a registered secret, an e-mail address or
+  a `regex:` match, and a typed value is not registered. That value comes from the
+  report's own steps, which the report file already holds, and the snapshot sits under
+  the run directory's ignored `grounding/`, whose ignore rule is proven before it is
+  written.
+- **Observed requests.** An `expect_requests` step watches the requests the page issues,
+  and the runner reads nothing from a request but its method and its URL: never a header,
+  a cookie, a token or a body. For each request that matches the step the evidence file
+  records the method, the host and the path (at most 50 are listed, the observed count
+  staying exact), with the query string and the fragment dropped in memory, and the
+  expected and observed counts. A registered secret that
+  appears in a path is masked like any evidence string, but a path can still carry an
+  identifier or a name the table does not recognize, so the file lives under the run
+  directory's ignored `evidence/`, whose ignore rule is proven before anything is
+  written, and for the step `results.json` carries only the result, the counts of a
+  failing reason and the path of that file.
+
+---
+
 ## What this policy is NOT
 
 - **Not a replacement for proper secret management.** Secrets must

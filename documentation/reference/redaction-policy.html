@@ -21,7 +21,7 @@
       </div>
 
       <h1>Redaction policy</h1>
-      <p class="page-subtitle">The rules the Test Runner applies when capturing stdout/stderr/logs into <code>PRPs/reports/&lt;feature&gt;/</code>. Secret values that appear in test output are replaced with <code>[REDACTED]</code> markers before being written to the versioned report that travels with the PR.</p>
+      <p class="page-subtitle">The rules the Test Runner applies when capturing stdout/stderr/logs into <code>PRPs/reports/&lt;feature&gt;/</code>. Secret values that appear in test output are replaced with <code>[REDACTED]</code> markers before being written to the versioned report that travels with the PR. A further section covers the evidence the QA runner writes: which session values it registers, and what keeps snapshots, screenshots and personal data out of git.</p>
 
       <div class="callout callout--note">
         <div class="callout__title">Scope</div>
@@ -140,6 +140,40 @@ regex:phoenix-[a-f0-9]{32}</code></pre>
         Rationale: URL parsers struggle with passwords containing special characters (<code>!</code>, <code>@</code>, <code>:</code>, <code>/</code>, <code>#</code>, <code>?</code>, <code>=</code>). A parse failure that emits the raw URL = leak. Going integral on the redaction is the safe default. If a team needs to see the host for debugging, they can re-run the suite manually outside the autonomous pipeline — the raw logs there aren't written to a versioned report.
       </p>
 
+      <h2 id="qa-runner-evidence">QA runner evidence: session values, snapshots, screenshots and personal data</h2>
+
+      <p>The QA runner keeps its own redaction table in memory and writes evidence under <code>PRPs/reports/&lt;feature&gt;/qa-run/&lt;run-id&gt;/</code>. Substring redaction is only as precise as the values registered, and a snapshot or a screenshot can show data no table knows. This section states what the runner registers, why, and what keeps the rest out of git. The packaged copy of the policy, <code>plugins/relay/resources/redaction-policy.md</code>, is the source of this section.</p>
+
+      <h3 id="session-values-source-first">Session values are registered source-first</h3>
+
+      <p>Registering every string of a saved session corrupts the evidence the operator reads: on a recorded run <code>localhost</code>, <code>false</code> and <code>MIDDLE</code> became <code>[REDACTED]</code> inside 23 URLs. The runner therefore registers a session value by its source:</p>
+
+      <ul>
+        <li><strong>Always registered</strong> (any entropy; the table&rsquo;s absolute 4-character minimum still applies): the token artifact, the cookie the role declares as its <code>sessionCookie</code>, the cookie named by each <code>api_origins</code> entry, env values selected by Layer 1 or Layer 2 names, <code>redact: true</code> captures and <code>redact_columns</code> values.</li>
+        <li><strong>Registered above a floor</strong>: every other cookie, <code>localStorage</code> and IndexedDB string, record keys included, only when it is at least 12 characters long and has a Shannon entropy of at least 3.0 bits per character.</li>
+        <li><strong>Never registered</strong>: a part of the target origin (scheme, host, port, host and port, the origin or a URL on it) and short literals such as <code>true</code>, <code>false</code>, <code>null</code> and small integers (the length gate refuses them).</li>
+      </ul>
+
+      <p>The floor is a judgment, not a measurement. No scanner documents a minimum length (detect-secrets documents entropy limits of 4.5 for base64 and 3.0 for hex, gitleaks an example of 3.5). The numbers are calibrated on the recorded values of a real scan, whose six non-secrets were all shorter than the floor and below its entropy.</p>
+
+      <div class="callout callout--warn">
+        <div class="callout__title">Failure mode</div>
+        <p>A short or low-entropy secret held by a cookie nobody declared is not masked by value. Four things back it: the Layer 1 value regexes; the structural masking of every cookie and <code>localStorage</code> <code>value</code> field and of every secret-named property in each JSON evidence file; the ignore rule below; and the secrecy scan of the dogfood. The remedy is to declare such a cookie as <code>sessionCookie</code> or in <code>api_origins</code>, or to add a <code>regex:</code> line to <code>PRPs/redaction-extensions.txt</code>.</p>
+      </div>
+
+      <h3 id="snapshots-personal-data">Snapshots, screenshots and personal data</h3>
+
+      <p>An accessibility snapshot lists locator names and visible text, a screenshot is pixels, and a response or row body is whatever the application returned for the test account. Any of them can hold personal data (a task title, a person&rsquo;s name, an e-mail address) that no secret table recognizes.</p>
+
+      <ul>
+        <li><strong>What the runner withholds.</strong> A snapshot entry that carries a registered secret, an e-mail address or a <code>regex:</code> match is withheld, and a screenshot is withheld (redacted text is written instead) when the page text carries a registered secret. The runner cannot recognize free-text personal data.</li>
+        <li><strong>Where the evidence lives.</strong> Every grounding snapshot, screenshot, redacted-text file and evidence body lives under the run directory&rsquo;s <code>grounding/</code> and <code>evidence/</code>. The run&rsquo;s own <code>.gitignore</code> ignores both. It is written through the runner&rsquo;s single write helper and proven with <code>git check-ignore -q</code> for a path of each kind before anything is written. <code>results.json</code> and <code>plan.json</code> stay tracked and hold no page text and no input value.</li>
+        <li><strong>When the proof does not hold.</strong> With git present and the proof unproven, the runner halts <code>FAILED_IGNORE_UNPROVEN</code> and writes no snapshot and no screenshot. When the run directory is not inside a git work tree, nothing there can be committed and the proof is recorded as <code>not-applicable</code>.</li>
+        <li><strong>Input values.</strong> An input value asserted by the runner is never written, only the result of the comparison: the evidence names which comparison ran and whether it passed, and the final screenshot masks the located field, so the value reaches no evidence file, no result, no reason and no terminal line.</li>
+        <li><strong>Post-interaction snapshots.</strong> A snapshot written after the <code>ground</code> mode replayed a prefix of <code>goto</code>, <code>click</code> and <code>fill</code> steps lives under <code>grounding/</code> beside the plain snapshot of its route and is withheld by the same rules, entry by entry. A prefix locator that names a withheld value is refused before the browser starts. The recorded <code>prefix</code> holds no typed value, only a SHA-256 digest, never in clear, and <code>ground</code> prints the value on no terminal line and writes it to no other file. The <code>entries</code> are page text read after the interaction, so they can echo a typed value the page renders back: an entry is withheld only for a registered secret, an e-mail address or a <code>regex:</code> match, and a typed value is not registered. That value comes from the report&rsquo;s own steps, which the report file already holds, and the snapshot sits under the run directory&rsquo;s ignored <code>grounding/</code>, whose ignore rule is proven before it is written.</li>
+        <li><strong>Observed requests.</strong> An <code>expect_requests</code> step watches the requests the page issues, and the runner reads nothing from a request but its method and its URL: never a header, a cookie, a token or a body. For each request that matches the step the evidence file records the method, the host and the path (at most 50 are listed, the observed count staying exact), with the query string and the fragment dropped in memory, and the expected and observed counts. A registered secret that appears in a path is masked like any evidence string, but a path can still carry an identifier or a name the table does not recognize, so the file lives under the run directory&rsquo;s ignored <code>evidence/</code>, whose ignore rule is proven before anything is written, and for the step <code>results.json</code> carries only the result, the counts of a failing reason and the path of that file. A listed path is also cut to its first 200 characters after redaction, an evidence-size cap on the written listing only. Unlike a snapshot entry, a path is not withheld for an e-mail address: the redaction masks a registered secret, a token-shaped value and a <code>regex:</code> match, and nothing else.</li>
+      </ul>
+
       <h2 id="what-this-is-not">What this policy is NOT</h2>
 
       <ul>
@@ -154,6 +188,7 @@ regex:phoenix-[a-f0-9]{32}</code></pre>
         <li><a href="../governance/decisions.html#redaction-policy">Decision: Secret redaction policy for Test Runner reports</a></li>
         <li><a href="../governance/anti-patterns.html">Anti-patterns — see "Emitting secret values in run reports or logs"</a></li>
         <li><a href="../concepts/prp-artifacts.html">PRP artifact paths — where redacted reports live</a></li>
+        <li><a href="commands.html#relay-qa-run"><code>/relay-qa-run</code> &mdash; the runner that applies the QA evidence rules</a></li>
       </ul>
 
       <div class="page-footer"></div>

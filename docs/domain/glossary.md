@@ -303,6 +303,257 @@ reviewed by the PRD Reviewer. Serves as input to the Plan Writer.
 Concept inherited from `prp-core`: PRD + repository intelligence + an
 executable runbook the AI can follow.
 
+## QA assertion actions
+
+The three flat `browser` plan steps `plugins/relay/scripts/qa-run.mjs` adds to
+its closed step vocabulary so that a case can assert more than presence:
+`expect_value`, `expect_state` and `expect_not_visible`. Each takes only a
+grounded locator form (`role` plus `name`, and for `expect_not_visible` also
+`text`; never a `selector`), counts as one expectation and is planned only from
+a `ground` snapshot entry whose `matches` is exactly 1, with the expected value
+or state taken from the report's own steps and never from the snapshot.
+`expect_value` compares the value of an input, a textarea or a select with
+exactly one of `equals` (exact), `contains` (a non-empty string) or `not_empty`
+(always `true`, surrounding whitespace ignored), and allows `{{name}}` bindings
+in `equals` and `contains`. The value is never written: the comparison evidence
+(`case-<n>.value-<step>.json`) holds the action, the step position, the locator
+already in the plan, a closed comparison word and `passed` or `failed`, no
+result or reason carries the value, and the final screenshot masks the located
+field. `expect_state` asserts `expanded` (read from `aria-expanded`), `disabled`
+(Playwright's definition) or `checked` (a checkbox or radio) against a boolean
+`equals` that is always written. An element that holds no value, or exposes no
+such state (a button without `aria-expanded`, a `details` disclosure, a
+non-checkbox, an `aria-checked="mixed"` element), blocks the case
+`STEP_NOT_PERFORMABLE` and is never read as an empty value, collapsed or
+unchecked. `expect_not_visible` passes only when the grounded locator is hidden
+or absent. A value, a state and an absence are each re-read for up to 5 seconds
+(`ASSERT_SETTLE_MS`, every 100 ms, both chosen and not measured) before the step
+is decided. The absence anchor: an `expect_not_visible` step is valid only after
+a positive step (`expect_visible`, `expect_text`, `expect_value` or
+`expect_state`) on the same route since the last `goto`, because a locator that
+matches nothing is hidden and an absence alone would pass on a page that never
+rendered; without it the entry is `PLAN_ENTRY_INVALID` before anything is
+seeded, authenticated or requested. A `goto` resets the anchor and an
+`expect_url` to another route drops it, but a `click` that navigates away does
+not: the anchor proves that the route rendered earlier in the case, not at the
+instant of the absence check. See `plugins/relay/commands/relay-qa-run.md`.
+
+Two planner rules the command doc states for these actions. A `click` that
+navigates does not reset the absence anchor, so the planner follows it with an
+`expect_url` of the new path and a positive step on the page it lands on before
+any `expect_not_visible`. A `checked` step on an element whose `aria-checked` is
+`mixed` blocks the case, but the runner reads only that attribute: a native
+checkbox whose DOM `indeterminate` property is set exposes no `aria-checked`, is
+not detected and is read as Playwright reports its checked state. A step planned
+after an interaction is grounded from the plain snapshot or from the
+post-interaction snapshot a `--prefix` ground wrote (see "QA grounding
+snapshot").
+
+A browser step that is none of these three, `expect_requests`, counts the
+requests the page issues instead of reading an element. It takes no locator, is
+not a positive assertion and so is no anchor for `expect_not_visible` (see "QA
+observed-request window").
+
+## QA case class and reason-code catalogue
+
+Two fields of a `/relay-qa-run` plan entry (`plan.json`), both declared by the
+planner and only validated and echoed by the runner, never inferred from the
+report. `class` is the pre-run classification of a case: `automatable`,
+`needs-a-new-driver`, `human-by-nature` or `blocked-by-product`; it is
+independent of the outcome, and an entry with no class is reported
+`unclassified`. `reason_code` names why a declining entry (a class and a code,
+no steps) does not execute its case, drawn from a closed catalogue defined once
+in `plugins/relay/scripts/qa-run.mjs` (`REASON_CATALOGUE`) and pinned by the
+`qa-run-contract` check: `UNGROUNDABLE_AFTER_INTERACTION`, `EXTERNAL_CHANNEL`,
+`VISUAL_JUDGEMENT`, `VOCABULARY_GAP`, `STEP_UNGROUNDED`, `PRODUCT_DEFECT`,
+`STATE_UNCONFIRMED` and the runner-derived `PARTIAL_REMAINDER`. A declined case
+is `needs-human` or `blocked` with a fixed reason and its manual steps verbatim,
+and a code outside the catalogue makes the entry `PLAN_ENTRY_INVALID`. A case
+the plan omits is `NO_PLAN_ENTRY`, a planner defect that is not a catalogue
+member. `results.json` carries a `classification` block (per-class counts, the
+driver-executed rate over the automatable class and the objective-step
+counters); the four-key `counts` partition is unchanged. See
+`plugins/relay/commands/relay-qa-run.md`.
+
+## QA grounding snapshot
+
+The file `qa-run.mjs ground` writes under `<run-dir>/grounding/` for one route
+and one role: the role-and-name and visible-text candidates of the page's
+accessibility snapshot, each with the number of elements it `matches`, from
+which `/relay-qa-run` plans locator steps (a step is planned only from an entry
+that matches exactly one element). It is taken from the settled page, not the
+first paint: the script reads the snapshot repeatedly and writes the file only
+once two successive snapshots, 1 second apart (`GROUND_POLL_INTERVAL_MS`), are
+equal within 20 seconds (`GROUND_STABLE_BOUND_MS`). A page that never settles
+ends `GROUND_UNSTABLE` (exit 1, no snapshot file, never a best-effort snapshot),
+and each case that needed a locator on that route is declined
+`STEP_UNGROUNDED`. The visible-text candidates include paragraph, list-item and
+cell lines, capped separately from the other candidates so a long table cannot
+displace a button or a heading. The interval and the bound are chosen, not
+measured on a real single-page application. Under Windows Git Bash a
+leading-slash `--route` needs `MSYS_NO_PATHCONV=1`, because MSYS otherwise
+rewrites it before the script sees it. See
+`plugins/relay/commands/relay-qa-run.md`.
+
+A post-interaction snapshot is the same file kind taken after `ground` replayed
+a prefix (`--prefix '<json>'`): at most 5 flat `goto`, `click` and `fill` steps
+of the case itself (`GROUND_PREFIX_MAX_STEPS`; at least one `click` or `fill`;
+each naming its element by `role` and `name` or by `text`, never a `selector`
+or a `{{name}}` binding; a `fill` value of at most 200 characters), replayed in
+order after the route loads, with the role's session behind the same local-only
+guard, each `click` or `fill` on exactly one element at that moment. It is named
+`<role>--<route>--after-<8 hex>.snapshot.json` (`schema_version` 2, `<route>`
+the path the page is on afterwards, the 8 hex the start of the SHA-256 of the
+canonical prefix), is written beside the plain snapshot and never over it, and
+carries a `prefix` array: the `--route` `goto` and every replayed step, with a
+`fill` recorded as `value_sha256`, the SHA-256 digest of its value, never the
+value. The digest keeps the typed value out of the `prefix`, out of every
+terminal line and out of every other file `ground` writes; it does not keep it
+out of the `entries`, which are page text read after the interaction and can
+echo a typed value the page renders back (an entry is withheld only for a
+registered secret, an e-mail address or a `regex:` match, and a typed value is
+not registered), so the file is protected by the run directory's ignored
+`grounding/`, whose rule is proven before the file is written. A malformed
+prefix exits 2 `GROUND_PREFIX_INVALID`; a step that matches zero or several
+elements, cannot be performed or names a withheld value halts
+`GROUND_PREFIX_FAILED` (exit 1); in both cases no snapshot is written. The
+plan-time check reads such a snapshot only when its role and route are the
+step's and the `goto`, `click` and `fill` steps of the case before that step,
+each `fill` hashed the same way, equal the recorded `prefix` in order (an
+assertion between them is ignored); every other step, and the interaction
+itself, is grounded against the plain snapshot. A prefix `fill` value that the
+report's own steps do not state is `PLAN_ENTRY_INVALID` when the snapshot is
+consumed, not at ground time. Each replayed `click` or `fill` is a real
+interaction with the local application, made at plan time and not undone, and
+`ground` runs no seed, so the planner prefixes only the case's own steps and
+never one that submits, saves, deletes or sends. Windows PowerShell 5.1 strips
+the double quotes inside a single-quoted argument, so the `--prefix` line is run
+from Git Bash, a POSIX shell or PowerShell 7.
+
+## QA observed-request window
+
+The span in which an `expect_requests` step of a `/relay-qa-run` browser case
+counts the requests the page issues, and the flat step that uses it:
+`{ "action": "expect_requests", "method": "POST", "url_contains": "/avatar",
+"count": 1 }`, exactly those four keys (no locator, no `selector`, no
+`session`). `method` is one of `GET`, `HEAD`, `POST`, `PUT`, `PATCH` or
+`DELETE`; `url_contains` is a path that starts with a single `/`, carries no
+query string, fragment or whitespace and is at most 200 characters, and a
+character the URL parser encodes is matched in its encoded form; `count` is an
+integer from 0 to 100 (`EXPECT_REQUESTS_COUNT_MAX`). The step counts the
+requests of the page whose method equals `method` and whose whole path contains
+`url_contains`, from the start of the case's last `goto`, `click` or `fill`
+step until 2 seconds (`EXPECT_REQUESTS_SETTLE_MS`, 2000 ms) after the step
+starts, and passes only when that number equals `count`. The wait comes first
+and the log is read after it, so a request a handler issues once the click
+returned is inside the window; matching and counting run on the whole path,
+however long. Each redirect hop is a request of its own, a popup, a worker and a
+WebSocket are not observed, and a case that carries the step runs with service
+workers blocked, so none answers a request out of sight.
+
+The step counts as one expectation but is not a positive assertion. It is valid
+only after a `goto`, `click` or `fill` step of the same case, and a `count` of 0
+also needs the positive step (`expect_visible`, `expect_text`, `expect_value` or
+`expect_state`) on the same route since the last `goto` that `expect_not_visible`
+needs, because an absence of requests alone does not show that a page rendered;
+otherwise the entry is `PLAN_ENTRY_INVALID` before anything is seeded,
+authenticated or requested. A request to a host the local-only guard does not
+approve is aborted before it leaves the machine: when it matches the step the
+case is `blocked` `FAILED_NON_LOCAL_TARGET` with nothing asserted, and when it
+does not match it is ignored. A failing step's reason carries only a step
+position and the observed and expected counts. An action the validator accepts
+but the browser driver has no branch for ends `STEP_NOT_PERFORMABLE` through the
+driver's terminal branch and is never recorded as passed.
+
+The evidence file is `evidence/case-<index>.requests-<step>.json`: the action,
+the step position, the method, the expected and observed counts, `truncated`,
+the `result` and, for each matching request, only its method, host and path. At
+most 50 requests are listed (`EXPECT_REQUESTS_EVIDENCE_MAX`) and the observed
+count stays exact. A listed path is redacted first and cut to its first 200
+characters afterwards, an evidence-size cap on the written listing only (the
+decision was made on the whole path), so a registered secret that straddles the
+cut is replaced whole. The query string and the fragment are dropped in memory
+and no header, cookie, token or body is ever read. The redaction masks a
+registered secret, a token-shaped value of the runner's value patterns and a
+`regex:` line match, and nothing else: an identifier no table entry recognizes (a
+user id, a name or an e-mail address in a route) can appear in the file. It is
+on no terminal stream and not in `results.json`, which carries for the step only
+its result, the counts of a failing reason and the file's path, and the file sits
+in the run directory's git-ignored `evidence/`. If the file cannot be written the
+case is `blocked` `EVIDENCE_WRITE_FAILED`.
+
+The numbers are chosen, not measured, and the Phase 8 dogfood recalibrates them:
+the 2000 ms window, the bound of 100 on `count`, the 50 listed requests and the
+200 characters of a listed path. The window is fixed, so a request issued after
+it closes is outside it and a `count` of 0 can pass on it; that is a stated
+limit, not a defect the step can detect. See
+`plugins/relay/commands/relay-qa-run.md` and
+`plugins/relay/resources/redaction-policy.md`.
+
+## QA run-evidence ignore
+
+The `.gitignore` that `qa-run.mjs init` writes inside every new run directory
+(`PRPs/reports/<feature>/qa-run/<run-id>/`), through the script's single write
+helper, so the run's own evidence stays out of git. Its rules are `grounding/`
+and `evidence/` (`RUN_IGNORE_RULES`): grounding snapshots, screenshots,
+redacted-text files and the response and row bodies can hold personal data (a
+task title, a person's name) that no redaction table recognizes, while
+`results.json` and `plan.json` are deliberately not listed and stay tracked.
+Before it writes anything the runner proves the rules with `git check-ignore -q`
+for one probe path of each evidence kind, and `init` ends its output with
+`IGNORE_PROOF: proven`, or `IGNORE_PROOF: not-applicable` when the run directory
+is not inside a git work tree, or git is absent or does not answer the work-tree
+probe (nothing there can be committed; `init` still writes the file). With the
+run directory inside a work tree and any probe path not ignored, the mode halts
+`FAILED_IGNORE_UNPROVEN` (exit 1) and writes no snapshot, screenshot or result. `ground` and `run` prove the same rules first and, inside a work tree,
+restore a missing `.gitignore`; an existing file is never overwritten and is
+judged by the proof. The halt name is the one the test-auth kit's secrecy script
+uses for its own proof. See `plugins/relay/commands/relay-qa-run.md` and
+`plugins/relay/resources/redaction-policy.md`.
+
+## QA session-less request
+
+The optional `"session": "none"` key of an `http` `request` step in a
+`/relay-qa-run` plan, with `"none"` its only legal value: the step is sent
+without the role's session, so a case can check that an endpoint refuses a
+request made with no token (a 401 or 403 rejection) or serves a public one. Only
+an `http` `request` step may carry it, with or without `origin`; any other value,
+and the key on a `query` step or a `browser` step, is `PLAN_ENTRY_INVALID`. The
+step is sent through its own fresh request context that holds no storage state
+and no derived `api_origins` header, so it carries no cookie and a `Set-Cookie`
+from one session-less step never reaches the next; its evidence file records
+`session: "none"`. It passes the same local-only guard first, so a non-local
+origin still blocks the case `FAILED_NON_LOCAL_TARGET` before any request. Every
+other step of the case keeps the role's session and a step without the key
+behaves exactly as before. A session-less step to a header-bearing origin needs
+no role (it does not end `API_HEADER_NO_SESSION`), and an entry whose every
+request carries the key names no role, because the runner still obtains the
+session of any role the entry names. The planner writes it only when the report's
+own step asks for a request made without the session, never to avoid a login.
+See `plugins/relay/commands/relay-qa-run.md`.
+
+## QA session-value floor
+
+The rule that decides which strings of a saved session `qa-run.mjs` registers
+as secrets for redaction by substring. Registration is by source: the token
+artifact, the cookie the role declares as `sessionCookie` and the cookie named
+by each `api_origins` entry are always registered (only the redaction table's
+4-character minimum applies). Every other cookie, `localStorage` and IndexedDB
+string, record keys included, is registered only when it is at least 12
+characters long (`SESSION_VALUE_MIN_LENGTH`) and has a Shannon entropy of at
+least 3.0 bits per character (`SESSION_VALUE_MIN_ENTROPY`), and never when it is
+a part of the target origin; short literals such as `true`, `false` or a small
+integer are therefore never registered, and `localhost` or `MIDDLE` no longer
+turn a verbatim URL into `[REDACTED]`. The numbers are a judgment calibrated on
+one recorded scan, not a measurement, and the accepted failure mode is that a
+short or low-entropy secret held by an undeclared cookie is not masked by value
+(the structural masks, the Layer 1 value regexes, the run directory's ignore
+and the dogfood scan back-stop it); the remedy is to declare that cookie as
+`sessionCookie` or in `api_origins`, or to add a `regex:` line to
+`PRPs/redaction-extensions.txt`. The `auth-secrecy` check pins the two constants
+equal to the numbers the redaction policy states, and `qa-run-contract` pins
+them in the command doc. See `plugins/relay/commands/relay-qa-run.md`.
+
 ## Repository topology
 
 The explicit declaration of a workspace's member repositories — a `## Repository
@@ -394,8 +645,34 @@ login request, and the model records only the issuing code's file:line, the
 declared argv command and the local store it touches, never a credential.
 For a `minted` role `/relay-qa-run` passes the login script `--force` when the
 recorded expiry is within 240 seconds of the run start, registers IndexedDB
-values as secrets, and reports the five minted login halts as named `blocked`
-reasons.
+strings as secrets only above the session-value floor (see QA session-value
+floor), and reports the five minted login halts as named `blocked` reasons.
+
+When a minted role's login script halts `FAILED_PROBE_MARKER_ABSENT` right after
+it minted (a cold application may not have rendered the declared marker yet),
+the runner runs that script once more before it blocks the role: only the kit
+login script is run again, with the same arguments plus `--force`, never the
+mint command itself, and the script runs its own local-only guard before its
+mint command. The cap is `LOGIN_REMINT_MAX_RETRIES`, 1, per role per run (each
+`ground` command is a run of its own), a number chosen and not measured that the
+Phase 8 dogfood recalibrates. The runner's comment on the cap gives the cost: a
+second halt after two fresh mints is a configuration problem the operator must
+see, and every extra run mints again and rotates the account's session. A proven
+second attempt yields the session; a second halt leaves the role blocked with
+that halt's own code, which is `FAILED_PROBE_MARKER_ABSENT` again when the proof
+fails again. A role whose mechanism is not `minted`, and every other halt, is
+never retried; the login template and its `KIT_TEMPLATE_ID` are unchanged, and
+the runner writes nothing for the retry, so a re-minted pass reads like a
+first-try pass in `results.json`.
+
+`/relay-auth-scripts --refresh` covers the roles a run selects: the roles of the
+approved model's `## Role and Permission Matrix`, narrowed by `--role`. It
+regenerates the script of those that already have one; a selected role with no
+`PRPs/auth/login-<role>.mjs` is generated exactly as without `--refresh` and is
+not reported as refreshed, so a kit narrower than the matrix is refreshed for
+its own roles only, and a role the kit holds that the matrix does not list is
+not selected and its script is left as it is. The statement documents the
+selection that already existed; it changes no behavior.
 
 ## Test Runner
 
