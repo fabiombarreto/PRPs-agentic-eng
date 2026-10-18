@@ -239,6 +239,13 @@
             <td>0.45.0</td>
             <td>Minted sessions: a confirmed local command issues each role's session, no login</td>
           </tr>
+          <tr>
+            <td><code>qa-runner-grounding-vocabulary-v2</code></td>
+            <td>8</td>
+            <td><span class="badge badge--partial">phases 1&ndash;7 shipped, dogfood pending</span></td>
+            <td>0.46.0</td>
+            <td>Stable grounding, text candidates, redaction floor, run-evidence ignore, reason-code classification and the session-less, input-value, absence, state, prefix and request-count steps</td>
+          </tr>
         </tbody>
       </table>
 
@@ -277,7 +284,7 @@
       <p>In <code>docs/</code> at the plugin repo root:</p>
 
       <ul>
-        <li><code>decisions.md</code> — 104 recorded decisions (see <a href="../governance/decisions.html">Decisions</a>)</li>
+        <li><code>decisions.md</code> — 105 recorded decisions (see <a href="../governance/decisions.html">Decisions</a>)</li>
         <li><code>anti-patterns.md</code> — 17 forbidden patterns (see <a href="../governance/anti-patterns.html">Anti-patterns</a>)</li>
         <li><code>decision-gate.md</code> — the mandatory control mechanism</li>
         <li><code>context/architecture.md</code>, <code>conventions.md</code>, <code>constraints.md</code>, <code>integrations.md</code>, <code>methodology.md</code></li>
@@ -583,12 +590,13 @@
         <dt>Kit commands</dt><dd><code>/relay-auth-setup</code> (an approved <code>auth-model.md</code>), <code>/relay-auth-scripts</code> (one login script per role, <code>login.config.json</code>, placeholder credentials) and <code>/relay-qa-seed</code> (seed declarations proposed from commands the project already has).</dd>
         <dt>Runner</dt><dd><code>/relay-qa-run</code> with the <code>qa-run.mjs</code>, <code>qa-query.mjs</code> and <code>qa-seed.mjs</code> scripts: four outcomes (<code>pass</code>, <code>fail</code>, <code>blocked</code>, <code>needs-human</code>), redacted evidence, a hard local-only guard.</dd>
         <dt>Case vocabulary</dt><dd>Since 0.44.0: literal step objects per driver, partial plans with a human remainder, captured seeds, a read-only database driver, declared API origins, UI grounding and per-test record resolution. All eight phases of <code>qa-runner-case-vocabulary.prd.md</code> are complete. The phase 8 dogfood closed on an amended success signal.</dd>
+        <dt>Grounding and vocabulary v2</dt><dd>Since 0.46.0: <code>ground</code> reads the settled page, keeps paragraph, list-item and cell text, and can replay a short prefix of the case&rsquo;s own steps first; session values are registered by source above a length and entropy floor; every run directory ignores its grounding snapshots and evidence, and proves it; each plan entry carries a class and a declining entry a catalogued reason code; the vocabulary gains a session-less request, <code>expect_value</code>, <code>expect_not_visible</code>, <code>expect_state</code> and <code>expect_requests</code>; and a minted role is re-minted once after a <code>FAILED_PROBE_MARKER_ABSENT</code> halt. Phases 1&ndash;7 of <code>qa-runner-grounding-vocabulary-v2.prd.md</code> shipped; phase 8, the dogfood on the same two byte-identical reports, is pending, so the amended metrics are not yet measured.</dd>
         <dt>Proof so far</dt><dd>The 2026-10-09 dogfoods proved authentication solved: in <code>super-ensino</code>, 3 of 3 roles held minted sessions with 0 human authentication actions, and 9 of 9 forced-expiry controls recovered by themselves. Driver execution stayed at 1 of 14 reachable cases, with 0 false <code>pass</code>, 0 <code>blocked</code> and 5 partially executed cases. The residue comes from grounding defects, vocabulary gaps and cases no local driver reaches. The metric was amended to a driver-executed rate over the automatable cases (&ge; 80%) plus objective-step coverage (&ge; 70%), and a follow-up PRD carries the fixes.</dd>
       </div>
 
       <div class="callout callout--note">
         <div class="callout__title">Recorded</div>
-        <p>Decision of 2026-09-25 in <code>docs/decisions.md</code> ("Executing a QA report's cases, backed by a project-local test-auth kit"); PRDs <code>manual-qa-runner-auth-kit.prd.md</code> (8 phases, all complete) and <code>qa-runner-case-vocabulary.prd.md</code> (8 phases, all complete; metrics amended 2026-10-09) and <code>test-auth-minted-session.prd.md</code> (4 phases, all complete).</p>
+        <p>Decision of 2026-09-25 in <code>docs/decisions.md</code> ("Executing a QA report's cases, backed by a project-local test-auth kit"); PRDs <code>manual-qa-runner-auth-kit.prd.md</code> (8 phases, all complete) and <code>qa-runner-case-vocabulary.prd.md</code> (8 phases, all complete; metrics amended 2026-10-09) and <code>test-auth-minted-session.prd.md</code> (4 phases, all complete) and <code>qa-runner-grounding-vocabulary-v2.prd.md</code> (8 phases; phases 1&ndash;7 shipped in 0.46.0, the dogfood pending).</p>
       </div>
 
       <h2 id="dogfood-status">Dogfood status</h2>
