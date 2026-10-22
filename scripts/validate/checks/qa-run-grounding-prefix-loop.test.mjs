@@ -26,7 +26,7 @@
  *      PLAN_ENTRY_INVALID at the position of the fill when the report never states the value, and an input whose
  *      value arrives 1.2 s after the load passes its comparison because the value is re-read. The control twin
  *      is the same plan against a project that holds only the plain snapshot: every case is refused
- *      STEP_UNGROUNDED before any login.
+ *      PLAN_ENTRY_INVALID before any login.
  *
  * Every run asserts that the QA report is byte-identical before and after. Nothing here calls git.
  *
@@ -406,7 +406,7 @@ test('AC-11 end to end: ground writes the files and one run consumes them: the r
   assert.deepEqual(validateResults(controlResults), []);
   const [c1, c2, c3] = controlResults.cases;
   for (const [label, c, step] of /** @type {[string, any, number][]} */ ([['the rows', c1, 4], ['the filter result', c2, 5], ['the invented value', c3, 5]])) {
-    assert.deepEqual([c.outcome, c.reason_code], ['needs-human', 'STEP_UNGROUNDED'], `${label}: ${brief(c)}`);
+    assert.deepEqual([c.outcome, c.reason_code], ['needs-human', 'PLAN_ENTRY_INVALID'], `${label}: ${brief(c)}`);
     assert.match(c.reason, new RegExp(`^step ${step}:`), label);
   }
   assert.equal(existsSync(control.sessions), false, 'a login ran although every case was refused at plan time');

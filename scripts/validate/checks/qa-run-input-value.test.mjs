@@ -196,14 +196,15 @@ test('AC-9 a binding or not_empty needs no literal in the report, and the bindin
   }
 });
 
-test('AC-9 an expect_value on a locator the snapshot lacks, or lists twice, is STEP_UNGROUNDED and names no locator', () => {
+// PRD AC-6: neither a snapshot entry with matches 1 nor a word of the report is PLAN_ENTRY_INVALID.
+test('AC-9 an expect_value on a locator the snapshot lacks, or lists twice, is PLAN_ENTRY_INVALID and names no locator', () => {
   const missing = pre([GOTO, { action: 'expect_value', role: 'textbox', name: 'Inexistente', not_empty: true }]);
-  assert.equal(missing?.code, 'STEP_UNGROUNDED');
+  assert.equal(missing?.code, 'PLAN_ENTRY_INVALID');
   const twin = pre([GOTO, { action: 'expect_value', role: 'textbox', name: 'Gemeo', not_empty: true }]);
-  assert.equal(twin?.code, 'STEP_UNGROUNDED');
+  assert.equal(twin?.code, 'PLAN_ENTRY_INVALID');
   assert.match(String(twin?.reason), /2 elements/);
   for (const r of [missing, twin]) assert.ok(!/Inexistente|Gemeo/.test(String(r?.reason)), `the refusal echoes a locator: ${r?.reason}`);
-  assert.equal(precheckGroundedSteps([GOTO, VALUE({ not_empty: true })], [], MANUAL, null)?.code, 'STEP_UNGROUNDED', 'no snapshot covers the route');
+  assert.equal(precheckGroundedSteps([GOTO, VALUE({ not_empty: true })], [], MANUAL, null)?.code, 'PLAN_ENTRY_INVALID', 'no snapshot covers the route');
 });
 
 // ---------------------------------------------------------------------------

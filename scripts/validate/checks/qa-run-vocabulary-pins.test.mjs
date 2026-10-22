@@ -207,7 +207,20 @@ test('AC-18 a doc whose marked example stopped being a session-less request, or 
   ])) {
     once(COMMAND, example);
     // The example becomes another valid step, so only the "carry an example of this action" rule can fire.
-    const r = vocabulary({ commandText: COMMAND.replace(example, () => example.replace(`"action": "${action}"`, '"action": "expect_visible"')) });
+    // The rule is "some marked browser example of this action", so the mutation must leave NONE: PRD qa-runner-ai-executable-steps
+    // AC-23 added a second marked expect_value example (`equals {{username}}`), and replacing only the first would leave that one.
+    let mutated = COMMAND.replace(example, () => example.replace(`"action": "${action}"`, '"action": "expect_visible"'));
+    if (action === 'expect_value') {
+      let replaced = 0;
+      mutated = COMMAND.replace(/(<!-- qa-step-example driver=browser -->[ \t]*\n```json\n)([^\n]*)(\n```)/g, (all, head, body, tail) => {
+        if (!body.includes('"action": "expect_value"')) return all;
+        replaced += 1;
+        return head + body.replace('"action": "expect_value"', '"action": "expect_visible"') + tail;
+      });
+      assert.ok(replaced >= 1, 'no marked expect_value example was replaced');
+      assert.ok(!/"action": "expect_value"/.test(mutated.split('<!-- qa-step-example driver=browser -->').slice(1).map((p) => p.split('```')[1] ?? '').join('\n')), 'a marked expect_value example survived the mutation');
+    }
+    const r = vocabulary({ commandText: mutated });
     assert.equal(r.ok, false, action);
     assert.equal(named(r, `marked browser example of ${action}`).length, 1, `${action}: ${JSON.stringify(r.findings)}`);
     assert.equal(named(r, 'does not validate').length, 0, `${action}: the replaced example must stay a valid step: ${JSON.stringify(r.findings)}`);

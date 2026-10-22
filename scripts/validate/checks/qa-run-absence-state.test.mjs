@@ -254,7 +254,8 @@ test('AC-10 a state or absence step on a snapshot entry of its own route and rol
   assert.equal(pre([GOTO, ABSENT]), null);
 });
 
-test('AC-10 a state or absence step on an unknown, ambiguous, mis-kinded, wrong-role or route-less locator is STEP_UNGROUNDED and the refusal echoes no locator', () => {
+// PRD AC-6: a locator that is neither a snapshot entry with matches 1 nor a word of the report is PLAN_ENTRY_INVALID.
+test('AC-10 a state or absence step on an unknown, ambiguous, mis-kinded, wrong-role or route-less locator is PLAN_ENTRY_INVALID and the refusal echoes no locator', () => {
   /** @type {[string, any, string | null][]} */
   const cases = [
     ['an unknown state locator', pre([GOTO, STATE({ name: 'Inexistente' })]), null],
@@ -267,7 +268,7 @@ test('AC-10 a state or absence step on an unknown, ambiguous, mis-kinded, wrong-
     ['a role the snapshots do not cover', pre([GOTO, STATE()], 'admin'), null],
   ];
   for (const [label, r, part] of cases) {
-    assert.equal(r?.code, 'STEP_UNGROUNDED', `${label}: ${JSON.stringify(r)}`);
+    assert.equal(r?.code, 'PLAN_ENTRY_INVALID', `${label}: ${JSON.stringify(r)}`);
     assert.match(String(r?.reason), /^step \d+:/, label);
     if (part !== null) assert.ok(String(r?.reason).includes(part), `${label}: ${r?.reason}`);
     assert.ok(!/Grupo|Gemeo|Inexistente|Nada aqui|Buy milk|Mensagem/.test(String(r?.reason)), `${label}: the refusal echoes a locator: ${r?.reason}`);

@@ -111,6 +111,13 @@ phases.
   degraded rung instead blocks (`VISUAL_GATE_BLOCKED`) — see
   `docs/decisions.md` [2026-07-23] Visual-verification loop and
   [2026-07-27] Implement-time visual gate.
+- **Also used by:** `qa-run.mjs` (the `run`, `ground` and `preflight` modes) resolves the
+  same package from the target or from the installed plugin's visual tooling directory.
+  A plugin installed from a directory marketplace gets no automatic dependency install, so
+  the first use after each plugin version halts `FAILED_PLAYWRIGHT_UNAVAILABLE` and names
+  the one command the operator runs:
+  `npm --prefix "${CLAUDE_PLUGIN_ROOT}/scripts/visual" install`. The runner never
+  downloads anything itself.
 - **Known endpoint/tool:** `npx playwright install --with-deps chromium`
   (provisioning); `chromium.launch({ headless: true })` (capture).
 

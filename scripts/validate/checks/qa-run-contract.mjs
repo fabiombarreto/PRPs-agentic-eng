@@ -14,11 +14,16 @@
  * that carries a `class` must carry one of the four classes or `unclassified`, a
  * case that carries `objective_steps` must carry null or a non-negative integer,
  * and a `classification` block must equal what the cases recompute to (all tolerant
- * of older `results.json` files that lack the keys). With `requireCatalogue` the
- * runner script must define the catalogue and the classes once each, the catalogue
- * must hold the seven codes the plan contract names and never the omitted-case
- * marker, the command must document every code and class, and every marked
- * plan-entry example in the command must validate against the runner's own
+ * of older `results.json` files that lack the keys). The two step counters
+ * (`needs_human_impossible`, `needs_human_gap`) are recomputed the same way and are
+ * validated only when present. With `requireCatalogue` the runner script must
+ * define the catalogue and the classes once each, the catalogue must hold the
+ * eleven codes the plan contract names and never the omitted-case marker, every
+ * code must carry a reason class (the impossible set is closed and the runner-owned
+ * codes are named), the command must document every code and class, its reason-code
+ * table must agree with the runner on every code's outcome and class, it must state
+ * the counting convention, the product-defect rule and the step counters, and every
+ * marked plan-entry example in the command must validate against the runner's own
  * validator.
  *
  * The `ground` mode is pinned with `requireGround`: the runner header and the
@@ -87,10 +92,13 @@ import {
   EXPECT_STATES,
   ASSERT_SETTLE_MS,
   REASON_CATALOGUE,
+  REASON_CLASSES,
+  RUNNER_OWNED_REASON_CODES,
   CASE_CLASSES,
   CLASS_UNCLASSIFIED,
   validatePlanClassification,
   summarizeClassification,
+  summarizeNeedsHuman,
   USAGE,
   GROUND_STABLE_BOUND_MS,
   GROUND_POLL_INTERVAL_MS,
@@ -120,7 +128,7 @@ const SEED_COMMAND_FILE = 'plugins/relay/commands/relay-qa-seed.md';
 const OUTCOMES_LITERAL = "export const OUTCOMES = ['pass', 'fail', 'blocked', 'needs-human'];";
 const OUTCOME_VALUES = ['pass', 'fail', 'blocked', 'needs-human'];
 const BANNED_IN_COMMAND = ['design-spec', 'relay-auth-setup', '.claude/PRPs', 'subagent_type']; // .claude/PRPs MUST NOT appear in the command
-const STEP_RESULTS = ['passed', 'failed', 'not-run', 'human'];
+const STEP_RESULTS = ['passed', 'failed', 'not-run', 'human', 'pending-judgment', 'uncertain', 'not-judged'];
 const STEP_EXAMPLE_DRIVERS = ['http', 'browser'];
 const STEP_EXAMPLE_PATTERN = /<!-- qa-step-example driver=(\w+) -->[ \t]*\r?\n```json\r?\n([\s\S]*?)\r?\n```/g;
 const PLAN_ENTRY_EXAMPLE_PATTERN = /<!-- qa-plan-entry-example -->[ \t]*\r?\n```json\r?\n([\s\S]*?)\r?\n```/g;
@@ -132,7 +140,24 @@ const REQUIRED_CATALOGUE_CODES = [
   'STATE_UNCONFIRMED',
   'STEP_UNGROUNDED',
   'PARTIAL_REMAINDER',
+  'OUTSIDE_LOCAL_ENVIRONMENT',
+  'HUMAN_SIGNOFF',
+  'JUDGEMENT_UNCERTAIN',
+  'ROLE_NOT_DEDICATED',
 ];
+/** The only codes of the impossible reason class: what no AI agent can execute alone. */
+const REQUIRED_IMPOSSIBLE_CODES = ['EXTERNAL_CHANNEL', 'OUTSIDE_LOCAL_ENVIRONMENT', 'HUMAN_SIGNOFF'];
+/** The codes the runner derives or records itself; a plan entry may not declare them. */
+const REQUIRED_RUNNER_OWNED_CODES = ['PARTIAL_REMAINDER', 'JUDGEMENT_UNCERTAIN', 'ROLE_NOT_DEDICATED'];
+/** The two step counters of results.json for what a needs-human case leaves to a person. */
+const NEEDS_HUMAN_COUNTERS = ['needs_human_impossible', 'needs_human_gap'];
+/** Phrases the command must carry, matched after whitespace is collapsed because the document is hard-wrapped. */
+const COUNTING_CONVENTION_PHRASES = [
+  'judgment and channel steps are objective steps',
+  'every objective step not of impossible class',
+  'frozen under this convention before any counted run',
+];
+const PRODUCT_DEFECT_RULE_PHRASES = ['stops the case from starting', 'executed and reported `fail`'];
 const REQUIRED_CASE_CLASSES = ['automatable', 'needs-a-new-driver', 'human-by-nature', 'blocked-by-product'];
 const ISO_MS =/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 const VOCABULARY_PREFIX = 'vocabulary: ';
@@ -200,7 +225,8 @@ export function validateResults(obj) {
   if (cases !== null) {
     const counts = obj.counts && typeof obj.counts === 'object' ? obj.counts : {};
     const sum = OUTCOME_VALUES.reduce((n, k) => n + (Number.isInteger(counts[k]) ? counts[k] : 0), 0);
-    if (sum !== cases.length) msgs.push(`cases.length (${cases.length}) does not equal the sum of counts (${sum})`);
+    const pendingCases = cases.filter((c) => isPlainObject(c) && c.outcome === null && Array.isArray(c.pending_judgment) && c.pending_judgment.length > 0).length;
+    if (sum + pendingCases !== cases.length) msgs.push(`cases.length (${cases.length}) does not equal the sum of counts (${sum})`);
     const resolvedCases = cases.filter((c) => c !== null && typeof c === 'object' && c.reason_code === 'AUTOMATED_EVIDENCE');
     if (obj.record_resolved !== undefined) {
       if (!Number.isInteger(obj.record_resolved) || obj.record_resolved < 0 || obj.record_resolved !== resolvedCases.length) {
@@ -216,6 +242,15 @@ export function validateResults(obj) {
     if (obj.partially_executed !== undefined) {
       if (!Number.isInteger(obj.partially_executed) || obj.partially_executed < 0 || obj.partially_executed !== partialCases.length) {
         msgs.push(`partially_executed (${JSON.stringify(obj.partially_executed)}) does not equal the number of PARTIAL_REMAINDER cases (${partialCases.length})`);
+      }
+    }
+    // The step counters are optional: results written before they existed lack both.
+    const recomputedNeedsHuman = summarizeNeedsHuman(cases.filter(isPlainObject));
+    for (const name of NEEDS_HUMAN_COUNTERS) {
+      if (obj[name] === undefined) continue;
+      const expected = recomputedNeedsHuman[/** @type {'needs_human_impossible' | 'needs_human_gap'} */ (name)];
+      if (!Number.isInteger(obj[name]) || obj[name] < 0 || obj[name] !== expected) {
+        msgs.push(`${name} (${JSON.stringify(obj[name])}) does not equal the steps the cases recompute to (${expected})`);
       }
     }
     for (const [i, c] of cases.entries()) {
@@ -238,7 +273,7 @@ export function validateResults(obj) {
           }
         }
       }
-      if (!OUTCOME_VALUES.includes(c.outcome)) msgs.push(`${label}.outcome ${JSON.stringify(c.outcome)} is outside the closed vocabulary`);
+      if (!OUTCOME_VALUES.includes(c.outcome) && !(c.outcome === null && Array.isArray(c.pending_judgment) && c.pending_judgment.length > 0)) msgs.push(`${label}.outcome ${JSON.stringify(c.outcome)} is outside the closed vocabulary`);
       // The class and the objective-step count are optional: results written before they existed lack both.
       if (c.class !== undefined && !CASE_CLASSES.includes(c.class) && c.class !== CLASS_UNCLASSIFIED) {
         msgs.push(`${label}.class ${JSON.stringify(c.class)} is not one of the four classes or ${CLASS_UNCLASSIFIED}`);
@@ -654,6 +689,20 @@ export function checkQaRunContract({ scriptText, commandText, seedScriptText, se
       if (spec.disposition !== 'needs-human' && spec.disposition !== 'blocked') {
         add(`the reason-code catalogue entry ${code} has a disposition outside needs-human, blocked`, SCRIPT_FILE);
       }
+      // Every code carries a reason class, and the impossible set is closed: nothing else may claim it.
+      if (!REASON_CLASSES.includes(spec.class)) {
+        add(`the reason-code catalogue entry ${code} has a class outside ${REASON_CLASSES.join(', ')}`, SCRIPT_FILE);
+      } else if (REQUIRED_IMPOSSIBLE_CODES.includes(code)) {
+        if (spec.class !== 'impossible') add(`the reason-code catalogue entry ${code} must carry the class impossible`, SCRIPT_FILE);
+      } else if (spec.class !== 'gap') {
+        add(`the reason-code catalogue entry ${code} must carry the class gap: only ${REQUIRED_IMPOSSIBLE_CODES.join(', ')} are impossible`, SCRIPT_FILE);
+      }
+    }
+    for (const code of REQUIRED_RUNNER_OWNED_CODES) {
+      if (!RUNNER_OWNED_REASON_CODES.includes(code)) add(`the runner-owned reason codes must include ${code}: a plan entry may not declare it`, SCRIPT_FILE);
+    }
+    for (const code of RUNNER_OWNED_REASON_CODES) {
+      if (!REQUIRED_RUNNER_OWNED_CODES.includes(code)) add(`the runner-owned reason codes must not include ${code}`, SCRIPT_FILE);
     }
     if (CASE_CLASSES.join(',') !== REQUIRED_CASE_CLASSES.join(',')) {
       add(`the case classes must be exactly ${REQUIRED_CASE_CLASSES.join(', ')} in that order, found ${CASE_CLASSES.join(', ')}`, SCRIPT_FILE);
@@ -724,6 +773,36 @@ export function checkQaRunContract({ scriptText, commandText, seedScriptText, se
       }
       for (const cls of CASE_CLASSES) {
         if (!commandText.includes(cls)) add(`the runner command must document the case class ${cls}`, COMMAND_FILE);
+      }
+      // The counting convention, the product-defect rule and the step counters. The document is hard-wrapped, so
+      // the phrases are matched after whitespace is collapsed. These messages name no catalogue code and no class.
+      const flatCommand = commandText.replace(/\s+/g, ' ');
+      for (const phrase of COUNTING_CONVENTION_PHRASES) {
+        if (!flatCommand.includes(phrase)) add(`the runner command must state the counting convention: it must contain "${phrase}"`, COMMAND_FILE);
+      }
+      for (const phrase of PRODUCT_DEFECT_RULE_PHRASES) {
+        if (!flatCommand.includes(phrase)) add(`the runner command must state the product-defect rule: it must contain "${phrase}"`, COMMAND_FILE);
+      }
+      for (const name of NEEDS_HUMAN_COUNTERS) {
+        if (!commandText.includes(`\`${name}\``)) add(`the runner command must document the step counter ${name}`, COMMAND_FILE);
+      }
+      // The reason-code table must agree with the runner on every code's outcome and class.
+      if (!/^\| Code \| Outcome \| Class \|/m.test(commandText)) {
+        add('the runner command reason-code table must carry a Class column: | Code | Outcome | Class | Use it when |', COMMAND_FILE);
+      } else {
+        /** @type {Record<string, { outcome: string, cls: string }>} */
+        const documentedRows = {};
+        for (const m of commandText.matchAll(/^\| `([A-Z_]+)` \| `(needs-human|blocked)` \| `(impossible|gap)` \|/gm)) {
+          documentedRows[m[1]] = { outcome: m[2], cls: m[3] };
+        }
+        for (const [code, spec] of Object.entries(REASON_CATALOGUE)) {
+          const row = Object.hasOwn(documentedRows, code) ? documentedRows[code] : null;
+          if (row === null) {
+            add(`the runner command reason-code table has no row for ${code} with its outcome and class`, COMMAND_FILE);
+          } else if (row.outcome !== spec.disposition || row.cls !== spec.class) {
+            add(`the runner command reason-code table gives ${code} the outcome ${row.outcome} and the class ${row.cls}, but the runner gives it ${spec.disposition} and ${spec.class}`, COMMAND_FILE);
+          }
+        }
       }
       // Each marked plan-entry example must validate against the runner's own classification validator.
       let planEntryExamples = 0;

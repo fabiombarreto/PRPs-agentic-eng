@@ -369,11 +369,13 @@ test('AC-10 carry-over DQ18: the doc says a navigating click does not reset the 
       'an `expect_visible`, `expect_text`, `expect_value` or `expect_state` step since the last `goto`',
       'A `click` that navigates to another page does not reset that anchor',
       'follow a navigating `click` with an `expect_url` of the new path and a positive step on the page it lands on before any `expect_not_visible`',
-      'The element must be one the snapshot of that page state already lists: the plain snapshot, or the one a `--prefix` ground wrote after the interactions of the case.',
+      // PRD AC-22: the sentence that stated the snapshot-only rule is reworded to the two grounding sources.
+      'The element is grounded like any other locator step: by the plain snapshot, by the one a `--prefix` ground wrote after the interactions of the case, or by the report\'s own words (see Grounding rules below).',
     ],
     'the expect_not_visible paragraph',
   );
   assert.equal(paragraph.includes('is still `UNGROUNDABLE_AFTER_INTERACTION`'), false, 'the sentence the prefix made false is still there');
+  assert.equal(paragraph.includes('The element must be one the snapshot of that page state already lists'), false, 'the snapshot-only sentence is still there');
 
   const goto = { action: 'goto', path: '/tarefas' };
   const heading = { action: 'expect_visible', role: 'heading', name: 'Tarefas' };

@@ -57,20 +57,40 @@ const MANUAL_STEPS = ['1. Open the page.', '2. Check the result.'];
 const MANUAL_STEPS_VERBATIM = MANUAL_STEPS.join('\n');
 const VERBATIM_CLAUSE = 'manual steps are reproduced verbatim';
 
-// The seven codes AC-6 names, the eighth the plan adds, and the outcome each declines to.
-const AC6_CODES = ['UNGROUNDABLE_AFTER_INTERACTION', 'EXTERNAL_CHANNEL', 'VISUAL_JUDGEMENT', 'PRODUCT_DEFECT', 'STATE_UNCONFIRMED', 'STEP_UNGROUNDED', 'PARTIAL_REMAINDER'];
+// The seven codes AC-6 names, then the four codes AC-1 of qa-runner-ai-executable-steps adds (OUTSIDE_LOCAL_ENVIRONMENT,
+// HUMAN_SIGNOFF, JUDGEMENT_UNCERTAIN, ROLE_NOT_DEDICATED); the vocabulary-gap code the plan adds is listed beside them,
+// and DECLINES_TO gives the outcome each code declines to.
+const AC6_CODES = [
+  'UNGROUNDABLE_AFTER_INTERACTION',
+  'EXTERNAL_CHANNEL',
+  'VISUAL_JUDGEMENT',
+  'PRODUCT_DEFECT',
+  'STATE_UNCONFIRMED',
+  'STEP_UNGROUNDED',
+  'PARTIAL_REMAINDER',
+  'OUTSIDE_LOCAL_ENVIRONMENT',
+  'HUMAN_SIGNOFF',
+  'JUDGEMENT_UNCERTAIN',
+  'ROLE_NOT_DEDICATED',
+];
 /** @type {Record<string, string>} */
 const DECLINES_TO = {
   UNGROUNDABLE_AFTER_INTERACTION: 'needs-human',
   EXTERNAL_CHANNEL: 'needs-human',
+  OUTSIDE_LOCAL_ENVIRONMENT: 'needs-human',
+  HUMAN_SIGNOFF: 'needs-human',
   VISUAL_JUDGEMENT: 'needs-human',
+  JUDGEMENT_UNCERTAIN: 'needs-human',
   VOCABULARY_GAP: 'needs-human',
   STEP_UNGROUNDED: 'needs-human',
   PRODUCT_DEFECT: 'blocked',
   STATE_UNCONFIRMED: 'blocked',
+  ROLE_NOT_DEDICATED: 'blocked',
   PARTIAL_REMAINDER: 'needs-human',
 };
-const DECLARABLE_CODES = Object.keys(DECLINES_TO).filter((c) => c !== 'PARTIAL_REMAINDER');
+// A plan entry may not declare a code the runner derives or records itself.
+const RUNNER_OWNED_CODES = ['PARTIAL_REMAINDER', 'JUDGEMENT_UNCERTAIN', 'ROLE_NOT_DEDICATED'];
+const DECLARABLE_CODES = Object.keys(DECLINES_TO).filter((c) => !RUNNER_OWNED_CODES.includes(c));
 const CLASSIFICATION_KEYS = [
   'automatable_driver_executed',
   'automatable_rate',
@@ -92,7 +112,7 @@ const executable = (extra = {}) => ({ index: 1, title: 't', class: 'automatable'
 // AC-6: the closed catalogue
 // ---------------------------------------------------------------------------
 
-test('AC-6 the catalogue holds the seven codes the PRD names plus the vocabulary-gap code, and not the omitted-case marker', () => {
+test('AC-6 the catalogue holds the seven codes the PRD names plus the vocabulary-gap code, and not the omitted-case marker, with the four codes of qa-runner-ai-executable-steps AC-1 added', () => {
   for (const code of AC6_CODES) assert.ok(Object.hasOwn(REASON_CATALOGUE, code), `${code} is missing from the catalogue`);
   assert.deepEqual(Object.keys(REASON_CATALOGUE).sort(), [...AC6_CODES, 'VOCABULARY_GAP'].sort());
   assert.equal(Object.hasOwn(REASON_CATALOGUE, 'NO_PLAN_ENTRY'), false, 'NO_PLAN_ENTRY marks a case the plan omitted; a plan cannot declare it');
