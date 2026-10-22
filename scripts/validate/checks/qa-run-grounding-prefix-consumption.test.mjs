@@ -1,5 +1,6 @@
 // @ts-check
 // PRPs/prds/qa-runner-grounding-vocabulary-v2.prd.md AC-11 Grounding after an interaction (the elements that exist only after a click or a fill become groundable: a locator step after the case's own interactions is grounded against the snapshot taken after exactly those interactions)
+// PRPs/prds/qa-runner-ai-executable-steps.prd.md AC-6 A locator is grounded by a snapshot entry or by the report words (a locator that is neither is PLAN_ENTRY_INVALID)
 // PRPs/prds/qa-runner-grounding-vocabulary-v2.prd.md AC-14 Untouched surfaces (the QA report is byte-identical before and after every run)
 /**
  * Phase 5 (grounding after an interaction), the consumption of a post-interaction snapshot, of
@@ -149,7 +150,7 @@ test('AC-11 a locator step after the case own interactions is grounded against t
   assert.equal(pre([GOTO, HEAD, CLICK, { action: 'expect_visible', text: 'Pagar conta' }], [PLAIN, POST]), null);
   // The exactly-one rule holds on the post-interaction entries as it does on the plain ones.
   const twin = pre([GOTO, HEAD, CLICK, { action: 'expect_visible', text: 'Duplicada' }], [PLAIN, POST]);
-  assert.equal(twin?.code, 'STEP_UNGROUNDED');
+  assert.equal(twin?.code, 'PLAN_ENTRY_INVALID');
   assert.match(String(twin?.reason), /^step 4:/);
   assert.match(String(twin?.reason), /2 elements/);
   assert.equal(String(twin?.reason).includes('Duplicada'), false, 'the refusal echoes the locator');
@@ -160,12 +161,12 @@ test('AC-11 a step before the interaction, and the interaction itself, are groun
   assert.equal(pre([GOTO, HEAD], [POST, PLAIN]), null);
   // Only the post-interaction file lists the row, and the row is asked for before the click.
   const early = pre([GOTO, ROW, CLICK], [PLAIN, POST]);
-  assert.equal(early?.code, 'STEP_UNGROUNDED');
+  assert.equal(early?.code, 'PLAN_ENTRY_INVALID');
   assert.match(String(early?.reason), /^step 2:/);
   assert.match(String(early?.reason), /not a snapshot entry/);
   // A post-interaction file alone cannot ground a step of a case that has not interacted yet.
   const alone = pre([GOTO, ROW], [POST]);
-  assert.equal(alone?.code, 'STEP_UNGROUNDED');
+  assert.equal(alone?.code, 'PLAN_ENTRY_INVALID');
   assert.match(String(alone?.reason), /no plan-time snapshot covers this role and route/);
 });
 
@@ -176,7 +177,7 @@ test('AC-11 only the goto, click and fill steps of the case count: an assertion 
 
   // A selector click is a legacy step with no key: the history is unkeyable, so the plain snapshot applies and the row is not there.
   const legacy = pre([GOTO, HEAD, { action: 'click', selector: '#legacy' }, ROW], [PLAIN, POST]);
-  assert.equal(legacy?.code, 'STEP_UNGROUNDED');
+  assert.equal(legacy?.code, 'PLAN_ENTRY_INVALID');
   assert.match(String(legacy?.reason), /^step 4:/);
 });
 
@@ -192,17 +193,17 @@ test('AC-11 a post-interaction snapshot is not consumed when the history of the 
   ];
   for (const [label, steps, snapshots, who] of notConsumed) {
     const r = pre(steps, snapshots, 'Type abd in the filter and apply it. Type abc too.', who);
-    assert.equal(r?.code, 'STEP_UNGROUNDED', `${label}: ${JSON.stringify(r)}`);
+    assert.equal(r?.code, 'PLAN_ENTRY_INVALID', `${label}: ${JSON.stringify(r)}`);
     assert.match(String(r?.reason), /not a snapshot entry/, label);
     assert.match(String(r?.reason), /post-interaction snapshot exists for this role and route/, `${label}: no hint`);
     assert.equal(/Outro|Aplicar|Filtro|abc|abd|Comprar/.test(String(r?.reason)), false, `${label}: the refusal echoes a locator or a value: ${r?.reason}`);
   }
 
   const otherRole = pre([GOTO, HEAD, CLICK, ROW], [PLAIN, postFile([GOTO, CLICK], ROWS, '/tasks', 'viewer')]);
-  assert.equal(otherRole?.code, 'STEP_UNGROUNDED', 'a post-interaction snapshot of another role was used');
+  assert.equal(otherRole?.code, 'PLAN_ENTRY_INVALID', 'a post-interaction snapshot of another role was used');
   const otherRoute = pre([{ action: 'goto', path: '/other' }, HEAD, CLICK, ROW], [{ ...PLAIN, route: '/other' }, POST]);
-  assert.equal(otherRoute?.code, 'STEP_UNGROUNDED', 'a post-interaction snapshot of another route was used');
-  assert.equal(pre([GOTO, HEAD, CLICK, ROW], [PLAIN, postFile([GOTO, CLICK], ROWS)], MANUAL, 'viewer')?.code, 'STEP_UNGROUNDED');
+  assert.equal(otherRoute?.code, 'PLAN_ENTRY_INVALID', 'a post-interaction snapshot of another route was used');
+  assert.equal(pre([GOTO, HEAD, CLICK, ROW], [PLAIN, postFile([GOTO, CLICK], ROWS)], MANUAL, 'viewer')?.code, 'PLAN_ENTRY_INVALID');
 });
 
 test('AC-11 two post-interaction snapshots of one role and route are told apart by the history of the case, and the route after an expect_url selects the snapshot of that route', () => {
@@ -210,36 +211,36 @@ test('AC-11 two post-interaction snapshots of one role and route are told apart 
   const b = postFile([GOTO, FILL, APPLY], [role('heading', 'Tarefas'), text('Filtro com 3 caracteres')]);
   assert.equal(pre([GOTO, HEAD, CLICK, ROW], [PLAIN, b, a]), null, 'the click case did not find its own file');
   assert.equal(pre([GOTO, HEAD, FILL, APPLY, RESULT], [PLAIN, a, b], 'Type abc in the filter.'), null, 'the fill case did not find its own file');
-  assert.equal(pre([GOTO, HEAD, FILL, APPLY, ROW], [PLAIN, a, b], 'Type abc in the filter.')?.code, 'STEP_UNGROUNDED', 'one file served the other history');
-  assert.equal(pre([GOTO, HEAD, CLICK, RESULT], [PLAIN, a, b], 'Type abc in the filter.')?.code, 'STEP_UNGROUNDED', 'one file served the other history');
+  assert.equal(pre([GOTO, HEAD, FILL, APPLY, ROW], [PLAIN, a, b], 'Type abc in the filter.')?.code, 'PLAN_ENTRY_INVALID', 'one file served the other history');
+  assert.equal(pre([GOTO, HEAD, CLICK, RESULT], [PLAIN, a, b], 'Type abc in the filter.')?.code, 'PLAN_ENTRY_INVALID', 'one file served the other history');
 
   // A click that navigates: the snapshot is keyed to the route the page ended on, which the case states with expect_url.
   const nav = postFile([GOTO, DETAILS], [role('heading', 'Detalhe'), text('Comprar leite')], '/tasks/5');
   const landed = { action: 'expect_url', path: '/tasks/5' };
   assert.equal(pre([GOTO, HEAD, DETAILS, landed, ROW], [PLAIN, nav]), null, 'the route after expect_url did not select the snapshot');
   const unstated = pre([GOTO, HEAD, DETAILS, ROW], [PLAIN, nav]);
-  assert.equal(unstated?.code, 'STEP_UNGROUNDED', 'without expect_url the case is still on the first route');
+  assert.equal(unstated?.code, 'PLAN_ENTRY_INVALID', 'without expect_url the case is still on the first route');
   assert.equal(/post-interaction snapshot exists/.test(String(unstated?.reason)), false, 'the hint names a snapshot of a route the case never reached');
 });
 
 test('AC-11 a plan with plain snapshots only refuses with the sentences it always had, byte for byte, and a plain lookup never returns a post-interaction file', () => {
   assert.equal(pre([GOTO, HEAD, CLICK], [PLAIN]), null);
   const unknown = pre([GOTO, HEAD, CLICK, ROW], [PLAIN]);
-  assert.deepEqual(unknown, { code: 'STEP_UNGROUNDED', reason: 'step 4: the locator is not a snapshot entry' });
+  assert.deepEqual(unknown, { code: 'PLAN_ENTRY_INVALID', reason: 'step 4: the locator is not a snapshot entry' });
   const noSnapshot = pre([GOTO, HEAD], []);
   assert.deepEqual(noSnapshot, {
-    code: 'STEP_UNGROUNDED',
+    code: 'PLAN_ENTRY_INVALID',
     reason: 'step 2: no plan-time snapshot covers this role and route; run the ground mode for the route before planning this step',
   });
   const ambiguous = pre([GOTO, { action: 'expect_visible', role: 'button', name: 'Gemeo' }], [{ ...PLAIN, entries: [role('button', 'Gemeo', 2)] }]);
-  assert.deepEqual(ambiguous, { code: 'STEP_UNGROUNDED', reason: 'step 2: the locator matched 2 elements in the snapshot; a locator must match exactly one' });
+  assert.deepEqual(ambiguous, { code: 'PLAN_ENTRY_INVALID', reason: 'step 2: the locator matched 2 elements in the snapshot; a locator must match exactly one' });
 
   // The same entry in a plain file and in a post-interaction file: a step before any interaction reads the plain one.
   const plainTwin = { ...PLAIN, entries: [role('heading', 'Tarefas', 2)] };
   const postOnly = postFile([GOTO, CLICK], [role('heading', 'Tarefas', 1)]);
   for (const snapshots of [[plainTwin, postOnly], [postOnly, plainTwin]]) {
     const r = pre([GOTO, HEAD], snapshots);
-    assert.equal(r?.code, 'STEP_UNGROUNDED', 'a plain lookup returned the post-interaction file');
+    assert.equal(r?.code, 'PLAN_ENTRY_INVALID', 'a plain lookup returned the post-interaction file');
     assert.match(String(r?.reason), /2 elements/);
   }
 });
@@ -272,7 +273,10 @@ test('AC-11 the report-sourced rule applies only to a consumed prefix: a plain p
   assert.equal(pre([GOTO, HEAD, FILL, APPLY], [PLAIN], 'Open the tasks.'), null);
   // A file for another value is not consumed, so the refusal is the grounding one, not the value rule.
   const other = pre([GOTO, HEAD, { ...FILL, value: 'abd' }, APPLY, RESULT], [PLAIN, POST_FILL], 'Open the tasks.');
-  assert.equal(other?.code, 'STEP_UNGROUNDED');
+  assert.equal(other?.code, 'PLAN_ENTRY_INVALID');
+  // Both rules share the code since the report's words became a grounding source, so the sentence tells them apart.
+  assert.match(String(other?.reason), /not a snapshot entry/);
+  assert.equal(/fill value/.test(String(other?.reason)), false, 'the value rule fired for a prefix that was not consumed');
   // A prefix of clicks has no typed value to source.
   assert.equal(pre([GOTO, HEAD, CLICK, ROW], [PLAIN, POST], 'Open the tasks.'), null);
 });
@@ -362,19 +366,19 @@ test('AC-11 end to end through the real runner: a post-interaction file is loade
   assert.match(consumed.reason, /^step 3:/);
   assert.equal(consumed.reason.includes('abc'), false, consumed.reason);
   // The control of the same shape on a route with no post-interaction file is refused for grounding, not for the value.
-  assert.deepEqual([control.outcome, control.reason_code], ['needs-human', 'STEP_UNGROUNDED'], brief(control));
+  assert.deepEqual([control.outcome, control.reason_code], ['needs-human', 'PLAN_ENTRY_INVALID'], brief(control));
   assert.match(control.reason, /^step 5:/);
   assert.match(control.reason, /not a snapshot entry/);
   assert.equal(/post-interaction/.test(control.reason), false, control.reason);
   // A schema-2 document with no prefix array, and a schema-3 one, are not post-interaction snapshots: ignored, so no hint.
   for (const [label, c] of /** @type {[string, any][]} */ ([['schema 2 without a prefix array', noArray], ['schema 3', three]])) {
-    assert.deepEqual([c.outcome, c.reason_code], ['needs-human', 'STEP_UNGROUNDED'], `${label}: ${brief(c)}`);
+    assert.deepEqual([c.outcome, c.reason_code], ['needs-human', 'PLAN_ENTRY_INVALID'], `${label}: ${brief(c)}`);
     assert.match(c.reason, /^step 4:/, label);
     assert.match(c.reason, /not a snapshot entry/, label);
     assert.equal(/post-interaction/.test(c.reason), false, `${label}: the file was recognized: ${c.reason}`);
   }
   // A file for another value exists for this role and route and is not consumed: the fixed hint says so, naming nothing.
-  assert.deepEqual([another.outcome, another.reason_code], ['needs-human', 'STEP_UNGROUNDED'], brief(another));
+  assert.deepEqual([another.outcome, another.reason_code], ['needs-human', 'PLAN_ENTRY_INVALID'], brief(another));
   assert.match(another.reason, /post-interaction snapshot exists for this role and route/);
   assert.equal(/abd|abc/.test(another.reason), false, another.reason);
 

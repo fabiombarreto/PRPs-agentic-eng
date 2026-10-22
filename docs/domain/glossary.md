@@ -309,9 +309,10 @@ The three flat `browser` plan steps `plugins/relay/scripts/qa-run.mjs` adds to
 its closed step vocabulary so that a case can assert more than presence:
 `expect_value`, `expect_state` and `expect_not_visible`. Each takes only a
 grounded locator form (`role` plus `name`, and for `expect_not_visible` also
-`text`; never a `selector`), counts as one expectation and is planned only from
-a `ground` snapshot entry whose `matches` is exactly 1, with the expected value
-or state taken from the report's own steps and never from the snapshot.
+`text`; never a `selector`), counts as one expectation and is grounded like any
+locator step (a `ground` snapshot entry whose `matches` is exactly 1, or a name or text the
+report's own steps state), with the expected value or state taken from the report's own steps
+and never from the snapshot.
 `expect_value` compares the value of an input, a textarea or a select with
 exactly one of `equals` (exact), `contains` (a non-empty string) or `not_empty`
 (always `true`, surrounding whitespace ignored), and allows `{{name}}` bindings
@@ -338,6 +339,18 @@ seeded, authenticated or requested. A `goto` resets the anchor and an
 not: the anchor proves that the route rendered earlier in the case, not at the
 instant of the absence check. See `plugins/relay/commands/relay-qa-run.md`.
 
+Visibility is judged as a person would in `expect_visible`, `expect_text` and
+`expect_not_visible`: an element counts as visible only when Playwright reports it
+visible and the browser's `checkVisibility`, read with its opacity and visibility
+options, agrees, so an element at `opacity: 0`, under an ancestor at `opacity: 0` or
+at `visibility: hidden` is not visible (`expect_visible` and `expect_text` fail on
+it with a fixed reason, `expect_not_visible` passes). Playwright alone counts an
+`opacity: 0` element as visible. A positive step is re-read for up to
+`ASSERT_SETTLE_MS`, so a fade-in has time to finish. The final capture of a browser
+case is a full-page screenshot with the password and `expect_value` masks, bounded
+by `CAPTURE_TIMEOUT_MS` (30 seconds, chosen and not measured) and retried once as a
+viewport-only capture if the full-page capture fails.
+
 Two planner rules the command doc states for these actions. A `click` that
 navigates does not reset the absence anchor, so the planner follows it with an
 `expect_url` of the new path and a positive step on the page it lands on before
@@ -348,6 +361,19 @@ not detected and is read as Playwright reports its checked state. A step planned
 after an interaction is grounded from the plain snapshot or from the
 post-interaction snapshot a `--prefix` ground wrote (see "QA grounding
 snapshot").
+
+A locator step is also valid when its `name` or `text` appears in the case's manual
+steps: it then has no snapshot entry, and the runner resolves it when the case runs,
+passing on exactly one match and ending the case `needs-human` `STEP_UNGROUNDED` on none
+or several; a locator that is neither a snapshot entry nor a word of the report is
+`PLAN_ENTRY_INVALID`. Four optional keys reshape a locator and are always resolved when
+the case runs: `within` (a `role` plus `name` or `name_prefix` scope that must resolve to
+exactly one element, chained so the locator matches only inside it), `name_prefix`
+(a name matched by its start, for a name that embeds a live count), `label_text` (an input
+whose label is not associated with it: from the one element whose visible text equals the
+label, the runner walks up to the nearest ancestor that holds exactly one `input`,
+`textarea` or `select`) and `index` (the zero-based position among the elements of a
+`role` inside a `within` scope). See `plugins/relay/commands/relay-qa-run.md`.
 
 A browser step that is none of these three, `expect_requests`, counts the
 requests the page issues instead of reading an element. It takes no locator, is
@@ -365,14 +391,62 @@ independent of the outcome, and an entry with no class is reported
 no steps) does not execute its case, drawn from a closed catalogue defined once
 in `plugins/relay/scripts/qa-run.mjs` (`REASON_CATALOGUE`) and pinned by the
 `qa-run-contract` check: `UNGROUNDABLE_AFTER_INTERACTION`, `EXTERNAL_CHANNEL`,
-`VISUAL_JUDGEMENT`, `VOCABULARY_GAP`, `STEP_UNGROUNDED`, `PRODUCT_DEFECT`,
-`STATE_UNCONFIRMED` and the runner-derived `PARTIAL_REMAINDER`. A declined case
-is `needs-human` or `blocked` with a fixed reason and its manual steps verbatim,
-and a code outside the catalogue makes the entry `PLAN_ENTRY_INVALID`. A case
-the plan omits is `NO_PLAN_ENTRY`, a planner defect that is not a catalogue
-member. `results.json` carries a `classification` block (per-class counts, the
-driver-executed rate over the automatable class and the objective-step
-counters); the four-key `counts` partition is unchanged. See
+`OUTSIDE_LOCAL_ENVIRONMENT`, `HUMAN_SIGNOFF`, `VISUAL_JUDGEMENT`,
+`VOCABULARY_GAP`, `STEP_UNGROUNDED`, `PRODUCT_DEFECT` and `STATE_UNCONFIRMED`,
+plus the runner-produced `PARTIAL_REMAINDER`, `JUDGEMENT_UNCERTAIN` and
+`ROLE_NOT_DEDICATED`, which a plan entry may not declare. Every code carries a
+reason class, `impossible` (`EXTERNAL_CHANNEL`, `OUTSIDE_LOCAL_ENVIRONMENT`,
+`HUMAN_SIGNOFF`) or `gap` (every other code), distinct from the `class` of a
+case. A declined case is `needs-human` or `blocked` with a fixed reason and its
+manual steps verbatim, and a code outside the catalogue makes the entry
+`PLAN_ENTRY_INVALID`. A case the plan omits is `NO_PLAN_ENTRY`, a planner defect
+that is not a catalogue member. `results.json` carries a `classification` block
+(per-class counts, the driver-executed rate over the automatable class and the
+objective-step counters); the four-key `counts` partition is unchanged, and the
+step counters `needs_human_impossible` and `needs_human_gap` sit beside it. See
+`plugins/relay/commands/relay-qa-run.md`.
+
+Two more plan-side declarations of `/relay-qa-run`, both validated by the runner and
+never inferred. `chosen_inputs` is an optional entry key that lists the `fill` steps
+whose value the planner chose because the report leaves it open, each with a `source`:
+`capture` (a `{{name}}` binding of a declared capture) or `snapshot` (a literal of at
+least 3 characters found, whitespace collapsed and case ignored, in the name or text of
+an entry of a grounding snapshot of the run directory); a literal found nowhere is
+`PLAN_ENTRY_INVALID`, and a later `expect_value` or `expect_text` may expect a chosen
+value. `effect` is an optional step key with the single value `write`, valid on a
+`click`, `fill` or `request` step: a case that carries a marked step is blocked with
+`ROLE_NOT_DEDICATED`, before any seed, session or request, unless the case's role has
+`"dedicated": true` in `PRPs/auth/login.config.json`, a flag the operator sets by hand
+and `/relay-auth-scripts` never writes. See `plugins/relay/commands/relay-qa-run.md`.
+
+A third plan-side declaration of `/relay-qa-run` is the `judge` step, for a visual,
+language or checklist judgment that the report's own steps ask for. Its `criterion`
+must appear verbatim in the case's manual steps, so it is never invented. When `run`
+reaches it the script writes a capture, and an element capture when the step names a
+`within` scope, and records the step as `pending-judgment`; the case has no outcome
+until the command session reads each capture and records a verdict through the `judge`
+mode of `qa-run.mjs` (`pass`, `fail` or `uncertain`, always with a text that says what
+the capture shows). The script never calls a model and never replaces a recorded
+verdict. A judged step is flagged `judged_by` `model`; an `uncertain` verdict ends the
+case `needs-human` with `JUDGEMENT_UNCERTAIN`. See `plugins/relay/commands/relay-qa-run.md`.
+
+A fourth plan-side declaration of `/relay-qa-run` is the `read_message` step, for a verification
+code that a local mail catcher or a local file holds. The project declares the source under
+`channel_sources` in `PRPs/auth/qa-seed.json` (a Mailpit origin that the local-only guard
+approves, or a file inside the target root); the step reads the newest message received
+after the case began, binds the first group of its regular expression to a variable of the
+case and registers the value for redaction, so it reaches no evidence file, reason or
+terminal line. A case that needs a message from a channel with no declared source is
+declined as before. See `plugins/relay/commands/relay-qa-run.md`.
+
+The preflight of `/relay-qa-run` is a read-only mode of `qa-run.mjs` that checks the
+environment before a run starts, with no network request: that Playwright resolves from
+the target or from the installed plugin directory, that the Chromium build it needs is
+installed, that every kit login script carries the installed template's stamp and that
+`PRPs/auth/.sessions/` is ignored by git. It exits non-zero on any failure and names the
+one command that provisions a missing dependency, which the operator runs once per
+plugin version; the runner never downloads anything itself. The same unresolvable
+Playwright halts `run` and `ground`, and a stale kit script halts `ground` by name. See
 `plugins/relay/commands/relay-qa-run.md`.
 
 ## QA grounding snapshot
@@ -380,8 +454,8 @@ counters); the four-key `counts` partition is unchanged. See
 The file `qa-run.mjs ground` writes under `<run-dir>/grounding/` for one route
 and one role: the role-and-name and visible-text candidates of the page's
 accessibility snapshot, each with the number of elements it `matches`, from
-which `/relay-qa-run` plans locator steps (a step is planned only from an entry
-that matches exactly one element). It is taken from the settled page, not the
+which `/relay-qa-run` plans locator steps (a step is planned from an entry
+that matches exactly one element, or from a word of the report's own steps). It is taken from the settled page, not the
 first paint: the script reads the snapshot repeatedly and writes the file only
 once two successive snapshots, 1 second apart (`GROUND_POLL_INTERVAL_MS`), are
 equal within 20 seconds (`GROUND_STABLE_BOUND_MS`). A page that never settles
@@ -437,7 +511,7 @@ counts the requests the page issues, and the flat step that uses it:
 `{ "action": "expect_requests", "method": "POST", "url_contains": "/avatar",
 "count": 1 }`, exactly those four keys (no locator, no `selector`, no
 `session`). `method` is one of `GET`, `HEAD`, `POST`, `PUT`, `PATCH` or
-`DELETE`; `url_contains` is a path that starts with a single `/`, carries no
+`DELETE`, or an array of distinct ones (the step then counts the requests of any of them); `url_contains` is a path that starts with a single `/`, carries no
 query string, fragment or whitespace and is at most 200 characters, and a
 character the URL parser encodes is matched in its encoded form; `count` is an
 integer from 0 to 100 (`EXPECT_REQUESTS_COUNT_MAX`). The step counts the

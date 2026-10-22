@@ -100,6 +100,11 @@ test('AC-12 validateStep accepts the flat step with each HTTP method, a count fr
   for (const method of ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE']) {
     assert.equal(R.validateStep('browser', step({ method })), null, method);
   }
+  // PRD AC-10: a non-empty array of distinct names of the six is accepted as well, in any order and length up to six.
+  for (const method of [['POST'], ['GET'], ['POST', 'PATCH', 'PUT'], ['DELETE', 'POST'], ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE']]) {
+    assert.equal(R.validateStep('browser', step({ method })), null, JSON.stringify(method));
+    assert.equal(R.validateSteps('browser', [GOTO, HEAD, CLICK, step({ method })], []), null, `${JSON.stringify(method)} as a sequence`);
+  }
   for (const count of [0, 1, 2, 57, R.EXPECT_REQUESTS_COUNT_MAX]) {
     assert.equal(R.validateStep('browser', step({ count })), null, `count ${count}`);
   }
@@ -117,7 +122,17 @@ test('AC-12 validateStep refuses every shape outside the closed step as PLAN_ENT
     ['an empty method', 'browser', step({ method: '' })],
     ['a null method', 'browser', step({ method: null })],
     ['a numeric method', 'browser', step({ method: 7 })],
-    ['an array method', 'browser', step({ method: ['POST'] })],
+    // PRD AC-10: a method is a name of the six or a non-empty array of distinct names of the six; ['POST'] is now accepted (see the accepting test).
+    ['an empty array method', 'browser', step({ method: [] })],
+    ['an array method that repeats a name', 'browser', step({ method: ['POST', 'POST'] })],
+    ['an array method with a non-string member', 'browser', step({ method: ['POST', 7] })],
+    ['an array method with a name outside the six', 'browser', step({ method: ['POST', 'TRACE'] })],
+    ['an array method with a lowercase member', 'browser', step({ method: ['post'] })],
+    ['an array method with a nested array', 'browser', step({ method: [['POST']] })],
+    ['an array method whose member is the canary', 'browser', step({ method: ['POST', CANARY] })],
+    ['an array method that is longer than the six names', 'browser', step({ method: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'GET'] })],
+    ['an object method', 'browser', step({ method: {} })],
+    ['an object method with a toString key', 'browser', step({ method: { toString: 1 } })],
     ['a missing method', 'browser', { action: 'expect_requests', url_contains: '/a', count: 1 }],
     ['a method that is the canary', 'browser', step({ method: CANARY })],
     ['a query string in url_contains', 'browser', step({ url_contains: '/avatar?x=1' })],

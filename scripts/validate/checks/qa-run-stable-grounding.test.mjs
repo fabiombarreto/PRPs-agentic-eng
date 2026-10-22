@@ -320,7 +320,8 @@ test('AC-2 the inline candidates have their own cap: a long table never displace
   }
 });
 
-test('AC-2 a step is planned from an inline candidate only when the snapshot counted exactly one element: zero or several is STEP_UNGROUNDED', () => {
+// PRD AC-6: an empty report grounds nothing, so a 0- or 2-match entry is PLAN_ENTRY_INVALID.
+test('AC-2 a step is planned from an inline candidate only when the snapshot counted exactly one element: zero or several is PLAN_ENTRY_INVALID', () => {
   const [candidate] = parseAriaSnapshot('- paragraph: Informações cadastrais');
   assert.ok(candidate && candidate.kind === 'text');
   const snapshotWith = (/** @type {number} */ matches) => ({ schema_version: 1, role: 'admin', route: '/perfil', entries: [{ ...candidate, matches }], withheld: 0 });
@@ -331,7 +332,7 @@ test('AC-2 a step is planned from an inline candidate only when the snapshot cou
   assert.equal(precheckGroundedSteps(steps, [snapshotWith(1)], '', 'admin'), null);
   for (const matches of [0, 2]) {
     const refusal = precheckGroundedSteps(steps, [snapshotWith(matches)], '', 'admin');
-    assert.equal(refusal?.code, 'STEP_UNGROUNDED', `matches ${matches}`);
+    assert.equal(refusal?.code, 'PLAN_ENTRY_INVALID', `matches ${matches}`);
     assert.match(String(refusal?.reason), new RegExp(`${matches} elements`));
     assert.equal(String(refusal?.reason).includes('Informações'), false, 'a reason never echoes the locator text');
   }
@@ -701,7 +702,7 @@ test('AC-2 end to end: paragraph, list-item and quoted-colon text reaches the sn
   assert.equal(precheckGroundedSteps(stepsFor('Registration details'), [doc], '', null), null);
   assert.equal(precheckGroundedSteps(stepsFor('Name: Ana'), [doc], '', null), null);
   const repeated = precheckGroundedSteps(stepsFor('Repeated line'), [doc], '', null);
-  assert.equal(repeated?.code, 'STEP_UNGROUNDED');
+  assert.equal(repeated?.code, 'PLAN_ENTRY_INVALID');
   assert.match(String(repeated?.reason), /2 elements/);
 });
 

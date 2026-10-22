@@ -147,6 +147,13 @@ If any is missing, HALT with the byte-exact pattern shared by every relay comman
    `command: null` entries with `STATE_COMMAND_MISSING`. Name `/relay-qa-run` as the
    next step in prose.
 
+   Also recommend, in prose only, that the operator declare `captures` for the identity
+   of each seeded account (`username`) and for the names or titles of the entities a
+   state seeds (a seeded occurrence title, a seeded task name): `/relay-qa-run` can then
+   assert a profile field with `equals {{username}}` and act on the seeded row instead
+   of an older one. This command only recommends: it never writes `captures`, and a
+   proposal still carries none.
+
 ---
 
 ## Constraints (hard rules)

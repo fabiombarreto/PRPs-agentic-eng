@@ -217,6 +217,13 @@ Merge into `PRPs/auth/login.config.json` additively: an existing role entry is
 never overwritten and an existing `baseUrl` is kept; write `baseUrl` from the
 first `## Local Targets` URL when absent.
 
+Dedicated roles. A role entry may carry `"dedicated": true`, set by the operator by
+hand, to declare that the role's account belongs to the local test environment alone,
+so that the QA runner may run the steps a plan marks as writes for that role. This command
+never writes the key: a generated role entry has no `dedicated` key, the additive merge
+and `--refresh` never add or change it, and any value other than the boolean `true`
+means the role is not dedicated. The key holds no credential and no session.
+
 For each role write `PRPs/auth/login-<role>.mjs` by `Read`-ing
 `${CLAUDE_PLUGIN_ROOT}/resources/auth-login.template.mjs` and replacing every
 occurrence of `__RELAY_ROLE__` with the slug — no other substitution and no edit.
@@ -242,6 +249,7 @@ selected role with no `PRPs/auth/login-<role>.mjs` script is generated exactly a
 `--refresh` and is not reported as refreshed, so a kit narrower than the matrix is
 refreshed for its own roles only. A role the kit holds that the model's matrix does not
 list is not selected, and its script is left as it is.
+The runner's preflight mode lists every script of the kit whose stamp line differs from the installed template's, with the role and the identities, so the roles to pass to `--role` are known before a run starts.
 
 Write `PRPs/auth/credentials.example.json` with placeholder values only when
 absent:

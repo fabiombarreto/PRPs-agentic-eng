@@ -32,6 +32,114 @@
 
       <p>Nothing yet.</p>
 
+      <h2 id="v0-47-0">0.47.0 &#8212; 2026-10-22</h2>
+
+      <p>Vocabulary v3: the runner executes what an AI agent can. The 0.46.0 dogfood executed 27 of the 74 objective
+        steps of the two reference reports and left 9 of 14 cases <code>needs-human</code>, although most of what it
+        declined is not impossible for an AI agent. This release ships phases 1&ndash;7 of
+        <code>PRPs/prds/qa-runner-ai-executable-steps.prd.md</code> and its release cut. Phase 9, the dogfood on the
+        same two byte-identical reports, follows on this release. The four-outcome vocabulary, the local-only guard,
+        the review loop, <code>/relay-qa-report</code> and <code>capture.mjs</code> are unchanged, and
+        <code>npm run validate</code> still runs 28 checks.</p>
+
+      <h3 id="v0-47-0-added">Added</h3>
+
+      <ul>
+        <li><strong>Impossible and gap classes for the QA runner&rsquo;s reason codes</strong> &mdash; every code of the
+          <code>/relay-qa-run</code> reason-code catalogue now carries a class. <code>EXTERNAL_CHANNEL</code> (redefined
+          as a real external channel with no declared local source), <code>OUTSIDE_LOCAL_ENVIRONMENT</code> (production
+          or a physical device) and <code>HUMAN_SIGNOFF</code> (a step the report reserves for a person) are
+          <code>impossible</code>: no AI agent can execute them alone. Every other code is a <code>gap</code> that
+          counts against the executed share. The catalogue holds twelve codes; <code>JUDGEMENT_UNCERTAIN</code> and
+          <code>ROLE_NOT_DEDICATED</code> are recorded by the runner and a plan cannot declare them.</li>
+        <li><strong>Step counters for what is left to a person</strong> &mdash; <code>results.json</code> gains
+          <code>needs_human_impossible</code> and <code>needs_human_gap</code>, the steps left to a person by a
+          <code>needs-human</code> case, split by the class of its reason code, beside the unchanged four-key
+          <code>counts</code>; the run prints a <code>Needs-human steps</code> summary line.</li>
+        <li><strong>Counting convention</strong> &mdash; the command document defines an objective step to include
+          judgment and channel steps, defines the metric denominator as every objective step not of impossible class,
+          and requires a pre-run table to be frozen under this convention before any counted run.</li>
+        <li><strong>Run-time and scoped locators</strong> &mdash; a locator step whose name or text the report&rsquo;s own
+          steps state no longer needs a snapshot entry: the runner resolves it when the case runs, passing on exactly one
+          match and ending the case <code>needs-human</code> <code>STEP_UNGROUNDED</code> on none or several. Locator
+          steps also take <code>within</code> (a group scope), <code>name_prefix</code> (a name that embeds a live count),
+          <code>label_text</code> (an input whose label is not associated with it) and <code>index</code> (the Nth
+          element of a role inside a scope), and <code>expect_requests</code> accepts an array of methods.</li>
+        <li><strong>Chosen inputs and dedicated-role writes</strong> &mdash; a plan entry may declare
+          <code>chosen_inputs</code> for a <code>fill</code> whose value the report leaves open: the value is a declared
+          capture or a literal found in a grounding snapshot of the run directory, a literal found nowhere is
+          <code>PLAN_ENTRY_INVALID</code>, and a later expectation may expect it. A click, fill or request marked
+          with the <code>effect</code> key set to <code>write</code> runs only for a role that
+          <code>login.config.json</code> declares <code>dedicated</code>; otherwise the case is <code>blocked</code>
+          with <code>ROLE_NOT_DEDICATED</code> before any seed, session or request. <code>/relay-qa-seed</code> and
+          <code>/relay-qa-run</code> now recommend capturing the seeded account&rsquo;s <code>username</code> and the
+          titles of seeded entities.</li>
+        <li><strong>Model judgment</strong> &mdash; a browser plan may carry a <code>judge</code> step for a visual,
+          language or checklist criterion that the report&rsquo;s own steps state. The runner captures the evidence
+          (plus an element capture when the step names a scope) and leaves the case without an outcome until the
+          command session records a verdict with <code>qa-run.mjs judge</code>, which needs an evidence text, never
+          replaces a recorded verdict and recomputes <code>results.json</code>. An uncertain verdict ends the case
+          <code>needs-human</code> with <code>JUDGEMENT_UNCERTAIN</code>, and the script never calls a model.</li>
+        <li><strong>Local channel sources</strong> &mdash; a project may declare a local Mailpit origin or a local file
+          under <code>channel_sources</code> in <code>qa-seed.json</code>, and a browser plan may carry a
+          <code>read_message</code> step that reads a verification code from it after the step that sends the message.
+          The newest message received after the case began yields the code, which is registered for redaction and
+          reaches no evidence file, reason or terminal line. A source that is not local blocks the case, and a channel
+          with no declared source is still declined as before.</li>
+        <li><strong>Self-checking environment</strong> &mdash; <code>qa-run.mjs preflight</code> checks, before a run
+          starts and with no network request, that Playwright resolves from the target or the installed plugin
+          directory, that the Chromium build it needs is installed, that every kit login script is current and that
+          the session directory is ignored by git, and exits non-zero on any failure. An unresolvable Playwright now
+          halts <code>run</code> and <code>ground</code> with the resolved plugin directory and the one command that
+          provisions it, a stale kit script halts <code>ground</code> by name, and a record-resolved case whose cited
+          tests import a source changed after the record was generated adds a <code>RECORD_STALE</code> warning.</li>
+      </ul>
+
+      <h3 id="v0-47-0-changed">Changed</h3>
+
+      <ul>
+        <li><strong><code>PRODUCT_DEFECT</code> is only for a case that cannot start</strong> &mdash; a product defect
+          the case can reach is executed and reported <code>fail</code> with evidence naming the failing step instead
+          of being declined.</li>
+        <li><strong><code>qa-run-contract</code></strong> &mdash; the check pins the class of every catalogue code, the
+          closed set of impossible codes, the runner-owned codes, the two counters and the counting convention in the
+          command document. It is extended, not duplicated: <code>npm run validate</code> still runs 28 checks.</li>
+        <li><strong>Reference pages</strong> &mdash; the <code>/relay-qa-run</code> entry of the commands reference and
+          the <code>qa-run-contract</code> section of the validation checks reference state the twelve codes, the two
+          classes and the counters.</li>
+        <li><strong>Visibility means visible to a person</strong> &mdash; <code>expect_visible</code> and
+          <code>expect_text</code> now fail, and <code>expect_not_visible</code> passes, on an element at
+          <code>opacity: 0</code>, under an ancestor at <code>opacity: 0</code> or at <code>visibility: hidden</code>:
+          the runner combines Playwright&rsquo;s visibility check, which counts such an element as visible, with the
+          browser&rsquo;s <code>checkVisibility</code>. A closed modal that stays in the page can no longer pass a
+          positive step.</li>
+        <li><strong>Full-page final capture</strong> &mdash; the final screenshot of a browser case now covers the whole
+          page, with the same password and <code>expect_value</code> masks, so content below the fold is part of the
+          evidence; if the full-page capture fails the runner takes the viewport capture once instead.</li>
+        <li><strong>Plan-time grounding</strong> &mdash; a locator that is neither a snapshot entry nor a word of the
+          report is now refused <code>PLAN_ENTRY_INVALID</code> (it was <code>STEP_UNGROUNDED</code>), and an
+          <code>expect_not_visible</code> inside a <code>within</code> scope asserts nothing, and ends the case
+          <code>STEP_UNGROUNDED</code>, when the scope is missing or hidden.</li>
+        <li><strong><code>governance/decisions.html</code></strong> &mdash; entry 106 registers the decisions of the
+          vocabulary-v3 runner as one dated entry (impossible-only <code>needs-human</code>, executed product defects,
+          the visibility conjunction, run-time grounding, dedicated-role writes, pending-then-judged steps, local channel
+          sources, the actionable environment halt and the codes kept outside the catalogue). It builds on the
+          2026-10-06 entry and does not re-register it.</li>
+        <li><strong><code>reference/scripts.html</code></strong> &mdash; the <code>qa-run.mjs</code> entry names all
+          three runner-owned reason codes and the impossible and gap classes with their step counters, and its
+          Dependencies row states the real halt for an unresolvable Playwright in place of &ldquo;never a
+          crash&rdquo;.</li>
+        <li><strong><code>roadmap/status.html</code></strong> &mdash; a row for
+          <code>qa-runner-ai-executable-steps</code> in the feature PRD table (9 phases, 0.47.0, dogfood pending); the
+          decision count is re-derived from <code>docs/decisions.md</code>.</li>
+        <li><strong><code>README.md</code></strong> &mdash; names the released version.</li>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.46.0</code> &rarr; <code>0.47.0</code> to
+          match this release; users running <code>/plugin</code> after pulling
+          this version will get a fresh <code>relay/0.47.0/</code> cache directory
+          with the vocabulary-v3 changes of <code>/relay-qa-run</code> registered.</li>
+      </ul>
+
       <h2 id="v0-46-0">0.46.0 &#8212; 2026-10-13</h2>
 
       <p>Grounding and vocabulary v2. The 0.44.0 and 0.45.0 re-runs drove 1 of 14 reachable cases across

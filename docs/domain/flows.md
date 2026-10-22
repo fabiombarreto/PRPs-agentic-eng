@@ -147,6 +147,20 @@ These standalone commands support that gate; none is invoked by
    steps. A case the plan omits is a planner defect (`NO_PLAN_ENTRY`), and
    `results.json` reports the per-class counts and the driver-executed rate
    over the automatable class.
+   `needs-human` is meant to cover only what no AI agent can execute alone, so
+   every reason code also carries a reason class: `impossible` for a real
+   external channel with no declared local source, production or a physical
+   device, or a step the report reserves for a person, and `gap` for every other
+   code, which counts against the executed share and is worked off, never
+   accepted as human by nature. `results.json` splits the steps that a
+   `needs-human` case leaves to a person into `needs_human_impossible` and
+   `needs_human_gap`, beside the unchanged four-key `counts`. A known product
+   defect that the case can reach is executed and ends `fail` with evidence
+   naming the failing step; `PRODUCT_DEFECT` is only for a case that cannot
+   start. The command's counting convention counts judgment and channel steps as
+   objective steps, takes as the metric denominator every objective step not of
+   impossible class, and requires a pre-run table to be frozen under it before
+   any counted run.
    Before it plans a locator step, the planner runs the script's `ground` mode
    once per route and role. That mode takes the page's accessibility snapshot
    only once two successive snapshots, one second apart, are equal (it waits at
@@ -158,6 +172,12 @@ These standalone commands support that gate; none is invoked by
    exists only after an interaction). An automated case that the test record
    resolves still gets its entry: it decides nothing about the outcome, but its
    class and objective-step count are still read.
+   Before `init`, the `preflight` mode checks the environment without a network request:
+   Playwright resolving from the target or the installed plugin directory, the Chromium
+   build it needs, the stamp of every kit login script and the ignore rule of
+   `PRPs/auth/.sessions/`; a failure names its fix and stops the command. A
+   record-resolved case whose cited test files import a source changed in git after the
+   record was generated keeps its outcome and adds a `RECORD_STALE` warning to the results.
    The run's evidence is kept readable and out of git. Session values are
    registered for redaction by source: the token artifact, the role's declared
    `sessionCookie` and the cookie of every `api_origins` entry always, and every
@@ -180,8 +200,9 @@ These standalone commands support that gate; none is invoked by
    the case `FAILED_NON_LOCAL_TARGET`), so a case can check that an endpoint
    refuses a request made without a token while every other step of the case
    keeps the role's session. Three browser steps take a grounded `role` plus
-   `name`, are planned only from a snapshot entry that matches exactly one
-   element, and take the expected value or state from the report's own steps:
+   `name`, are grounded like any locator step (a snapshot entry that matches exactly
+   one element, or a name that the report's own steps state), and take the expected
+   value or state from the report's own steps:
    `expect_value` compares an input, textarea or select value (`equals`,
    `contains` or `not_empty`) and records only which comparison ran and whether
    it passed, never the value, with the field masked in the final screenshot;
@@ -194,6 +215,36 @@ These standalone commands support that gate; none is invoked by
    `expect_state`) on the same route since the last `goto`, because an absence
    alone would pass on a page that never rendered; without that anchor the entry
    is `PLAN_ENTRY_INVALID` before anything is seeded, authenticated or requested.
+   Visibility is judged as a person would: an element at `opacity: 0` or
+   `visibility: hidden` is not visible, so `expect_visible` and `expect_text` fail on
+   it and `expect_not_visible` passes. The final capture of a browser case is a
+   full-page screenshot with the same masks.
+   A locator step is also valid when its name or text appears in the report's own
+   steps: it has no snapshot entry, the runner resolves it when the case runs, and
+   none or several matches end the case `needs-human` `STEP_UNGROUNDED`; a locator
+   that is neither is `PLAN_ENTRY_INVALID`. The optional keys `within`, `name_prefix`,
+   `label_text` and `index` scope or reshape a locator (a group scope, a name matched
+   by its start, an input found from its label text, the Nth element of a role in a
+   scope) and are always resolved when the case runs.
+   A value the report leaves open may be chosen by the planner and declared in the
+   entry's `chosen_inputs` (a `fill` value that is a declared capture or a literal found
+   in a grounding snapshot of the run directory; a literal found nowhere is
+   `PLAN_ENTRY_INVALID`), and a click, fill or request marked with the `effect` key set
+   to `write` runs only for a role that `login.config.json` declares `"dedicated": true`;
+   otherwise the case is `blocked` with `ROLE_NOT_DEDICATED` before any seed, session or
+   request.
+   A `judge` step captures a visual, language or checklist criterion that the report
+   states, and the case then waits with no outcome: the command session reads each
+   capture and records a verdict (`pass`, `fail` or `uncertain`) with the text of what
+   it saw through the `judge` mode of `qa-run.mjs`, and the script recomputes
+   `results.json` once the last verdict of the case is in. An `uncertain` verdict ends
+   the case `needs-human` with `JUDGEMENT_UNCERTAIN`.
+   A `read_message` step reads a verification code from a local source that
+   `channel_sources` declares (a Mailpit origin the guard approves, or a file inside the
+   target root): the newest message received after the case began yields the first group
+   of the step's expression as a variable of the case, registered for redaction, which
+   the steps after it may use as `{{name}}`. A channel with no declared source is
+   declined as before.
    An element that exists only after a click or a fill is grounded in a second
    pass: after the plain snapshot of the route, `ground --prefix '<json>'`
    replays a prefix of at most 5 flat `goto`, `click` and `fill` steps of the
@@ -226,7 +277,7 @@ These standalone commands support that gate; none is invoked by
    follows it with an `expect_url` of the new path and a positive step before
    any absence step.
    A browser step may also count the requests the page issues: `expect_requests`
-   takes a `method`, a `url_contains` path (one leading `/`, no query string,
+   takes a `method` (or an array of distinct methods, any of which counts), a `url_contains` path (one leading `/`, no query string,
    fragment or whitespace) and a `count` from 0 to 100, and passes only when the
    page's requests of that method whose whole path contains `url_contains` number
    exactly `count`, from the start of the case's last `goto`, `click` or `fill`

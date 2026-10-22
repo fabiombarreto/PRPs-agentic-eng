@@ -14,6 +14,8 @@
  *   node <plugin-root>/scripts/qa-run.mjs init  --root <dir> --feature <slug> [--env-handle <path>]
  *   node <plugin-root>/scripts/qa-run.mjs run   --root <dir> --feature <slug> --run-dir <rel-dir> [--env-handle <path>] [--max-cases <n>]
  *   node <plugin-root>/scripts/qa-run.mjs ground --root <dir> --feature <slug> --run-dir <rel-dir> --route </path> [--role <slug>] [--env-handle <path>] [--prefix <json>]
+ *   node <plugin-root>/scripts/qa-run.mjs judge --run-dir <rel-dir> --case <n> --step <k> --verdict pass|fail|uncertain --evidence "<text>" [--root <dir>]
+ *   node <plugin-root>/scripts/qa-run.mjs preflight --root <dir>
  *   node <plugin-root>/scripts/qa-run.mjs --help
  *
  * The mode is mandatory. Unknown arguments, flags missing a value, or no mode
@@ -41,6 +43,8 @@
  *          a short list of `goto`, `click` and `fill` steps after the route
  *          loads, and a step that cannot be performed on exactly one element is
  *          the halt GROUND_PREFIX_FAILED (exit 1, nothing written).
+ *   judge  records one verdict of one pending judge step and recomputes results.json; it never calls a model.
+ *   preflight  reads files and asks git, with no network request and no write, and reports whether Playwright resolves and from where, whether the Chromium build is installed, whether every kit login script is current and whether PRPs/auth/.sessions/ is ignored; exit 1 on any failure.
  *
  * Exit codes: 0 completed, 1 a named halt (a FAILED_* code or one of the ground
  * halts such as GROUND_UNSTABLE) or an aborted run, 2 bad arguments.
@@ -63,7 +67,7 @@
  * Node >=18, ESM.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, statSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, statSync, readdirSync, realpathSync } from 'node:fs';
 import { resolve, join, relative, dirname, isAbsolute, basename } from 'node:path';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
@@ -145,11 +149,19 @@ const HUMAN_GATE_SENTENCE =
 /** The one `ground` usage line, shared by USAGE and GROUND_USAGE so the two cannot drift. */
 const GROUND_USAGE_LINE = '  qa-run.mjs ground --root <dir> --feature <slug> --run-dir <rel-dir> --route </path> [--role <slug>] [--env-handle <path>] [--prefix <json>]';
 
+/** The one `judge` usage line, shared by USAGE and JUDGE_USAGE so the two cannot drift. */
+const JUDGE_USAGE_LINE = '  qa-run.mjs judge --run-dir <rel-dir> --case <n> --step <k> --verdict <pass|fail|uncertain> --evidence "<what the capture shows>" [--root <dir>]';
+
+/** The one `preflight` usage line, shared by USAGE and PREFLIGHT_USAGE so the two cannot drift. */
+const PREFLIGHT_USAGE_LINE = '  qa-run.mjs preflight --root <dir>';
+
 export const USAGE = `Usage:
   qa-run.mjs parse --report <path>
   qa-run.mjs init  --root <dir> --feature <slug> [--env-handle <path>]
   qa-run.mjs run   --root <dir> --feature <slug> --run-dir <rel-dir> [--env-handle <path>] [--max-cases <n>]
 ${GROUND_USAGE_LINE}
+${JUDGE_USAGE_LINE}
+${PREFLIGHT_USAGE_LINE}
   qa-run.mjs --help
 `;
 
@@ -1071,8 +1083,8 @@ async function guardTarget(baseUrl, root) {
 // ---------------------------------------------------------------------------
 
 /**
- * @typedef {{ index: number, action: string, result: string, evidence: string | null }} StepRecord
- * @typedef {{ outcome: string, reason_code: string | null, reason: string | null, evidence: string[], steps?: StepRecord[] }} CaseResult
+ * @typedef {{ index: number, action: string, result: string, evidence: string | null, kind?: string, scope_evidence?: string | null, judged_by?: string, judgment_evidence?: string }} StepRecord
+ * @typedef {{ outcome: string, reason_code: string | null, reason: string | null, evidence: string[], steps?: StepRecord[], pending_judgment?: number[], record_stale?: string[] }} CaseResult
  * @typedef {{ root: string, runDirAbs: string, runDirRel: string, table: RedactionTable, target: NonNullable<Target>, playwright: any, loginConfig: any, sessions: Map<string, any>, seeds: Map<string, any>, seedConfig: any, anonChecks: Map<string, any> }} RunCtx
  * @typedef {{ path: string | null, token: string | null, header?: string | null, valuePrefix?: string | null }} SessionInfo
  */
@@ -1091,7 +1103,7 @@ const isObj = (/** @type {any} */ v) => v !== null && typeof v === 'object' && !
 
 const HTTP_ACTIONS = ['request', 'query'];
 const API_ORIGIN_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/;
-const BROWSER_ACTIONS = ['goto', 'click', 'fill', 'expect_visible', 'expect_text', 'expect_url', 'query', 'expect_value', 'expect_not_visible', 'expect_state', 'expect_requests'];
+const BROWSER_ACTIONS = ['goto', 'click', 'fill', 'expect_visible', 'expect_text', 'expect_url', 'query', 'expect_value', 'expect_not_visible', 'expect_state', 'expect_requests', 'judge'];
 const API_HEADER_FORBIDDEN = ['host', 'content-length', 'cookie', 'transfer-encoding'];
 const LOCATOR_ACTIONS = ['click', 'fill', 'expect_visible', 'expect_text', 'expect_value', 'expect_not_visible', 'expect_state'];
 const LOCATOR_ROLES = ['button', 'link', 'textbox', 'checkbox', 'radio', 'combobox', 'heading', 'tab', 'menuitem', 'option', 'switch', 'searchbox', 'spinbutton', 'slider', 'dialog', 'alert', 'status', 'row', 'cell', 'columnheader', 'listitem', 'img', 'navigation', 'region', 'table', 'menu', 'tabpanel'];
@@ -1107,14 +1119,115 @@ export const POSITIVE_ASSERTION_ACTIONS = Object.freeze(['expect_visible', 'expe
 /** The element states `expect_state` can assert. The runner reads each through Playwright's locator API, never the snapshot token. */
 export const EXPECT_STATES = Object.freeze(['expanded', 'disabled', 'checked']);
 
+/** The optional step keys that scope or reshape a locator; a step that carries any of them is a scoped locator step. */
+export const SCOPED_LOCATOR_KEYS = Object.freeze(['within', 'name_prefix', 'label_text', 'index']);
+
+/** The kinds of judgment a `judge` step may ask for, the verdicts a judgment may record, and the limits of the texts (chosen, not measured). */
+export const JUDGE_KINDS = Object.freeze(['visual', 'language', 'checklist']);
+export const JUDGE_VERDICTS = Object.freeze(['pass', 'fail', 'uncertain']);
+export const JUDGE_CRITERION_MAX = 500;
+export const JUDGE_EVIDENCE_MIN = 10;
+export const JUDGE_EVIDENCE_MAX = 2000;
+
+/** The step result of a judged step that waits for a verdict, and the internal result of a case that holds one. Never an outcome. */
+export const PENDING_JUDGMENT = 'pending-judgment';
+
+/** The channels a `read_message` step may read, the source kind each channel accepts, and the limits of a read (chosen, not measured). */
+export const READ_MESSAGE_CHANNELS = Object.freeze(['mail', 'sms']);
+export const CHANNEL_SOURCE_KINDS = Object.freeze({ mail: 'mailpit', sms: 'file' });
+export const READ_MESSAGE_WAIT_MS = 10000;
+export const READ_MESSAGE_POLL_MS = 500;
+export const MESSAGE_REGEX_MAX = 200;
+export const MESSAGE_TEXT_MAX = 65536;
+export const MESSAGE_VALUE_MAX = 200;
+/** A recipient is one plain token: it is placed in a search query and in a line filter, never trusted as free text. */
+const MESSAGE_TO_PATTERN = /^[^\s"'<>\\]{3,254}$/;
+
 /**
- * The strict locator form of a browser step: role plus name, or visible text. Pure, no I/O.
+ * Validates the `within` object of a step: a supported `role` and exactly one of `name` or `name_prefix`, both
+ * non-empty strings. Pure and total: it never throws and a reason names keys, never a value.
+ * @param {any} within
+ * @returns {{ ok: true, scope: { role: string, name?: string, namePrefix?: string } } | { ok: false, why: string }}
+ */
+export function scopeOf(within) {
+  if (!isObj(within) || Object.keys(within).some((k) => !['role', 'name', 'name_prefix'].includes(k))) {
+    return { ok: false, why: 'within takes only a role and a name or name_prefix' };
+  }
+  if (!isStr(within.role) || !LOCATOR_ROLES.includes(within.role)) return { ok: false, why: 'within role must be one of the supported roles' };
+  if ((within.name === undefined) === (within.name_prefix === undefined)) return { ok: false, why: 'within takes exactly one of name or name_prefix' };
+  const label = within.name !== undefined ? within.name : within.name_prefix;
+  if (!isStr(label) || label.trim() === '') return { ok: false, why: 'within name must be a non-empty string' };
+  return { ok: true, scope: within.name !== undefined ? { role: within.role, name: within.name } : { role: within.role, namePrefix: within.name_prefix } };
+}
+
+/**
+ * The locator form of a step that carries `within`, `name_prefix`, `label_text` or `index`. Pure and total.
+ * @param {any} step an object that carries at least one of SCOPED_LOCATOR_KEYS
+ * @returns {{ ok: false, why: string } | { ok: true, form: 'scoped', scope: null | { role: string, name?: string, namePrefix?: string }, target: { kind: 'role', role: string, name: string } | { kind: 'role-prefix', role: string, namePrefix: string } | { kind: 'text', text: string } | { kind: 'label', labelText: string } | { kind: 'nth', role: string, index: number } }}
+ */
+function scopedLocatorOf(step) {
+  /** @param {string} why @returns {{ ok: false, why: string }} */
+  const bad = (why) => ({ ok: false, why });
+  const named = (/** @type {any} */ v) => isStr(v) && v.trim() !== '';
+  if (step.selector !== undefined) return bad('a step names one locator form: selector, role and name, or text');
+  /** @type {null | { role: string, name?: string, namePrefix?: string }} */ let scope = null;
+  if (step.within !== undefined) {
+    const s = scopeOf(step.within);
+    if (!s.ok) return bad(s.why);
+    scope = s.scope;
+  }
+  const hasRole = step.role !== undefined;
+  const hasName = step.name !== undefined;
+  const hasPrefix = step.name_prefix !== undefined;
+  const hasText = step.text !== undefined;
+  const hasLabel = step.label_text !== undefined;
+  const hasIndex = step.index !== undefined;
+  if (hasText) {
+    if (hasRole || hasName || hasPrefix || hasLabel || hasIndex) return bad('a step names one locator form: role with name, name_prefix or index; text; or label_text');
+    if (!named(step.text)) return bad('text must be a non-empty string');
+    return { ok: true, form: 'scoped', scope, target: { kind: 'text', text: step.text } };
+  }
+  if (hasLabel) {
+    if (hasRole || hasName || hasPrefix || hasIndex) return bad('label_text names the whole locator: it takes no role, name, name_prefix or index');
+    if (!named(step.label_text)) return bad('label_text must be a non-empty string');
+    return { ok: true, form: 'scoped', scope, target: { kind: 'label', labelText: step.label_text } };
+  }
+  if (!hasRole) return bad('a step with within, name_prefix or index needs a role, a text or a label_text');
+  if (!isStr(step.role) || !LOCATOR_ROLES.includes(step.role)) return bad('role must be one of the supported roles');
+  if ([hasName, hasPrefix, hasIndex].filter(Boolean).length !== 1) return bad('role takes exactly one of name, name_prefix or index');
+  if (hasName) {
+    if (!named(step.name)) return bad('name must be a non-empty string');
+    return { ok: true, form: 'scoped', scope, target: { kind: 'role', role: step.role, name: step.name } };
+  }
+  if (hasPrefix) {
+    if (!named(step.name_prefix)) return bad('name_prefix must be a non-empty string');
+    return { ok: true, form: 'scoped', scope, target: { kind: 'role-prefix', role: step.role, namePrefix: step.name_prefix } };
+  }
+  if (scope === null) return bad('index needs a within scope');
+  if (!Number.isSafeInteger(step.index) || step.index < 0) return bad('index must be a non-negative integer');
+  return { ok: true, form: 'scoped', scope, target: { kind: 'nth', role: step.role, index: step.index } };
+}
+
+/**
+ * Whether a locator descriptor names a control whose value or state can be read: the role form, or a scoped form
+ * that is not a bare text. Pure.
+ * @param {any} loc
+ * @returns {boolean}
+ */
+export function isControlLocator(loc) {
+  return isObj(loc) && loc.ok === true && (loc.form === 'role' || (loc.form === 'scoped' && loc.target.kind !== 'text'));
+}
+
+/**
+ * The strict locator form of a browser step: role plus name, or visible text, or (when the step carries one of
+ * SCOPED_LOCATOR_KEYS) the scoped form. Pure, no I/O.
  * Returns null when the step carries none of the keys role, name, text.
  * @param {any} step
- * @returns {null | { ok: false, why: string } | { ok: true, form: 'role', role: string, name: string } | { ok: true, form: 'text', text: string }}
+ * @returns {null | { ok: false, why: string } | { ok: true, form: 'role', role: string, name: string } | { ok: true, form: 'text', text: string } | ReturnType<typeof scopedLocatorOf>}
  */
 export function locatorOf(step) {
   if (!isObj(step)) return null;
+  if (SCOPED_LOCATOR_KEYS.some((k) => step[k] !== undefined)) return scopedLocatorOf(step);
   const hasRole = step.role !== undefined;
   const hasName = step.name !== undefined;
   const hasText = step.text !== undefined;
@@ -1188,6 +1301,19 @@ export function deriveApiHeader(spec, state, host) {
 const VARIABLE_PATTERN = /\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
 
 /**
+ * Whether an `expect_requests` method is one of the six method names or a non-empty array of distinct ones. Pure and
+ * total: every member is tested by type before anything is compared, so a hostile value (an object with a
+ * `toString` key, a nested array, an array-like) is refused and never coerced.
+ * @param {any} method
+ * @returns {boolean}
+ */
+function validRequestMethods(method) {
+  const one = (/** @type {any} */ m) => typeof m === 'string' && HTTP_METHODS.includes(m);
+  if (Array.isArray(method)) return method.length >= 1 && method.length <= HTTP_METHODS.length && method.every(one) && new Set(method).size === method.length;
+  return one(method);
+}
+
+/**
  * The per-step rules of the closed vocabulary. Returns the rejection text, or the number of expectations the step carries.
  * @param {string} driver
  * @param {any} s
@@ -1203,6 +1329,12 @@ function stepRules(driver, s) {
       return bad('nested step form is not accepted; use the flat shape {"action": "<name>", ...}');
     }
     return bad('not an object with a string action');
+  }
+  // `effect` declares a step that changes state. Its one legal value is "write", and only a click, a fill or an
+  // http request can carry it; a reason names the key, never a value.
+  if (s.effect !== undefined) {
+    if (s.effect !== 'write') return bad('effect must be "write" when present');
+    if (s.action !== 'click' && s.action !== 'fill' && s.action !== 'request') return bad('effect applies only to click, fill and request steps');
   }
   if (s.action === 'query') {
     if (s.session !== undefined) return bad('query takes no session key');
@@ -1242,10 +1374,11 @@ function stepRules(driver, s) {
     const loc = LOCATOR_ACTIONS.includes(s.action) ? locatorOf(s) : null;
     if (loc !== null) {
       if (!loc.ok) return bad(`${s.action}: ${loc.why}`);
+      if (loc.form === 'scoped' && loc.target.kind === 'label' && (s.action === 'expect_text' || s.action === 'expect_not_visible')) return bad(`${s.action} does not take label_text: it names an input`);
       if (s.action === 'fill' && !isStr(s.value)) return bad('fill needs a string value');
       if (s.action === 'expect_text' && !isStr(s.contains)) return bad('expect_text needs a string contains');
       if (s.action === 'expect_value') {
-        if (loc.form !== 'role') return bad('expect_value needs a role and a name');
+        if (!isControlLocator(loc)) return bad('expect_value needs a role and a name');
         const comparisons = [s.equals, s.contains, s.not_empty].filter((v) => v !== undefined).length;
         if (comparisons !== 1) return bad('expect_value needs exactly one of equals, contains or not_empty');
         if (s.equals !== undefined && !isStr(s.equals)) return bad('expect_value equals must be a string');
@@ -1253,7 +1386,7 @@ function stepRules(driver, s) {
         if (s.not_empty !== undefined && s.not_empty !== true) return bad('expect_value not_empty must be true');
       }
       if (s.action === 'expect_state') {
-        if (loc.form !== 'role') return bad('expect_state needs a role and a name');
+        if (!isControlLocator(loc)) return bad('expect_state needs a role and a name');
         if (!EXPECT_STATES.includes(s.state)) return bad('expect_state state must be one of expanded, disabled, checked');
         if (typeof s.equals !== 'boolean') return bad('expect_state needs a boolean equals');
       }
@@ -1290,7 +1423,7 @@ function stepRules(driver, s) {
         if (Object.keys(s).some((k) => !['action', 'method', 'url_contains', 'count'].includes(k))) {
           return bad('expect_requests takes only method, url_contains and count');
         }
-        if (!HTTP_METHODS.includes(s.method)) return bad('expect_requests method must be one of GET, HEAD, POST, PUT, PATCH, DELETE');
+        if (!validRequestMethods(s.method)) return bad('expect_requests method must be one of GET, HEAD, POST, PUT, PATCH, DELETE, or a non-empty array of distinct ones');
         if (!isStr(s.url_contains) || s.url_contains.length > 200 || !/^\/(?!\/)[^\s?#]*$/.test(s.url_contains)) {
           return bad('expect_requests url_contains must be a path that starts with a single / and carries no query string, fragment or whitespace, of at most 200 characters');
         }
@@ -1298,6 +1431,47 @@ function stepRules(driver, s) {
           return bad(`expect_requests count must be an integer from 0 to ${EXPECT_REQUESTS_COUNT_MAX}`);
         }
         expectations++;
+        break;
+      }
+      case 'judge': {
+        // A judged step asserts nothing itself: it hands a capture to a recorded verdict, and that verdict is the expectation.
+        if (Object.keys(s).some((k) => !['action', 'kind', 'criterion', 'within'].includes(k))) {
+          return bad('judge takes only kind, criterion and within');
+        }
+        if (!isStr(s.kind) || !JUDGE_KINDS.includes(s.kind)) return bad('judge kind must be visual, language or checklist');
+        if (!isStr(s.criterion) || s.criterion.trim() === '' || s.criterion.length > JUDGE_CRITERION_MAX) {
+          return bad(`judge criterion must be a non-empty string of at most ${JUDGE_CRITERION_MAX} characters`);
+        }
+        if (s.within !== undefined) {
+          const scope = scopeOf(s.within);
+          if (!scope.ok) return bad(`judge: ${scope.why}`);
+        }
+        expectations++;
+        break;
+      }
+      case 'read_message': {
+        // A read step asserts nothing: it binds a value read from a declared local source to a variable of the case.
+        if (Object.keys(s).some((k) => !['action', 'channel', 'to', 'extract'].includes(k))) {
+          return bad('read_message takes only channel, to and extract');
+        }
+        if (!isStr(s.channel) || !READ_MESSAGE_CHANNELS.includes(s.channel)) return bad('read_message channel must be mail or sms');
+        if (!isStr(s.to) || !MESSAGE_TO_PATTERN.test(s.to)) {
+          return bad('read_message to must be 3 to 254 characters with no whitespace, quote, angle bracket or backslash');
+        }
+        if (!isObj(s.extract) || Object.keys(s.extract).some((k) => !['regex', 'as'].includes(k))) {
+          return bad('read_message extract takes only regex and as');
+        }
+        if (!isStr(s.extract.regex) || s.extract.regex === '' || s.extract.regex.length > MESSAGE_REGEX_MAX) {
+          return bad(`read_message extract.regex must be a non-empty string of at most ${MESSAGE_REGEX_MAX} characters`);
+        }
+        if (!isStr(s.extract.as) || !CAPTURE_NAME_PATTERN.test(s.extract.as)) return bad('read_message extract.as must be a variable name');
+        let groups = 0;
+        try {
+          groups = (new RegExp(`${s.extract.regex}|`).exec('') ?? []).length - 1;
+        } catch {
+          return bad('read_message extract.regex is not a valid regular expression');
+        }
+        if (groups < 1) return bad('read_message extract.regex needs a capturing group');
         break;
       }
       default:
@@ -1329,6 +1503,243 @@ function stepVariables(step) {
 }
 
 /**
+ * The zero-based index of the first step marked `"effect": "write"`, or -1. Pure and total.
+ * @param {any} steps
+ * @returns {number}
+ */
+export function firstWriteStep(steps) {
+  return Array.isArray(steps) ? steps.findIndex((s) => isObj(s) && s.effect === 'write') : -1;
+}
+
+/**
+ * Whether the kit declares the role dedicated: its entry in the parsed `login.config.json` carries `dedicated`
+ * set to the boolean `true`. Any other value, a missing role, a null role and a missing or malformed config are
+ * not dedicated. Pure and total; it reads a parsed object and touches no file.
+ * @param {any} loginConfig
+ * @param {any} role
+ * @returns {boolean}
+ */
+export function isDedicatedRole(loginConfig, role) {
+  if (!isObj(loginConfig) || !isObj(loginConfig.roles) || !isStr(role) || !Object.hasOwn(loginConfig.roles, role)) return false;
+  const entry = loginConfig.roles[role];
+  return isObj(entry) && entry.dedicated === true;
+}
+
+/** The sources a chosen input may name, and the limits of the `chosen_inputs` array (chosen, not measured). */
+export const CHOSEN_INPUT_SOURCES = Object.freeze(['capture', 'snapshot']);
+export const CHOSEN_INPUTS_MAX = 20;
+const CHOSEN_REASON_MAX = 200;
+const CHOSEN_LITERAL_MIN = 3;
+
+/**
+ * Validates the optional `chosen_inputs` key of a plan entry: an array of items `{ step, source, reason }`, each
+ * naming a distinct `fill` step with a string value. A `capture` item needs a value that is a `{{name}}` binding
+ * (validateSteps already refuses an unbound name); a `snapshot` item needs a literal value. Pure and total; a
+ * reason names the key and an item position, never a value.
+ * @param {string} driver
+ * @param {any[]} steps
+ * @param {any} chosen the entry's `chosen_inputs`, undefined when absent
+ * @returns {{ code: string, reason: string } | null}
+ */
+export function validateChosenInputs(driver, steps, chosen) {
+  if (chosen === undefined) return null;
+  const bad = (/** @type {string} */ why) => ({ code: 'PLAN_ENTRY_INVALID', reason: `chosen_inputs: ${why}` });
+  if (driver !== 'browser') return bad('applies to browser entries only');
+  if (!Array.isArray(chosen) || chosen.length === 0 || chosen.length > CHOSEN_INPUTS_MAX) {
+    return bad(`must be a non-empty array of at most ${CHOSEN_INPUTS_MAX} items`);
+  }
+  if (!Array.isArray(steps)) return bad('needs the steps of the entry');
+  /** @type {Set<number>} */ const seen = new Set();
+  for (const [k, item] of chosen.entries()) {
+    const at = `item ${k + 1}`;
+    if (!isObj(item) || Object.keys(item).some((key) => !['step', 'source', 'reason'].includes(key))) return bad(`${at} takes only step, source and reason`);
+    if (!Number.isInteger(item.step) || item.step < 1 || item.step > steps.length) return bad(`${at} step must be the 1-based position of a step of this entry`);
+    if (seen.has(item.step)) return bad(`${at} repeats the step of an earlier item`);
+    seen.add(item.step);
+    const target = steps[item.step - 1];
+    if (!isObj(target) || target.action !== 'fill' || !isStr(target.value)) return bad(`${at} must name a fill step with a string value`);
+    if (!isStr(item.source) || !CHOSEN_INPUT_SOURCES.includes(item.source)) return bad(`${at} source must be capture or snapshot`);
+    if (!isStr(item.reason) || item.reason.trim() === '' || item.reason.length > CHOSEN_REASON_MAX) {
+      return bad(`${at} reason must be a non-empty string of at most ${CHOSEN_REASON_MAX} characters`);
+    }
+    const bound = [...target.value.matchAll(VARIABLE_PATTERN)].length > 0;
+    if (item.source === 'capture' && !bound) return bad(`${at} source capture needs a value that is a {{name}} binding`);
+    if (item.source === 'snapshot' && bound) return bad(`${at} source snapshot needs a literal value, not a {{name}} binding`);
+  }
+  return null;
+}
+
+/**
+ * The literal values of the chosen `fill` steps, with the zero-based index of each step. A step that is not a
+ * fill, or whose value is a `{{name}}` binding, is skipped. Pure and total.
+ * @param {any} steps
+ * @param {any} chosen
+ * @returns {{ at: number, value: string }[]}
+ */
+export function chosenFillValues(steps, chosen) {
+  /** @type {{ at: number, value: string }[]} */ const out = [];
+  if (!Array.isArray(steps) || !Array.isArray(chosen)) return out;
+  for (const item of chosen) {
+    if (!isObj(item) || !Number.isInteger(item.step)) continue;
+    const s = steps[item.step - 1];
+    if (!isObj(s) || s.action !== 'fill' || !isStr(s.value) || [...s.value.matchAll(VARIABLE_PATTERN)].length > 0) continue;
+    out.push({ at: item.step - 1, value: s.value });
+  }
+  return out;
+}
+
+/**
+ * Requires every `snapshot`-sourced chosen value to appear (whitespace collapsed, case ignored, at least 3
+ * characters) inside the `name` or `text` of an entry of some grounding snapshot of the run directory. Returns
+ * the first refusal or null. The reason names an item position and never the value. Pure and total.
+ * @param {any} steps
+ * @param {any} chosen
+ * @param {any} snapshots the objects `loadGroundingSnapshots` returns
+ * @returns {{ code: string, reason: string } | null}
+ */
+export function chosenSnapshotRefusal(steps, chosen, snapshots) {
+  if (!Array.isArray(chosen) || !Array.isArray(steps)) return null;
+  const flat = (/** @type {string} */ t) => t.replace(/\s+/g, ' ').trim().toLowerCase();
+  /** @type {string[]} */ const words = [];
+  for (const snap of Array.isArray(snapshots) ? snapshots : []) {
+    if (!isObj(snap) || !Array.isArray(snap.entries)) continue;
+    for (const e of snap.entries) {
+      if (!isObj(e)) continue;
+      const w = e.kind === 'role' ? e.name : e.kind === 'text' ? e.text : null;
+      if (isStr(w)) words.push(flat(w));
+    }
+  }
+  for (const [k, item] of chosen.entries()) {
+    if (!isObj(item) || item.source !== 'snapshot') continue;
+    const s = Number.isInteger(item.step) ? steps[item.step - 1] : undefined;
+    const literal = isObj(s) && isStr(s.value) ? flat(s.value) : '';
+    if (literal.length < CHOSEN_LITERAL_MIN || !words.some((w) => w.includes(literal))) {
+      return {
+        code: 'PLAN_ENTRY_INVALID',
+        reason: `chosen_inputs: item ${k + 1} chose a value that appears in no grounding snapshot of the run directory; ground the page that shows it first, or bind the input to a declared capture`,
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Requires the `criterion` of every `judge` step to appear in the case's manual steps once whitespace is collapsed
+ * (case is kept: the words are the report's own, verbatim). A criterion the report does not state is refused, so a
+ * planner can never invent what is judged. Pure and total; the reason names a step position and never the criterion.
+ * @param {any} steps
+ * @param {any} manualText the case's manual steps as the report states them
+ * @returns {{ code: string, reason: string } | null}
+ */
+export function validateJudgeCriteria(steps, manualText) {
+  if (!Array.isArray(steps)) return null;
+  const flat = (/** @type {string} */ t) => t.replace(/\s+/g, ' ').trim();
+  const report = isStr(manualText) ? flat(manualText) : null;
+  for (const [i, s] of steps.entries()) {
+    if (!isObj(s) || s.action !== 'judge') continue;
+    const criterion = isStr(s.criterion) ? flat(s.criterion) : '';
+    if (report === null || criterion === '' || !report.includes(criterion)) {
+      return { code: 'PLAN_ENTRY_INVALID', reason: `step ${i + 1}: the judge criterion must appear verbatim in the case's manual steps` };
+    }
+  }
+  return null;
+}
+
+/**
+ * Reads one channel's declaration from the `channel_sources` map of the seed file. Pure and total: no file or network access;
+ * a reason is a fixed sentence and never echoes a declared url, path or key.
+ * @param {any} sources the `channel_sources` value of the seed file (anything)
+ * @param {any} channel
+ * @param {string} root the target root
+ * @returns {{ ok: true, channel: string, kind: 'mailpit', url: string } | { ok: true, channel: string, kind: 'file', abs: string } | { ok: false, code: string, reason: string }}
+ */
+export function classifyChannelSource(sources, channel, root) {
+  const invalid = (/** @type {string} */ reason) => ({ ok: /** @type {const} */ (false), code: 'CHANNEL_SOURCE_INVALID', reason });
+  if (!isStr(channel) || !READ_MESSAGE_CHANNELS.includes(channel)) return invalid('the channel must be mail or sms');
+  if (!isObj(sources) || !Object.hasOwn(sources, channel)) {
+    return { ok: false, code: 'EXTERNAL_CHANNEL', reason: REASON_CATALOGUE.EXTERNAL_CHANNEL.reason };
+  }
+  const entry = sources[channel];
+  if (!isObj(entry) || Object.keys(entry).some((k) => !['kind', 'url', 'path'].includes(k))) {
+    return invalid(`the ${channel} channel source must be an object with kind and ${channel === 'mail' ? 'url' : 'path'} only`);
+  }
+  const kind = /** @type {Record<string, string>} */ (CHANNEL_SOURCE_KINDS)[channel];
+  if (entry.kind !== kind) return invalid(`the ${channel} channel source kind must be ${kind}`);
+  if (channel === 'mail') {
+    if (!isStr(entry.url) || Object.hasOwn(entry, 'path')) return invalid('the mail channel source needs a url');
+    let u;
+    try {
+      u = new URL(entry.url);
+    } catch {
+      return invalid('the mail channel source url is not a valid url');
+    }
+    if ((u.protocol !== 'http:' && u.protocol !== 'https:') || u.username !== '' || u.password !== '') {
+      return invalid('the mail channel source url must be http or https with no credentials');
+    }
+    return { ok: true, channel, kind: 'mailpit', url: u.origin + u.pathname.replace(/\/+$/, '') };
+  }
+  if (!isStr(entry.path) || entry.path === '' || isAbsolute(entry.path) || Object.hasOwn(entry, 'url')) {
+    return invalid('the sms channel source needs a relative path');
+  }
+  const abs = resolve(root, entry.path);
+  const rel = relative(resolve(root), abs);
+  if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) return invalid('the sms path resolves outside the target root');
+  return { ok: true, channel, kind: 'file', abs };
+}
+
+/**
+ * The newest message of a Mailpit search listing that was received at or after the start of the case. Pure and total.
+ * @param {any} listing the parsed search response
+ * @param {number} startedMs
+ * @returns {{ id: string, createdMs: number } | null}
+ */
+export function newestMailAfter(listing, startedMs) {
+  if (!isObj(listing) || !Array.isArray(listing.messages)) return null;
+  /** @type {{ id: string, createdMs: number } | null} */ let best = null;
+  for (const m of listing.messages) {
+    if (!isObj(m) || !isStr(m.ID) || !/^[A-Za-z0-9_-]{1,64}$/.test(m.ID) || !isStr(m.Created)) continue;
+    const createdMs = Date.parse(m.Created);
+    if (!Number.isFinite(createdMs) || createdMs < startedMs) continue;
+    if (best === null || createdMs > best.createdMs) best = { id: m.ID, createdMs };
+  }
+  return best;
+}
+
+/**
+ * The last non-blank line of an sms text that holds the recipient. Pure and total.
+ * @param {any} text
+ * @param {any} to
+ * @returns {string | null}
+ */
+export function smsEntryAfter(text, to) {
+  if (!isStr(text) || !isStr(to) || to === '') return null;
+  const lines = text.split(/\r?\n/).filter((l) => l.trim() !== '');
+  for (let i = lines.length - 1; i >= 0; i--) if (lines[i].includes(to)) return lines[i];
+  return null;
+}
+
+/**
+ * Runs the planner's expression on a message text and returns its first group. Pure and total; a reason is a fixed
+ * sentence and never contains the text, the expression or the group.
+ * @param {any} text
+ * @param {any} regex
+ * @returns {{ ok: true, value: string } | { ok: false, reason: string }}
+ */
+export function extractMessageValue(text, regex) {
+  if (!isStr(text) || !isStr(regex)) return { ok: false, reason: 'the message or the expression is not text' };
+  let match;
+  try {
+    match = new RegExp(regex).exec(text.slice(0, MESSAGE_TEXT_MAX));
+  } catch {
+    return { ok: false, reason: 'the expression is not a valid regular expression' };
+  }
+  if (match === null) return { ok: false, reason: 'the expression matched nothing' };
+  const value = match[1];
+  if (!isStr(value) || value === '' || value.length > MESSAGE_VALUE_MAX) return { ok: false, reason: 'the first group is missing, empty or too long' };
+  return { ok: true, value };
+}
+
+/**
  * Validates one plan step against the closed vocabulary (reason text carries no step prefix).
  * @param {string} driver
  * @param {any} step
@@ -1354,12 +1765,13 @@ export function validateSteps(driver, steps, boundNames = []) {
   /** @type {string | null | undefined} */ let anchored;
   // Whether a goto, click or fill step of the case came earlier: a request count needs an action to observe.
   let interacted = false;
+  /** @type {Set<string>} */ const messageBound = new Set();
   for (const [i, s] of steps.entries()) {
     const r = stepRules(driver, s);
     if ('why' in r) return { code: 'PLAN_ENTRY_INVALID', reason: `step ${i + 1}: ${r.why}` };
     expectations += r.expectations;
     for (const name of stepVariables(s)) {
-      if (!boundNames.includes(name)) {
+      if (!boundNames.includes(name) && !messageBound.has(name)) {
         return { code: 'PLAN_ENTRY_INVALID', reason: `step ${i + 1}: variable ${name} is not bound by a capture declared for this case` };
       }
     }
@@ -1383,6 +1795,15 @@ export function validateSteps(driver, steps, boundNames = []) {
             reason: `step ${i + 1}: expect_requests with count 0 needs an earlier expect_visible, expect_text, expect_value or expect_state step on the same route since the last goto`,
           };
         }
+      }
+      if (s.action === 'read_message') {
+        if (!interacted) {
+          return { code: 'PLAN_ENTRY_INVALID', reason: `step ${i + 1}: read_message needs an earlier goto, click or fill step in the same case` };
+        }
+        if (boundNames.includes(s.extract.as) || messageBound.has(s.extract.as)) {
+          return { code: 'PLAN_ENTRY_INVALID', reason: `step ${i + 1}: read_message extract.as names a variable that is already bound in this case` };
+        }
+        messageBound.add(s.extract.as);
       }
       if (s.action === 'goto' || s.action === 'click' || s.action === 'fill') interacted = true;
     }
@@ -1611,6 +2032,45 @@ export async function settleAssertion(read, accept, opts = {}) {
 }
 
 /**
+ * Whether the located element is visible to a person. Playwright counts an element at `opacity: 0` as
+ * visible, so its own check is joined (AND) with the browser's `checkVisibility`, read with its opacity and
+ * visibility options on the same element: an element at `opacity: 0`, under an ancestor at `opacity: 0`, or
+ * at `visibility: hidden` is not visible. A locator that matches nothing is not visible. A browser that
+ * cannot answer throws, which `settleAssertion` reads as unreadable and never as a pass.
+ * @param {any} target a Playwright locator that matches at most one element
+ * @returns {Promise<boolean>}
+ */
+export async function isVisibleToPerson(target) {
+  if (!(await target.isVisible())) return false;
+  return target.evaluate(
+    (/** @type {any} */ el) => {
+      if (typeof el.checkVisibility !== 'function') throw new Error('checkVisibility is unavailable');
+      return el.checkVisibility({ opacityProperty: true, visibilityProperty: true }) === true;
+    },
+    undefined,
+    { timeout: 1000 },
+  );
+}
+
+/**
+ * The positive half of the visibility rule for one step: null when the located element is visible to a
+ * person within the settle window (so a fade-in has time to finish), else the case verdict. The reasons are
+ * fixed sentences that carry no locator word and no page text.
+ * @param {any} target
+ * @param {number} n the 1-based step position
+ * @param {{ boundMs?: number, intervalMs?: number, sleep?: (ms: number) => Promise<void>, now?: () => number }} [opts] forwarded to `settleAssertion`
+ * @returns {Promise<CaseResult | null>}
+ */
+export async function requireVisibleToPerson(target, n, opts = {}) {
+  const seen = await settleAssertion(() => isVisibleToPerson(target), (visible) => visible === true, opts);
+  if (seen.status === 'accepted') return null;
+  if (seen.status === 'rejected') {
+    return { outcome: 'fail', reason_code: null, reason: `step ${n}: the target was present but not visible to a person (opacity or visibility hides it)`, evidence: [] };
+  }
+  return blocked('STEP_NOT_PERFORMABLE', `step ${n}: the visibility of the target could not be read; nothing was asserted`);
+}
+
+/**
  * The comparison an `expect_value` step declares, as a closed word. Pure.
  * @param {any} step
  * @returns {'not_empty' | 'equals' | 'contains' | null}
@@ -1725,7 +2185,8 @@ export function evaluateRequestWindow(window, step) {
     }
   }
   const method = isObj(step) ? step.method : undefined;
-  const matching = needle === null ? [] : entries.filter((e) => isObj(e) && e.method === method && isStr(e.path) && e.path.includes(needle));
+  const wanted = Array.isArray(method) ? method : [method];
+  const matching = needle === null ? [] : entries.filter((e) => isObj(e) && wanted.includes(e.method) && isStr(e.path) && e.path.includes(needle));
   if (matching.some((e) => e.local !== true)) return { status: 'non-local' };
   const observed = matching.length;
   return {
@@ -1772,7 +2233,7 @@ export function observeRequests(page, target) {
 
 /**
  * Plan-time grounding pre-check. Returns null when every locator step is acceptable, else the first
- * refusal. A reason names a step position, never a locator value.
+ * refusal. A reason names a step position, never a locator value. See `groundLocators`.
  * @param {any[]} steps
  * @param {any[]} snapshots
  * @param {any} manualText
@@ -1780,13 +2241,55 @@ export function observeRequests(page, target) {
  * @returns {{ code: string, reason: string } | null}
  */
 export function precheckGroundedSteps(steps, snapshots, manualText, role) {
+  return groundLocators(steps, snapshots, manualText, role).refusal;
+}
+
+/**
+ * Plan-time grounding of every locator step, and which of them the browser resolves when the case runs. A
+ * locator is grounded by a snapshot entry of the step's role and route with `matches` exactly 1 (as before) or by
+ * the report's own words: its `name`, `text` or label appears in `manualText` once whitespace is collapsed and
+ * case is ignored. A locator with neither source is refused `PLAN_ENTRY_INVALID`. `runtime` lists the zero-based
+ * indexes of the steps with no snapshot entry behind them (grounded only by the report's words) and of every
+ * step that carries a scoped key, because a snapshot lists page-wide candidates only. A scoped step needs each
+ * word it carries (scope, name, prefix, text or label) grounded the same way; `index` carries none. Pure.
+ * @param {any[]} steps
+ * @param {any[]} snapshots
+ * @param {any} manualText
+ * @param {string | null} role
+ * @param {any} [chosen] the entry's chosen_inputs; an expectation may match the value of an EARLIER chosen fill
+ * @returns {{ refusal: { code: string, reason: string } | null, runtime: number[] }}
+ */
+export function groundLocators(steps, snapshots, manualText, role, chosen = []) {
   const wantRole = role === null ? 'anonymous' : role;
   const collapse = (/** @type {string} */ t) => t.replace(/\s+/g, ' ').trim().toLowerCase();
+  const report = isStr(manualText) ? collapse(manualText) : null;
+  // A word is the report's own only when it is a non-blank string that the case's manual steps contain.
+  const inReport = (/** @type {any} */ word) => report !== null && isStr(word) && word.trim() !== '' && report.includes(collapse(word));
+  // A chosen fill is a second source for an expectation, but only for a step AFTER it. An empty literal matches nothing.
+  const chosenFills = chosenFillValues(steps, chosen);
+  const chosenHas = (/** @type {any} */ literal, /** @type {number} */ before, /** @type {boolean} */ whole) =>
+    isStr(literal) && collapse(literal) !== '' && chosenFills.some((c) => c.at < before && (whole ? collapse(c.value) === collapse(literal) : collapse(c.value).includes(collapse(literal))));
+  /** @type {number[]} */ const runtime = [];
+  /** @param {string} reason */
+  const refuse = (reason) => ({ refusal: { code: 'PLAN_ENTRY_INVALID', reason }, runtime });
   /** @type {string | null} */ let route = null;
   for (const [i, step] of steps.entries()) {
     const n = i + 1;
     if (!isObj(step)) continue;
     if (step.action === 'goto' || step.action === 'expect_url') route = routeKey(step.path);
+    if (step.action === 'judge' && step.within !== undefined) {
+      const scoped = scopeOf(step.within);
+      if (scoped.ok) {
+        const sc = scoped.scope;
+        const word = sc.name !== undefined ? sc.name : /** @type {string} */ (sc.namePrefix);
+        const plain = route === null ? undefined : snapshots.find((s) => isObj(s) && s.role === wantRole && s.route === route && !isPostInteractionSnapshot(s));
+        const listed = plain !== undefined && Array.isArray(plain.entries) && plain.entries.some((/** @type {any} */ e) => isObj(e) && e.matches === 1 && e.kind === 'role' && e.role === sc.role
+          && (sc.name !== undefined ? e.name === sc.name : isStr(e.name) && e.name.startsWith(word)));
+        if (!inReport(word) && !listed) {
+          return refuse(`step ${n}: the judge scope is neither a snapshot entry that matches exactly one element nor a word of the report's own steps`);
+        }
+      }
+    }
     if (!LOCATOR_ACTIONS.includes(step.action)) continue;
     const loc = locatorOf(step);
     if (loc === null || !loc.ok) continue;
@@ -1798,43 +2301,66 @@ export function precheckGroundedSteps(steps, snapshots, manualText, role) {
     const histKey = hist.some((h) => h.step.action !== 'goto') ? groundingPrefixKey(hist.map((h) => h.norm)) : null;
     const after = histKey === null ? undefined : candidates.find((s) => isPostInteractionSnapshot(s) && groundingPrefixKey(s.prefix) === histKey);
     const snap = after ?? candidates.find((s) => !isPostInteractionSnapshot(s));
-    if (snap === undefined) {
-      return { code: 'STEP_UNGROUNDED', reason: `step ${n}: no plan-time snapshot covers this role and route; run the ground mode for the route before planning this step` };
-    }
-    const entry = (Array.isArray(snap.entries) ? snap.entries : []).find((/** @type {any} */ e) =>
-      isObj(e) && (loc.form === 'role' ? e.kind === 'role' && e.role === loc.role && e.name === loc.name : e.kind === 'text' && e.text === loc.text));
-    if (entry === undefined) {
-      const hint = after === undefined && candidates.some((s) => isPostInteractionSnapshot(s))
-        ? '; a post-interaction snapshot exists for this role and route, but the steps of this case before this one are not exactly its prefix'
-        : '';
-      return { code: 'STEP_UNGROUNDED', reason: `step ${n}: the locator is not a snapshot entry${hint}` };
-    }
-    if (entry.matches !== 1) {
-      return { code: 'STEP_UNGROUNDED', reason: `step ${n}: the locator matched ${entry.matches} elements in the snapshot; a locator must match exactly one` };
-    }
-    if (after !== undefined) {
-      // A value a consumed prefix typed must come from the report's own steps; the reason names a position only.
-      for (const h of hist) {
-        if (h.step.action !== 'fill') continue;
-        const ok = isStr(manualText) && isStr(h.step.value) && collapse(manualText).includes(collapse(h.step.value));
-        if (!ok) return { code: 'PLAN_ENTRY_INVALID', reason: `step ${h.at}: a fill value that a grounded prefix replays must come from the report's own steps` };
+    /** @type {any[]} */ const entries = snap !== undefined && Array.isArray(snap.entries) ? snap.entries.filter(isObj) : [];
+    const hint = after === undefined && candidates.some((s) => isPostInteractionSnapshot(s))
+      ? '; a post-interaction snapshot exists for this role and route, but the steps of this case before this one are not exactly its prefix'
+      : '';
+    if (loc.form === 'scoped') {
+      // A snapshot lists page-wide candidates only, so a scoped step is always resolved when the case runs; each
+      // word it carries is still grounded by the report or by a snapshot entry that matches exactly one element.
+      /** @type {{ word: string, listed: (e: any) => boolean }[]} */ const words = [];
+      const sc = loc.scope;
+      if (sc !== null) {
+        words.push(sc.name !== undefined
+          ? { word: sc.name, listed: (/** @type {any} */ e) => e.kind === 'role' && e.role === sc.role && e.name === sc.name }
+          : { word: /** @type {string} */ (sc.namePrefix), listed: (/** @type {any} */ e) => e.kind === 'role' && e.role === sc.role && isStr(e.name) && e.name.startsWith(/** @type {string} */ (sc.namePrefix)) });
+      }
+      const t = loc.target;
+      if (t.kind === 'role') words.push({ word: t.name, listed: (/** @type {any} */ e) => e.kind === 'role' && e.role === t.role && e.name === t.name });
+      else if (t.kind === 'role-prefix') words.push({ word: t.namePrefix, listed: (/** @type {any} */ e) => e.kind === 'role' && e.role === t.role && isStr(e.name) && e.name.startsWith(t.namePrefix) });
+      else if (t.kind === 'text') words.push({ word: t.text, listed: (/** @type {any} */ e) => e.kind === 'text' && e.text === t.text });
+      else if (t.kind === 'label') words.push({ word: t.labelText, listed: (/** @type {any} */ e) => e.kind === 'text' && e.text === t.labelText });
+      for (const w of words) {
+        if (inReport(w.word) || entries.some((e) => e.matches === 1 && w.listed(e))) continue;
+        return refuse(`step ${n}: the scoped locator is neither a snapshot entry that matches exactly one element nor a word of the report's own steps${hint}`);
+      }
+      runtime.push(i);
+    } else {
+      const entry = entries.find((e) => (loc.form === 'role' ? e.kind === 'role' && e.role === loc.role && e.name === loc.name : e.kind === 'text' && e.text === loc.text));
+      const listed = entry !== undefined && entry.matches === 1;
+      if (!listed && !inReport(loc.form === 'role' ? loc.name : loc.text)) {
+        if (snap === undefined) {
+          return refuse(`step ${n}: no plan-time snapshot covers this role and route; run the ground mode for the route before planning this step`);
+        }
+        if (entry === undefined) return refuse(`step ${n}: the locator is not a snapshot entry${hint}`);
+        return refuse(`step ${n}: the locator matched ${entry.matches} elements in the snapshot; a locator must match exactly one`);
+      }
+      if (!listed) {
+        runtime.push(i);
+      } else if (after !== undefined) {
+        // A value a consumed prefix typed must come from the report's own steps; the reason names a position only.
+        for (const h of hist) {
+          if (h.step.action !== 'fill') continue;
+          const ok = isStr(manualText) && isStr(h.step.value) && collapse(manualText).includes(collapse(h.step.value));
+          if (!ok) return refuse(`step ${h.at}: a fill value that a grounded prefix replays must come from the report's own steps`);
+        }
       }
     }
     if (step.action === 'expect_text') {
-      const ok = isStr(manualText) && isStr(step.contains) && collapse(manualText).includes(collapse(step.contains));
-      if (!ok) return { code: 'PLAN_ENTRY_INVALID', reason: `step ${n}: expect_text contains must come from the report's own steps, not from the snapshot` };
+      const ok = (isStr(manualText) && isStr(step.contains) && collapse(manualText).includes(collapse(step.contains))) || chosenHas(step.contains, i, false);
+      if (!ok) return refuse(`step ${n}: expect_text contains must come from the report's own steps, not from the snapshot`);
     }
     if (step.action === 'expect_value') {
       // A literal expectation comes from the report's own steps; a {{name}} binding is validated against the declared captures.
       for (const key of ['equals', 'contains']) {
         const literal = step[key];
         if (!isStr(literal) || [...literal.matchAll(VARIABLE_PATTERN)].length > 0) continue;
-        const ok = isStr(manualText) && collapse(manualText).includes(collapse(literal));
-        if (!ok) return { code: 'PLAN_ENTRY_INVALID', reason: `step ${n}: expect_value ${key} must come from the report's own steps or be bound by a declared capture` };
+        const ok = (isStr(manualText) && collapse(manualText).includes(collapse(literal))) || chosenHas(literal, i, key === 'equals');
+        if (!ok) return refuse(`step ${n}: expect_value ${key} must come from the report's own steps or be bound by a declared capture`);
       }
     }
   }
-  return null;
+  return { refusal: null, runtime };
 }
 
 /**
@@ -1844,7 +2370,7 @@ export function precheckGroundedSteps(steps, snapshots, manualText, role) {
  */
 export function summarizeEntries(entries) {
   /** @type {Record<string, number>} */ const counts = { pass: 0, fail: 0, blocked: 0, 'needs-human': 0 };
-  for (const e of entries) counts[e.outcome]++;
+  for (const e of entries) if (Object.hasOwn(counts, e.outcome)) counts[e.outcome]++;
   return {
     counts,
     record_resolved: entries.filter((e) => e.reason_code === 'AUTOMATED_EVIDENCE').length,
@@ -1853,50 +2379,147 @@ export function summarizeEntries(entries) {
 }
 
 /**
+ * Whether a driver result is a case that holds judge steps awaiting a verdict: the internal pending value, a
+ * non-empty list of step positions and nothing else. The one exception to the closed outcome vocabulary. Pure.
+ * @param {any} result
+ * @returns {boolean}
+ */
+export function isPendingResult(result) {
+  return isObj(result) && result.outcome === PENDING_JUDGMENT && Array.isArray(result.pending_judgment) && result.pending_judgment.length > 0;
+}
+
+/**
+ * The judgment block of `results.json`: how many judge steps wait for a verdict and how many have one. `null`
+ * when no entry holds a judge step, so a run without one keeps the file it always had. Pure and total.
+ * @param {any[]} entries
+ * @returns {{ pending_steps: number, judged_steps: number } | null}
+ */
+export function summarizeJudgment(entries) {
+  let seen = 0;
+  let pending = 0;
+  let judged = 0;
+  for (const e of Array.isArray(entries) ? entries : []) {
+    for (const s of isObj(e) && Array.isArray(e.steps) ? e.steps : []) {
+      if (!isObj(s) || s.action !== 'judge') continue;
+      seen++;
+      if (s.result === PENDING_JUDGMENT) pending++;
+      else if (s.judged_by === 'model' && (s.result === 'passed' || s.result === 'failed' || s.result === 'uncertain')) judged++;
+    }
+  }
+  return seen === 0 ? null : { pending_steps: pending, judged_steps: judged };
+}
+
+// The reason classes: `impossible` is what no AI agent can execute alone, `gap` is every other limit. The reason
+// class belongs to a catalogue code and is not the `class` of a case (`CASE_CLASSES`).
+export const REASON_CLASSES = Object.freeze(['impossible', 'gap']);
+
+/**
  * The plan-facing closed catalogue of reason codes: the causes a plan entry may name when it declines a case
- * instead of executing it. `disposition` is the outcome a declined case is reported with; `reason` is a fixed
- * sentence that carries no planner-supplied text. A runtime halt code (session, probe, query or origin) stays a
- * specific runner code outside this list, and the planner-defect marker for a case the plan omitted entirely is
- * deliberately not a member.
- * @type {Readonly<Record<string, Readonly<{ disposition: 'needs-human' | 'blocked', reason: string }>>>}
+ * instead of executing it. `disposition` is the outcome a declined case is reported with; `class` is the reason
+ * class of the code; `reason` is a fixed sentence that carries no planner-supplied text. A runtime halt code
+ * (session, probe, query or origin) stays a specific runner code outside this list, and the planner-defect marker
+ * for a case the plan omitted entirely is deliberately not a member.
+ * @type {Readonly<Record<string, Readonly<{ disposition: 'needs-human' | 'blocked', class: 'impossible' | 'gap', reason: string }>>>}
  */
 export const REASON_CATALOGUE = Object.freeze({
   UNGROUNDABLE_AFTER_INTERACTION: Object.freeze({
     disposition: 'needs-human',
+    class: 'gap',
     reason: 'the case needs an element that exists only after an interaction and cannot be grounded before it; the manual steps are reproduced verbatim',
   }),
   EXTERNAL_CHANNEL: Object.freeze({
     disposition: 'needs-human',
-    reason: 'the case needs an external channel that no local driver reaches; the manual steps are reproduced verbatim',
+    class: 'impossible',
+    reason: 'the case needs a real external channel with no declared local source; the manual steps are reproduced verbatim',
+  }),
+  OUTSIDE_LOCAL_ENVIRONMENT: Object.freeze({
+    disposition: 'needs-human',
+    class: 'impossible',
+    reason: 'the case needs production or a physical device that no local environment provides; the manual steps are reproduced verbatim',
+  }),
+  HUMAN_SIGNOFF: Object.freeze({
+    disposition: 'needs-human',
+    class: 'impossible',
+    reason: 'the report reserves this step for a person; the manual steps are reproduced verbatim',
   }),
   VISUAL_JUDGEMENT: Object.freeze({
     disposition: 'needs-human',
+    class: 'gap',
     reason: 'the case asks for a judgment of appearance that no driver can make; the manual steps are reproduced verbatim',
+  }),
+  JUDGEMENT_UNCERTAIN: Object.freeze({
+    disposition: 'needs-human',
+    class: 'gap',
+    reason: 'a judgment of the captured evidence was recorded as uncertain; the manual steps are reproduced verbatim',
   }),
   VOCABULARY_GAP: Object.freeze({
     disposition: 'needs-human',
+    class: 'gap',
     reason: 'a step the case needs, or a declared source or origin for it, is missing from the closed vocabulary; the manual steps are reproduced verbatim',
   }),
   STEP_UNGROUNDED: Object.freeze({
     disposition: 'needs-human',
+    class: 'gap',
     reason: 'a step of the case could not be grounded to exactly one element; the manual steps are reproduced verbatim',
   }),
   PARTIAL_REMAINDER: Object.freeze({
     disposition: 'needs-human',
+    class: 'gap',
     reason: 'the objective steps ran and the rest of the case is human work; the manual steps are reproduced verbatim',
   }),
   PRODUCT_DEFECT: Object.freeze({
     disposition: 'blocked',
-    reason: 'a known product defect blocks the case; the manual steps are reproduced verbatim',
+    class: 'gap',
+    reason: 'a known product defect stops the case from starting; the manual steps are reproduced verbatim',
   }),
   STATE_UNCONFIRMED: Object.freeze({
     disposition: 'blocked',
+    class: 'gap',
     reason: 'the state the case requires is not confirmed; the manual steps are reproduced verbatim',
+  }),
+  ROLE_NOT_DEDICATED: Object.freeze({
+    disposition: 'blocked',
+    class: 'gap',
+    reason: 'a write step names a role the kit does not declare dedicated; nothing was executed; the manual steps are reproduced verbatim',
   }),
 });
 
-/** Codes the runner derives itself (here from `human_remainder`); a plan entry may not declare them. */
-export const RUNNER_OWNED_REASON_CODES = Object.freeze(['PARTIAL_REMAINDER']);
+/** Codes the runner derives or records itself (`PARTIAL_REMAINDER` from `human_remainder`); a plan entry may not declare them. */
+export const RUNNER_OWNED_REASON_CODES = Object.freeze(['PARTIAL_REMAINDER', 'JUDGEMENT_UNCERTAIN', 'ROLE_NOT_DEDICATED']);
+
+/**
+ * The reason class of a catalogue code, or `null` for anything that is not an own key of the catalogue. Pure.
+ * @param {any} code
+ * @returns {'impossible' | 'gap' | null}
+ */
+export function reasonClassOf(code) {
+  if (!isStr(code) || !Object.hasOwn(REASON_CATALOGUE, code)) return null;
+  return REASON_CATALOGUE[code].class;
+}
+
+/**
+ * The step counters of `results.json` for what a `needs-human` case leaves to a person, split by the reason class
+ * of its code. A case owes its declared `objective_steps` less the steps a driver ran (`passed` or `failed`); one
+ * that declared none owes its steps still `not-run` or `human`. A `blocked` case, a code outside the catalogue and
+ * anything that is not an object add nothing. A sibling of `summarizeEntries`, which it leaves untouched. Pure.
+ * @param {any[]} entries
+ * @returns {{ needs_human_impossible: number, needs_human_gap: number }}
+ */
+export function summarizeNeedsHuman(entries) {
+  const total = { impossible: 0, gap: 0 };
+  for (const e of entries) {
+    if (!isObj(e) || e.outcome !== 'needs-human') continue;
+    const cls = reasonClassOf(e.reason_code);
+    if (cls === null) continue;
+    const steps = Array.isArray(e.steps) ? e.steps : [];
+    const executed = steps.filter((/** @type {any} */ s) => isObj(s) && (s.result === 'passed' || s.result === 'failed')).length;
+    const owed = Number.isInteger(e.objective_steps)
+      ? Math.max(0, e.objective_steps - executed)
+      : steps.filter((/** @type {any} */ s) => isObj(s) && (s.result === 'not-run' || s.result === 'human')).length;
+    total[cls] += owed;
+  }
+  return { needs_human_impossible: total.impossible, needs_human_gap: total.gap };
+}
 
 /** The four pre-run classes a plan entry may declare, in the order the frozen classification table lists them. */
 export const CASE_CLASSES = Object.freeze(['automatable', 'needs-a-new-driver', 'human-by-nature', 'blocked-by-product']);
@@ -1934,8 +2557,11 @@ export function validatePlanClassification(entry) {
     if (!isStr(code) || !Object.hasOwn(REASON_CATALOGUE, code)) {
       return refuse(`the plan entry's reason_code ${bounded(code)} is not in the closed reason-code catalogue`);
     }
-    if (RUNNER_OWNED_REASON_CODES.includes(code)) {
+    if (code === 'PARTIAL_REMAINDER') {
       return refuse(`the reason_code ${code} is derived by the runner from human_remainder; a plan entry may not declare it`);
+    }
+    if (RUNNER_OWNED_REASON_CODES.includes(code)) {
+      return refuse(`the reason_code ${code} is produced by the runner itself; a plan entry may not declare it`);
     }
     const noSteps = entry.steps === undefined || (Array.isArray(entry.steps) && entry.steps.length === 0);
     if (!noSteps || entry.human_remainder !== undefined) {
@@ -2090,6 +2716,91 @@ function loadPlaywright(root, pluginRoot) {
   return null;
 }
 
+/** The plugin's visual-tooling directory, with forward slashes: where the runner looks for Playwright when the target has none. */
+function visualDirOf(/** @type {string} */ pluginRoot) {
+  return fwd(join(pluginRoot, 'scripts', 'visual'));
+}
+
+/** The one command that provisions the visual tooling's packages; the package's own postinstall also installs the Chromium build. */
+function provisionCommand(/** @type {string} */ dir) {
+  return `npm --prefix "${dir}" install`;
+}
+
+/** The reason a persisted case carries: a fixed sentence with no path, because the plugin cache path holds the operator's home directory. */
+const PLAYWRIGHT_UNAVAILABLE_REASON = "playwright is not resolvable from the target or from the plugin's visual tooling directory; the run printed the resolved path and the one command that provisions it";
+
+/** The persisted reason of a case blocked because a headless Chromium could not be launched: a fixed sentence with no path. */
+const BROWSER_UNAVAILABLE_REASON = 'a headless Chromium could not be launched; the preflight mode names the one command that provisions the visual tooling';
+
+/**
+ * The terminal text of an unresolvable Playwright, in every mode: the resolved plugin directory and the one
+ * provisioning command. It names an absolute path, so it is printed and never written to a run file.
+ * @param {string} pluginRoot
+ * @returns {string}
+ */
+export function playwrightUnavailableText(pluginRoot) {
+  const dir = visualDirOf(pluginRoot);
+  return `playwright is not resolvable from the target or from ${dir}; provision it once, with your consent, by running: ${provisionCommand(dir)}`;
+}
+
+/**
+ * The terminal text of a Chromium build that is missing or cannot start, with the same one command.
+ * @param {string} pluginRoot
+ * @returns {string}
+ */
+function browserUnavailableText(pluginRoot) {
+  const dir = visualDirOf(pluginRoot);
+  return `the Chromium build of the resolved playwright is not installed or could not be launched; install it once, with your consent, by running: ${provisionCommand(dir)}`;
+}
+
+/**
+ * Whether Playwright resolves for a target and plugin root, from which package directory and at which version.
+ * It loads the package the way the runner does and reports where it came from; it makes no request and starts no browser.
+ * @param {string} root the target root
+ * @param {string} pluginRoot
+ * @returns {{ playwright: any | null, path: string | null, version: string | null, visualDir: string }}
+ */
+export function describePlaywright(root, pluginRoot) {
+  const visualDir = visualDirOf(pluginRoot);
+  const playwright = loadPlaywright(root, pluginRoot);
+  if (playwright === null) return { playwright: null, path: null, version: null, visualDir };
+  for (const base of [join(root, 'package.json'), join(pluginRoot, 'scripts', 'visual', 'package.json')]) {
+    try {
+      const dir = dirname(createRequire(base).resolve('playwright'));
+      const pkg = readJsonOrNull(join(dir, 'package.json'));
+      return { playwright, path: fwd(dir), version: isObj(pkg) && isStr(pkg.version) ? pkg.version : null, visualDir };
+    } catch {
+      // this base does not resolve the package; the next one may
+    }
+  }
+  return { playwright, path: null, version: null, visualDir };
+}
+
+/**
+ * The kit login scripts under `PRPs/auth/` whose template stamp differs from the installed template's, by role.
+ * It reuses `staleKitScript`, so it fails open exactly as the run does: a script without the template sentence, an
+ * unreadable script or template and an unstamped installed template are never reported. Reads files only.
+ * @param {string} root the target root
+ * @returns {{ role: string, detail: string }[]}
+ */
+export function staleKitRoles(root) {
+  const dir = join(root, 'PRPs', 'auth');
+  /** @type {string[]} */ let names = [];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return [];
+  }
+  /** @type {{ role: string, detail: string }[]} */ const stale = [];
+  for (const name of names.sort()) {
+    const m = /^login-(.+)\.mjs$/.exec(name);
+    if (!m || !ROLE_PATTERN.test(m[1])) continue;
+    const detail = staleKitScript(join(dir, name));
+    if (detail !== null) stale.push({ role: m[1], detail });
+  }
+  return stale;
+}
+
 /**
  * @param {any} obj
  * @param {string} path
@@ -2226,6 +2937,136 @@ function writeEvidence(ctx, name, payload) {
   const abs = join(ctx.runDirAbs, 'evidence', name);
   writeRunFile(ctx, abs, payload);
   return `${ctx.runDirRel}/evidence/${name}`;
+}
+
+/**
+ * The bound of one final-capture attempt, in milliseconds. It is explicit because the capture used to run under
+ * the page default of 10 seconds, and a full-page capture is heavier than a viewport one; a larger bound costs
+ * nothing on the success path and only delays a capture that is stuck. Chosen, not measured.
+ */
+export const CAPTURE_TIMEOUT_MS = 30000;
+
+/**
+ * The final screenshot of a browser case: the full page with the given masks applied. If the full-page capture
+ * throws (a very tall page, a page that closed), the viewport is captured once with the same masks, so a case
+ * keeps the evidence it had before the capture grew. The caller writes the bytes through the single evidence
+ * writer; a page that cannot be captured either way throws and the caller classifies that.
+ * @param {any} page
+ * @param {any[]} masks
+ * @returns {Promise<Buffer>}
+ */
+export async function captureFinalPng(page, masks) {
+  try {
+    return await page.screenshot({ mask: masks, fullPage: true, timeout: CAPTURE_TIMEOUT_MS });
+  } catch {
+    return page.screenshot({ mask: masks, timeout: CAPTURE_TIMEOUT_MS });
+  }
+}
+
+/**
+ * A screenshot of one located element with the given masks. Reusable by a step that scopes its evidence to a
+ * locator; the `judge` step uses it for a scoped capture. Like the final capture it returns bytes and writes nothing.
+ * @param {any} target a Playwright locator
+ * @param {any[]} masks
+ * @returns {Promise<Buffer>}
+ */
+export function captureElementPng(target, masks) {
+  return target.screenshot({ mask: masks, timeout: CAPTURE_TIMEOUT_MS });
+}
+
+/**
+ * The XPath, relative to the element that holds the label text, of the nearest container (the element itself
+ * included) that holds exactly one `input`, `textarea` or `select`; a hidden input is not counted. Counts only
+ * ever grow going up, so the first container that holds any control either holds exactly one (the target) or
+ * more (nothing matches, and the case ends `STEP_UNGROUNDED`). A fixed constant, never planner text.
+ */
+export const LABEL_CONTAINER_XPATH = "xpath=ancestor-or-self::*[count(.//input[not(@type='hidden')] | .//textarea | .//select) = 1][1]";
+
+/** The control inside the container that `LABEL_CONTAINER_XPATH` selects. */
+const LABEL_CONTROL_CSS = "input:not([type='hidden']), textarea, select";
+
+/** @param {string} s @returns {string} the text with every regular-expression metacharacter escaped */
+const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * The `getByRole` options for an exact accessible name, or for a name matched by its start: an anchored,
+ * case-sensitive regular expression whose whitespace runs match any whitespace run.
+ * @param {{ name?: string, namePrefix?: string }} spec
+ * @returns {{ name: string | RegExp, exact?: boolean }}
+ */
+function nameOption(spec) {
+  if (spec.name !== undefined) return { name: spec.name, exact: true };
+  return { name: new RegExp(`^${/** @type {string} */ (spec.namePrefix).trim().split(/\s+/).map(escapeRegExp).join('\\s+')}`) };
+}
+
+/**
+ * The locator of a `within` scope: every element of the scope's role whose accessible name is the scope's name
+ * (exact) or starts with its name prefix. It may match any number of elements; the caller requires exactly one.
+ * @param {any} page a Playwright page
+ * @param {{ role: string, name?: string, namePrefix?: string }} scope
+ * @returns {any}
+ */
+export function scopeLocator(page, scope) {
+  return page.getByRole(scope.role, nameOption(scope));
+}
+
+/**
+ * Resolves a scope to its single element: waits up to 10 seconds for the first match to attach, then counts.
+ * Exported so that a later step (the `judge` step's element capture) resolves the same scope the same way and
+ * hands `locator` to `captureElementPng`, with no second implementation of scope resolution.
+ * @param {any} page
+ * @param {{ role: string, name?: string, namePrefix?: string }} scope
+ * @returns {Promise<{ ok: true, locator: any } | { ok: false, count: number }>}
+ */
+export async function resolveScopeElement(page, scope) {
+  const locator = scopeLocator(page, scope);
+  await locator.first().waitFor({ state: 'attached', timeout: 10000 }).catch(() => {});
+  const count = await locator.count().catch(() => 0);
+  return count === 1 ? { ok: true, locator } : { ok: false, count };
+}
+
+/**
+ * Builds the Playwright locator of an `ok` descriptor of `locatorOf`, with the locators that must each match
+ * exactly one element before the target can be trusted (the scope, and the label element of `label_text`) and,
+ * for an `index`, the list the index selects from. It builds locators and resolves nothing. Scope is a chain of
+ * ordinary locators (the scope's own `getByRole`, then the target's), never the locator-level scoping method that
+ * arrives only in Playwright 1.64.
+ * @param {any} page
+ * @param {any} loc
+ * @returns {{ target: any, guards: { what: 'scope' | 'label', locator: any }[], indexed: null | { all: any, index: number } }}
+ */
+export function buildLocator(page, loc) {
+  if (loc.form === 'role') return { target: page.getByRole(loc.role, { name: loc.name, exact: true }), guards: [], indexed: null };
+  if (loc.form === 'text') return { target: page.getByText(loc.text, { exact: true }), guards: [], indexed: null };
+  /** @type {{ what: 'scope' | 'label', locator: any }[]} */ const guards = [];
+  /** @type {any} */ let base = page;
+  if (loc.scope !== null) {
+    base = scopeLocator(page, loc.scope);
+    guards.push({ what: 'scope', locator: base });
+  }
+  const t = loc.target;
+  if (t.kind === 'role') return { target: base.getByRole(t.role, { name: t.name, exact: true }), guards, indexed: null };
+  if (t.kind === 'role-prefix') return { target: base.getByRole(t.role, nameOption({ namePrefix: t.namePrefix })), guards, indexed: null };
+  if (t.kind === 'text') return { target: base.getByText(t.text, { exact: true }), guards, indexed: null };
+  if (t.kind === 'label') {
+    const labelElement = base.getByText(t.labelText, { exact: true });
+    guards.push({ what: 'label', locator: labelElement });
+    return { target: labelElement.locator(LABEL_CONTAINER_XPATH).locator(LABEL_CONTROL_CSS), guards, indexed: null };
+  }
+  const all = base.getByRole(t.role);
+  return { target: all.nth(t.index), guards, indexed: { all, index: t.index } };
+}
+
+/**
+ * The locator keys of a scoped step as the comparison evidence records them: the words already in the plan,
+ * never a typed or compared value.
+ * @param {any} step
+ * @returns {Record<string, any>}
+ */
+function scopedLocatorRecord(step) {
+  /** @type {Record<string, any>} */ const record = {};
+  for (const k of ['within', 'role', 'name', 'name_prefix', 'label_text', 'index', 'text']) if (step[k] !== undefined) record[k] = step[k];
+  return record;
 }
 
 /**
@@ -2396,6 +3237,141 @@ async function fetchAnonymously(playwright, baseURL, url, fetchOptions) {
   }
 }
 
+const pauseMs = (/** @type {number} */ ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * The byte size of a declared sms file at the start of a case (0 when it does not exist yet).
+ * @param {string} abs
+ * @returns {number}
+ */
+function smsBaselineSize(abs) {
+  try {
+    return statSync(abs).size;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Reads a verification value from a declared Mailpit origin: the newest message to the recipient received after the
+ * start of the case. The guard is checked again right before the first request. Returns no message text.
+ * @param {RunCtx} ctx
+ * @param {string} base the declared origin (no trailing slash)
+ * @param {string} to
+ * @param {number} startedMs
+ * @param {string} regex
+ * @returns {Promise<{ ok: true, value: string, receivedAt: string } | { ok: false, kind: 'non-local' | 'unreachable' | 'absent' }>}
+ */
+async function readMailValue(ctx, base, to, startedMs, regex) {
+  const g = await ctx.target.guard.checkTarget(base, { root: ctx.root });
+  if (!g.ok) return { ok: false, kind: 'non-local' };
+  // A redirect is never followed: the catcher's answer is read as it is.
+  const noRedirects = 0;
+  const options = { method: 'GET', maxRedirects: noRedirects, timeout: 10000, failOnStatusCode: false };
+  const deadline = Date.now() + READ_MESSAGE_WAIT_MS;
+  for (;;) {
+    /** @type {any} */ let listing;
+    try {
+      const search = await fetchAnonymously(ctx.playwright, new URL(base).origin, `${base}/api/v1/search?query=${encodeURIComponent(`to:${to}`)}&limit=50`, options);
+      if (search.status() !== 200) return { ok: false, kind: 'unreachable' };
+      listing = JSON.parse(await search.text());
+    } catch {
+      return { ok: false, kind: 'unreachable' };
+    }
+    const hit = newestMailAfter(listing, startedMs);
+    if (hit !== null) {
+      /** @type {any} */ let detail = null;
+      try {
+        const resp = await fetchAnonymously(ctx.playwright, new URL(base).origin, `${base}/api/v1/message/${encodeURIComponent(hit.id)}`, options);
+        if (resp.status() !== 200) return { ok: false, kind: 'unreachable' };
+        detail = JSON.parse(await resp.text());
+      } catch {
+        return { ok: false, kind: 'unreachable' };
+      }
+      const got = isObj(detail) && isStr(detail.Text) ? extractMessageValue(detail.Text, regex) : null;
+      if (got !== null && got.ok) return { ok: true, value: got.value, receivedAt: new Date(hit.createdMs).toISOString() };
+    }
+    if (Date.now() >= deadline) return { ok: false, kind: 'absent' };
+    await pauseMs(READ_MESSAGE_POLL_MS);
+  }
+}
+
+/**
+ * Reads a verification value from a declared sms file: only the bytes appended since the case started, the last line
+ * that holds the recipient. A link that leaves the target root is refused.
+ * @param {string} root
+ * @param {string} abs
+ * @param {number} baseline
+ * @param {string} to
+ * @param {string} regex
+ * @returns {Promise<{ ok: true, value: string, receivedAt: null } | { ok: false, kind: 'outside' | 'unreachable' | 'absent' }>}
+ */
+async function readSmsValue(root, abs, baseline, to, regex) {
+  const deadline = Date.now() + READ_MESSAGE_WAIT_MS;
+  for (;;) {
+    if (existsSync(abs)) {
+      try {
+        const real = realpathSync(abs);
+        const rel = relative(realpathSync(root), real);
+        if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) return { ok: false, kind: 'outside' };
+        const bytes = readFileSync(real);
+        const appended = bytes.subarray(bytes.length >= baseline ? baseline : 0).toString('utf8');
+        const entry = smsEntryAfter(appended, to);
+        const got = entry === null ? null : extractMessageValue(entry, regex);
+        if (got !== null && got.ok) return { ok: true, value: got.value, receivedAt: null };
+      } catch {
+        return { ok: false, kind: 'unreachable' };
+      }
+    }
+    if (Date.now() >= deadline) return { ok: false, kind: 'absent' };
+    await pauseMs(READ_MESSAGE_POLL_MS);
+  }
+}
+
+/**
+ * Runs one `read_message` step: classify the declared source, read the message, register the value for redaction
+ * BEFORE anything is written, and write a metadata-only evidence file. No reason, evidence value or terminal line
+ * carries the message, the recipient, the value or the expression.
+ * @param {RunCtx} ctx
+ * @param {any} kase
+ * @param {any} step
+ * @param {number} n the one-based step position
+ * @param {number} startedMs
+ * @param {number} smsBaseline
+ * @returns {Promise<{ ok: true, value: string, evidence: string } | { ok: false, result: any }>}
+ */
+async function runReadMessage(ctx, kase, step, n, startedMs, smsBaseline) {
+  const src = classifyChannelSource(isObj(ctx.seedConfig) ? ctx.seedConfig.channel_sources : undefined, step.channel, ctx.root);
+  if (!src.ok) {
+    return { ok: false, result: src.code === 'EXTERNAL_CHANNEL' ? needsHuman(src.code, `step ${n}: ${src.reason}`) : blocked(src.code, `step ${n}: ${src.reason}`) };
+  }
+  if (!isStr(step.to) || !MESSAGE_TO_PATTERN.test(step.to)) {
+    return { ok: false, result: blocked('STEP_NOT_PERFORMABLE', `step ${n}: the recipient is not a plain address or number; nothing was requested`) };
+  }
+  const read = src.kind === 'mailpit'
+    ? await readMailValue(ctx, src.url, step.to, startedMs, step.extract.regex)
+    : await readSmsValue(ctx.root, src.abs, smsBaseline, step.to, step.extract.regex);
+  if (!read.ok) {
+    if (read.kind === 'non-local') return { ok: false, result: blocked('FAILED_NON_LOCAL_TARGET', `step ${n}: the declared mail source is not local; nothing was requested`) };
+    if (read.kind === 'outside') return { ok: false, result: blocked('CHANNEL_SOURCE_INVALID', `step ${n}: the declared sms file resolves outside the target root; nothing was read`) };
+    if (read.kind === 'unreachable') return { ok: false, result: blocked('CHANNEL_UNREACHABLE', `step ${n}: the declared ${step.channel} source could not be read`) };
+    return { ok: false, result: { outcome: 'fail', reason_code: null, reason: `step ${n}: no message from the declared ${step.channel} source matched within ${READ_MESSAGE_WAIT_MS / 1000} seconds`, evidence: [] } };
+  }
+  if (read.value.length < 4) {
+    return { ok: false, result: blocked('CAPTURE_UNREDACTABLE', `step ${n}: the extracted value is too short to redact; nothing was kept`) };
+  }
+  addSecretValues(ctx.table, [read.value]);
+  try {
+    const evidence = writeEvidence(ctx, `case-${kase.index}.message-${n}.json`, {
+      kind: 'json',
+      value: { action: 'read_message', step: n, channel: step.channel, received_at: read.receivedAt, result: 'passed' },
+    });
+    return { ok: true, value: read.value, evidence };
+  } catch {
+    return { ok: false, result: blocked('EVIDENCE_WRITE_FAILED', `step ${n}: the message evidence could not be written`) };
+  }
+}
+
 DRIVERS.http = async (ctx, kase, plan, session) => {
   const target = ctx.target;
   /** @type {any} */ const opts = httpContextOptions(target.origin, session, false);
@@ -2478,27 +3454,52 @@ DRIVERS.http = async (ctx, kase, plan, session) => {
 };
 
 /**
- * One role-and-name or text locator step. The locator must match exactly one element at run time;
- * it never passes through first(), nth() or last() for the decision. Returns a result that ends the
+ * One role-and-name, text or scoped locator step. The locator must match exactly one element at run time;
+ * the decision never passes through first() or last(), and nth() only for the indexed form, whose index is
+ * checked against the number of matches in its scope first. Returns a result that ends the
  * case, or null when the step passed. A reason never carries a locator value, a fill value, an input
  * value or page text.
  * @param {any} page
  * @param {any} step
- * @param {{ ok: true, form: 'role', role: string, name: string } | { ok: true, form: 'text', text: string }} loc
+ * @param {any} loc
  * @param {number} n
  * @param {(kind: string, passed: boolean) => void} [recordComparison] records which comparison an `expect_value` step ran and whether it passed
+ * @param {boolean} [runtime] true when no snapshot entry grounds the step, so the report's words do
  * @returns {Promise<CaseResult | null>}
  */
-async function runLocatorStep(page, step, loc, n, recordComparison) {
-  const target = loc.form === 'role' ? page.getByRole(loc.role, { name: loc.name, exact: true }) : page.getByText(loc.text, { exact: true });
+async function runLocatorStep(page, step, loc, n, recordComparison, runtime = false) {
+  const built = buildLocator(page, loc);
+  const target = built.target;
+  // A scoped locator is never a snapshot entry, and a plain one that no entry grounds (`runtime`) is the report's
+  // word. Both are resolved here: zero matches end the case needs-human instead of failing it.
+  const atRunTime = runtime || loc.form === 'scoped';
+  for (const guard of built.guards) {
+    await guard.locator.first().waitFor({ state: 'attached', timeout: 10000 }).catch(() => {});
+    const found = await guard.locator.count().catch(() => 0);
+    if (found !== 1) {
+      return needsHuman('STEP_UNGROUNDED', `step ${n}: the ${guard.what} matched ${found} elements at run time; a ${guard.what} must match exactly one, so nothing was asserted or acted on`);
+    }
+  }
+  if (built.indexed !== null) {
+    await built.indexed.all.first().waitFor({ state: 'attached', timeout: 10000 }).catch(() => {});
+    const total = await built.indexed.all.count().catch(() => 0);
+    if (built.indexed.index >= total) {
+      return needsHuman('STEP_UNGROUNDED', `step ${n}: the index is past the last matching element of the scope (${total} found), so nothing was asserted or acted on`);
+    }
+  }
   if (step.action === 'expect_not_visible') {
+    if (built.guards.length > 0 && built.guards[0].what === 'scope') {
+      const shown = await settleAssertion(() => isVisibleToPerson(built.guards[0].locator), (visible) => visible === true);
+      if (shown.status === 'rejected') return needsHuman('STEP_UNGROUNDED', `step ${n}: the scope is not visible to a person, so an absence inside it asserts nothing`);
+      if (shown.status === 'unreadable') return blocked('STEP_NOT_PERFORMABLE', `step ${n}: the visibility of the target could not be read; nothing was asserted`);
+    }
     // An absence is decided on the live page, with no wait for the element to attach: a locator that
     // matches nothing is hidden. The anchor rule of validateSteps is what keeps that from being vacuous.
     const present = await target.count().catch(() => 0);
     if (present > 1) {
       return needsHuman('STEP_UNGROUNDED', `step ${n}: the locator matched ${present} elements at run time; a locator must match exactly one, so nothing was asserted`);
     }
-    const hidden = await settleAssertion(() => target.isHidden(), (isHidden) => isHidden === true);
+    const hidden = await settleAssertion(async () => !(await isVisibleToPerson(target)), (isHidden) => isHidden === true);
     if (hidden.status === 'accepted') return null;
     if (hidden.status === 'rejected') return { outcome: 'fail', reason_code: null, reason: `step ${n}: the element was still visible`, evidence: [] };
     return blocked('STEP_NOT_PERFORMABLE', `step ${n}: the visibility of the target could not be read; nothing was asserted`);
@@ -2511,6 +3512,7 @@ async function runLocatorStep(page, step, loc, n, recordComparison) {
   }
   const expects = POSITIVE_ASSERTION_ACTIONS.includes(step.action);
   if (count === 0) {
+    if (atRunTime) return needsHuman('STEP_UNGROUNDED', `step ${n}: the locator matched no element at run time, so nothing was asserted or acted on`);
     if (expects) return { outcome: 'fail', reason_code: null, reason: `step ${n}: the expected element was not found`, evidence: [] };
     return blocked('STEP_NOT_PERFORMABLE', `step ${n}: the ${step.action} target could not be found or acted on`);
   }
@@ -2526,7 +3528,7 @@ async function runLocatorStep(page, step, loc, n, recordComparison) {
   if (step.action === 'expect_visible') {
     const ok = await target.waitFor({ state: 'visible', timeout: 10000 }).then(() => true, () => false);
     if (!ok) return { outcome: 'fail', reason_code: null, reason: `step ${n}: the expected element was not visible`, evidence: [] };
-    return null;
+    return requireVisibleToPerson(target, n);
   }
   if (step.action === 'expect_value') {
     // The value is read with the documented input reader and compared in place: it is never returned,
@@ -2571,13 +3573,22 @@ async function runLocatorStep(page, step, loc, n, recordComparison) {
     if (text === null || !text.includes(step.contains)) {
       return { outcome: 'fail', reason_code: null, reason: `step ${n}: the expected text was not present`, evidence: [] };
     }
-    return null;
+    return requireVisibleToPerson(target, n);
   }
   return blocked('STEP_NOT_PERFORMABLE', `step ${n}: the ${step.action} target could not be found or acted on`);
 }
 
 DRIVERS.browser = async (ctx, kase, plan, session) => {
+  // The plan is copied so that rewriting the steps after a read never touches the caller's array.
+  plan = { ...plan, steps: plan.steps.slice() };
+  // "After the case started" means after the browser steps began; an sms source also records how long its file was then.
+  const startedMs = Date.now();
+  /** @type {Record<string, { value: string, redact: boolean }>} */ const messageValues = {};
+  /** @type {Set<number>} */ const secretFillAt = new Set();
+  const smsSource = classifyChannelSource(isObj(ctx.seedConfig) ? ctx.seedConfig.channel_sources : undefined, 'sms', ctx.root);
+  const smsBaseline = smsSource.ok && plan.steps.some((/** @type {any} */ s) => isObj(s) && s.action === 'read_message' && s.channel === 'sms') ? smsBaselineSize(smsSource.abs) : 0;
   const target = ctx.target;
+  const runtimeSteps = Array.isArray(plan.runtime_steps) ? plan.runtime_steps : [];
   // A case that carries an expect_requests step logs the requests of its page and runs with service workers blocked.
   const watchesRequests = plan.steps.some((/** @type {any} */ s) => isObj(s) && s.action === 'expect_requests');
   /** @type {{ method: string, host: string, path: string, local: boolean }[] | null} */ let requestLog = null;
@@ -2586,13 +3597,16 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
   try {
     browser = await ctx.playwright.chromium.launch({ headless: true });
   } catch {
-    return blocked('FAILED_BROWSER_UNAVAILABLE', 'a headless Chromium could not be launched; run `npx playwright install chromium` in plugins/relay/scripts/visual/');
+    return blocked('FAILED_BROWSER_UNAVAILABLE', BROWSER_UNAVAILABLE_REASON);
   }
   /** @type {any} */ let context = null;
   /** @type {string[]} */ const evidence = [];
   /** @type {Map<number, string>} */ const queryEvidence = new Map();
   // The located field of every expect_value step that ran: masked in the final capture, so a value the runner read is not left in clear.
   /** @type {any[]} */ const valueMasks = [];
+  /** @type {Map<number, string>} */ const judgeKinds = new Map();
+  /** @type {Map<number, string>} */ const judgeScope = new Map();
+  /** @type {number[]} */ const pendingAt = [];
   try {
     context = await browser.newContext({
       ...(session && session.path ? { storageState: session.path } : {}),
@@ -2615,19 +3629,20 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
       if (requestLog !== null && (step.action === 'goto' || step.action === 'click' || step.action === 'fill')) windowStart = requestLog.length;
       const lstep = LOCATOR_ACTIONS.includes(step.action) ? locatorOf(step) : null;
       if (lstep !== null && lstep.ok) {
-        if (step.action === 'expect_value' && lstep.form === 'role') valueMasks.push(page.getByRole(lstep.role, { name: lstep.name, exact: true }));
+        if (step.action === 'expect_value' && isControlLocator(lstep)) valueMasks.push(buildLocator(page, lstep).target);
+        if (step.action === 'fill' && secretFillAt.has(i) && isControlLocator(lstep)) valueMasks.push(buildLocator(page, lstep).target);
         // The comparison evidence holds the action, the step position, the locator already in the plan, the
         // closed comparison word and passed or failed: never the value, its length or the expected string.
         const lr = await runLocatorStep(page, step, lstep, n, (kind, passed) => {
-          if (lstep.form !== 'role') return;
+          if (!isControlLocator(lstep)) return;
           queryEvidence.set(
             i,
             writeEvidence(ctx, `case-${kase.index}.value-${n}.json`, {
               kind: 'json',
-              value: { action: 'expect_value', step: n, locator: { role: lstep.role, name: lstep.name }, comparison: kind, result: passed ? 'passed' : 'failed' },
+              value: { action: 'expect_value', step: n, locator: lstep.form === 'role' ? { role: lstep.role, name: lstep.name } : scopedLocatorRecord(step), comparison: kind, result: passed ? 'passed' : 'failed' },
             }),
           );
-        });
+        }, runtimeSteps.includes(i));
         if (lr !== null) {
           verdict = lr;
           break;
@@ -2647,6 +3662,7 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
           break;
         }
       } else if (step.action === 'click' || step.action === 'fill') {
+        if (step.action === 'fill' && secretFillAt.has(i)) valueMasks.push(page.locator(step.selector));
         try {
           if (step.action === 'click') await page.click(step.selector);
           else await page.fill(step.selector, step.value);
@@ -2663,15 +3679,27 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
         }
         queryEvidence.set(i, q.evidence);
       } else if (step.action === 'expect_visible') {
-        const ok = await page.locator(step.selector).first().waitFor({ state: 'visible', timeout: 10000 }).then(() => true, () => false);
+        const located = page.locator(step.selector).first();
+        const ok = await located.waitFor({ state: 'visible', timeout: 10000 }).then(() => true, () => false);
         if (!ok) {
           verdict = { outcome: 'fail', reason_code: null, reason: `step ${n}: the expected element was not visible`, evidence: [] };
           break;
         }
+        const seen = await requireVisibleToPerson(located, n);
+        if (seen !== null) {
+          verdict = seen;
+          break;
+        }
       } else if (step.action === 'expect_text') {
-        const text = await page.locator(step.selector).first().textContent({ timeout: 10000 }).catch(() => null);
+        const located = page.locator(step.selector).first();
+        const text = await located.textContent({ timeout: 10000 }).catch(() => null);
         if (text === null || !text.includes(step.contains)) {
           verdict = { outcome: 'fail', reason_code: null, reason: `step ${n}: the expected text was not present`, evidence: [] };
+          break;
+        }
+        const seen = await requireVisibleToPerson(located, n);
+        if (seen !== null) {
+          verdict = seen;
           break;
         }
       } else if (step.action === 'expect_url') {
@@ -2726,6 +3754,56 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
           verdict = { outcome: 'fail', reason_code: null, reason: `step ${n}: the page issued ${decided.observed} matching request(s); ${step.count} were expected`, evidence: [] };
           break;
         }
+      } else if (step.action === 'judge') {
+        // The capture is what a person would look at; the verdict is recorded later by the command session.
+        const masks = [page.locator('input[type=password]'), ...valueMasks];
+        /** @type {any} */ let scopeElement = null;
+        if (step.within !== undefined) {
+          const scoped = scopeOf(step.within);
+          const found = scoped.ok ? await resolveScopeElement(page, scoped.scope) : { ok: false, count: 0 };
+          if (!found.ok) {
+            verdict = needsHuman('STEP_UNGROUNDED', `step ${n}: the judge scope matched ${found.count} elements at run time; a scope must match exactly one, so nothing was captured or judged`);
+            break;
+          }
+          scopeElement = found.locator;
+        }
+        try {
+          const pageText = await page.innerText('body').catch(() => '');
+          queryEvidence.set(
+            i,
+            containsSecret(pageText, ctx.table)
+              ? writeEvidence(ctx, `case-${kase.index}.judge-${n}.txt`, { kind: 'text', value: pageText })
+              : writeEvidence(ctx, `case-${kase.index}.judge-${n}.png`, { kind: 'binary', value: await captureFinalPng(page, masks) }),
+          );
+          if (scopeElement !== null) {
+            const scopeText = await scopeElement.innerText({ timeout: 5000 }).catch(() => '');
+            judgeScope.set(
+              i,
+              containsSecret(scopeText, ctx.table)
+                ? writeEvidence(ctx, `case-${kase.index}.judge-${n}.scope.txt`, { kind: 'text', value: scopeText })
+                : writeEvidence(ctx, `case-${kase.index}.judge-${n}.scope.png`, { kind: 'binary', value: await captureElementPng(scopeElement, masks) }),
+            );
+          }
+        } catch {
+          verdict = blocked('EVIDENCE_WRITE_FAILED', `step ${n}: the judge capture could not be taken or written`);
+          break;
+        }
+        judgeKinds.set(i, step.kind);
+        pendingAt.push(i);
+      } else if (step.action === 'read_message') {
+        const read = await runReadMessage(ctx, kase, step, n, startedMs, smsBaseline);
+        if (!read.ok) {
+          verdict = read.result;
+          break;
+        }
+        queryEvidence.set(i, read.evidence);
+        messageValues[step.extract.as] = { value: read.value, redact: true };
+        // The value reaches only the steps after this one; a fill that uses it is masked in every later capture.
+        for (let j = i + 1; j < plan.steps.length; j++) {
+          const before = plan.steps[j];
+          if (isObj(before) && before.action === 'fill' && stepVariables(before).includes(step.extract.as)) secretFillAt.add(j);
+          plan.steps[j] = substituteVariables(before, messageValues);
+        }
       } else {
         // Every action the validator accepts has a branch above (the locator forms left through continue), so an
         // accepted action with no handler can never be recorded as passed.
@@ -2733,13 +3811,13 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
         break;
       }
     }
-    // Evidence after the last step: a screenshot, or redacted text when the page text holds a secret.
+    // Evidence after the last step: a full-page screenshot, or redacted text when the page text holds a secret.
     try {
       const bodyText = await page.innerText('body').catch(() => '');
       if (containsSecret(bodyText, ctx.table)) {
         evidence.push(writeEvidence(ctx, `case-${kase.index}.txt`, { kind: 'text', value: bodyText }));
       } else {
-        const png = await page.screenshot({ mask: [page.locator('input[type=password]'), ...valueMasks] });
+        const png = await captureFinalPng(page, [page.locator('input[type=password]'), ...valueMasks]);
         evidence.push(writeEvidence(ctx, `case-${kase.index}.png`, { kind: 'binary', value: png }));
       }
     } catch {
@@ -2748,9 +3826,14 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
       }
     }
     // The final capture reflects the state after the last step that ran, so it is attributed to that step.
-    const stepsOut = recordSteps(plan.steps, ranTo + 1, verdict !== null ? ranTo : -1, (j) => queryEvidence.get(j) ?? (j === ranTo ? evidence[0] ?? null : null));
-    const allEvidence = [...queryEvidence.values(), ...evidence];
+    const recorded = recordSteps(plan.steps, ranTo + 1, verdict !== null ? ranTo : -1, (j) => queryEvidence.get(j) ?? (j === ranTo ? evidence[0] ?? null : null));
+    // A captured judge step waits for a verdict only when no other step ended the case; otherwise it is moot.
+    const stepsOut = recorded.map((rec, j) => (judgeKinds.has(j)
+      ? { ...rec, result: verdict === null ? PENDING_JUDGMENT : 'not-judged', kind: judgeKinds.get(j), scope_evidence: judgeScope.get(j) ?? null }
+      : rec));
+    const allEvidence = [...queryEvidence.values(), ...judgeScope.values(), ...evidence];
     if (verdict !== null) return { ...verdict, evidence: allEvidence, steps: stepsOut };
+    if (pendingAt.length > 0) return { outcome: PENDING_JUDGMENT, reason_code: null, reason: null, evidence: allEvidence, steps: stepsOut, pending_judgment: pendingAt.map((j) => j + 1) };
     return { outcome: 'pass', reason_code: null, reason: null, evidence: allEvidence, steps: stepsOut };
   } finally {
     if (context) await context.close().catch(() => {});
@@ -3420,6 +4503,106 @@ function resolveFromRecord(root, feature, kase) {
   };
 }
 
+/** Extensions tried, in order, when a relative specifier names no file as written. */
+const SOURCE_EXTENSIONS = ['', '.mjs', '.js', '.cjs', '.ts', '.tsx', '.jsx', '.mts', '.cts'];
+
+/** The relative specifiers a test file imports statically: `from` forms, a bare side-effect form and a literal `require`. */
+const STATIC_IMPORT_PATTERNS = [
+  /(?:^|[^\w$.])(?:import|export)\s[^'";]*?\sfrom\s*['"](\.{1,2}\/[^'"\r\n]+)['"]/g,
+  /(?:^|[^\w$.])import\s*['"](\.{1,2}\/[^'"\r\n]+)['"]/g,
+  /(?:^|[^\w$.])require\(\s*['"](\.{1,2}\/[^'"\r\n]+)['"]\s*\)/g,
+];
+
+/**
+ * The repository-relative path of the file a relative specifier names, or null when none exists or it leaves the root.
+ * @param {string} fromFile absolute path of the importing file
+ * @param {string} spec
+ * @param {string} rootAbs
+ * @returns {string | null}
+ */
+function resolveRelativeImport(fromFile, spec, rootAbs) {
+  const base = resolve(dirname(fromFile), spec);
+  const stem = base.replace(/\.[mc]?js$/, '');
+  const candidates = SOURCE_EXTENSIONS.map((ext) => base + ext);
+  if (stem !== base) for (const ext of ['.ts', '.tsx', '.mts', '.cts']) candidates.push(stem + ext);
+  for (const ext of SOURCE_EXTENSIONS.slice(1)) candidates.push(join(base, `index${ext}`));
+  for (const candidate of candidates) {
+    try {
+      if (!statSync(candidate).isFile()) continue;
+    } catch {
+      continue;
+    }
+    const rel = relative(rootAbs, candidate);
+    return rel === '' || rel.startsWith('..') || isAbsolute(rel) ? null : fwd(rel);
+  }
+  return null;
+}
+
+/**
+ * Whether git reports a file changed after an instant: its last commit is later, or it has uncommitted changes and
+ * its modification time is later. A git failure is never "changed".
+ * @param {ProcessRunner} run
+ * @param {string} root
+ * @param {string} rel
+ * @param {number} generatedMs
+ * @returns {boolean}
+ */
+function changedAfter(run, root, rel, generatedMs) {
+  const log = gitCall(run, root, ['log', '-1', '--format=%ct', '--', rel]);
+  const committedMs = !log.error && log.status === 0 ? Number(String(log.stdout).trim()) * 1000 : Number.NaN;
+  if (Number.isFinite(committedMs) && committedMs > generatedMs) return true;
+  const status = gitCall(run, root, ['status', '--porcelain', '--', rel]);
+  if (status.error || status.status !== 0 || String(status.stdout).trim() === '') return false;
+  try {
+    return statSync(join(root, rel)).mtimeMs > generatedMs;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The source files that cited test files import statically (one level) and that git reports changed after the
+ * record's `generated_at`. Pure of the outcome: it only reads. Total: anything it cannot read or ask is an empty list,
+ * and outside a git work tree it is always empty.
+ * @param {string} root the target root
+ * @param {string[]} citedPaths repository-relative paths of the cited test files
+ * @param {string} generatedAt the record's `generated_at`
+ * @param {ProcessRunner} [run] injectable so a test drives it without git
+ * @returns {string[]} sorted repository-relative paths
+ */
+export function recordStaleSources(root, citedPaths, generatedAt, run = spawnSync) {
+  try {
+    const generated = isStr(generatedAt) ? Date.parse(generatedAt) : Number.NaN;
+    if (!isStr(root) || !Array.isArray(citedPaths) || Number.isNaN(generated)) return [];
+    if (!insideWorkTree(run, root)) return [];
+    const rootAbs = resolve(root);
+    /** @type {Set<string>} */ const sources = new Set();
+    for (const cited of citedPaths) {
+      if (!isStr(cited)) continue;
+      const abs = resolve(rootAbs, cited);
+      const own = relative(rootAbs, abs);
+      if (own === '' || own.startsWith('..') || isAbsolute(own)) continue;
+      /** @type {string} */ let text;
+      try {
+        const st = statSync(abs);
+        if (!st.isFile() || st.size > 524288) continue;
+        text = readFileSync(abs, 'utf8');
+      } catch {
+        continue;
+      }
+      for (const pattern of STATIC_IMPORT_PATTERNS) {
+        for (const hit of text.matchAll(pattern)) {
+          const rel = resolveRelativeImport(abs, hit[1], rootAbs);
+          if (rel !== null && rel !== fwd(own)) sources.add(rel);
+        }
+      }
+    }
+    return [...sources].filter((rel) => changedAfter(run, rootAbs, rel, generated)).sort();
+  } catch {
+    return [];
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Case classification
 // ---------------------------------------------------------------------------
@@ -3507,7 +4690,7 @@ async function preAuthenticatedGate(ctx, role, record) {
   if (verdict === 'clean') return { ctx: { ...ctx, target: alt } };
   if (verdict === 'unreachable') return { block: blocked('TARGET_UNREACHABLE', 'the alternative target could not be loaded for the anonymous check') };
   if (verdict === 'unavailable') {
-    return { block: blocked('FAILED_BROWSER_UNAVAILABLE', 'a headless Chromium could not be launched; run `npx playwright install chromium` in plugins/relay/scripts/visual/') };
+    return { block: blocked('FAILED_BROWSER_UNAVAILABLE', BROWSER_UNAVAILABLE_REASON) };
   }
   return blockedPre('the alternative target still showed the authenticated-only marker with no session');
 }
@@ -3548,8 +4731,10 @@ async function executeCase(ctxOrNull, kase, planByIndex, target, makeCtx, root, 
     // No driver runs for a resolved case, and a plan entry for it is ignored. Never a pass without evidence.
     try {
       const evCtx = ctxOrNull ?? makeCtx();
-      const evidence = writeEvidence(evCtx, `case-${kase.index}.record.json`, { kind: 'json', value: resolved.value });
-      return { result: { outcome: resolved.outcome, reason_code: 'AUTOMATED_EVIDENCE', reason: resolved.reason, evidence: [evidence] }, driver: null, role: null };
+      const stale = recordStaleSources(root, resolved.value.files.map((/** @type {{ cited: string }} */ f) => f.cited), resolved.value.record_generated_at);
+      const value = stale.length > 0 ? { ...resolved.value, stale_sources: stale } : resolved.value;
+      const evidence = writeEvidence(evCtx, `case-${kase.index}.record.json`, { kind: 'json', value });
+      return { result: { outcome: resolved.outcome, reason_code: 'AUTOMATED_EVIDENCE', reason: resolved.reason, evidence: [evidence], ...(stale.length > 0 ? { record_stale: stale } : {}) }, driver: null, role: null };
     } catch {
       return { result: blocked('EVIDENCE_WRITE_FAILED', 'the record-resolved evidence file could not be written; no outcome is claimed'), driver: null, role: null };
     }
@@ -3582,6 +4767,19 @@ async function executeCase(ctxOrNull, kase, planByIndex, target, makeCtx, root, 
   if (p.human_remainder !== undefined && !(isObj(p.human_remainder) && isStr(p.human_remainder.reason) && p.human_remainder.reason.trim() !== '')) {
     return out(needsHuman('PLAN_ENTRY_INVALID', 'human_remainder must be an object with a non-empty string reason'));
   }
+  // The chosen inputs are checked for shape before anything else is read, and a write is allowed only for a role the
+  // kit declares dedicated. Both refusals come before the query module, the target, any seed, session or request.
+  const invalidChosen = validateChosenInputs(driver, p.steps, p.chosen_inputs);
+  if (invalidChosen) return out(needsHuman(invalidChosen.code, invalidChosen.reason));
+  const invalidJudge = validateJudgeCriteria(p.steps, kase.manual_steps_verbatim);
+  if (invalidJudge) return out(needsHuman(invalidJudge.code, invalidJudge.reason));
+  const writeAt = firstWriteStep(p.steps);
+  if (writeAt !== -1) {
+    const kitConfig = ctxOrNull ? ctxOrNull.loginConfig : readJsonOrNull(join(root, 'PRPs', 'auth', 'login.config.json'));
+    if (!isDedicatedRole(kitConfig, role)) {
+      return out(blocked('ROLE_NOT_DEDICATED', `step ${writeAt + 1}: ${REASON_CATALOGUE.ROLE_NOT_DEDICATED.reason}`));
+    }
+  }
   const hasQuery = p.steps.some((/** @type {any} */ s) => isObj(s) && s.action === 'query');
   const Q = hasQuery ? await loadQueryModule() : null;
   if (hasQuery && Q === null) return out(blocked('QUERY_MODULE_UNAVAILABLE', 'the query module could not be loaded; nothing was executed'));
@@ -3591,6 +4789,10 @@ async function executeCase(ctxOrNull, kase, planByIndex, target, makeCtx, root, 
     return out(blocked('TARGET_UNDECLARED', 'no target is declared: set baseUrl in PRPs/auth/login.config.json or pass --env-handle <path>'));
   }
   const ctx = ctxOrNull ?? makeCtx();
+  if (p.chosen_inputs !== undefined) {
+    const chosenRefusal = chosenSnapshotRefusal(p.steps, p.chosen_inputs, loadGroundingSnapshots(ctx.runDirAbs));
+    if (chosenRefusal) return out(needsHuman(chosenRefusal.code, chosenRefusal.reason));
+  }
   for (const [i, s] of p.steps.entries()) {
     if (!isObj(s) || s.action !== 'request' || s.origin === undefined) continue;
     const r = await resolveApiOrigin(ctx, s, i + 1);
@@ -3599,12 +4801,14 @@ async function executeCase(ctxOrNull, kase, planByIndex, target, makeCtx, root, 
       return out(blocked('API_HEADER_NO_SESSION', `step ${i + 1}: the origin ${r.spec.name} derives a header from the role session, but the plan entry names no role`));
     }
   }
-  if (driver === 'browser' && p.steps.some((/** @type {any} */ s) => isObj(s) && LOCATOR_ACTIONS.includes(s.action) && locatorOf(s) !== null)) {
-    const grounded = precheckGroundedSteps(p.steps, loadGroundingSnapshots(ctx.runDirAbs), kase.manual_steps_verbatim, role);
-    if (grounded !== null) return out(needsHuman(grounded.code, grounded.reason));
+  /** @type {number[]} */ let runtimeSteps = [];
+  if (driver === 'browser' && p.steps.some((/** @type {any} */ s) => isObj(s) && (LOCATOR_ACTIONS.includes(s.action) && locatorOf(s) !== null || s.action === 'judge' && s.within !== undefined))) {
+    const grounded = groundLocators(p.steps, loadGroundingSnapshots(ctx.runDirAbs), kase.manual_steps_verbatim, role, p.chosen_inputs);
+    if (grounded.refusal !== null) return out(needsHuman(grounded.refusal.code, grounded.refusal.reason));
+    runtimeSteps = grounded.runtime;
   }
   if (ctx.playwright === null) {
-    return out(blocked('FAILED_PLAYWRIGHT_UNAVAILABLE', 'playwright is not resolvable; run `npm install` in plugins/relay/scripts/visual/'));
+    return out(blocked('FAILED_PLAYWRIGHT_UNAVAILABLE', PLAYWRIGHT_UNAVAILABLE_REASON));
   }
   for (const [i, s] of p.steps.entries()) {
     if (typeof s.path === 'string' && resolveStepUrl(s.path, target) === null) {
@@ -3617,6 +4821,16 @@ async function executeCase(ctxOrNull, kase, planByIndex, target, makeCtx, root, 
     const src = /** @type {any} */ (Q).classifyQuerySource(querySources, s.source);
     if (!src.ok) return out(blocked(src.code, `step ${i + 1}: ${src.reason}`));
     if (!(await queryArgvIsLocal(ctx, src.argv))) return out(blocked('FAILED_NON_LOCAL_TARGET', `step ${i + 1}: a query source argument names a non-local URL; nothing was executed`));
+  }
+  const channelSources = seedConfig && isObj(seedConfig) ? seedConfig.channel_sources : undefined;
+  for (const [i, s] of p.steps.entries()) {
+    if (!isObj(s) || s.action !== 'read_message') continue;
+    const src = classifyChannelSource(channelSources, s.channel, root);
+    if (!src.ok) return out(src.code === 'EXTERNAL_CHANNEL' ? needsHuman(src.code, `step ${i + 1}: ${src.reason}`) : blocked(src.code, `step ${i + 1}: ${src.reason}`));
+    if (src.kind === 'mailpit') {
+      const g = await ctx.target.guard.checkTarget(src.url, { root });
+      if (!g.ok) return out(blocked('FAILED_NON_LOCAL_TARGET', `step ${i + 1}: the declared mail source is not local; nothing was requested`));
+    }
   }
   /** @type {any[]} */ let steps = p.steps;
   // A browser case for a role whose target authenticates every request cannot
@@ -3663,7 +4877,7 @@ async function executeCase(ctxOrNull, kase, planByIndex, target, makeCtx, root, 
   }
   const fn = DRIVERS[driver];
   if (!fn) return out(needsHuman('NO_ACTIVE_DRIVER', `no active driver handles ${JSON.stringify(driver)}`));
-  const ran = await fn(runCtx, kase, { ...p, steps }, session);
+  const ran = await fn(runCtx, kase, { ...p, steps, runtime_steps: runtimeSteps }, session);
   // A driver that passed every step has all of them passed; a driver that ended the case early already recorded its steps.
   const withSteps = ran.outcome === 'pass' && ran.steps === undefined
     ? { ...ran, steps: recordSteps(p.steps, p.steps.length, -1, (j) => (driver === 'http' ? ran.evidence[j] ?? null : j === p.steps.length - 1 ? ran.evidence[0] ?? null : null)) }
@@ -3804,14 +5018,23 @@ async function runRun(args) {
       } catch (err) {
         result = blocked('RUNNER_ERROR', `an unexpected error stopped this case: ${redactText(String(err && /** @type {any} */ (err).message ? /** @type {any} */ (err).message : err), table)}`);
       }
-      if (!OUTCOMES.includes(result.outcome)) result = blocked('RUNNER_ERROR', 'an internal path produced a value outside the closed vocabulary');
+      if (!OUTCOMES.includes(result.outcome) && !isPendingResult(result)) result = blocked('RUNNER_ERROR', 'an internal path produced a value outside the closed vocabulary');
+      if (Array.isArray(result.record_stale) && result.record_stale.length > 0) {
+        warnings.push({
+          code: 'RECORD_STALE',
+          message: `case ${c.index}: ${result.record_stale.length} source file(s) imported by the cited tests changed in git after the record was generated; the outcome is unchanged, re-run the cited tests before trusting it (the files are listed in the case evidence)`,
+          case: c.index,
+          files: result.record_stale,
+        });
+      }
       const finishedAt = now();
       const keepSteps = result.outcome === 'blocked' || result.outcome === 'needs-human';
+      const pending = isPendingResult(result);
       entries.push({
         index: c.index,
         title: c.title,
         risk: c.risk,
-        outcome: result.outcome,
+        outcome: pending ? null : result.outcome,
         reason_code: result.reason_code,
         reason: result.reason,
         driver,
@@ -3821,7 +5044,8 @@ async function runRun(args) {
         duration_ms: Math.max(0, Date.parse(finishedAt) - Date.parse(startedAt)),
         evidence: result.evidence,
         steps: Array.isArray(result.steps) ? result.steps : [],
-        manual_steps_verbatim: keepSteps ? c.manual_steps_verbatim : null,
+        manual_steps_verbatim: keepSteps || pending ? c.manual_steps_verbatim : null,
+        ...(pending ? { pending_judgment: result.pending_judgment } : {}),
       });
     }
   } catch (err) {
@@ -3841,6 +5065,8 @@ async function runRun(args) {
     applyClassification(entries, planByIndex);
     const { counts, record_resolved: recordResolved, partially_executed: partiallyExecuted } = summarizeEntries(entries);
     const classification = summarizeClassification(entries);
+    const needsHuman = summarizeNeedsHuman(entries);
+    const judgment = summarizeJudgment(entries);
     // Record-resolved cases are INSIDE counts.pass/fail (the four-key partition is unchanged) but were
     // not executed by a driver: they are reported beside the driver-executed numbers, never added to them.
     const recordEntries = entries.filter((e) => e.reason_code === 'AUTOMATED_EVIDENCE');
@@ -3869,6 +5095,9 @@ async function runRun(args) {
       counts,
       record_resolved: recordResolved,
       partially_executed: partiallyExecuted,
+      needs_human_impossible: needsHuman.needs_human_impossible,
+      needs_human_gap: needsHuman.needs_human_gap,
+      ...(judgment === null ? {} : { judgment }),
       classification,
       aborted,
       warnings,
@@ -3889,7 +5118,12 @@ async function runRun(args) {
       `QA run finished: pass=${counts.pass - recordPass} fail=${counts.fail - recordFail} blocked=${counts.blocked} needs-human=${counts['needs-human']}`,
       `Record-resolved (not driver-executed): record-resolved=${recordResolved} (pass=${recordPass} fail=${recordFail})`,
       `Partially executed (not in the driver-executed rate): partially-executed=${partiallyExecuted}`,
-      ...entries.filter((e) => e.outcome !== 'pass').map((e) => `  case ${e.index}: ${e.outcome}${e.reason_code ? ` (${e.reason_code})` : ''}`),
+      `Needs-human steps: impossible=${needsHuman.needs_human_impossible} gap=${needsHuman.needs_human_gap}`,
+      ...entries.filter((e) => e.outcome !== 'pass').map((e) => `  case ${e.index}: ${e.outcome === null ? 'pending-judgment' : e.outcome}${e.reason_code ? ` (${e.reason_code})` : ''}`),
+      ...(judgment !== null && judgment.pending_steps > 0
+        ? [`Pending judgment: ${judgment.pending_steps} step(s); record each verdict with qa-run.mjs judge`,
+          ...entries.flatMap((e) => (Array.isArray(e.steps) ? e.steps : []).filter((/** @type {any} */ s) => s.result === PENDING_JUDGMENT).map((/** @type {any} */ s) => `  judge case ${e.index} step ${s.index} (${s.kind}): ${s.evidence}${s.scope_evidence ? ` and ${s.scope_evidence}` : ''}`))]
+        : []),
       `Results: ${runDirRel}/results.json`,
       `Evidence: ${runDirRel}/evidence/`,
     ];
@@ -3897,6 +5131,10 @@ async function runRun(args) {
     if (aborted) lines.push(`RUN ABORTED: ${aborted.reason_code}`);
     if (shaAfter !== shaBefore) {
       process.stderr.write(`FAILED_REPORT_MODIFIED: ${reportRel} changed during the run\n`);
+      exitCode = 1;
+    }
+    if (entries.some((e) => e.reason_code === 'FAILED_PLAYWRIGHT_UNAVAILABLE')) {
+      process.stderr.write(`FAILED_PLAYWRIGHT_UNAVAILABLE: ${playwrightUnavailableText(PLUGIN_ROOT)}\n`);
       exitCode = 1;
     }
     lines.push(HUMAN_GATE_SENTENCE, `Review file: ${reportRel}`);
@@ -4007,6 +5245,7 @@ export function groundingStepKey(step) {
   if (step.action !== 'click' && step.action !== 'fill') return null;
   const loc = locatorOf(step);
   if (loc === null || !loc.ok) return null;
+  if (loc.form === 'scoped') return null;
   /** @type {any} */ const norm = { action: step.action };
   if (loc.form === 'role') {
     norm.role = loc.role;
@@ -4244,7 +5483,7 @@ async function runGround(argv) {
   }
   requireRunIgnore(runDirAbs);
   const playwright = loadPlaywright(root, PLUGIN_ROOT);
-  if (playwright === null) throw new Halt('FAILED_PLAYWRIGHT_UNAVAILABLE', 'playwright could not be resolved from the target or the plugin');
+  if (playwright === null) throw new Halt('FAILED_PLAYWRIGHT_UNAVAILABLE', playwrightUnavailableText(PLUGIN_ROOT));
   const table = buildRedactionTable({ root, env: process.env, secretValues: [] });
   /** @type {RunCtx} */ const ctx = {
     root,
@@ -4264,6 +5503,9 @@ async function runGround(argv) {
     const roles = ctx.loginConfig && isObj(ctx.loginConfig.roles) ? ctx.loginConfig.roles : {};
     if (!Object.hasOwn(roles, role)) throw new Halt('ROLE_UNDECLARED', `role ${role} is not declared in PRPs/auth/login.config.json`);
     const s = obtainSession(ctx, role);
+    if (!s.ok && s.code === 'FAILED_KIT_SCRIPT_STALE') {
+      throw new Halt('FAILED_KIT_SCRIPT_STALE', `the kit login script for role ${role} was generated from a different template than the installed one (${s.detail ?? 'identities unknown'}); run /relay-auth-scripts --role ${role} --refresh`);
+    }
     if (!s.ok) throw new Halt('SESSION_UNAVAILABLE', `the kit login script for role ${role} did not produce a session (${s.code})`);
     storagePath = s.info.path;
   }
@@ -4277,7 +5519,7 @@ async function runGround(argv) {
   try {
     browser = await playwright.chromium.launch({ headless: true });
   } catch {
-    throw new Halt('FAILED_BROWSER_UNAVAILABLE', 'a headless Chromium could not be launched; run `npx playwright install chromium` in plugins/relay/scripts/visual/');
+    throw new Halt('FAILED_BROWSER_UNAVAILABLE', browserUnavailableText(PLUGIN_ROOT));
   }
   try {
     const context = await browser.newContext(storagePath !== null ? { storageState: storagePath } : {});
@@ -4365,12 +5607,276 @@ async function runGroundGuarded(argv) {
   }
 }
 
+/** The probe path of the session directory; `git check-ignore` evaluates the pathname, so it need not exist. */
+export const PREFLIGHT_SESSION_PROBES = Object.freeze(['PRPs/auth/.sessions/probe.json']);
+
+/**
+ * The environment check behind `qa-run.mjs preflight`: one line per check and a final line. It reads files and
+ * asks git; it makes no network request, starts no browser and writes nothing.
+ * @param {string} root the target root
+ * @param {{ pluginRoot?: string, run?: ProcessRunner }} [opts] injectable so a test drives it without the real plugin directory or git
+ * @returns {{ ok: boolean, lines: string[], failures: number }}
+ */
+export function runPreflight(root, opts = {}) {
+  const pluginRoot = opts.pluginRoot ?? PLUGIN_ROOT;
+  const run = opts.run ?? spawnSync;
+  /** @type {string[]} */ const lines = [];
+  let failures = 0;
+  /** @param {string} code @param {string} detail */
+  const fail = (code, detail) => {
+    failures++;
+    lines.push(`PREFLIGHT ${code}: ${detail}`);
+  };
+  const pw = describePlaywright(root, pluginRoot);
+  if (pw.playwright === null) {
+    fail('FAILED_PLAYWRIGHT_UNAVAILABLE', playwrightUnavailableText(pluginRoot));
+    lines.push('PREFLIGHT chromium: skipped (playwright is not resolvable)');
+  } else {
+    lines.push(`PREFLIGHT playwright: ok ${pw.path ?? 'path unknown'}${pw.version !== null ? ` (version ${pw.version})` : ''}`);
+    /** @type {any} */ let exe = null;
+    try {
+      exe = pw.playwright.chromium.executablePath();
+    } catch {
+      exe = null;
+    }
+    if (isStr(exe) && exe !== '' && existsSync(exe)) lines.push('PREFLIGHT chromium: ok');
+    else fail('FAILED_BROWSER_UNAVAILABLE', browserUnavailableText(pluginRoot));
+  }
+  const stale = staleKitRoles(root);
+  if (stale.length === 0) lines.push('PREFLIGHT kit: ok (every kit login script is current)');
+  for (const s of stale) fail('FAILED_KIT_SCRIPT_STALE', `role ${s.role} (${s.detail}); run /relay-auth-scripts --role ${s.role} --refresh`);
+  if (!insideWorkTree(run, root)) {
+    lines.push('PREFLIGHT sessions: ok (not inside a git work tree; nothing there can be committed)');
+  } else {
+    const unproven = PREFLIGHT_SESSION_PROBES.filter((probe) => {
+      const r = gitCall(run, root, ['check-ignore', '-q', '--', probe]);
+      return Boolean(r.error) || r.status !== 0;
+    });
+    if (unproven.length === 0) lines.push('PREFLIGHT sessions: ok (PRPs/auth/.sessions/ is ignored)');
+    else fail('FAILED_IGNORE_UNPROVEN', 'PRPs/auth/.sessions/ is not proven ignored by git; add PRPs/auth/.sessions/ to the project .gitignore');
+  }
+  lines.push(failures === 0 ? 'PREFLIGHT: ok' : `PREFLIGHT: FAILED (${failures} check(s))`);
+  return { ok: failures === 0, lines, failures };
+}
+
+const PREFLIGHT_USAGE = `Usage:
+${PREFLIGHT_USAGE_LINE}
+  Reads files and asks git; it makes no network request and writes nothing. Exit 1 when any check fails.
+`;
+
+/**
+ * @param {string[]} argv
+ * @returns {Promise<number>}
+ */
+async function runPreflightGuarded(argv) {
+  if (argv.length !== 2 || argv[0] !== '--root' || argv[1].startsWith('--')) {
+    process.stderr.write(PREFLIGHT_USAGE);
+    return 2;
+  }
+  const root = resolve(argv[1]);
+  if (!existsSync(root) || !statSync(root).isDirectory()) {
+    process.stderr.write(`--root must be an existing directory\n${PREFLIGHT_USAGE}`);
+    return 2;
+  }
+  try {
+    const result = runPreflight(root);
+    process.stdout.write(`${result.lines.join('\n')}\n`);
+    return result.ok ? 0 : 1;
+  } catch {
+    process.stderr.write('FAILED_RUNNER_ERROR: the runner stopped on an unexpected error\n');
+    return 1;
+  }
+}
+
+/**
+ * Parses the arguments of the judge mode. Pure and total. Every flag takes a value that does not start with `--`;
+ * `--case` and `--step` are positive integers, `--verdict` is one of JUDGE_VERDICTS and `--evidence` is a text of
+ * JUDGE_EVIDENCE_MIN to JUDGE_EVIDENCE_MAX characters once trimmed. A refusal carries a fixed sentence that names a
+ * flag and never a value.
+ * @param {any} argv
+ * @returns {{ ok: true, root: string, runDir: string, caseIndex: number, stepIndex: number, verdict: string, evidence: string } | { ok: false, why: string }}
+ */
+export function parseJudgeArgs(argv) {
+  /** @param {string} why @returns {{ ok: false, why: string }} */
+  const refuse = (why) => ({ ok: false, why });
+  if (!Array.isArray(argv)) return refuse('JUDGE_ARGUMENTS_INVALID: the arguments must be a list');
+  /** @type {Record<string, string>} */ const given = {};
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (!isStr(a) || !['--root', '--run-dir', '--case', '--step', '--verdict', '--evidence'].includes(a)) return refuse('JUDGE_ARGUMENTS_INVALID: an unknown argument');
+    const v = argv[i + 1];
+    if (!isStr(v) || v.startsWith('--')) return refuse(`JUDGE_ARGUMENTS_INVALID: ${a} needs a value`);
+    if (Object.hasOwn(given, a)) return refuse(`JUDGE_ARGUMENTS_INVALID: ${a} is given twice`);
+    given[a] = v;
+    i++;
+  }
+  if (!Object.hasOwn(given, '--run-dir')) return refuse('JUDGE_ARGUMENTS_INVALID: --run-dir is required');
+  if (!Object.hasOwn(given, '--case') || !/^[1-9]\d*$/.test(given['--case'])) return refuse('JUDGE_ARGUMENTS_INVALID: --case must be a positive integer');
+  if (!Object.hasOwn(given, '--step') || !/^[1-9]\d*$/.test(given['--step'])) return refuse('JUDGE_ARGUMENTS_INVALID: --step must be a positive integer');
+  if (!Object.hasOwn(given, '--verdict') || !JUDGE_VERDICTS.includes(given['--verdict'])) return refuse('JUDGE_ARGUMENTS_INVALID: --verdict must be pass, fail or uncertain');
+  const evidence = Object.hasOwn(given, '--evidence') ? given['--evidence'].trim() : '';
+  if (evidence === '') return refuse('JUDGE_EVIDENCE_REQUIRED: a verdict is recorded only with --evidence, the text of what the capture shows');
+  if (evidence.length < JUDGE_EVIDENCE_MIN || evidence.length > JUDGE_EVIDENCE_MAX) {
+    return refuse(`JUDGE_EVIDENCE_REQUIRED: --evidence must be ${JUDGE_EVIDENCE_MIN} to ${JUDGE_EVIDENCE_MAX} characters`);
+  }
+  return { ok: true, root: resolve(Object.hasOwn(given, '--root') ? given['--root'] : process.cwd()), runDir: given['--run-dir'], caseIndex: Number(given['--case']), stepIndex: Number(given['--step']), verdict: given['--verdict'], evidence };
+}
+
+/**
+ * The final outcome of a case whose judge steps all have a verdict: any `failed` judge step gives `fail`, else any
+ * `uncertain` one gives `needs-human` with `JUDGEMENT_UNCERTAIN`, else `pass`; a `pass` of a plan entry with
+ * `human_remainder` becomes `PARTIAL_REMAINDER` through `applyPartialRemainder`. A reason is a fixed sentence with a
+ * step position; it never carries the verdict text. Pure and total.
+ * @param {any} entry the results.json case entry
+ * @param {any} planEntry its plan entry, or undefined
+ * @returns {CaseResult}
+ */
+export function settleJudgedCase(entry, planEntry) {
+  const steps = isObj(entry) && Array.isArray(entry.steps) ? entry.steps : [];
+  const evidence = isObj(entry) && Array.isArray(entry.evidence) ? entry.evidence : [];
+  const judged = steps.filter((/** @type {any} */ s) => isObj(s) && s.action === 'judge');
+  const failed = judged.find((/** @type {any} */ s) => s.result === 'failed');
+  if (failed !== undefined) return { outcome: 'fail', reason_code: null, reason: `step ${failed.index}: the judged criterion was not met`, evidence, steps };
+  const unsure = judged.find((/** @type {any} */ s) => s.result === 'uncertain');
+  if (unsure !== undefined) {
+    return { outcome: 'needs-human', reason_code: 'JUDGEMENT_UNCERTAIN', reason: `step ${unsure.index}: ${REASON_CATALOGUE.JUDGEMENT_UNCERTAIN.reason}`, evidence, steps };
+  }
+  return applyPartialRemainder({ outcome: 'pass', reason_code: null, reason: null, evidence, steps }, planEntry);
+}
+
+/**
+ * Records one verdict in a parsed results.json and returns the recomputed document, or a refusal. The step must be a
+ * `judge` step of a case that has no outcome yet and is still `pending-judgment`: a recorded verdict is never
+ * replaced. When the case has no pending step left it is settled; the counts, the two needs-human counters, the
+ * classification block and the judgment block are recomputed from the entries. Pure and total; the input is not
+ * mutated and no reason carries the verdict text.
+ * @param {any} results
+ * @param {any} planEntry
+ * @param {{ caseIndex: number, stepIndex: number, verdict: string, evidencePath: string }} req
+ * @returns {{ ok: true, results: any, settled: boolean, pendingSteps: number } | { ok: false, code: string, reason: string }}
+ */
+export function applyJudgeVerdict(results, planEntry, req) {
+  /** @param {string} code @param {string} reason @returns {{ ok: false, code: string, reason: string }} */
+  const refuse = (code, reason) => ({ ok: false, code, reason });
+  if (!isObj(results) || !Array.isArray(results.cases) || !isObj(req) || !JUDGE_VERDICTS.includes(req.verdict)) {
+    return refuse('JUDGE_RESULTS_UNREADABLE', 'results.json is not a results document the judge mode can update');
+  }
+  const next = JSON.parse(JSON.stringify(results));
+  const entry = next.cases.find((/** @type {any} */ c) => isObj(c) && c.index === req.caseIndex);
+  const rec = isObj(entry) && Array.isArray(entry.steps) ? entry.steps.find((/** @type {any} */ s) => isObj(s) && s.index === req.stepIndex) : undefined;
+  if (!isObj(entry) || entry.outcome !== null || !isObj(rec) || rec.action !== 'judge' || rec.result !== PENDING_JUDGMENT) {
+    return refuse('JUDGE_STEP_NOT_PENDING', `step ${req.stepIndex} of case ${req.caseIndex} is not a judge step that awaits a verdict`);
+  }
+  rec.result = req.verdict === 'pass' ? 'passed' : req.verdict === 'fail' ? 'failed' : 'uncertain';
+  rec.judged_by = 'model';
+  rec.judgment_evidence = req.evidencePath;
+  const waiting = entry.steps.filter((/** @type {any} */ s) => isObj(s) && s.action === 'judge' && s.result === PENDING_JUDGMENT);
+  if (waiting.length === 0) {
+    const settled = settleJudgedCase(entry, planEntry);
+    entry.outcome = settled.outcome;
+    entry.reason_code = settled.reason_code;
+    entry.reason = settled.reason;
+    entry.steps = settled.steps;
+    delete entry.pending_judgment;
+    if (settled.outcome !== 'needs-human' && settled.outcome !== 'blocked') entry.manual_steps_verbatim = null;
+  } else {
+    entry.pending_judgment = waiting.map((/** @type {any} */ s) => s.index);
+  }
+  const sums = summarizeEntries(next.cases);
+  next.counts = sums.counts;
+  next.record_resolved = sums.record_resolved;
+  next.partially_executed = sums.partially_executed;
+  const needs = summarizeNeedsHuman(next.cases);
+  next.needs_human_impossible = needs.needs_human_impossible;
+  next.needs_human_gap = needs.needs_human_gap;
+  next.classification = summarizeClassification(next.cases);
+  const judgment = summarizeJudgment(next.cases);
+  if (judgment !== null) next.judgment = judgment;
+  const pendingSteps = judgment === null ? 0 : judgment.pending_steps;
+  return { ok: true, results: next, settled: waiting.length === 0, pendingSteps };
+}
+
+const JUDGE_USAGE = `Usage:
+${JUDGE_USAGE_LINE}
+  The verdict is recorded for one judge step that run left pending-judgment; --evidence is the text of what the capture visibly shows, never a secret or a personal value. A recorded verdict is never replaced.
+`;
+
+/**
+ * Records one verdict of one pending judge step and rewrites results.json. It reads and writes only inside one run
+ * directory, spawns nothing and calls no model. The verdict text goes to an evidence file under the ignored
+ * `evidence/` directory through `writeEvidence`; results.json carries only fixed sentences and paths and is
+ * rewritten through `writeRunFile`, the one writer.
+ * @param {string[]} argv
+ * @returns {Promise<number>}
+ */
+async function runJudge(argv) {
+  const a = parseJudgeArgs(argv);
+  if (!a.ok) {
+    process.stderr.write(`${a.why}\n${JUDGE_USAGE}`);
+    return 2;
+  }
+  const root = a.root;
+  const runDirAbs = resolve(root, a.runDir);
+  const runDirRel = fwd(relative(root, runDirAbs));
+  if (!/^PRPs\/reports\/[a-z0-9][a-z0-9-]*\/qa-run\/[^/]+$/.test(runDirRel) || !existsSync(runDirAbs) || !statSync(runDirAbs).isDirectory()) {
+    process.stderr.write(`--run-dir must be an existing run directory inside PRPs/reports/<feature>/qa-run/\n${JUDGE_USAGE}`);
+    return 2;
+  }
+  requireRunIgnore(runDirAbs);
+  const results = readJsonOrNull(join(runDirAbs, 'results.json'));
+  if (!isObj(results) || results.schema_version !== 1 || !Array.isArray(results.cases)) {
+    throw new Halt('JUDGE_RESULTS_UNREADABLE', 'results.json is missing or is not a results document; run the plan first');
+  }
+  const plan = readJsonOrNull(join(runDirAbs, 'plan.json'));
+  const planEntry = isObj(plan) && Array.isArray(plan.cases) ? plan.cases.find((/** @type {any} */ e) => isObj(e) && e.index === a.caseIndex) : undefined;
+  const table = buildRedactionTable({ root, env: process.env, secretValues: [] });
+  const name = `case-${a.caseIndex}.judge-${a.stepIndex}.verdict.json`;
+  const evidencePath = `${runDirRel}/evidence/${name}`;
+  const applied = applyJudgeVerdict(results, planEntry, { caseIndex: a.caseIndex, stepIndex: a.stepIndex, verdict: a.verdict, evidencePath });
+  if (!applied.ok) throw new Halt(applied.code, applied.reason);
+  try {
+    writeEvidence({ runDirAbs, runDirRel, table }, name, { kind: 'json', value: { case: a.caseIndex, step: a.stepIndex, verdict: a.verdict, evidence: a.evidence, recorded_at: now() } });
+  } catch {
+    throw new Halt('EVIDENCE_WRITE_FAILED', 'the verdict could not be written; results.json was not changed');
+  }
+  try {
+    writeRunFile({ runDirAbs, table }, join(runDirAbs, 'results.json'), { kind: 'json', value: applied.results });
+  } catch {
+    throw new Halt('FAILED_RESULTS_WRITE_FAILED', 'results.json could not be written');
+  }
+  const settledEntry = applied.results.cases.find((/** @type {any} */ c) => isObj(c) && c.index === a.caseIndex);
+  process.stdout.write(`JUDGED: case ${a.caseIndex} step ${a.stepIndex} verdict=${a.verdict}\n`);
+  process.stdout.write(applied.settled ? `CASE_SETTLED: case ${a.caseIndex} outcome=${settledEntry.outcome}${settledEntry.reason_code ? ` (${settledEntry.reason_code})` : ''}\n` : `CASE_PENDING: case ${a.caseIndex} has ${settledEntry.pending_judgment.length} step(s) left\n`);
+  process.stdout.write(applied.pendingSteps === 0 ? 'RESULTS: final\n' : `RESULTS: pending ${applied.pendingSteps} step(s)\n`);
+  process.stdout.write(`${HUMAN_GATE_SENTENCE}\n`);
+  return 0;
+}
+
+/**
+ * @param {string[]} argv
+ * @returns {Promise<number>}
+ */
+async function runJudgeGuarded(argv) {
+  try {
+    return await runJudge(argv);
+  } catch (err) {
+    if (err instanceof Halt) {
+      process.stderr.write(`${err.message}\n`);
+      return 1;
+    }
+    process.stderr.write('FAILED_RUNNER_ERROR: the runner stopped on an unexpected error\n');
+    return 1;
+  }
+}
+
 /**
  * @param {string[]} argv
  * @returns {Promise<number>} exit code
  */
 async function main(argv) {
   if (argv[0] === 'ground') return await runGroundGuarded(argv.slice(1));
+  if (argv[0] === 'judge') return await runJudgeGuarded(argv.slice(1));
+  if (argv[0] === 'preflight') return await runPreflightGuarded(argv.slice(1));
   const args = parseArgs(argv);
   if (args === null) {
     process.stderr.write(USAGE);

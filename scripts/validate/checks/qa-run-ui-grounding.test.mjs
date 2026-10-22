@@ -288,17 +288,20 @@ test('AC-13 precheckGroundedSteps accepts a fully grounded plan and ignores sele
   assert.equal(pre([{ action: 'click', selector: '#legacy' }]), null, 'a selector step needs no route');
 });
 
-test('AC-13 precheckGroundedSteps refuses an ambiguous snapshot entry, an unknown entry, a missing goto, a missing route and the wrong role as STEP_UNGROUNDED', () => {
+// PRD AC-6: a manual text that holds none of the locator words, so only a snapshot entry with matches 1 could ground a row.
+const FOREIGN = '1. Open the panel and check the page';
+
+test('AC-13 precheckGroundedSteps refuses an ambiguous snapshot entry, an unknown entry, a missing goto, a missing route and the wrong role as PLAN_ENTRY_INVALID', () => {
   /** @type {[string, any, string | null][]} */
   const cases = [
-    ['an ambiguous entry', pre([GOTO, { action: 'click', role: 'button', name: 'Deletexyz' }]), 'STEP_UNGROUNDED'],
-    ['an unknown entry', pre([GOTO, { action: 'click', role: 'button', name: 'Archivexyz' }]), 'STEP_UNGROUNDED'],
-    ['a text entry that is not a snapshot entry', pre([GOTO, { action: 'click', text: 'Nopexyz' }]), 'STEP_UNGROUNDED'],
-    ['a role entry named as text', pre([GOTO, { action: 'click', text: 'Save' }]), 'STEP_UNGROUNDED'],
-    ['no goto before the locator', pre([{ action: 'click', role: 'button', name: 'Save' }]), 'STEP_UNGROUNDED'],
-    ['a route with no snapshot', pre([{ action: 'goto', path: '/missing' }, { action: 'click', role: 'button', name: 'Save' }]), 'STEP_UNGROUNDED'],
-    ['the wrong role', pre([GOTO, { action: 'click', role: 'button', name: 'Save' }], 'viewer'), 'STEP_UNGROUNDED'],
-    ['an anonymous plan on a route only an admin snapshot covers', pre([GOTO, { action: 'click', role: 'button', name: 'Save' }], null), 'STEP_UNGROUNDED'],
+    ['an ambiguous entry', pre([GOTO, { action: 'click', role: 'button', name: 'Deletexyz' }], 'admin', FOREIGN), 'PLAN_ENTRY_INVALID'],
+    ['an unknown entry', pre([GOTO, { action: 'click', role: 'button', name: 'Archivexyz' }], 'admin', FOREIGN), 'PLAN_ENTRY_INVALID'],
+    ['a text entry that is not a snapshot entry', pre([GOTO, { action: 'click', text: 'Nopexyz' }], 'admin', FOREIGN), 'PLAN_ENTRY_INVALID'],
+    ['a role entry named as text', pre([GOTO, { action: 'click', text: 'Save' }], 'admin', FOREIGN), 'PLAN_ENTRY_INVALID'],
+    ['no goto before the locator', pre([{ action: 'click', role: 'button', name: 'Save' }], 'admin', FOREIGN), 'PLAN_ENTRY_INVALID'],
+    ['a route with no snapshot', pre([{ action: 'goto', path: '/missing' }, { action: 'click', role: 'button', name: 'Save' }], 'admin', FOREIGN), 'PLAN_ENTRY_INVALID'],
+    ['the wrong role', pre([GOTO, { action: 'click', role: 'button', name: 'Save' }], 'viewer', FOREIGN), 'PLAN_ENTRY_INVALID'],
+    ['an anonymous plan on a route only an admin snapshot covers', pre([GOTO, { action: 'click', role: 'button', name: 'Save' }], null, FOREIGN), 'PLAN_ENTRY_INVALID'],
   ];
   for (const [label, r, code] of cases) {
     assert.equal(r?.code, code, `${label}: ${JSON.stringify(r)}`);
@@ -313,8 +316,8 @@ test('AC-13 precheckGroundedSteps reads the anonymous snapshots for a plan with 
 test('AC-13 precheckGroundedSteps moves the tracked route on goto and on expect_url', () => {
   // Save exists only on "/", Go only on "/other" for the admin role: the entry that applies is the one of the tracked route.
   assert.equal(pre([GOTO, { action: 'expect_url', path: '/other' }, { action: 'click', role: 'button', name: 'Go' }]), null, 'Go is grounded once expect_url moved to /other');
-  const moved = pre([GOTO, { action: 'click', role: 'button', name: 'Save' }, { action: 'expect_url', path: '/other' }, { action: 'click', role: 'button', name: 'Save' }]);
-  assert.equal(moved?.code, 'STEP_UNGROUNDED', 'Save is not an entry of /other');
+  const moved = pre([GOTO, { action: 'click', role: 'button', name: 'Save' }, { action: 'expect_url', path: '/other' }, { action: 'click', role: 'button', name: 'Save' }], 'admin', FOREIGN);
+  assert.equal(moved?.code, 'PLAN_ENTRY_INVALID', 'Save is not an entry of /other and the report does not name it');
   assert.match(String(moved?.reason), /^step 4:/);
   const back = pre([{ action: 'goto', path: '/other' }, { action: 'goto', path: '/' }, { action: 'click', role: 'button', name: 'Save' }]);
   assert.equal(back, null, 'a later goto moves the route back');
@@ -505,7 +508,8 @@ test('AC-13 end to end: an ungrounded, ambiguous, absent or report-foreign locat
   const fx = fixture({
     baseUrl: 'http://127.0.0.1:9',
     browser: false,
-    manuals: ['Click Deletexyz and see the Panel heading', 'See the Panel heading', 'Click Archivexyz'],
+    // PRD AC-6: the manuals of cases 1 and 3 do not name their locators, so only a snapshot entry with matches 1 could ground them.
+    manuals: ['Check the page', 'See the Panel heading', 'Check the page'],
   });
   writePlan(fx, [
     [{ action: 'goto', path: '/' }, { action: 'click', role: 'button', name: 'Deletexyz' }, { action: 'expect_visible', role: 'heading', name: 'Panel' }],
@@ -519,7 +523,7 @@ test('AC-13 end to end: an ungrounded, ambiguous, absent or report-foreign locat
   for (const [i, c] of r.results.cases.entries()) {
     if (i === 1) continue;
     assert.equal(c.outcome, 'needs-human', `case ${i + 1}: ${JSON.stringify(c)}`);
-    assert.equal(c.reason_code, 'STEP_UNGROUNDED', `case ${i + 1}: ${c.reason}`);
+    assert.equal(c.reason_code, 'PLAN_ENTRY_INVALID', `case ${i + 1}: ${c.reason}`);
     assert.match(c.reason, /step 2/, 'the refusal names the step');
   }
   assert.equal(existsSync(fx.sessionsDir), false, 'a login ran before the grounding refusals');
@@ -532,12 +536,12 @@ test('AC-13 end to end: an ungrounded, ambiguous, absent or report-foreign locat
   r = await runRunner(fx.root);
   const [c1, c2, c3] = r.results.cases;
   assert.equal(c1.outcome, 'needs-human');
-  assert.equal(c1.reason_code, 'STEP_UNGROUNDED');
+  assert.equal(c1.reason_code, 'PLAN_ENTRY_INVALID');
   assert.match(c1.reason, /2 elements/);
   assert.equal(c2.outcome, 'needs-human');
   assert.equal(c2.reason_code, 'PLAN_ENTRY_INVALID', 'an expectation that is not in the report is a plan defect');
   assert.equal(c3.outcome, 'needs-human');
-  assert.equal(c3.reason_code, 'STEP_UNGROUNDED');
+  assert.equal(c3.reason_code, 'PLAN_ENTRY_INVALID');
   assert.match(c3.reason, /not a snapshot entry/);
   assert.equal(existsSync(fx.sessionsDir), false, 'a login ran although every case was refused');
   assert.deepEqual(validateResults(r.results), []);
@@ -655,7 +659,7 @@ test('AC-13 end to end: a grounded role, text and fill locator passes and acts e
   assert.equal(c1.outcome, 'pass', JSON.stringify([c1.outcome, c1.reason_code, c1.reason]));
   assert.equal(hits['/saved'], 1, 'the Save click must be performed exactly once');
   assert.deepEqual(typed, ['abc'], 'the fill must reach the page');
-  assert.equal(c2.outcome, 'needs-human', 'a locator the snapshot counted twice is refused at plan time');
+  assert.equal(c2.outcome, 'needs-human', 'a locator the snapshot counted twice but the report names is valid at plan time and ends the case at run time');
   assert.equal(c2.reason_code, 'STEP_UNGROUNDED');
   assert.equal(hits['/deleted'] ?? 0, 0, 'an ambiguous locator was acted on');
   assert.deepEqual(validateResults(r.results), []);
