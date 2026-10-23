@@ -210,7 +210,7 @@ Current value of `tdd` in `docs/context/methodology.md`: **false**. Test-after o
 | 6 | Local channel sources | `channel_sources` declarations under the guard; `read_message` with extraction into a redacted variable; mail via Mailpit (Should); SMS file source (Could); literal doc examples (AC-15, AC-16, AC-21, AC-22 for `read_message`) | complete | - | lane:qa-run | 4, 5 | PRPs/plans/qa-runner-ai-executable-steps-phase-6-local-channel-sources.plan.md |
 | 7 | Self-checking environment | Verification of F10's mechanism, then fresh-cache dependency resolution or an actionable halt in every mode; `preflight` mode; kit staleness before planning and by name in `ground`; record staleness flag (AC-17, AC-18, AC-19, AC-20) | complete | - | lane:qa-run | - | PRPs/plans/qa-runner-ai-executable-steps-phase-7-self-checking-environment.plan.md |
 | 8 | Release cut | Minor bump with changelog, `documentation/` per `documentation/AGENTS.md`, `npm run validate` and the corpus green, install of the new version (AC-24, AC-25) | complete | - | - | 3, 4, 5, 6, 7 | PRPs/plans/qa-runner-ai-executable-steps-phase-8-release-cut.plan.md |
-| 9 | Dogfood | Re-freeze the pre-run table under the new convention, run both byte-identical reports with the dedicated accounts, negative controls, read every pass and judged step, run the scans, compare against the metrics (AC-26) | pending | - | - | 8 | - |
+| 9 | Dogfood | Re-freeze the pre-run table under the new convention, run both byte-identical reports with the dedicated accounts, negative controls, read every pass and judged step, run the scans, compare against the metrics (AC-26) | complete | - | - | 8 | PRPs/plans/qa-runner-ai-executable-steps-phase-9-dogfood.plan.md |
 
 ### Phase Details
 
@@ -258,6 +258,12 @@ Current value of `tdd` in `docs/context/methodology.md`: **false**. Test-after o
 - **Goal:** measure the hypothesis on the same two reports.
 - **Scope:** re-freeze the pre-run table (classes, impossible-class steps, objective-step counts) before the run; counted runs on `super-ensino` and `praesto-sum` with the dedicated accounts; one negative control per new step kind and judgment kind; the phase-8 worksheet and post-run checks extended to judged and channel steps; the comparison with 0.46.0.
 - **Success signal:** AC-26 read and reported, met or not, with every miss attributed to a named cause.
+- **Results (relay 0.47.0, read 2026-10-23; evidence in `PRPs/reports/qa-runner-ai-executable-steps/phase-9/`: `dogfood-report.md`, `metrics-final.txt`, `controls.json`, `close-decision.md`):**
+  - **Counted runs:** `super-ensino` `20261023T150701048Z` (pass 5, fail 0, blocked 1, needs-human 6) and `praesto-sum` `20261023T175308972Z` (pass 1 driver-executed plus 19 record-resolved, needs-human 3), both reports byte-identical to the frozen hashes.
+  - **Met:** M1 (16/16 frozen classes), M2 (3/3 automatable), M5 (27 passes read, 0 false; 13 negative controls as expected, NC-6 run on a GET with a recorded deviation, NC-12 N/A), M6 (scans clean), M7 (zero plugin or kit preparation).
+  - **Not met:** M3a (28/63 = 44.4% and 3/24 = 12.5%), M3b (31/87 = 35.6%) and M4 (`STEP_NOT_PERFORMABLE` and `PLAN_ENTRY_INVALID` are not decline codes). The 56 lost steps are attributed: case 20 plan-authoring error under the all-or-nothing prefix rule (21), S-4 submit-gated error message (15), T-2 select options and success text absent from the report (8), S-6 unnamed avatar items (7), S-5 devtools panel and onboarding overlay (3), X-1 error page (2). Findings KD-19..KD-23 and OBS-1..OBS-4.
+  - Against 0.46.0: 27 of 74 (36.5%, earlier convention) and 31 of 87 (35.6%, vocabulary v3), not mixed.
+- **Phase 9 is complete under the amended signal (operator, 2026-10-23).** AC-26 was read and reported with every miss attributed; the ≥ 90% executed-step target was **not met**, and its causes are input to a follow-up PRD.
 
 ---
 
