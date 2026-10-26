@@ -291,20 +291,23 @@ test('AC-13 precheckGroundedSteps accepts a fully grounded plan and ignores sele
 // PRD AC-6: a manual text that holds none of the locator words, so only a snapshot entry with matches 1 could ground a row.
 const FOREIGN = '1. Open the panel and check the page';
 
-test('AC-13 precheckGroundedSteps refuses an ambiguous snapshot entry, an unknown entry, a missing goto, a missing route and the wrong role as PLAN_ENTRY_INVALID', () => {
-  /** @type {[string, any, string | null][]} */
+// vocabulary v4 (step-level validation): a grounding miss is a step gap, reported as STEP_UNGROUNDED with one fixed sentence.
+const GAP_SENTENCE = 'the step could not be grounded to exactly one element';
+
+test('AC-13 AC-1 AC-2 precheckGroundedSteps reports an ambiguous snapshot entry, an unknown entry, a missing goto, a missing route and the wrong role as STEP_UNGROUNDED at the step position', () => {
+  /** @type {[string, any, number][]} */
   const cases = [
-    ['an ambiguous entry', pre([GOTO, { action: 'click', role: 'button', name: 'Deletexyz' }], 'admin', FOREIGN), 'PLAN_ENTRY_INVALID'],
-    ['an unknown entry', pre([GOTO, { action: 'click', role: 'button', name: 'Archivexyz' }], 'admin', FOREIGN), 'PLAN_ENTRY_INVALID'],
-    ['a text entry that is not a snapshot entry', pre([GOTO, { action: 'click', text: 'Nopexyz' }], 'admin', FOREIGN), 'PLAN_ENTRY_INVALID'],
-    ['a role entry named as text', pre([GOTO, { action: 'click', text: 'Save' }], 'admin', FOREIGN), 'PLAN_ENTRY_INVALID'],
-    ['no goto before the locator', pre([{ action: 'click', role: 'button', name: 'Save' }], 'admin', FOREIGN), 'PLAN_ENTRY_INVALID'],
-    ['a route with no snapshot', pre([{ action: 'goto', path: '/missing' }, { action: 'click', role: 'button', name: 'Save' }], 'admin', FOREIGN), 'PLAN_ENTRY_INVALID'],
-    ['the wrong role', pre([GOTO, { action: 'click', role: 'button', name: 'Save' }], 'viewer', FOREIGN), 'PLAN_ENTRY_INVALID'],
-    ['an anonymous plan on a route only an admin snapshot covers', pre([GOTO, { action: 'click', role: 'button', name: 'Save' }], null, FOREIGN), 'PLAN_ENTRY_INVALID'],
+    ['an ambiguous entry', pre([GOTO, { action: 'click', role: 'button', name: 'Deletexyz' }], 'admin', FOREIGN), 2],
+    ['an unknown entry', pre([GOTO, { action: 'click', role: 'button', name: 'Archivexyz' }], 'admin', FOREIGN), 2],
+    ['a text entry that is not a snapshot entry', pre([GOTO, { action: 'click', text: 'Nopexyz' }], 'admin', FOREIGN), 2],
+    ['a role entry named as text', pre([GOTO, { action: 'click', text: 'Save' }], 'admin', FOREIGN), 2],
+    ['no goto before the locator', pre([{ action: 'click', role: 'button', name: 'Save' }], 'admin', FOREIGN), 1],
+    ['a route with no snapshot', pre([{ action: 'goto', path: '/missing' }, { action: 'click', role: 'button', name: 'Save' }], 'admin', FOREIGN), 2],
+    ['the wrong role', pre([GOTO, { action: 'click', role: 'button', name: 'Save' }], 'viewer', FOREIGN), 2],
+    ['an anonymous plan on a route only an admin snapshot covers', pre([GOTO, { action: 'click', role: 'button', name: 'Save' }], null, FOREIGN), 2],
   ];
-  for (const [label, r, code] of cases) {
-    assert.equal(r?.code, code, `${label}: ${JSON.stringify(r)}`);
+  for (const [label, r, position] of cases) {
+    assert.deepEqual(r, { code: 'STEP_UNGROUNDED', reason: `step ${position}: ${GAP_SENTENCE}` }, `${label}: ${JSON.stringify(r)}`);
     assert.ok(!/Save|Deletexyz|Archivexyz|Nopexyz/.test(r.reason), `${label}: the reason echoes a locator: ${r.reason}`);
   }
 });
@@ -317,25 +320,26 @@ test('AC-13 precheckGroundedSteps moves the tracked route on goto and on expect_
   // Save exists only on "/", Go only on "/other" for the admin role: the entry that applies is the one of the tracked route.
   assert.equal(pre([GOTO, { action: 'expect_url', path: '/other' }, { action: 'click', role: 'button', name: 'Go' }]), null, 'Go is grounded once expect_url moved to /other');
   const moved = pre([GOTO, { action: 'click', role: 'button', name: 'Save' }, { action: 'expect_url', path: '/other' }, { action: 'click', role: 'button', name: 'Save' }], 'admin', FOREIGN);
-  assert.equal(moved?.code, 'PLAN_ENTRY_INVALID', 'Save is not an entry of /other and the report does not name it');
+  assert.equal(moved?.code, 'STEP_UNGROUNDED', 'Save is not an entry of /other and the report does not name it');
   assert.match(String(moved?.reason), /^step 4:/);
   const back = pre([{ action: 'goto', path: '/other' }, { action: 'goto', path: '/' }, { action: 'click', role: 'button', name: 'Save' }]);
   assert.equal(back, null, 'a later goto moves the route back');
 });
 
-test('AC-13 a precheckGroundedSteps refusal names the offending step by position', () => {
+test('AC-13 AC-1 a precheckGroundedSteps gap names the offending step by position and only by position', () => {
   const r = pre([GOTO, { action: 'click', role: 'button', name: 'Save' }, { action: 'click', role: 'button', name: 'Deletexyz' }]);
+  assert.equal(r?.code, 'STEP_UNGROUNDED');
   assert.match(String(r?.reason), /^step 3:/);
-  assert.match(String(r?.reason), /2 elements/);
+  assert.ok(!/Deletexyz|elements/.test(String(r?.reason)), `the reason carries a locator or a match count: ${r?.reason}`);
 });
 
-test('AC-13 precheckGroundedSteps refuses an expect_text whose contains is not in the report as PLAN_ENTRY_INVALID', () => {
+test('AC-13 AC-1 precheckGroundedSteps reports an expect_text whose contains is not in the report as a STEP_UNGROUNDED gap', () => {
   const step = (/** @type {string} */ contains) => ({ action: 'expect_text', role: 'heading', name: 'Panel', contains });
   const outsider = pre([GOTO, step('Welcome')]);
-  assert.equal(outsider?.code, 'PLAN_ENTRY_INVALID');
-  assert.ok(!/Panel|Welcome/.test(outsider?.reason.replace(/expect_text contains must come from the report's own steps, not from the snapshot/, '')), outsider?.reason);
-  assert.equal(pre([GOTO, step('Panel')], 'admin', null)?.code, 'PLAN_ENTRY_INVALID', 'a missing manual text fails the expectation');
-  assert.equal(pre([GOTO, step('Panel')], 'admin', 42)?.code, 'PLAN_ENTRY_INVALID', 'a non-string manual text fails the expectation');
+  assert.deepEqual(outsider, { code: 'STEP_UNGROUNDED', reason: `step 2: ${GAP_SENTENCE}` });
+  assert.ok(!/Panel|Welcome/.test(outsider?.reason), outsider?.reason);
+  assert.equal(pre([GOTO, step('Panel')], 'admin', null)?.code, 'STEP_UNGROUNDED', 'a missing manual text fails the expectation');
+  assert.equal(pre([GOTO, step('Panel')], 'admin', 42)?.code, 'STEP_UNGROUNDED', 'a non-string manual text fails the expectation');
   assert.equal(pre([GOTO, step('click   SAVE')]), null, 'the substring test is whitespace and case insensitive');
 });
 
@@ -504,10 +508,10 @@ function walk(dir) {
 // The plan-time refusals: before any login and with no browser
 // ---------------------------------------------------------------------------
 
-test('AC-13 end to end: an ungrounded, ambiguous, absent or report-foreign locator ends the case needs-human before any login', SLOW, async () => {
+test('AC-13 AC-1 AC-2 end to end: an ungrounded, ambiguous, absent or report-foreign locator is a step gap: the valid part of the case runs and the case ends needs-human STEP_UNGROUNDED', SLOW, async () => {
   const fx = fixture({
-    baseUrl: 'http://127.0.0.1:9',
-    browser: false,
+    baseUrl: pageUrl,
+    browser: true,
     // PRD AC-6: the manuals of cases 1 and 3 do not name their locators, so only a snapshot entry with matches 1 could ground them.
     manuals: ['Check the page', 'See the Panel heading', 'Check the page'],
   });
@@ -517,36 +521,50 @@ test('AC-13 end to end: an ungrounded, ambiguous, absent or report-foreign locat
     [{ action: 'goto', path: '/' }, { action: 'click', role: 'button', name: 'Archivexyz' }, { action: 'expect_visible', role: 'heading', name: 'Panel' }],
   ]);
 
+  /** @param {any} results the shape every run must have: the goto ran, the gap is human with the code, the rest of an interaction gap is human */
+  const check = (results) => {
+    const [c1, c2, c3] = results.cases;
+    for (const [i, c] of results.cases.entries()) {
+      assert.equal(c.outcome, 'needs-human', `case ${i + 1}: ${JSON.stringify(c)}`);
+      assert.equal(c.reason_code, 'STEP_UNGROUNDED', `case ${i + 1}: ${c.reason}`);
+      assert.equal(typeof c.manual_steps_verbatim, 'string', `case ${i + 1}: the manual steps are reproduced for the person`);
+      assert.ok(c.manual_steps_verbatim.length > 0, `case ${i + 1}: the manual steps are not empty`);
+      assert.equal(c.steps[0].result, 'passed', `case ${i + 1}: the valid goto before the gap ran`);
+    }
+    // Cases 1 and 3: an ungrounded click truncates; the click and the assertion after it are human.
+    for (const c of [c1, c3]) {
+      assert.deepEqual(c.steps.map((/** @type {any} */ s) => s.result), ['passed', 'human', 'human']);
+      assert.equal(c.steps[1].reason_code, 'STEP_UNGROUNDED');
+      assert.equal(c.steps[2].reason_code, null);
+      assert.match(c.steps[2].reason, /not run after an ungrounded interaction/);
+    }
+    // Case 2: an ungrounded assertion is the only gap.
+    assert.deepEqual(c2.steps.map((/** @type {any} */ s) => s.result), ['passed', 'human']);
+    assert.equal(c2.steps[1].reason_code, 'STEP_UNGROUNDED');
+  };
+
+  resetHits();
   // First run: there is no grounding directory at all, so no locator step has a snapshot.
   let r = await runRunner(fx.root);
   assert.ok(r.results, `no results.json: ${r.stderr}`);
-  for (const [i, c] of r.results.cases.entries()) {
-    if (i === 1) continue;
-    assert.equal(c.outcome, 'needs-human', `case ${i + 1}: ${JSON.stringify(c)}`);
-    assert.equal(c.reason_code, 'PLAN_ENTRY_INVALID', `case ${i + 1}: ${c.reason}`);
-    assert.match(c.reason, /step 2/, 'the refusal names the step');
-  }
-  assert.equal(existsSync(fx.sessionsDir), false, 'a login ran before the grounding refusals');
+  check(r.results);
+  assert.equal(existsSync(fx.sessionsDir), true, 'the valid part of the case needs its session, so the login ran');
 
-  // Second run: one snapshot of "/" where Deletexyz matches twice, Panel and Welcome once, Archivexyz is absent.
+  // Second run: one snapshot of "/" where Deletexyz matches twice, Panel once, Archivexyz is absent.
   writeSnapshot(fx, 'admin--root.snapshot.json', snap('/', [
     { kind: 'role', role: 'button', name: 'Deletexyz', matches: 2 },
     { kind: 'role', role: 'heading', name: 'Panel', matches: 1 },
   ]));
   r = await runRunner(fx.root);
-  const [c1, c2, c3] = r.results.cases;
-  assert.equal(c1.outcome, 'needs-human');
-  assert.equal(c1.reason_code, 'PLAN_ENTRY_INVALID');
-  assert.match(c1.reason, /2 elements/);
-  assert.equal(c2.outcome, 'needs-human');
-  assert.equal(c2.reason_code, 'PLAN_ENTRY_INVALID', 'an expectation that is not in the report is a plan defect');
-  assert.equal(c3.outcome, 'needs-human');
-  assert.equal(c3.reason_code, 'PLAN_ENTRY_INVALID');
-  assert.match(c3.reason, /not a snapshot entry/);
-  assert.equal(existsSync(fx.sessionsDir), false, 'a login ran although every case was refused');
+  check(r.results);
   assert.deepEqual(validateResults(r.results), []);
   for (const c of r.results.cases) assert.ok(OUTCOMES.includes(c.outcome), c.outcome);
-  for (const c of r.results.cases) assert.ok(!/Deletexyz|Archivexyz/.test(c.reason), `a reason echoes a locator: ${c.reason}`);
+  for (const c of r.results.cases) {
+    const text = JSON.stringify([c.reason, c.steps]);
+    assert.ok(!/Deletexyz|Archivexyz|Welcome/.test(text), `a reason or a step record echoes a locator or a value: ${text}`);
+  }
+  assert.equal(hits['/deleted'] ?? 0, 0, 'nothing after the ungrounded click acted on the page');
+  assert.equal(hits['/saved'] ?? 0, 0);
 });
 
 test('AC-13 end to end: ground refuses bad arguments with the usage text and exit 2', SLOW, async () => {

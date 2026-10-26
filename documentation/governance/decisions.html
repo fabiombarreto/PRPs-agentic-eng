@@ -137,6 +137,7 @@
         <li><a href="#visual-tooling-provisioning">Provisioning the visual tooling in every new plugin cache: registered backlog item (F10)</a></li>
         <li><a href="#separate-from-upstream">Separating relay from the upstream Wirasm repository: registered backlog item</a></li>
         <li><a href="#qa-runner-impossible-only-needs-human">The QA runner&#39;s needs-human means only what no AI agent can execute alone (vocabulary v3)</a></li>
+        <li><a href="#qa-runner-vocabulary-v4">The QA runner degrades by step and names every failure (vocabulary v4)</a></li>
       </ol>
 
       <h2 id="entries">Entries</h2>
@@ -1040,6 +1041,23 @@
           <li><strong>Environment and evidence-quality signals stay outside the reason-code catalogue.</strong> <code>RECORD_STALE</code>, <code>FAILED_KIT_SCRIPT_STALE</code>, <code>FAILED_IGNORE_UNPROVEN</code> and the Playwright and browser halts are not members of <code>REASON_CATALOGUE</code>, so they do not enter the impossible and gap counters.</li>
         </ol></dd>
         <dt>Reason</dt><dd>Each item removes a reason for a person to do what the runner can do, or makes the remainder measurable. The class split turns &ldquo;human by nature&rdquo; from a label into a count; judgment stays with the session that can see the capture and the script stays deterministic, local and credential-free; declared local sources and dedicated roles keep every outward effect on a stand-in the operator controls. Registering them at the cut records the shape once, before the dogfood measures it.</dd>
+      </div>
+
+      <h3 id="qa-runner-vocabulary-v4">107. The QA runner degrades by step and names every failure: vocabulary v4</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-10-25</dd>
+        <dt>Context</dt><dd>The 0.47.0 dogfood of <code>/relay-qa-run</code> executed 31 of the 87 non-impossible objective steps (35.6%) of the two reference reports against a 90% target, and the lost steps were mostly not impossible: one mis-grounded step forfeited a whole case, an error message was reachable only after a validation submit, controls had no accessible name, known overlays covered the page and a product defect stopped a case at its first failing assertion. Phases 1 to 6 of <code>qa-runner-vocabulary-v4</code> are implemented in the 0.48.0 release and this entry registers them together; phase 8, the counted dogfood, measures them.</dd>
+        <dt>Decision</dt><dd><ol>
+          <li><strong>Plan validation degrades per step for grounding and stays per entry for schema errors.</strong> An ungrounded assertion is a step gap recorded <code>human</code> with <code>STEP_UNGROUNDED</code> and the rest runs; an ungrounded <code>click</code>, <code>fill</code> or <code>goto</code> truncates the rest of the case; an unknown action, a missing key, an invalid <code>effect</code> or an unbound <code>{{name}}</code> is still <code>PLAN_ENTRY_INVALID</code> for the entry.</li>
+          <li><strong>A failed action reports a closed cause, never an error text.</strong> <code>STEP_NOT_PERFORMABLE</code> carries a <code>cause</code> of <code>covered</code>, <code>disabled</code>, <code>not_editable</code>, <code>absent</code>, <code>detached</code> or <code>other</code> derived by pre-checks, and reasons stay fixed sentences. <code>STEP_NOT_PERFORMABLE</code> and <code>PLAN_ENTRY_INVALID</code> sit in <code>RUNTIME_REASON_CATALOGUE</code>, outside <code>REASON_CATALOGUE</code>; <code>OVERLAY_HANDLER_INVALID</code> is a declaration halt outside both.</li>
+          <li><strong>An element the report names that the product lacks is a <code>fail</code>.</strong> Cause <code>absent</code>; a locator that matches more than one element still ends <code>needs-human</code> <code>STEP_UNGROUNDED</code>.</li>
+          <li><strong>Assertions continue, interactions stop.</strong> After a failed assertion the <code>expect_*</code>, <code>query</code> and <code>judge</code> steps still run; the first interaction or step with an <code>effect</code>, and everything after it, is <code>not-run</code>.</li>
+          <li><strong>Three vocabulary items reach steps the reports describe without literal text.</strong> A role-only <code>expect_visible</code> inside a scope, a closed <code>number</code> <code>pattern</code> for <code>expect_text</code>, and an <code>anchor_text</code> scope. No planner-written selectors and no forced actions.</li>
+          <li><strong>A validation submit is a <code>click</code> with <code>effect: "validation"</code>.</strong> It needs a dedicated role and an earlier <code>fill</code> whose value appears verbatim in the case&#39;s manual steps; its requests are recorded; <code>ground --prefix</code> never submits.</li>
+          <li><strong>Overlays are dismissed only by handlers the project declares.</strong> <code>overlay_handlers</code> in <code>PRPs/auth/qa-seed.json</code>, registered with <code>page.addLocatorHandler</code>, every dismissal recorded, a write-effect handler only for a dedicated role, an off-origin dismissal blocks the case <code>FAILED_NON_LOCAL_TARGET</code>, never a forced click. The constants are chosen, not measured: 25 firings per handler per page, a 3-second dismissal bound and 10 entries.</li>
+          <li><strong>v4 ships as 0.48.0 and is measured on the same two byte-identical reports.</strong> Target at least 90% executed per project and over both, with zero false passes.</li>
+        </ol></dd>
+        <dt>Reason</dt><dd>Each item removes a reason for a person to do what the runner can do, or makes the remainder precise: a grounding miss is local to one step, a closed cause turns &ldquo;could not be performed&rdquo; into something the planner can fix without leaking page text, reporting an absent element as a result keeps a product defect from reading as a planning gap, and declared handlers keep every dismissal visible and attributable.</dd>
       </div>
 
       <h2 id="how-to-add">Adding a new decision</h2>

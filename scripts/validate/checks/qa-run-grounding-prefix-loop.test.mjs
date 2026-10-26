@@ -337,7 +337,7 @@ test('AC-1 end to end: a page that is stable before the click and never settles 
 // 3. The whole loop
 // ---------------------------------------------------------------------------
 
-test('AC-11 end to end: ground writes the files and one run consumes them: the rows after the click and the filter result pass, a fill value the report never states is a plan defect at the fill, and a value that arrives late is re-read; with only the plain snapshot every case is refused before any login', SLOW, async () => {
+test('AC-11 AC-1 end to end: ground writes the files and one run consumes them: the rows after the click and the filter result pass, a fill value the report never states makes the step that depends on it a step gap, and a value that arrives late is re-read; with only the plain snapshot every case runs its valid part and records the unlisted step as a gap', SLOW, async () => {
   resetObservations();
   const resultText = `Filtro com ${TYPED.length} caracteres`;
   const heading = { action: 'expect_visible', role: 'heading', name: 'Tarefas' };
@@ -388,14 +388,18 @@ test('AC-11 end to end: ground writes the files and one run consumes them: the r
   const [rows, filtered, invented, late] = results.cases;
   assert.equal(rows.outcome, 'pass', `the rows that exist only after the click were not asserted: ${brief(rows)}`);
   assert.equal(filtered.outcome, 'pass', `the filter result was not asserted: ${brief(filtered)}`);
-  assert.deepEqual([invented.outcome, invented.reason_code], ['needs-human', 'PLAN_ENTRY_INVALID'], brief(invented));
-  assert.match(invented.reason, /^step 3:/, 'the refusal does not name the position of the fill');
-  assert.equal(invented.reason.includes(TYPED), false, `the refusal echoes the value: ${invented.reason}`);
+  // The value the report never states: the step that depends on the replayed fill (the result expectation) is the gap,
+  // the steps before it ran, and the case needs a person only for that step.
+  assert.deepEqual([invented.outcome, invented.reason_code], ['needs-human', 'STEP_UNGROUNDED'], brief(invented));
+  assert.deepEqual(invented.steps.map((/** @type {any} */ s) => s.result), ['passed', 'passed', 'passed', 'passed', 'human']);
+  assert.equal(invented.steps[4].reason_code, 'STEP_UNGROUNDED');
+  assert.equal(JSON.stringify(invented).includes(TYPED), false, `the case record echoes the value: ${brief(invented)}`);
   assert.equal(late.outcome, 'pass', `the value that arrived after the load was not re-read: ${brief(late)}`);
-  // The filter case acted exactly once with exactly the typed value; the refused twin acted not at all.
-  assert.deepEqual(typed, [TYPED], 'the filter was applied other than once, or with another value');
+  // Both filter cases ran their fill and apply (the second one's only gap is its expectation), with exactly the typed value.
+  assert.deepEqual(typed, [TYPED, TYPED], 'the filter was applied other than once per case, or with another value');
 
-  // Control twin: the same plan against a project that holds the plain snapshot only is refused before any login.
+  // Control twin: the same plan against a project that holds the plain snapshot only: the element that exists only
+  // after the interaction is not listed, so that one step is a gap; everything before it runs.
   const controlCases = cases.slice(0, 3);
   const control = fixture(controlCases);
   mkdirSync(control.grounding, { recursive: true });
@@ -406,8 +410,10 @@ test('AC-11 end to end: ground writes the files and one run consumes them: the r
   assert.deepEqual(validateResults(controlResults), []);
   const [c1, c2, c3] = controlResults.cases;
   for (const [label, c, step] of /** @type {[string, any, number][]} */ ([['the rows', c1, 4], ['the filter result', c2, 5], ['the invented value', c3, 5]])) {
-    assert.deepEqual([c.outcome, c.reason_code], ['needs-human', 'PLAN_ENTRY_INVALID'], `${label}: ${brief(c)}`);
-    assert.match(c.reason, new RegExp(`^step ${step}:`), label);
+    assert.deepEqual([c.outcome, c.reason_code], ['needs-human', 'STEP_UNGROUNDED'], `${label}: ${brief(c)}`);
+    // Only the unlisted step is human; every step before it ran.
+    assert.deepEqual(c.steps.map((/** @type {any} */ s) => s.result), [...Array(step - 1).fill('passed'), 'human'], label);
+    assert.equal(c.steps[step - 1].reason_code, 'STEP_UNGROUNDED', label);
   }
-  assert.equal(existsSync(control.sessions), false, 'a login ran although every case was refused at plan time');
+  assert.equal(existsSync(control.sessions), true, 'the valid part of each case needs its session, so the login ran');
 });

@@ -133,14 +133,15 @@ test('AC-14 a missing or non-string manual text refuses every judge step, and ho
 
 test('AC-5 a judge scope is grounded like every scoped locator: a word of the report, or a snapshot entry that matches exactly one element', () => {
   const withScope = [GOTO, { ...J, within: { role: 'region', name: 'Resumo' } }];
-  assert.equal(R.groundLocators(withScope, [], 'Open. Check the Resumo panel.', null).refusal, null, 'a scope word of the report is grounded');
-  assert.equal(R.groundLocators(withScope, [], 'Open. Check the panel.', null).refusal?.code, 'PLAN_ENTRY_INVALID', 'a scope word nobody states is refused');
+  assert.deepEqual(R.groundLocators(withScope, [], 'Open. Check the Resumo panel.', null).gaps, [], 'a scope word of the report is grounded');
+  // vocabulary v4: a scope nobody grounds makes the judge step a step gap (an assertion: it is skipped, never an entry refusal).
+  assert.deepEqual(R.groundLocators(withScope, [], 'Open. Check the panel.', null), { gaps: [{ at: 1, kind: 'assertion' }], truncateAt: null, runtime: [] }, 'a scope word nobody states is a gap');
   assert.deepEqual(R.groundLocators(withScope, [], 'Open. Check the Resumo panel.', null).runtime, [], 'a judge scope declares no run-time resolution');
   const snap = { schema_version: 1, role: 'anonymous', route: '/', entries: [{ kind: 'role', role: 'region', name: 'Resumo', matches: 1 }], withheld: 0 };
-  assert.equal(R.groundLocators(withScope, [snap], 'Open. Check the panel.', null).refusal, null, 'a snapshot entry that matches once grounds it');
+  assert.deepEqual(R.groundLocators(withScope, [snap], 'Open. Check the panel.', null).gaps, [], 'a snapshot entry that matches once grounds it');
   const twice = { ...snap, entries: [{ kind: 'role', role: 'region', name: 'Resumo', matches: 2 }] };
-  assert.equal(R.groundLocators(withScope, [twice], 'Open. Check the panel.', null).refusal?.code, 'PLAN_ENTRY_INVALID', 'two matches do not ground it');
-  assert.equal(R.groundLocators([GOTO, J], [], 'Open.', null).refusal, null, 'a judge step with no scope needs no grounding');
+  assert.deepEqual(R.groundLocators(withScope, [twice], 'Open. Check the panel.', null).gaps, [{ at: 1, kind: 'assertion' }], 'two matches do not ground it');
+  assert.deepEqual(R.groundLocators([GOTO, J], [], 'Open.', null).gaps, [], 'a judge step with no scope needs no grounding');
   assert.equal(R.groundLocators.length, 4, 'the grounding arity is unchanged');
 });
 
@@ -621,22 +622,28 @@ test('AC-13 AC-14 AC-5 a run with judge steps stays pending until every verdict 
     // AC-14: a criterion the report does not state never reaches the browser.
     assert.deepEqual([c[1].outcome, c[1].reason_code], ['needs-human', 'PLAN_ENTRY_INVALID'], JSON.stringify(c[1]));
     for (const i of [2, 3]) assert.deepEqual([c[i].outcome, c[i].pending_judgment], [null, [3]], JSON.stringify(c[i]));
-    // A case that ends through another step is final at once; its judge step was never reached (not-run, since only a captured judge step can be not-judged).
-    assert.deepEqual([c[4].outcome, c[4].reason_code], ['needs-human', 'STEP_UNGROUNDED'], JSON.stringify(c[4]));
-    assert.equal(c[4].steps.find((/** @type {any} */ s) => s.action === 'judge').result, 'not-run');
+    // A case that ends through another step is final at once, and its judge step is moot: never pending, never judged.
+    // Vocabulary v4 (AC-5): the report names "Absent heading" and the page lacks it, so the case is a fail with cause absent, not a planning gap.
+    // Vocabulary v4 (AC-6): a judge step after a failed assertion still runs (assertions continue), so it captures its evidence and is recorded not-judged.
+    assert.deepEqual([c[4].outcome, c[4].reason_code, c[4].cause], ['fail', null, 'absent'], JSON.stringify(c[4]));
+    assert.equal(c[4].steps[1].result, 'failed');
+    assert.equal(c[4].steps[1].cause, 'absent');
+    const moot = c[4].steps.find((/** @type {any} */ s) => s.action === 'judge');
+    assert.equal(moot.result, 'not-judged');
+    assert.equal(moot.kind, 'visual');
+    assert.equal(moot.evidence, `${RUN}/evidence/case-5.judge-3.png`, 'the capture a person would look at is kept');
     assert.equal('pending_judgment' in c[4], false);
-    assert.deepEqual(doc.counts, { pass: 0, fail: 0, blocked: 0, 'needs-human': 2 }, 'the pending cases are in no count');
+    assert.deepEqual(doc.counts, { pass: 0, fail: 1, blocked: 0, 'needs-human': 1 }, 'the pending cases are in no count');
     assert.deepEqual(doc.judgment, { pending_steps: 4, judged_steps: 0 });
     assert.deepEqual(validateResults(doc), [], 'the contract rejects the pending results');
 
     // The captures: a full-page PNG per judge step, plus the element PNG of the within scope (AC-5).
     const evidence = (/** @type {string} */ name) => join(runAbs, 'evidence', name);
     const header = (/** @type {string} */ name) => { assert.ok(existsSync(evidence(name)), `missing evidence file ${name}`); return readFileSync(evidence(name)); };
-    for (const name of ['case-1.judge-3.png', 'case-1.judge-4.png', 'case-1.judge-4.scope.png', 'case-3.judge-3.png', 'case-4.judge-3.png']) {
+    for (const name of ['case-1.judge-3.png', 'case-1.judge-4.png', 'case-1.judge-4.scope.png', 'case-3.judge-3.png', 'case-4.judge-3.png', 'case-5.judge-3.png']) {
       assert.ok(header(name).subarray(0, 8).equals(PNG_MAGIC), `${name} is not a PNG`);
     }
     assert.ok(!existsSync(evidence('case-1.judge-3.scope.png')), 'a step with no scope must write no element capture');
-    assert.ok(!existsSync(evidence('case-5.judge-3.png')), 'a judge step that never ran must write no capture');
     assert.equal(c[0].steps[3].scope_evidence, `${RUN}/evidence/case-1.judge-4.scope.png`);
     assert.equal(c[0].steps[2].scope_evidence, null);
     assert.equal(c[0].steps[3].evidence, `${RUN}/evidence/case-1.judge-4.png`);
@@ -645,7 +652,7 @@ test('AC-13 AC-14 AC-5 a run with judge steps stays pending until every verdict 
     const area = (/** @type {Buffer} */ b) => b.readUInt32BE(16) * b.readUInt32BE(20);
     assert.ok(area(scope) > 0 && area(scope) < area(full), 'the scope capture must be an element screenshot, smaller than the page');
     assert.ok(run.stdout.includes('Pending judgment: 4 step(s)'), run.stdout);
-    assert.ok(run.stdout.includes('QA run finished: pass=0 fail=0 blocked=0 needs-human=2'), run.stdout);
+    assert.ok(run.stdout.includes('QA run finished: pass=0 fail=1 blocked=0 needs-human=1'), run.stdout);
 
     // The judge mode: a refusal changes nothing, the first verdict leaves the case open.
     const judge = (/** @type {string[]} */ ...args) => runAsync(['judge', '--root', root, '--run-dir', RUN, ...args], root);
@@ -665,9 +672,9 @@ test('AC-13 AC-14 AC-5 a run with judge steps stays pending until every verdict 
     // Final outcomes.
     const raw = readFileSync(resultsPath, 'utf8');
     const done = JSON.parse(raw);
-    assert.deepEqual(done.cases.map((/** @type {any} */ x) => x.outcome), ['pass', 'needs-human', 'needs-human', 'fail', 'needs-human']);
-    assert.deepEqual(done.cases.map((/** @type {any} */ x) => x.reason_code), [null, 'PLAN_ENTRY_INVALID', 'JUDGEMENT_UNCERTAIN', null, 'STEP_UNGROUNDED']);
-    assert.deepEqual(done.counts, { pass: 1, fail: 1, blocked: 0, 'needs-human': 3 });
+    assert.deepEqual(done.cases.map((/** @type {any} */ x) => x.outcome), ['pass', 'needs-human', 'needs-human', 'fail', 'fail']);
+    assert.deepEqual(done.cases.map((/** @type {any} */ x) => x.reason_code), [null, 'PLAN_ENTRY_INVALID', 'JUDGEMENT_UNCERTAIN', null, null]);
+    assert.deepEqual(done.counts, { pass: 1, fail: 2, blocked: 0, 'needs-human': 2 });
     assert.deepEqual(done.judgment, { pending_steps: 0, judged_steps: 4 });
     assert.ok(done.cases[0].steps.filter((/** @type {any} */ s) => s.action === 'judge').every((/** @type {any} */ s) => s.result === 'passed' && s.judged_by === 'model'));
     assert.ok(!raw.includes(CANARY) && !run.stdout.includes(CANARY) && !second.stdout.includes(CANARY) && !last.stdout.includes(CANARY), 'the verdict text leaked outside evidence/');

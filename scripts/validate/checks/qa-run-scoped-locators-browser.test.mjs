@@ -292,7 +292,7 @@ function runRunner(root) {
   });
 }
 
-test('AC-6 AC-7 AC-8 AC-9 AC-10 end to end through the real runner: report-word locators resolve at run time, zero and several matches end STEP_UNGROUNDED with nothing acted on, neither source is PLAN_ENTRY_INVALID, and within, name_prefix, label_text, index and a method array behave on a real page', SLOW, async () => {
+test('AC-6 AC-7 AC-8 AC-9 AC-10 end to end through the real runner: report-word locators resolve at run time, zero and several matches end STEP_UNGROUNDED with nothing acted on, a locator with neither source is a step gap that runs the valid part, and within, name_prefix, label_text, index and a method array behave on a real page', SLOW, async () => {
   const root = realpathSync(mkdtempSync(join(SANDBOX, 'run-')));
   const runDir = join(root, ...RUN_REL.split('/'));
   mkdirSync(join(runDir, 'grounding'), { recursive: true });
@@ -369,10 +369,10 @@ test('AC-6 AC-7 AC-8 AC-9 AC-10 end to end through the real runner: report-word 
 
   /** @type {[string, string | null][]} */
   const want = [
-    ['pass', null], ['needs-human', 'STEP_UNGROUNDED'], ['needs-human', 'PLAN_ENTRY_INVALID'], ['pass', null], ['needs-human', 'STEP_UNGROUNDED'],
+    ['pass', null], ['needs-human', 'STEP_UNGROUNDED'], ['needs-human', 'STEP_UNGROUNDED'], ['pass', null], ['needs-human', 'STEP_UNGROUNDED'],
     ['pass', null], ['fail', null], ['needs-human', 'STEP_UNGROUNDED'], ['pass', null], ['fail', null],
-    ['needs-human', 'STEP_UNGROUNDED'], ['pass', null], ['needs-human', 'STEP_UNGROUNDED'], ['pass', null], ['needs-human', 'STEP_UNGROUNDED'],
-    ['needs-human', 'PLAN_ENTRY_INVALID'], ['fail', null], ['pass', null], ['fail', null],
+    ['fail', null], ['pass', null], ['needs-human', 'STEP_UNGROUNDED'], ['pass', null], ['needs-human', 'STEP_UNGROUNDED'],
+    ['needs-human', 'STEP_UNGROUNDED'], ['fail', null], ['pass', null], ['fail', null],
     ['fail', null], ['blocked', 'STEP_NOT_PERFORMABLE'],
   ];
   assert.equal(c.length, want.length);
@@ -383,15 +383,21 @@ test('AC-6 AC-7 AC-8 AC-9 AC-10 end to end through the real runner: report-word 
 
   // The reasons: fixed sentences that name a position and never a locator word.
   assert.match(c[1].reason, /^step 3: the locator matched no element at run time/);
-  assert.match(c[2].reason, /^step 3:/);
+  // A locator that neither source grounds is a step gap (vocabulary v4): the case reason is the catalogue sentence, and the
+  // gap itself is recorded on its step record.
+  assert.match(c[2].reason, /could not be grounded to exactly one element/);
   assert.match(c[4].reason, /^step 3: the locator matched 2 elements at run time/);
   assert.equal(c[6].reason, 'step 3: the element was still visible');
   assert.match(c[7].reason, /^step 3: the scope matched 0 elements at run time/);
   assert.equal(c[9].reason, 'step 3: the expanded state did not equal the declared value');
-  assert.match(c[10].reason, /^step 3: the locator matched no element at run time/, 'a middle-substring prefix matches nothing');
+  // Vocabulary v4 (AC-5): a positive assertion on a report-word locator that matches nothing is a QA result, a fail with cause absent.
+  assert.equal(c[10].reason, 'step 3: the element the report names was not found on the page after the wait', 'a middle-substring prefix matches nothing');
+  assert.equal(c[10].cause, 'absent');
+  assert.equal(c[10].steps[2].result, 'failed');
+  assert.equal(c[10].steps[2].cause, 'absent');
   assert.match(c[12].reason, /^step 3: the locator matched no element at run time/, 'a container with two inputs matches nothing');
   assert.match(c[14].reason, /^step 3: the index is past the last matching element of the scope \(4 found\)/);
-  assert.match(c[15].reason, /^step 3:/);
+  assert.match(c[15].reason, /could not be grounded to exactly one element/);
   assert.equal(c[16].reason, 'step 3: the target was present but not visible to a person (opacity or visibility hides it)');
   assert.equal(c[18].reason, 'step 4: the page issued 0 matching request(s); 1 were expected');
   assert.match(c[19].reason, /^step 3:/, 'a snapshot-grounded positive step on a missing element fails at that step, as in 0.46.0');
@@ -405,7 +411,11 @@ test('AC-6 AC-7 AC-8 AC-9 AC-10 end to end through the real runner: report-word 
   assert.notEqual(c[19].reason_code, 'STEP_UNGROUNDED');
   assert.equal(c[19].steps[2].result, 'failed');
   assert.equal(c[1].steps[2].result, 'failed');
-  assert.equal((c[2].steps ?? []).some((/** @type {any} */ st) => st.result === 'passed'), false, 'a plan defect is refused before any step ran');
+  // The steps before the ungrounded click ran; the click itself is human with STEP_UNGROUNDED and nothing acted on the page.
+  for (const k of [2, 15]) {
+    assert.deepEqual(c[k].steps.map((/** @type {any} */ st) => st.result), ['passed', 'passed', 'human'], `case ${k + 1}`);
+    assert.equal(c[k].steps[2].reason_code, 'STEP_UNGROUNDED', `case ${k + 1}`);
+  }
 
   // The page's own record of what was clicked: exactly the passing cases acted, once each; the ungrounded ones acted not at all.
   await new Promise((r) => setTimeout(r, 300));

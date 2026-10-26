@@ -172,39 +172,40 @@ const MANUAL = '1. Open the profile.\n2. The phone equals 55  1199.';
 /** @param {any[]} steps @param {any} [manual] */
 const pre = (steps, manual = MANUAL) => precheckGroundedSteps(steps, SNAPSHOTS, manual, null);
 
-test('AC-9 a literal equals or contains must come from the report own steps, whitespace and case insensitively, and the refusal names the key and never the literal', () => {
+test('AC-9 AC-1 a literal equals or contains must come from the report own steps, whitespace and case insensitively, and a literal that does not is a STEP_UNGROUNDED gap that never names the literal', () => {
   const foreign = pre([GOTO, VALUE({ equals: 'zz999 absent' })]);
-  assert.equal(foreign?.code, 'PLAN_ENTRY_INVALID');
+  assert.equal(foreign?.code, 'STEP_UNGROUNDED');
   assert.match(String(foreign?.reason), /^step 2:/);
-  assert.ok(String(foreign?.reason).includes('equals'), String(foreign?.reason));
-  assert.ok(!String(foreign?.reason).includes('zz999'), `the refusal echoes the literal: ${foreign?.reason}`);
+  assert.ok(!String(foreign?.reason).includes('zz999'), `the reason echoes the literal: ${foreign?.reason}`);
   const foreignContains = pre([GOTO, VALUE({ contains: 'zz999 absent' })]);
-  assert.equal(foreignContains?.code, 'PLAN_ENTRY_INVALID');
-  assert.ok(String(foreignContains?.reason).includes('contains'), String(foreignContains?.reason));
+  assert.equal(foreignContains?.code, 'STEP_UNGROUNDED');
+  assert.match(String(foreignContains?.reason), /^step 2:/);
   assert.equal(pre([GOTO, VALUE({ equals: '55 1199' })]), null, 'a literal from the report must pass, whitespace-insensitively');
   assert.equal(pre([GOTO, VALUE({ contains: 'PHONE   EQUALS' })]), null, 'the substring test is case-insensitive');
-  assert.equal(pre([GOTO, VALUE({ equals: '55 1199' })], null)?.code, 'PLAN_ENTRY_INVALID', 'a missing manual text fails the expectation');
-  assert.equal(pre([GOTO, VALUE({ equals: '55 1199' })], 42)?.code, 'PLAN_ENTRY_INVALID', 'a non-string manual text fails the expectation');
+  assert.equal(pre([GOTO, VALUE({ equals: '55 1199' })], null)?.code, 'STEP_UNGROUNDED', 'a missing manual text fails the expectation');
+  assert.equal(pre([GOTO, VALUE({ equals: '55 1199' })], 42)?.code, 'STEP_UNGROUNDED', 'a non-string manual text fails the expectation');
 });
 
 test('AC-9 a binding or not_empty needs no literal in the report, and the binding test keeps no state between calls', () => {
   assert.equal(pre([GOTO, VALUE({ not_empty: true })]), null);
   for (let round = 0; round < 3; round++) {
     assert.equal(pre([GOTO, VALUE({ contains: '{{phone}}' })]), null, `a binding was refused in round ${round}`);
-    assert.equal(pre([GOTO, VALUE({ equals: 'zz999 absent' })])?.code, 'PLAN_ENTRY_INVALID', `a literal was accepted in round ${round}`);
+    assert.equal(pre([GOTO, VALUE({ equals: 'zz999 absent' })])?.code, 'STEP_UNGROUNDED', `a literal was accepted in round ${round}`);
     assert.equal(pre([GOTO, VALUE({ equals: 'prefix {{a}} {{b}}' })]), null, `a mixed binding was refused in round ${round}`);
   }
 });
 
-// PRD AC-6: neither a snapshot entry with matches 1 nor a word of the report is PLAN_ENTRY_INVALID.
-test('AC-9 an expect_value on a locator the snapshot lacks, or lists twice, is PLAN_ENTRY_INVALID and names no locator', () => {
+// vocabulary v4: neither a snapshot entry with matches 1 nor a word of the report is a step gap (STEP_UNGROUNDED).
+test('AC-9 AC-1 an expect_value on a locator the snapshot lacks, or lists twice, is a STEP_UNGROUNDED gap and names no locator', () => {
   const missing = pre([GOTO, { action: 'expect_value', role: 'textbox', name: 'Inexistente', not_empty: true }]);
-  assert.equal(missing?.code, 'PLAN_ENTRY_INVALID');
+  assert.equal(missing?.code, 'STEP_UNGROUNDED');
   const twin = pre([GOTO, { action: 'expect_value', role: 'textbox', name: 'Gemeo', not_empty: true }]);
-  assert.equal(twin?.code, 'PLAN_ENTRY_INVALID');
-  assert.match(String(twin?.reason), /2 elements/);
-  for (const r of [missing, twin]) assert.ok(!/Inexistente|Gemeo/.test(String(r?.reason)), `the refusal echoes a locator: ${r?.reason}`);
-  assert.equal(precheckGroundedSteps([GOTO, VALUE({ not_empty: true })], [], MANUAL, null)?.code, 'PLAN_ENTRY_INVALID', 'no snapshot covers the route');
+  assert.equal(twin?.code, 'STEP_UNGROUNDED');
+  for (const r of [missing, twin]) {
+    assert.match(String(r?.reason), /^step 2:/);
+    assert.ok(!/Inexistente|Gemeo|elements/.test(String(r?.reason)), `the reason echoes a locator or a count: ${r?.reason}`);
+  }
+  assert.equal(precheckGroundedSteps([GOTO, VALUE({ not_empty: true })], [], MANUAL, null)?.code, 'STEP_UNGROUNDED', 'no snapshot covers the route');
 });
 
 // ---------------------------------------------------------------------------
@@ -280,7 +281,7 @@ before(async () => {
   server = createServer((req, res) => {
     const path = String(req.url).split('?')[0];
     hits[path] = (hits[path] ?? 0) + 1;
-    const phone = path === '/profile' || path === '/formA' ? VALUE_A : path === '/formB' ? VALUE_B : null;
+    const phone = path === '/profile' || path === '/formA' || path === '/foreign' ? VALUE_A : path === '/formB' ? VALUE_B : null;
     if (phone === null) {
       res.writeHead(404, { 'content-type': 'text/plain' });
       res.end('not found');
@@ -465,7 +466,7 @@ test('AC-9 end to end: each comparison passes and fails on a real page, a bound 
     ['pass', null],
     ['pass', null],
     ['fail', null],
-    ['needs-human', 'PLAN_ENTRY_INVALID'],
+    ['needs-human', 'STEP_UNGROUNDED'],
     ['needs-human', 'PLAN_ENTRY_INVALID'],
     ['fail', null],
   ];
@@ -503,13 +504,17 @@ test('AC-9 end to end: each comparison passes and fails on a real page, a bound 
   assert.match(c[10].reason, /^step 3:/);
   assert.deepEqual(jsonEvidenceOf(11), [], 'a missing field left comparison evidence');
   assert.deepEqual(c[10].steps.map((/** @type {any} */ s) => s.result), ['passed', 'passed', 'failed']);
-  // A literal the report never states and a binding no capture declares end the entry before any page is loaded.
-  assert.match(c[11].reason, /^step 3:/);
-  assert.ok(c[11].reason.includes('equals'), c[11].reason);
-  assert.ok(!c[11].reason.includes('zz999'), `the refusal echoes the literal: ${c[11].reason}`);
+  // A literal the report never states is a step gap (vocabulary v4): the page is loaded and the steps before the
+  // comparison run, the comparison itself is recorded human with STEP_UNGROUNDED and is never made.
+  assert.equal(c[11].reason_code, 'STEP_UNGROUNDED');
+  assert.deepEqual(c[11].steps.map((/** @type {any} */ s) => s.result), ['passed', 'passed', 'human']);
+  assert.equal(c[11].steps[2].reason_code, 'STEP_UNGROUNDED');
+  assert.ok(!JSON.stringify([c[11].reason, c[11].steps]).includes('zz999'), `the gap echoes the literal: ${JSON.stringify(c[11].steps)}`);
+  assert.deepEqual(jsonEvidenceOf(12), [], 'a comparison that was never made left comparison evidence');
+  assert.ok((hits['/foreign'] ?? 0) >= 1, 'the valid part of the entry did not load its page');
+  // A binding no capture declares is a schema error: the whole entry is refused before any page is loaded (unchanged).
   assert.match(c[12].reason, /^step 3:/);
   assert.ok(c[12].reason.includes('nope'), c[12].reason);
-  assert.equal(hits['/foreign'] ?? 0, 0, 'the refused literal entry loaded its page');
   assert.equal(hits['/unbound'] ?? 0, 0, 'the refused binding entry loaded its page');
   const stepRecord = c[0].steps[2];
   assert.equal(stepRecord.action, 'expect_value');

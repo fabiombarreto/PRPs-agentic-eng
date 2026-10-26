@@ -404,8 +404,8 @@ A step that only the report's words ground has no snapshot entry, so the runner 
 when the case runs: exactly one match passes, and no match or several end the case
 `needs-human` `STEP_UNGROUNDED` with nothing acted on. A step grounded by a snapshot entry
 keeps its earlier outcomes, so a missing element still fails a positive step. A locator taken
-from neither source is `PLAN_ENTRY_INVALID` before anything is seeded, authenticated or
-requested. Four optional keys reshape a locator and are always resolved when the case runs;
+from neither source is a step gap (see "Per-step validation, failure causes and
+continuation" below), not a refusal of the entry. Four optional keys reshape a locator and are always resolved when the case runs;
 every word they carry follows the same rule, so it comes from the report's own steps or from
 a snapshot entry with `matches` exactly `1`. They are valid on `click`, `fill`,
 `expect_visible`, `expect_text`, `expect_value`, `expect_state` and `expect_not_visible`,
@@ -467,14 +467,57 @@ A literal `browser` step that picks one of several controls inside a group by po
 element ends the case `needs-human` `STEP_UNGROUNDED`. Plan it only from what the report or the
 snapshot states about the order of the controls: a re-layout changes the control it picks.
 
+A literal `browser` step that scopes a locator to the group that holds a visible text:
+
+<!-- qa-step-example driver=browser -->
+```json
+{ "action": "click", "within": { "anchor_text": "Escolha seu avatar" }, "role": "button", "index": 0 }
+```
+
+`within` may be `{ "anchor_text": "<visible text>" }` alone, for controls with no accessible
+name under a container that has none either. The runner finds the one visible element whose
+text is `anchor_text`, walks up to the nearest ancestor that holds at least one element of
+the step's `role`, and resolves the step inside it. It needs a `role` together with `name`,
+`name_prefix` or `index`, is not taken by `fill`, `expect_value` or `judge`, and follows the
+grounding rule of any other word (the text comes from the report's own steps or from a
+snapshot entry with `matches` exactly `1`). Zero or several anchors end the case
+`needs-human` `STEP_UNGROUNDED`, and the reason never echoes the anchor text.
+
+A literal `browser` step that asserts the presence of an element by role alone inside a scope:
+
+<!-- qa-step-example driver=browser -->
+```json
+{ "action": "expect_visible", "within": { "role": "dialog", "name": "Validar e-mail" }, "role": "alert" }
+```
+
+An `expect_visible` with a `within` scope of role and name and a `role` but no `name`,
+`name_prefix` or `index` passes when at least one element of that role inside the scope is
+visible to a person; when none is present it fails with cause `absent`; when some are
+present and none is visible to a person it fails without a cause. Only `expect_visible`
+takes this form, and without `within` the entry is `PLAN_ENTRY_INVALID`.
+
+A literal `browser` step that asserts a value is shown without stating it:
+
+<!-- qa-step-example driver=browser -->
+```json
+{ "action": "expect_text", "role": "button", "name_prefix": "Não concluídas", "pattern": "number" }
+```
+
+An `expect_text` may carry `pattern` instead of `contains`, for a value the report says is
+shown but does not state (a count). The closed list holds only `number`: the step passes
+when the visible text of the located element contains a run of digits and fails when it
+contains none. Any other name is `PLAN_ENTRY_INVALID`, and `pattern` cannot be combined
+with `contains`.
+
 Grounding rules. Write a locator step for an entry of the snapshot of the step's own
 route and role whose `matches` is exactly `1`, copying its `role` and `name` or its `text`
 verbatim; the route of a step is the last `goto` or `expect_url` path before it. The
 report's own words are the second source (see Run-time and scoped locators above): a `name`
-or `text` that the case's manual steps state needs no snapshot entry. A step whose element is
-neither in the snapshot nor in the report's words is not planned: decline the case with
-`STEP_UNGROUNDED` before anything is seeded, authenticated or requested, because the script
-refuses such a step as `PLAN_ENTRY_INVALID`. The declining entry names no step and carries no
+or `text` that the case's manual steps state needs no snapshot entry. Plan the step
+anyway: a step whose element is neither in the snapshot nor in the report's words is
+recorded by the runner as a step gap and the rest of the case runs (see "Per-step
+validation, failure causes and continuation" below). Decline the whole case with
+`STEP_UNGROUNDED` only when no step of it can run. The declining entry names no step and carries no
 free text: the runner writes the fixed catalogue sentence for the code and reproduces the
 manual steps verbatim, so which step could not be grounded belongs in your own working notes
 or in the run summary you relay to the operator, never in the plan entry. At run time a
@@ -620,7 +663,32 @@ Partially executed cases are counted in `partially_executed`, reported beside
 Per-step results: every case a driver executed lists a `steps` array in
 `results.json`, one item per step with `index`, `action`, `result` (`passed`,
 `failed`, `not-run` or `human`) and `evidence` (a path or null). Cases no driver
-executed carry an empty `steps`.
+executed carry an empty `steps`. A failed step may carry a `cause` from the same closed
+list as a blocked action (see the next subsection).
+
+### Per-step validation, failure causes and continuation
+
+A step the runner cannot ground is a step gap, not a refusal of the entry: an ungrounded
+`expect_*` step is recorded `human` with `STEP_UNGROUNDED` and the steps around it still run,
+while an ungrounded `click`, `fill` or `goto` ends the run of the case there and every later
+step is recorded `human` as not run after an ungrounded interaction. The reasons are fixed
+sentences. A malformed entry (an unknown action, a missing required key, an invalid `effect`,
+an unbound `{{name}}`) is still `PLAN_ENTRY_INVALID` for the whole entry, and the case ends
+`needs-human` with `STEP_UNGROUNDED` only when no executed step failed.
+
+A `click` or `fill` that cannot be performed ends the case `blocked` with
+`STEP_NOT_PERFORMABLE`, a gap of the run, and the reason names a `cause` from a closed list:
+`covered`, `disabled`, `not_editable`, `absent`, `detached` or `other`. The cause is derived
+by checks the runner makes, and no Playwright error text or page text is ever written. An
+`expect_*` step grounded only by the report's words that matches no element after the wait
+is a `fail` with cause `absent`, because an element the report names that the page lacks is
+a product result; a locator that matches more than one element still ends the case
+`needs-human` with `STEP_UNGROUNDED`.
+
+A failed assertion does not end the case: the later `expect_*`, `query` and `judge` steps
+still run and are recorded, and the case ends `fail`. The first `goto`, `click`, `fill`,
+`request` or `read_message` step, or any step that carries an `effect`, and every step
+after it, is recorded `not-run` with the fixed reason not run after a failed assertion.
 
 ### Classify every case and name every decline
 
@@ -677,7 +745,7 @@ reproduced verbatim.
 | `STEP_UNGROUNDED` | `needs-human` | `gap` | a step's element is neither in the snapshot nor in the report's words, or does not match exactly one element when the step is resolved |
 | `PRODUCT_DEFECT` | `blocked` | `gap` | a known product defect stops the case from starting; a defect the case can reach is executed and ends `fail` |
 | `STATE_UNCONFIRMED` | `blocked` | `gap` | the declaration for the required state is not confirmed |
-| `ROLE_NOT_DEDICATED` | `blocked` | `gap` | never declared: the runner refuses a write step for a role the kit does not declare dedicated |
+| `ROLE_NOT_DEDICATED` | `blocked` | `gap` | never declared: the runner refuses a write or validation step for a role the kit does not declare dedicated |
 | `PARTIAL_REMAINDER` | `needs-human` | `gap` | never declared: the runner derives it from `human_remainder`, which must name its gap |
 
 Every code carries a reason class, shown in the third column. `impossible` marks what
@@ -692,6 +760,15 @@ classification above.
 Runtime halt codes (session, probe, query and origin codes such as
 `SESSION_UNAVAILABLE`, `QUERY_FAILED` or `API_ORIGIN_INVALID`) stay as they are and
 are not part of this catalogue.
+
+Run-time codes outside the catalogue. These three codes are reported by the runner, never
+declared by a plan entry, and are deliberately not catalogue rows:
+
+| Code | Outcome | Kind | Meaning |
+|------|---------|------|---------|
+| `STEP_NOT_PERFORMABLE` | `blocked` | run-time gap | a step's target could not be acted on; the `cause` is one word of the closed list `covered`, `disabled`, `not_editable`, `absent`, `detached` or `other` |
+| `PLAN_ENTRY_INVALID` | `needs-human` | plan defect | the plan entry is malformed (a schema error); it is a defect of the plan, not a decline of the case, and it is reported apart from the declined cases |
+| `OVERLAY_HANDLER_INVALID` | `blocked` | declaration defect | the `overlay_handlers` declaration of `PRPs/auth/qa-seed.json` is malformed; the case is blocked before any step runs and `ground` halts with the same code |
 
 A declining entry carries `class` and `reason_code` and no `steps` and no
 `human_remainder`; its outcome comes from the catalogue and it never needs a
@@ -784,8 +861,9 @@ A literal `browser` step that changes data, marked as a write:
 { "action": "click", "role": "button", "name": "Save", "effect": "write" }
 ```
 
-`effect` has one legal value, `"write"`, and only a `click`, `fill` or `request` step
-may carry it; any other value, and the key on any other step, is `PLAN_ENTRY_INVALID`.
+`effect` has two legal values, `"write"` and `"validation"`. `"write"` may be carried by a
+`click`, `fill` or `request` step and `"validation"` by a `click` step only; any other
+value, and the key on any other step, is `PLAN_ENTRY_INVALID`.
 Mark every step that creates, changes or deletes data. The runner refuses a case with
 a marked step unless the case's role has `"dedicated": true` in
 `PRPs/auth/login.config.json`: the case ends `blocked` with `ROLE_NOT_DEDICATED`,
@@ -794,6 +872,26 @@ entry with no role is not dedicated. The flag is set by the operator, never by y
 read which roles carry it, never write it and never decide that a role is dedicated.
 The runner does not detect writes, so an unmarked step that saves, deletes or sends is
 your defect; plan the marked steps anyway and let the runner report the block.
+
+A literal `browser` step that submits a form to read the validation error the report describes:
+
+<!-- qa-step-example driver=browser -->
+```json
+{ "action": "click", "role": "button", "name": "Enviar", "effect": "validation" }
+```
+
+A `click` marked `"effect": "validation"` submits a form with a value the report itself
+gives as invalid, after a `fill` such as
+`{ "action": "fill", "role": "textbox", "name": "E-mail", "value": "not-an-email" }`. The
+entry is `PLAN_ENTRY_INVALID` otherwise, because a validation submit needs an earlier `fill`
+step in the same case whose value appears verbatim in the case's manual steps. The click
+passes through the same dedicated-role gate as a write: a role the kit does not declare
+dedicated ends the case `blocked` with `ROLE_NOT_DEDICATED` before anything is seeded,
+authenticated or requested. When the click runs, the requests the click issues are recorded
+in its evidence, and a request to a host the local-only guard does not approve blocks the
+case `FAILED_NON_LOCAL_TARGET`. Never invent a value for a validation submit. A `ground
+--prefix` accepts only `goto`, `click` and `fill` steps with no `effect` key, so a prefix
+never submits a form.
 
 Seed captures worth using. A declaration may capture the identity of the account it
 seeds (`username`) and the names or titles of the entities it seeds. When the
@@ -918,6 +1016,33 @@ invent one and never write a URL or a path in `plan.json`.
 { "channel_sources": { "mail": { "kind": "mailpit", "url": "http://localhost:8025" } } }
 ```
 
+Overlay handlers. `overlay_handlers` is a top-level array in `PRPs/auth/qa-seed.json`, next
+to `states` and `channel_sources`; it declares the overlays the product is known to show
+(an onboarding tour, a developer-tools panel) and how to dismiss each.
+
+```json
+{ "overlay_handlers": [ { "id": "onboarding-tour", "trigger": { "role": "dialog", "name": "Bem-vindo" }, "dismiss": { "role": "button", "name": "Pular" } } ] }
+```
+
+Each entry is an object with `id`, `trigger`, `dismiss` and an optional `effect` of
+`"write"`; `trigger` and `dismiss` name an element by role and name, or by text, and
+nothing else. A declaration holds at most 10 entries, and an `id` is 1 to 40 letters,
+digits, hyphens or underscores. The runner registers each handler with
+`page.addLocatorHandler` (Playwright 1.44 or newer, otherwise the case is blocked
+`FAILED_PLAYWRIGHT_UNAVAILABLE`) so that the dismissal runs before a `click` or `fill` when
+the trigger is visible; each handler runs at most 25 times per page and the dismissal click
+is bounded to 3 seconds. These numbers are chosen, not measured; the dogfood recalibrates
+them; a handler marked `"effect": "write"` is registered only for a role the kit declares
+dedicated; for any other role it is not registered and the run records why, and a dismissal
+that leaves the guard-approved origin blocks the case `FAILED_NON_LOCAL_TARGET`, and
+handlers never use a forced click. In short, an overlay with no declared handler is never dismissed,
+and a click it blocks ends the case `blocked` with `STEP_NOT_PERFORMABLE` and cause
+`covered`; a malformed declaration blocks the case `OVERLAY_HANDLER_INVALID` before any step
+runs, and each dismissal is listed by handler id, step and result in
+`evidence/case-<n>.overlay.json`, and `ground` dismisses declared overlays too and prints an
+`OVERLAY_DISMISSED` line for each. Read which handlers are declared; never write one and
+never edit the file.
+
 A literal `browser` step that reads a verification code from a declared source:
 
 <!-- qa-step-example driver=browser -->
@@ -1002,6 +1127,13 @@ Honesty rules:
   issues, with `method`, `url_contains` and `count` taken from the report's own steps and
   after the `goto`, `click` or `fill` step that triggers them; never to confirm that a page
   rendered.
+- Plan a role-only presence step only when the report says an element of a kind appears
+  inside a named scope without naming it; plan `pattern` only for a value the report says
+  is shown without stating it, never for a value it states.
+- Plan `effect: "validation"` only with a literal the report gives as invalid, after a
+  `fill` of that literal, and only for a role the kit declares dedicated.
+- Read the declared overlay handlers and nothing more: never rely on, name or plan around
+  an overlay handler the file does not declare.
 - Every executable entry must carry at least one expectation; a declining entry has
   no steps and so carries none.
 - Never put a credential or token value in `plan.json`.

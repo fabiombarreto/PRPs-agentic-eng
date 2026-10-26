@@ -222,17 +222,27 @@ These standalone commands support that gate; none is invoked by
    A locator step is also valid when its name or text appears in the report's own
    steps: it has no snapshot entry, the runner resolves it when the case runs, and
    none or several matches end the case `needs-human` `STEP_UNGROUNDED`; a locator
-   that is neither is `PLAN_ENTRY_INVALID`. The optional keys `within`, `name_prefix`,
+   that is neither is a step gap, not an entry refusal: an ungrounded assertion is
+   skipped and recorded `human` with `STEP_UNGROUNDED`, and an ungrounded `click` or
+   `fill` is recorded `human` together with every later step (schema errors stay
+   `PLAN_ENTRY_INVALID` for the whole entry). The optional keys `within`, `name_prefix`,
    `label_text` and `index` scope or reshape a locator (a group scope, a name matched
    by its start, an input found from its label text, the Nth element of a role in a
-   scope) and are always resolved when the case runs.
+   scope) and are always resolved when the case runs. `within` may also be
+   `{ anchor_text }` (the nearest ancestor of the one visible anchor that holds an
+   element of the step's role; none or several anchors end the case `needs-human`
+   `STEP_UNGROUNDED`), and an `expect_visible` with `within` and a `role` but no name
+   passes on at least one visible element of that role in the scope.
    A value the report leaves open may be chosen by the planner and declared in the
    entry's `chosen_inputs` (a `fill` value that is a declared capture or a literal found
    in a grounding snapshot of the run directory; a literal found nowhere is
    `PLAN_ENTRY_INVALID`), and a click, fill or request marked with the `effect` key set
-   to `write` runs only for a role that `login.config.json` declares `"dedicated": true`;
+   to `write`, or a click set to `validation` (a form submit with the report's own
+   invalid value, which needs an earlier fill of that literal in the same case), runs
+   only for a role that `login.config.json` declares `"dedicated": true`;
    otherwise the case is `blocked` with `ROLE_NOT_DEDICATED` before any seed, session or
-   request.
+   request. A validation click records the requests it issues (method, host and path
+   only) and a non-local one blocks the case `FAILED_NON_LOCAL_TARGET`.
    A `judge` step captures a visual, language or checklist criterion that the report
    states, and the case then waits with no outcome: the command session reads each
    capture and records a verdict (`pass`, `fail` or `uncertain`) with the text of what
@@ -245,6 +255,13 @@ These standalone commands support that gate; none is invoked by
    of the step's expression as a variable of the case, registered for redaction, which
    the steps after it may use as `{{name}}`. A channel with no declared source is
    declined as before.
+   An overlay that blocks a click or a fill (a consent banner, a modal) is dismissed only
+   when the project declares it under `overlay_handlers` in `PRPs/auth/qa-seed.json`: a
+   trigger and a dismiss element, each by role and name or by text. The handler runs
+   before a click or a fill, never on a `goto`; one that writes state runs only for a
+   dedicated role; an undeclared overlay is never dismissed, so the click ends covered;
+   a dismissal that leaves the approved origin ends the case `FAILED_NON_LOCAL_TARGET`.
+   A malformed declaration blocks every browser case `OVERLAY_HANDLER_INVALID`.
    An element that exists only after a click or a fill is grounded in a second
    pass: after the plain snapshot of the route, `ground --prefix '<json>'`
    replays a prefix of at most 5 flat `goto`, `click` and `fill` steps of the
