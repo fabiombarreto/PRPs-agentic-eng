@@ -13,7 +13,7 @@ This repository is also the marketplace that publishes the plugin.
 Shipped. The pipeline is implemented: PRD authoring, planning, test
 authoring, implementation, test running, and PR close-out, plus a
 validation suite and on-demand behavioral evals for the plugin itself.
-`plugins/relay` (version 0.47.0, per its `plugin.json`) contains 23
+`plugins/relay` (version 0.48.0, per its `plugin.json`) contains 23
 `/relay-*` commands, 23 agents and one skill (`context-builder`). It also
 includes a local manual-QA runner and opt-in Figma design and
 visual-verification commands.

@@ -70,92 +70,106 @@ const SNAP = snap('/p', [
 
 /** @param {any[]} steps @param {any} manual @param {any[]} [snapshots] */
 const ground = (steps, manual, snapshots = [SNAP]) => R.groundLocators(steps, snapshots, manual, null);
+// vocabulary v4 (step-level validation): a miss is a step gap, never an entry refusal.
+/** @param {number[]} runtime the shape of a result with no gap */
+const clean = (runtime) => ({ gaps: [], truncateAt: null, runtime });
+/** @param {number} at zero-based @param {'assertion' | 'interaction'} kind @param {number[]} [runtime] */
+const gapOf = (at, kind, runtime = []) => ({ gaps: [{ at, kind }], truncateAt: kind === 'interaction' ? at : null, runtime });
+const STEP_SENTENCE = 'the step could not be grounded to exactly one element';
 
 // ---------------------------------------------------------------------------
 // 1. The two grounding sources (PRD AC-6)
 // ---------------------------------------------------------------------------
 
 test('AC-6 a locator that a snapshot entry lists with matches 1 is grounded and left out of runtime, whatever the report says', () => {
-  assert.deepEqual(ground([GOTO, { action: 'click', role: 'button', name: 'Salvar' }], ''), { refusal: null, runtime: [] });
-  assert.deepEqual(ground([GOTO, { action: 'expect_visible', text: 'Mensagem visivel' }], null), { refusal: null, runtime: [] });
+  assert.deepEqual(ground([GOTO, { action: 'click', role: 'button', name: 'Salvar' }], ''), clean([]));
+  assert.deepEqual(ground([GOTO, { action: 'expect_visible', text: 'Mensagem visivel' }], null), clean([]));
   // Listed AND stated: the snapshot grounds it, so the browser does not re-resolve it (a missing element still fails a positive step).
-  assert.deepEqual(ground([GOTO, { action: 'click', role: 'button', name: 'Salvar' }], 'Click Salvar.'), { refusal: null, runtime: [] });
+  assert.deepEqual(ground([GOTO, { action: 'click', role: 'button', name: 'Salvar' }], 'Click Salvar.'), clean([]));
 });
 
 test('AC-6 a locator whose words the report states is grounded with no snapshot at all and its step index goes to runtime', () => {
   const click = { action: 'click', role: 'button', name: 'Inexistente' };
-  assert.deepEqual(ground([GOTO, click], 'Click Inexistente.', []), { refusal: null, runtime: [1] });
+  assert.deepEqual(ground([GOTO, click], 'Click Inexistente.', []), clean([1]));
   // A text locator, and a role locator on a route whose snapshot lacks the entry.
-  assert.deepEqual(ground([GOTO, { action: 'expect_visible', text: 'Algo novo' }], 'See Algo novo on the page.', []), { refusal: null, runtime: [1] });
-  assert.deepEqual(ground([GOTO, click], 'Click Inexistente.'), { refusal: null, runtime: [1] });
+  assert.deepEqual(ground([GOTO, { action: 'expect_visible', text: 'Algo novo' }], 'See Algo novo on the page.', []), clean([1]));
+  assert.deepEqual(ground([GOTO, click], 'Click Inexistente.'), clean([1]));
   // Only the steps with no snapshot entry behind them are listed, in step order.
   const mixed = ground([GOTO, { action: 'click', role: 'button', name: 'Salvar' }, click, { action: 'click', role: 'button', name: 'Outro' }], 'Click Inexistente then Outro.');
-  assert.deepEqual(mixed, { refusal: null, runtime: [2, 3] });
+  assert.deepEqual(mixed, clean([2, 3]));
   // A 2-match entry stated by the report is grounded too: the browser decides how many there are when the case runs.
-  assert.deepEqual(ground([GOTO, { action: 'click', role: 'button', name: 'Gemeo' }], 'Click Gemeo.'), { refusal: null, runtime: [1] });
+  assert.deepEqual(ground([GOTO, { action: 'click', role: 'button', name: 'Gemeo' }], 'Click Gemeo.'), clean([1]));
 });
 
 test('AC-6 the report is compared after collapsing whitespace and ignoring case, in both directions', () => {
   const step = { action: 'click', role: 'button', name: 'Dois   Espacos' };
-  assert.equal(ground([GOTO, step], 'Click the button dois espacos now', []).refusal, null);
-  assert.equal(ground([GOTO, step], 'CLICK DOIS\n\tESPACOS', []).refusal, null);
-  assert.equal(ground([GOTO, { action: 'click', role: 'button', name: 'ABC' }], 'press abc', []).refusal, null);
+  assert.deepEqual(ground([GOTO, step], 'Click the button dois espacos now', []).gaps, []);
+  assert.deepEqual(ground([GOTO, step], 'CLICK DOIS\n\tESPACOS', []).gaps, []);
+  assert.deepEqual(ground([GOTO, { action: 'click', role: 'button', name: 'ABC' }], 'press abc', []).gaps, []);
   // A word that is only part of a longer word is still contained: the rule is a contained-text rule, not a token rule.
-  assert.equal(ground([GOTO, { action: 'click', role: 'button', name: 'dois' }], 'Click Dois Espacos', []).refusal, null);
-  assert.equal(ground([GOTO, { action: 'click', role: 'button', name: 'Dois Espacos Tres' }], 'Click Dois Espacos', [])?.refusal?.code, 'PLAN_ENTRY_INVALID');
+  assert.deepEqual(ground([GOTO, { action: 'click', role: 'button', name: 'dois' }], 'Click Dois Espacos', []).gaps, []);
+  assert.deepEqual(ground([GOTO, { action: 'click', role: 'button', name: 'Dois Espacos Tres' }], 'Click Dois Espacos', []), gapOf(1, 'interaction'));
 });
 
 test('AC-6 an empty, blank or non-string report grounds nothing', () => {
   const click = { action: 'click', role: 'button', name: 'Inexistente' };
   for (const manual of ['', '   ', '\n\t', null, undefined, 42, {}, ['Inexistente'], true]) {
     const r = ground([GOTO, click], manual, []);
-    assert.equal(r.refusal?.code, 'PLAN_ENTRY_INVALID', `a report of ${JSON.stringify(manual)} grounded the step`);
+    assert.deepEqual(r.gaps, [{ at: 1, kind: 'interaction' }], `a report of ${JSON.stringify(manual)} grounded the step`);
+    assert.equal(r.truncateAt, 1, `a report of ${JSON.stringify(manual)} did not truncate at the click`);
     assert.deepEqual(r.runtime, [], `a report of ${JSON.stringify(manual)} left a step to run time`);
   }
 });
 
-test('AC-6 a locator that is neither a snapshot entry with matches 1 nor a word of the report is PLAN_ENTRY_INVALID with the three sentences it always had and no locator word', () => {
+test('AC-1 AC-2 a locator that is neither a snapshot entry with matches 1 nor a word of the report is a step gap that carries no text: an assertion is skipped, an interaction truncates', () => {
   const report = 'Open the page and look around.';
+  // An interaction (click) with no source: gap + truncation at its own position.
   const notAnEntry = ground([GOTO, { action: 'click', role: 'button', name: 'Fantasma' }], report);
-  assert.deepEqual(notAnEntry.refusal, { code: 'PLAN_ENTRY_INVALID', reason: 'step 2: the locator is not a snapshot entry' });
+  assert.deepEqual(notAnEntry, gapOf(1, 'interaction'));
   const twin = ground([GOTO, { action: 'click', role: 'button', name: 'Gemeo' }], report);
-  assert.deepEqual(twin.refusal, { code: 'PLAN_ENTRY_INVALID', reason: 'step 2: the locator matched 2 elements in the snapshot; a locator must match exactly one' });
+  assert.deepEqual(twin, gapOf(1, 'interaction'), 'a snapshot entry counted twice is not a source');
+  // An assertion with no source: gap, no truncation.
   const textTwin = ground([GOTO, { action: 'expect_visible', text: 'Repetido' }], report);
-  assert.equal(textTwin.refusal?.code, 'PLAN_ENTRY_INVALID');
-  assert.match(String(textTwin.refusal?.reason), /^step 2: the locator matched 2 elements in the snapshot/);
+  assert.deepEqual(textTwin, gapOf(1, 'assertion'));
   const noSnapshot = ground([GOTO, { action: 'click', role: 'button', name: 'Fantasma' }], report, []);
-  assert.deepEqual(noSnapshot.refusal, {
-    code: 'PLAN_ENTRY_INVALID',
-    reason: 'step 2: no plan-time snapshot covers this role and route; run the ground mode for the route before planning this step',
-  });
+  assert.deepEqual(noSnapshot, gapOf(1, 'interaction'));
   const noGoto = ground([{ action: 'click', role: 'button', name: 'Fantasma' }], report);
-  assert.equal(noGoto.refusal?.code, 'PLAN_ENTRY_INVALID');
+  assert.deepEqual(noGoto, gapOf(0, 'interaction'));
   for (const r of [notAnEntry, twin, textTwin, noSnapshot, noGoto]) {
-    assert.ok(!/Fantasma|Gemeo|Repetido/.test(String(r.refusal?.reason)), `the refusal echoes a locator: ${r.refusal?.reason}`);
-    assert.deepEqual(r.runtime, []);
+    assert.ok(!/Fantasma|Gemeo|Repetido/.test(JSON.stringify(r)), `the result echoes a locator: ${JSON.stringify(r)}`);
+    assert.equal('refusal' in r, false, 'a grounding miss is no longer an entry refusal');
   }
   // The role of the plan decides which snapshot applies: a snapshot of another role grounds nothing.
   const otherRole = R.groundLocators([GOTO, { action: 'click', role: 'button', name: 'Salvar' }], [SNAP], report, 'admin');
-  assert.equal(otherRole.refusal?.code, 'PLAN_ENTRY_INVALID');
-  assert.match(String(otherRole.refusal?.reason), /no plan-time snapshot covers this role and route/);
+  assert.deepEqual(otherRole, gapOf(1, 'interaction'));
+  // The pre-check names the position and one fixed sentence, never the locator.
+  assert.deepEqual(R.precheckGroundedSteps([GOTO, { action: 'click', role: 'button', name: 'Fantasma' }], [SNAP], report, null), { code: 'STEP_UNGROUNDED', reason: `step 2: ${STEP_SENTENCE}` });
 });
 
-test('AC-6 the first refusal wins and names its own step position', () => {
+test('AC-2 the walk stops at the first ungrounded interaction: later steps are neither grounded nor gaps, and the gap names its own step position', () => {
   const steps = [GOTO, { action: 'click', role: 'button', name: 'Salvar' }, { action: 'click', role: 'button', name: 'Fantasma' }, { action: 'click', role: 'button', name: 'Gemeo' }];
   const r = ground(steps, 'nothing');
-  assert.match(String(r.refusal?.reason), /^step 3: /);
+  assert.deepEqual(r, gapOf(2, 'interaction'));
+  assert.match(String(R.precheckGroundedSteps(steps, [SNAP], 'nothing', null)?.reason), /^step 3: /);
 });
 
-test('AC-6 the report-text rules on the expectation literals still apply to a report-word locator', () => {
+test('AC-1 an assertion gap does not stop the walk: the steps after it are still grounded and later gaps are all listed', () => {
+  const bad = (/** @type {string} */ name) => ({ action: 'expect_visible', role: 'button', name });
+  const steps = [GOTO, { action: 'expect_visible', role: 'button', name: 'Salvar' }, bad('Fantasma'), { action: 'expect_visible', text: 'Mensagem visivel' }, bad('Outro Fantasma')];
+  assert.deepEqual(ground(steps, 'nothing'), { gaps: [{ at: 2, kind: 'assertion' }, { at: 4, kind: 'assertion' }], truncateAt: null, runtime: [] });
+  // The first gap is the one the pre-check names.
+  assert.match(String(R.precheckGroundedSteps(steps, [SNAP], 'nothing', null)?.reason), /^step 3: /);
+});
+
+test('AC-1 the report-text rules on the expectation literals still apply to a report-word locator, as a step gap', () => {
   const heading = { action: 'expect_text', role: 'heading', name: 'Titulo', contains: 'Bem vindo' };
-  assert.equal(ground([GOTO, heading], 'See the Titulo heading say Bem vindo.', []).refusal, null);
+  assert.deepEqual(ground([GOTO, heading], 'See the Titulo heading say Bem vindo.', []).gaps, []);
   const foreign = ground([GOTO, heading], 'See the Titulo heading.', []);
-  assert.equal(foreign.refusal?.code, 'PLAN_ENTRY_INVALID');
-  assert.match(String(foreign.refusal?.reason), /^step 2: expect_text contains must come from the report's own steps/);
-  assert.ok(!String(foreign.refusal?.reason).includes('Bem vindo'));
+  assert.deepEqual(foreign, gapOf(1, 'assertion'), 'a contains the report never states is a gap, not a runtime step');
+  assert.ok(!JSON.stringify(foreign).includes('Bem vindo'));
   const value = { action: 'expect_value', role: 'textbox', name: 'Nome', equals: 'Ana' };
-  assert.equal(ground([GOTO, value], 'The Nome field holds Ana.', []).refusal, null);
-  assert.match(String(ground([GOTO, value], 'The Nome field is filled.', []).refusal?.reason), /^step 2: expect_value equals must come from the report's own steps/);
+  assert.deepEqual(ground([GOTO, value], 'The Nome field holds Ana.', []).gaps, []);
+  assert.deepEqual(ground([GOTO, value], 'The Nome field is filled.', []), gapOf(1, 'assertion'));
 });
 
 test('AC-6 the fill value of a consumed post-interaction prefix is checked only for a step that a snapshot entry grounded', () => {
@@ -171,29 +185,31 @@ test('AC-6 the fill value of a consumed post-interaction prefix is checked only 
   const shown = { action: 'expect_visible', text: 'Resultado' };
   // Listed by the post-interaction snapshot: the typed value must come from the report.
   const listed = R.groundLocators([GOTO, FILL, shown], [SNAP, post([text('Resultado')])], 'See Resultado.', null);
-  assert.equal(listed.refusal?.code, 'PLAN_ENTRY_INVALID');
-  assert.match(String(listed.refusal?.reason), /^step 2: a fill value that a grounded prefix replays must come from the report's own steps/);
-  assert.ok(!String(listed.refusal?.reason).includes('abc'));
-  assert.equal(R.groundLocators([GOTO, FILL, shown], [SNAP, post([text('Resultado')])], 'Type abc and see Resultado.', null).refusal, null);
+  assert.deepEqual(listed, gapOf(2, 'assertion'), 'the step that depends on the replayed fill is the gap');
+  assert.ok(!JSON.stringify(listed).includes('abc'));
+  assert.deepEqual(R.groundLocators([GOTO, FILL, shown], [SNAP, post([text('Resultado')])], 'Type abc and see Resultado.', null), clean([]));
   // Grounded only by the report's words: no snapshot entry stands behind the step, so the browser resolves it and the rule has nothing to guard.
   const stated = R.groundLocators([GOTO, FILL, shown], [SNAP, post([])], 'See Resultado.', null);
-  assert.deepEqual(stated, { refusal: null, runtime: [2] });
+  assert.deepEqual(stated, clean([2]));
 });
 
-test('AC-6 precheckGroundedSteps keeps its signature and is exactly the refusal of groundLocators', () => {
+test('AC-1 precheckGroundedSteps keeps its signature: null with no gap, else STEP_UNGROUNDED naming the first gap position', () => {
   assert.equal(R.precheckGroundedSteps.length, 4);
   assert.equal(R.groundLocators.length, 4);
-  const inputs = /** @type {[any[], any[], any, string | null][]} */ ([
-    [[GOTO, { action: 'click', role: 'button', name: 'Salvar' }], [SNAP], '', null],
-    [[GOTO, { action: 'click', role: 'button', name: 'Fantasma' }], [SNAP], 'x', null],
-    [[GOTO, { action: 'click', role: 'button', name: 'Fantasma' }], [SNAP], 'Click Fantasma', null],
-    [[GOTO, { action: 'click', role: 'button', name: 'Gemeo' }], [SNAP], 'x', null],
-    [[GOTO, { action: 'click', within: B, role: 'button', index: 0 }], [SNAP], '', null],
-    [[GOTO, { action: 'click', role: 'button', name: 'Salvar' }], [], '', null],
-    [[{ action: 'click', selector: '#legacy' }], [], '', null],
+  // [steps, snapshots, report, who, expected step position of the first gap or null]
+  const inputs = /** @type {[any[], any[], any, string | null, number | null][]} */ ([
+    [[GOTO, { action: 'click', role: 'button', name: 'Salvar' }], [SNAP], '', null, null],
+    [[GOTO, { action: 'click', role: 'button', name: 'Fantasma' }], [SNAP], 'x', null, 2],
+    [[GOTO, { action: 'click', role: 'button', name: 'Fantasma' }], [SNAP], 'Click Fantasma', null, null],
+    [[GOTO, { action: 'click', role: 'button', name: 'Gemeo' }], [SNAP], 'x', null, 2],
+    [[GOTO, { action: 'click', within: B, role: 'button', index: 0 }], [SNAP], '', null, null],
+    [[GOTO, { action: 'click', role: 'button', name: 'Salvar' }], [], '', null, 2],
+    [[{ action: 'click', selector: '#legacy' }], [], '', null, null],
   ]);
-  for (const [steps, snaps, manual, who] of inputs) {
-    assert.deepEqual(R.precheckGroundedSteps(steps, snaps, manual, who), R.groundLocators(steps, snaps, manual, who).refusal, JSON.stringify(steps));
+  for (const [steps, snaps, manual, who, position] of inputs) {
+    const expected = position === null ? null : { code: 'STEP_UNGROUNDED', reason: `step ${position}: ${STEP_SENTENCE}` };
+    assert.deepEqual(R.precheckGroundedSteps(steps, snaps, manual, who), expected, JSON.stringify(steps));
+    assert.equal(R.groundLocators(steps, snaps, manual, who).gaps.length === 0, position === null, JSON.stringify(steps));
   }
   assert.equal(R.precheckGroundedSteps([GOTO, { action: 'click', selector: '#a' }], [], '', null), null, 'a selector step is not checked');
 });
@@ -201,58 +217,55 @@ test('AC-6 precheckGroundedSteps keeps its signature and is exactly the refusal 
 test('AC-6 a scoped step needs every word it carries grounded by the report or by a snapshot entry that matches once; it is always left to run time', () => {
   // The scope is a snapshot entry of its own, the target a word of the report.
   const scoped = { action: 'click', within: B, role: 'button', name: 'Excluir' };
-  assert.deepEqual(ground([GOTO, scoped], 'In Grupo B click Excluir.'), { refusal: null, runtime: [1] });
+  assert.deepEqual(ground([GOTO, scoped], 'In Grupo B click Excluir.'), clean([1]));
   // Both words listed in the snapshot: still run time, because a snapshot lists page-wide candidates only.
   const listedBoth = { action: 'click', within: B, role: 'button', name: 'Salvar' };
-  assert.deepEqual(ground([GOTO, listedBoth], ''), { refusal: null, runtime: [1] });
-  // The scope word is neither listed nor stated.
+  assert.deepEqual(ground([GOTO, listedBoth], ''), clean([1]));
+  // The scope word is neither listed nor stated: the click is an interaction gap.
   const noScope = ground([GOTO, scoped], 'Click Excluir.', []);
-  assert.equal(noScope.refusal?.code, 'PLAN_ENTRY_INVALID');
-  assert.match(String(noScope.refusal?.reason), /^step 2: the scoped locator is neither a snapshot entry that matches exactly one element nor a word of the report's own steps/);
+  assert.deepEqual(noScope, gapOf(1, 'interaction'));
   // The target word is neither listed nor stated.
   const noTarget = ground([GOTO, scoped], 'In Grupo B click the button.');
-  assert.equal(noTarget.refusal?.code, 'PLAN_ENTRY_INVALID');
-  assert.match(String(noTarget.refusal?.reason), /^step 2: the scoped locator is neither/);
-  for (const r of [noScope, noTarget]) assert.ok(!/Grupo|Excluir/.test(String(r.refusal?.reason)), `the refusal echoes a locator: ${r.refusal?.reason}`);
+  assert.deepEqual(noTarget, gapOf(1, 'interaction'));
+  for (const r of [noScope, noTarget]) assert.ok(!/Grupo|Excluir/.test(JSON.stringify(r)), `the result echoes a locator: ${JSON.stringify(r)}`);
   // A scope listed twice does not ground its word.
   const twinScope = { action: 'click', within: { role: 'button', name: 'Gemeo' }, role: 'button', index: 0 };
-  assert.equal(ground([GOTO, twinScope], '').refusal?.code, 'PLAN_ENTRY_INVALID');
-  assert.deepEqual(ground([GOTO, twinScope], 'Inside Gemeo click the first button.'), { refusal: null, runtime: [1] });
+  assert.deepEqual(ground([GOTO, twinScope], ''), gapOf(1, 'interaction'));
+  assert.deepEqual(ground([GOTO, twinScope], 'Inside Gemeo click the first button.'), clean([1]));
   // A scope by prefix: the prefix is the word.
   const byPrefix = { action: 'expect_visible', within: { role: 'region', name_prefix: 'Grupo' }, text: 'Mensagem visivel' };
-  assert.deepEqual(ground([GOTO, byPrefix], ''), { refusal: null, runtime: [1] });
-  assert.equal(ground([GOTO, { ...byPrefix, within: { role: 'region', name_prefix: 'Nada' } }], '').refusal?.code, 'PLAN_ENTRY_INVALID');
+  assert.deepEqual(ground([GOTO, byPrefix], ''), clean([1]));
+  assert.deepEqual(ground([GOTO, { ...byPrefix, within: { role: 'region', name_prefix: 'Nada' } }], ''), gapOf(1, 'assertion'));
   // A name_prefix target is grounded by a snapshot entry that starts with it, or by the report.
   const prefixed = { action: 'click', role: 'button', name_prefix: 'Salv' };
-  assert.deepEqual(ground([GOTO, prefixed], ''), { refusal: null, runtime: [1] });
-  assert.equal(ground([GOTO, { ...prefixed, name_prefix: 'Zzz' }], '').refusal?.code, 'PLAN_ENTRY_INVALID');
-  assert.deepEqual(ground([GOTO, { ...prefixed, name_prefix: 'Zzz' }], 'The Zzz header'), { refusal: null, runtime: [1] });
+  assert.deepEqual(ground([GOTO, prefixed], ''), clean([1]));
+  assert.deepEqual(ground([GOTO, { ...prefixed, name_prefix: 'Zzz' }], ''), gapOf(1, 'interaction'));
+  assert.deepEqual(ground([GOTO, { ...prefixed, name_prefix: 'Zzz' }], 'The Zzz header'), clean([1]));
 });
 
 test('AC-6 index carries no word of its own: only its scope has to be grounded', () => {
   const nth = { action: 'click', within: B, role: 'button', index: 1 };
-  assert.deepEqual(ground([GOTO, nth], ''), { refusal: null, runtime: [1] }, 'the scope is a snapshot entry, the index needs no word');
+  assert.deepEqual(ground([GOTO, nth], ''), clean([1]), 'the scope is a snapshot entry, the index needs no word');
   const noScope = ground([GOTO, nth], 'x', []);
-  assert.equal(noScope.refusal?.code, 'PLAN_ENTRY_INVALID', 'a scope with no source is refused');
-  assert.deepEqual(ground([GOTO, nth], 'Inside Grupo B click the second button.', []), { refusal: null, runtime: [1] });
+  assert.deepEqual(noScope, gapOf(1, 'interaction'), 'a scope with no source is a gap');
+  assert.deepEqual(ground([GOTO, nth], 'Inside Grupo B click the second button.', []), clean([1]));
   // The role of the button is not a locator word: an index step names none.
-  assert.deepEqual(ground([GOTO, { ...nth, role: 'listitem' }], 'Grupo B has list items', []), { refusal: null, runtime: [1] });
+  assert.deepEqual(ground([GOTO, { ...nth, role: 'listitem' }], 'Grupo B has list items', []), clean([1]));
 });
 
 test('AC-8 label_text is grounded by a text entry that matches once or by the report, and is always left to run time', () => {
   const fill = { action: 'fill', label_text: 'E-mail*', value: 'ana' };
-  assert.deepEqual(ground([GOTO, fill], ''), { refusal: null, runtime: [1] }, 'a text entry of the snapshot lists the label');
-  assert.deepEqual(ground([GOTO, { ...fill, label_text: 'Telefone*' }], 'Type 1199 in Telefone*.'), { refusal: null, runtime: [1] });
+  assert.deepEqual(ground([GOTO, fill], ''), clean([1]), 'a text entry of the snapshot lists the label');
+  assert.deepEqual(ground([GOTO, { ...fill, label_text: 'Telefone*' }], 'Type 1199 in Telefone*.'), clean([1]));
   const none = ground([GOTO, { ...fill, label_text: 'Telefone*' }], 'Type in the phone.');
-  assert.equal(none.refusal?.code, 'PLAN_ENTRY_INVALID');
-  assert.match(String(none.refusal?.reason), /^step 2: the scoped locator is neither/);
-  assert.ok(!String(none.refusal?.reason).includes('Telefone'));
+  assert.deepEqual(none, gapOf(1, 'interaction'), 'a fill with an ungrounded label truncates');
+  assert.ok(!JSON.stringify(none).includes('Telefone'));
   // A label that the snapshot counted twice is not a snapshot source.
-  assert.equal(ground([GOTO, { ...fill, label_text: 'Repetido' }], '').refusal?.code, 'PLAN_ENTRY_INVALID');
+  assert.deepEqual(ground([GOTO, { ...fill, label_text: 'Repetido' }], ''), gapOf(1, 'interaction'));
   // expect_value on a label locator keeps the literal rule.
   const value = { action: 'expect_value', label_text: 'E-mail*', equals: 'ana' };
-  assert.equal(ground([GOTO, value], 'Check the field.').refusal?.code, 'PLAN_ENTRY_INVALID', 'E-mail* is listed, but the literal ana is not in the report');
-  assert.deepEqual(ground([GOTO, value], 'The E-mail* field holds ana.'), { refusal: null, runtime: [1] });
+  assert.deepEqual(ground([GOTO, value], 'Check the field.'), gapOf(1, 'assertion'), 'E-mail* is listed, but the literal ana is not in the report');
+  assert.deepEqual(ground([GOTO, value], 'The E-mail* field holds ana.'), clean([1]));
 });
 
 // ---------------------------------------------------------------------------
@@ -509,15 +522,18 @@ function browserExamples() {
   return out;
 }
 
-test('AC-22 the command doc carries exactly one marked literal example per new key, found by the key, and each validates alone against the script', () => {
+test('AC-22 the command doc carries a marked literal example per new key, exactly one per (key, form), and each validates alone against the script', () => {
   const examples = browserExamples();
   assert.ok(examples.length >= 4, 'the marked examples were not found');
   const withKey = (/** @type {(s: any) => boolean} */ pred) => examples.filter((e) => pred(e.step));
+  const isAnchor = (/** @type {any} */ s) => s.within !== undefined && s.within !== null && s.within.anchor_text !== undefined;
+  // Vocabulary v4 adds forms of the same keys (a within scope by anchor text, a role-only presence step, a name_prefix
+  // beside a pattern, an index inside an anchor scope), so each key is pinned per form: one example each.
   const byKey = /** @type {[string, { line: number, step: any }[]][]} */ ([
-    ['within', withKey((s) => s.within !== undefined && s.index === undefined)],
-    ['name_prefix', withKey((s) => s.name_prefix !== undefined)],
+    ['within', withKey((s) => s.within !== undefined && !isAnchor(s) && s.index === undefined && (s.name !== undefined || s.text !== undefined))],
+    ['name_prefix', withKey((s) => s.name_prefix !== undefined && s.pattern === undefined)],
     ['label_text', withKey((s) => s.label_text !== undefined)],
-    ['index', withKey((s) => s.index !== undefined)],
+    ['index', withKey((s) => s.index !== undefined && !isAnchor(s))],
   ]);
   for (const [key, found] of byKey) {
     assert.equal(found.length, 1, `${key}: ${found.length} marked examples`);
@@ -527,6 +543,11 @@ test('AC-22 the command doc carries exactly one marked literal example per new k
   // The index example is a scoped one, and the within example carries the scope the doc describes.
   assert.ok(R.scopeOf(byKey[0][1][0].step.within).ok);
   assert.ok(R.scopeOf(byKey[3][1][0].step.within).ok);
+  // The v4 forms of within: the anchor-text scope and the role-only presence step, one marked example each.
+  const anchor = withKey(isAnchor);
+  assert.equal(anchor.length, 1, `anchor_text: ${anchor.length} marked examples`);
+  const roleOnly = withKey((s) => s.action === 'expect_visible' && s.within !== undefined && !isAnchor(s) && s.role !== undefined && s.name === undefined && s.name_prefix === undefined && s.text === undefined && s.index === undefined);
+  assert.equal(roleOnly.length, 1, `role-only presence: ${roleOnly.length} marked examples`);
   // Every marked browser example in the doc validates alone (a regression guard over the older examples too).
   for (const e of examples) assert.equal(R.validateStep('browser', e.step), null, `the example at line ${e.line} does not validate`);
 });
@@ -538,9 +559,12 @@ test('AC-22 the command doc states the two locator sources, the run-time resolut
   const grounding = COMMAND_DOC.indexOf('Grounding rules.');
   assert.ok(grounding > start, 'the grounding rules must come after the paragraph they refer to');
   const paragraph = collapse(COMMAND_DOC.slice(start, COMMAND_DOC.indexOf('\n\n', start)));
-  for (const token of ['snapshot', '`matches`', 'manual steps', 'whitespace', 'case', 'STEP_UNGROUNDED', 'PLAN_ENTRY_INVALID', 'needs-human', 'Four optional keys']) {
+  for (const token of ['snapshot', '`matches`', 'manual steps', 'whitespace', 'case', 'STEP_UNGROUNDED', 'step gap', 'needs-human', 'Four optional keys']) {
     assert.ok(paragraph.includes(token), `the paragraph does not state ${token}`);
   }
+  // Vocabulary v4: an ungrounded locator is a step gap, no longer a refusal of the whole entry.
+  assert.equal(paragraph.includes('is `PLAN_ENTRY_INVALID` before anything is seeded'), false, 'the paragraph still calls an ungrounded locator PLAN_ENTRY_INVALID');
+  assert.ok(paragraph.includes('not a refusal of the entry'), 'the paragraph does not say an ungrounded locator leaves the entry valid');
   // The grounding rules and the absence paragraph name the report's words as a source.
   assert.ok(collapse(COMMAND_DOC.slice(grounding, grounding + 1500)).includes('report'), 'the grounding rules do not name the report');
   for (const key of R.SCOPED_LOCATOR_KEYS) assert.ok(COMMAND_DOC.slice(start).includes('`' + key + '`'), 'the doc after the paragraph does not explain ' + key);

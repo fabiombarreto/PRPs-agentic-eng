@@ -41,6 +41,7 @@ import {
   objectiveStepsOf,
   summarizeClassification,
   applyClassification,
+  RUNTIME_REASON_CATALOGUE,
 } from '../../../plugins/relay/scripts/qa-run.mjs';
 import { validateResults, checkQaRunContract } from './qa-run-contract.mjs';
 
@@ -565,10 +566,36 @@ test('AC-7 the command doc records the frozen classification of the 14 reachable
 test('AC-6 the catalogue table in the command doc agrees with the script: same codes, same outcome for each', () => {
   /** @type {Record<string, string>} */
   const documented = {};
-  for (const m of COMMAND.matchAll(/^\| `([A-Z_]+)` \| `(needs-human|blocked)` \|/gm)) documented[m[1]] = m[2];
+  // The catalogue table is the one whose third cell is a backticked reason class; the run-time table that follows it
+  // has a different header and a plain-text Kind cell, so its rows are not catalogue rows.
+  for (const m of COMMAND.matchAll(/^\| `([A-Z_]+)` \| `(needs-human|blocked)` \| `(impossible|gap)` \|/gm)) documented[m[1]] = m[2];
   assert.deepEqual(Object.keys(documented).sort(), Object.keys(REASON_CATALOGUE).sort());
   for (const [code, outcome] of Object.entries(DECLINES_TO)) assert.equal(documented[code], outcome, `${code} is documented with another outcome than the script gives it`);
   assert.equal(Object.hasOwn(documented, 'NO_PLAN_ENTRY'), false);
+  for (const code of ['STEP_NOT_PERFORMABLE', 'PLAN_ENTRY_INVALID', 'OVERLAY_HANDLER_INVALID']) {
+    assert.equal(Object.hasOwn(documented, code), false, `${code} is a run-time code and must stay out of the catalogue table`);
+  }
+});
+
+test('AC-6 the run-time codes table in the command doc lists exactly the runner run-time codes plus OVERLAY_HANDLER_INVALID, each with the runner outcome', () => {
+  const start = COMMAND.indexOf('| Code | Outcome | Kind | Meaning |');
+  assert.ok(start >= 0, 'the run-time codes table header is missing');
+  assert.equal(COMMAND.indexOf('| Code | Outcome | Kind | Meaning |', start + 1), -1, 'the run-time table header appears more than once');
+  const lines = COMMAND.slice(start).split('\n');
+  /** @type {Record<string, string>} */
+  const documented = {};
+  for (const line of lines.slice(2)) {
+    if (!line.startsWith('|')) break;
+    const m = /^\| `([A-Z_]+)` \| `(needs-human|blocked)` \| ([^`|][^|]*) \|/.exec(line);
+    assert.ok(m, `a run-time table row is malformed (the Kind cell must be plain text): ${line.slice(0, 80)}`);
+    documented[/** @type {RegExpExecArray} */ (m)[1]] = /** @type {RegExpExecArray} */ (m)[2];
+  }
+  const expected = Object.fromEntries([
+    ...Object.entries(RUNTIME_REASON_CATALOGUE).map(([code, spec]) => [code, spec.disposition]),
+    ['OVERLAY_HANDLER_INVALID', 'blocked'],
+  ]);
+  assert.deepEqual(documented, expected);
+  for (const code of Object.keys(documented)) assert.equal(Object.hasOwn(REASON_CATALOGUE, code), false, `${code} must stay outside the closed catalogue`);
 });
 
 test('AC-7 every plan-entry illustration in the command doc validates, and the declining ones decline as their catalogued outcome', () => {

@@ -30,7 +30,20 @@
 
       <h2 id="unreleased">Unreleased</h2>
 
-      <h3 id="unreleased-added">Added</h3>
+      <p>Nothing yet.</p>
+
+      <h2 id="v0-48-0">0.48.0 &#8212; 2026-10-25</h2>
+
+      <p>Vocabulary v4: step-level resilience for the QA runner. The 0.47.0 dogfood executed 31 of the 87
+        non-impossible objective steps (35.6%) of the two reference reports against a target of 90%, and most of the
+        lost steps were not impossible. This release ships phases 1&ndash;7 of
+        <code>PRPs/prds/qa-runner-vocabulary-v4.prd.md</code> and its release cut. Phase 8, the counted dogfood on the
+        same two byte-identical reports, follows. The four-outcome vocabulary, the local-only guard,
+        <code>/relay-qa-report</code> and <code>capture.mjs</code> are unchanged, and <code>npm run validate</code>
+        still runs 28 checks.</p>
+
+      <h3 id="v0-48-0-added">Added</h3>
+
       <ul>
         <li><strong><a href="roadmap/status.html#planned-provider-prompt-cache">Phase status &mdash; Planned: evaluate explicit provider prompt caching</a></strong>
           &mdash; registers an evaluation of whether the Anthropic API&rsquo;s prompt cache can make relay runs faster
@@ -39,6 +52,53 @@
           <code>docs/decisions.md</code>. Nothing is implemented.</li>
         <li><strong><a href="governance/decisions.html#provider-prompt-cache-evaluation">Decisions &mdash; entry 107</a></strong>
           &mdash; mirrors the same 2026-10-25 decision on the site.</li>
+        <li><strong>Per-step grounding gaps</strong> &mdash; a step the runner cannot ground is recorded
+          <code>human</code> with <code>STEP_UNGROUNDED</code> and the rest of the case runs; an ungrounded
+          <code>click</code>, <code>fill</code> or <code>goto</code> ends the run of the case there and the later steps
+          are recorded as not run. Only a schema error is <code>PLAN_ENTRY_INVALID</code> for the whole entry.</li>
+        <li><strong>Closed failure causes</strong> &mdash; a <code>click</code> or <code>fill</code> that cannot be
+          performed ends the case <code>blocked</code> with <code>STEP_NOT_PERFORMABLE</code> and a <code>cause</code>
+          of <code>covered</code>, <code>disabled</code>, <code>not_editable</code>, <code>absent</code>,
+          <code>detached</code> or <code>other</code>, written as a fixed sentence and never as an error text. An
+          element the report names that the page lacks ends <code>fail</code> with cause <code>absent</code>.</li>
+        <li><strong>Assertion continuation</strong> &mdash; after a failed assertion the later
+          <code>expect_*</code>, <code>query</code> and <code>judge</code> steps still run and are recorded; the first
+          interaction after the failure, and every step after it, is recorded <code>not-run</code>.</li>
+        <li><strong>Three vocabulary items</strong> &mdash; a role-only <code>expect_visible</code> inside a scope, a
+          closed <code>number</code> <code>pattern</code> for <code>expect_text</code>, and an <code>anchor_text</code>
+          scope for controls with no accessible name, each with a literal example in the command document.</li>
+        <li><strong>Validation submit</strong> &mdash; a <code>click</code> marked <code>effect: "validation"</code>
+          submits a form with a value the report gives as invalid, after a <code>fill</code> of that value; it passes
+          the same dedicated-role gate as a write and the requests it issues are recorded.</li>
+        <li><strong>Declared overlay handlers</strong> &mdash; <code>overlay_handlers</code> in
+          <code>PRPs/auth/qa-seed.json</code> declares the overlays a project shows and how to dismiss each, registered
+          with <code>page.addLocatorHandler</code> and never with a forced click. At most 10 entries, 25 firings per
+          handler per page and a 3-second dismissal are chosen, not measured; a malformed declaration blocks the case
+          <code>OVERLAY_HANDLER_INVALID</code>.</li>
+        <li><strong>Run-time codes table</strong> &mdash; the command document lists <code>STEP_NOT_PERFORMABLE</code>,
+          <code>PLAN_ENTRY_INVALID</code> as a plan defect and <code>OVERLAY_HANDLER_INVALID</code> apart from the
+          reason-code catalogue.</li>
+      </ul>
+
+      <h3 id="v0-48-0-changed">Changed</h3>
+
+      <ul>
+        <li><strong>Command document</strong> &mdash; <code>plugins/relay/commands/relay-qa-run.md</code> corrects the
+          <code>effect</code> sentence (two legal values) and the plan-time grounding sentences, and
+          <code>relay-qa-seed.md</code> recommends <code>overlay_handlers</code> in prose only. The fixed
+          <code>ROLE_NOT_DEDICATED</code> catalogue sentence now covers a validation step.</li>
+        <li><strong>Reference documents</strong> &mdash; <code>docs/api-reference.md</code> names the new exports and
+          keys, and the glossary says a role-only presence step with no element present fails with cause
+          <code>absent</code>.</li>
+        <li><strong>Decision entry 108</strong> &mdash; <code>governance/decisions.html</code> mirrors the new entry;
+          <code>roadmap/status.html</code> counts 108 decisions and lists the feature;
+          <code>reference/scripts.html</code> and <code>reference/commands.html</code> describe the v4 behavior.</li>
+        <li><strong><code>README.md</code></strong> &mdash; the live version prose names 0.48.0.</li>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.47.0</code> &rarr; <code>0.48.0</code> to
+          match this release; users running <code>/plugin</code> after pulling
+          this version will get a fresh <code>relay/0.48.0/</code> cache directory
+          with all newly-shipped commands and agents registered.</li>
       </ul>
 
       <h2 id="v0-47-0">0.47.0 &#8212; 2026-10-22</h2>

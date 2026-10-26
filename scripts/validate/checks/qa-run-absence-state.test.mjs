@@ -46,6 +46,7 @@ import {
   validateStep,
   validateSteps,
   precheckGroundedSteps,
+  groundLocators,
   settleAssertion,
   ariaExpandedOf,
   POSITIVE_ASSERTION_ACTIONS,
@@ -254,25 +255,38 @@ test('AC-10 a state or absence step on a snapshot entry of its own route and rol
   assert.equal(pre([GOTO, ABSENT]), null);
 });
 
-// PRD AC-6: a locator that is neither a snapshot entry with matches 1 nor a word of the report is PLAN_ENTRY_INVALID.
-test('AC-10 a state or absence step on an unknown, ambiguous, mis-kinded, wrong-role or route-less locator is PLAN_ENTRY_INVALID and the refusal echoes no locator', () => {
-  /** @type {[string, any, string | null][]} */
+// vocabulary v4: a locator that is neither a snapshot entry with matches 1 nor a word of the report is a step gap (STEP_UNGROUNDED), not an entry refusal.
+test('AC-10 AC-1 a state or absence step on an unknown, ambiguous, mis-kinded, wrong-role or route-less locator is a STEP_UNGROUNDED gap that names its position and echoes no locator', () => {
+  /** @type {[string, any, number][]} */
   const cases = [
-    ['an unknown state locator', pre([GOTO, STATE({ name: 'Inexistente' })]), null],
-    ['a state locator the snapshot counted twice', pre([GOTO, STATE({ name: 'Gemeo' })]), '2 elements'],
-    ['an absence locator the snapshot counted twice', pre([GOTO, { action: 'expect_not_visible', role: 'button', name: 'Gemeo' }]), '2 elements'],
-    ['an absence text the snapshot does not list', pre([GOTO, { action: 'expect_not_visible', text: 'Nada aqui' }]), null],
-    ['a role entry named as text', pre([GOTO, { action: 'expect_not_visible', text: 'Grupo' }]), null],
-    ['no goto before the locator', pre([STATE()]), null],
-    ['a route with no snapshot', pre([{ action: 'goto', path: '/missing' }, STATE()]), null],
-    ['a role the snapshots do not cover', pre([GOTO, STATE()], 'admin'), null],
+    ['an unknown state locator', pre([GOTO, STATE({ name: 'Inexistente' })]), 2],
+    ['a state locator the snapshot counted twice', pre([GOTO, STATE({ name: 'Gemeo' })]), 2],
+    ['an absence locator the snapshot counted twice', pre([GOTO, { action: 'expect_not_visible', role: 'button', name: 'Gemeo' }]), 2],
+    ['an absence text the snapshot does not list', pre([GOTO, { action: 'expect_not_visible', text: 'Nada aqui' }]), 2],
+    ['a role entry named as text', pre([GOTO, { action: 'expect_not_visible', text: 'Grupo' }]), 2],
+    ['no goto before the locator', pre([STATE()]), 1],
+    ['a route with no snapshot', pre([{ action: 'goto', path: '/missing' }, STATE()]), 2],
+    ['a role the snapshots do not cover', pre([GOTO, STATE()], 'admin'), 2],
   ];
-  for (const [label, r, part] of cases) {
-    assert.equal(r?.code, 'PLAN_ENTRY_INVALID', `${label}: ${JSON.stringify(r)}`);
-    assert.match(String(r?.reason), /^step \d+:/, label);
-    if (part !== null) assert.ok(String(r?.reason).includes(part), `${label}: ${r?.reason}`);
-    assert.ok(!/Grupo|Gemeo|Inexistente|Nada aqui|Buy milk|Mensagem/.test(String(r?.reason)), `${label}: the refusal echoes a locator: ${r?.reason}`);
+  for (const [label, r, position] of cases) {
+    assert.equal(r?.code, 'STEP_UNGROUNDED', `${label}: ${JSON.stringify(r)}`);
+    assert.match(String(r?.reason), new RegExp(`^step ${position}: `), label);
+    assert.ok(!/Grupo|Gemeo|Inexistente|Nada aqui|Buy milk|Mensagem|elements/.test(String(r?.reason)), `${label}: the reason echoes a locator: ${r?.reason}`);
   }
+});
+
+test('AC-1 an absence whose only positive anchor is an ungrounded assertion is a gap too, so an absence is never asserted on a page whose anchor was skipped', () => {
+  const unlistedAnchor = { action: 'expect_visible', role: 'heading', name: 'Sem Fonte' };
+  // The anchor is itself a gap: the absence step after it is a gap, nothing else is.
+  const g = groundLocators([GOTO, unlistedAnchor, ABSENT], SNAPSHOTS, 'Open the form.', null);
+  assert.deepEqual(g.gaps, [{ at: 1, kind: 'assertion' }, { at: 2, kind: 'assertion' }]);
+  assert.equal(g.truncateAt, null);
+  // A grounded anchor keeps the absence a normal step.
+  const ok = groundLocators([GOTO, STATE(), ABSENT], SNAPSHOTS, 'Open the form.', null);
+  assert.deepEqual(ok.gaps, []);
+  // The anchor of one route does not carry to a second goto.
+  const reloaded = groundLocators([GOTO, STATE(), GOTO, ABSENT], SNAPSHOTS, 'Open the form.', null);
+  assert.deepEqual(reloaded.gaps, [], 'validateSteps owns the sequence rule; the gap pass adds none of its own');
 });
 
 // ---------------------------------------------------------------------------

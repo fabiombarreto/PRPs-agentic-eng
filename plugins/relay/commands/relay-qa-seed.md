@@ -154,6 +154,11 @@ If any is missing, HALT with the byte-exact pattern shared by every relay comman
    of an older one. This command only recommends: it never writes `captures`, and a
    proposal still carries none.
 
+   Also recommend, in prose only, that the operator declare `overlay_handlers` in
+   `PRPs/auth/qa-seed.json` for any overlay the report's pages are known to show (a
+   developer-tools panel, an onboarding tour). This command never writes that key, and
+   `/relay-qa-run` documents its shape.
+
 ---
 
 ## Constraints (hard rules)

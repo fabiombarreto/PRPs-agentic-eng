@@ -226,7 +226,8 @@ test('AC-4 requireVisibleToPerson returns null for a visible element and the fix
 test('AC-4 requireVisibleToPerson returns the blocked STEP_NOT_PERFORMABLE verdict, never a pass, for a page that cannot be read', BROWSER, async () => {
   const target = await locatorOfClosedPage();
   const verdict = await requireVisibleToPerson(target, 5, { boundMs: 300, intervalMs: 50 });
-  assert.deepEqual(verdict, { outcome: 'blocked', reason_code: 'STEP_NOT_PERFORMABLE', reason: UNREADABLE(5), evidence: [] });
+  // Vocabulary v4 (AC-4): every STEP_NOT_PERFORMABLE verdict carries a cause of the closed list; a page that cannot be read has none to name, so it is `other`.
+  assert.deepEqual(verdict, { outcome: 'blocked', reason_code: 'STEP_NOT_PERFORMABLE', reason: UNREADABLE(5), evidence: [], cause: 'other' });
 });
 
 test('AC-4 requireVisibleToPerson re-reads inside the settle window, so an element that fades in is accepted, and one that never does is rejected', BROWSER, async () => {

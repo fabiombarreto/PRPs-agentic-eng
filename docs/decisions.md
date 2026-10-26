@@ -2552,8 +2552,6 @@ Until a PRD is authored via `/relay-prd` and approved, the 2026-04-19 entry stay
 
 **Areas affected:** `plugins/relay/scripts/qa-run.mjs`; `plugins/relay/commands/relay-qa-run.md`; `plugins/relay/commands/relay-qa-seed.md`; `plugins/relay/commands/relay-auth-scripts.md`; `scripts/validate/checks/qa-run-contract.mjs`; `documentation/` (governance/decisions, reference/scripts, roadmap/status, changelog).
 
----
-
 ## [2026-10-25] Using the provider's explicit prompt cache to speed up plugin execution is a registered evaluation
 
 **Context:** A relay run is dominated by model calls: `/relay-execute` drives, per phase, a writer and a reviewer for the plan, the implementation, the tests and the docs, and every `Task` dispatch starts a subagent that re-reads the same large, stable material before it does any work. That material is its agent definition, `docs/context/methodology.md`, the plan, the source PRD, and the rubric and template files under `plugins/relay/resources/`. Retries repeat it: a `CHANGES_REQUESTED` verdict re-dispatches the writer with almost the same prefix, and `code-reviewer` re-reads the same plan on every attempt. The Anthropic API offers prompt caching, where a request marks a stable prefix with a `cache_control` breakpoint and later requests that share that prefix read it at a fraction of the input-token cost and latency, within a time-to-live (TTL). relay does not call the API itself: it is prompt and configuration, and Claude Code issues every request and decides where the cache breakpoints go. A plugin's markdown therefore cannot place an explicit breakpoint; what it controls is the order and stability of what each agent reads, and the session settings the operator runs with. The one place in this repository that calls the API directly is `npm run eval` (`scripts/eval.mjs` running `promptfoo` with `ANTHROPIC_API_KEY`), where an explicit breakpoint can be set. No relay consumer reads cache usage today: `scripts/efficiency.mjs` and `plugins/relay/scripts/usage-metrics.mjs` record no cache-read or cache-write token counts. The operator asked (2026-10-25) to check whether the provider's explicit cache can make plugin execution faster.
@@ -2576,6 +2574,28 @@ Until a PRD is authored via `/relay-prd` and approved, the 2026-04-19 entry stay
 - Changing the field contract of `usage-metrics.mjs` or `efficiency.mjs`.
 
 **Areas affected (when eventually decided):** `plugins/relay/agents/` (reading order), `plugins/relay/commands/relay-execute.md`, `relay-implement.md`, `relay-plan.md` (dispatch inputs); `plugins/relay/scripts/usage-metrics.mjs` and `scripts/efficiency.mjs` (cache-token fields); `scripts/eval.mjs` and `promptfooconfig.yaml`; `docs/context/architecture.md`; `documentation/` (governance/decisions, roadmap/status, changelog).
+
+---
+
+## [2026-10-25] The QA runner degrades by step and names every failure: per-step grounding gaps, closed failure causes, assertion continuation, three vocabulary items, validation submits and declared overlay handlers (vocabulary v4)
+
+**Context:** The 0.47.0 dogfood executed 31 of the 87 non-impossible objective steps (35.6%) of the two reference reports against a 90% target, and the lost steps were mostly not impossible: one mis-grounded step forfeited a whole case, an error message was reachable only after a validation submit, controls had no accessible name, known overlays covered the page and a product defect stopped a case at its first failing assertion. `PRPs/prds/qa-runner-vocabulary-v4.prd.md` phases 1 to 6 are implemented in the 0.48.0 release and their manifests proposed separate candidates; this entry registers them together, the way the 2026-10-22 entry did. Phase 8, the counted dogfood, measures them.
+
+**Decision:**
+1. **Plan validation degrades per step for grounding and stays per entry for schema errors.** An ungrounded assertion is a step gap recorded `human` with `STEP_UNGROUNDED` and the rest runs; an ungrounded `click`, `fill` or `goto` truncates the rest of the case; an unknown action, a missing key, an invalid `effect` or an unbound `{{name}}` is still `PLAN_ENTRY_INVALID` for the entry.
+2. **A failed action reports a closed cause, never an error text.** `STEP_NOT_PERFORMABLE` carries a `cause` of `covered`, `disabled`, `not_editable`, `absent`, `detached` or `other` derived by pre-checks; reasons stay fixed sentences (the redaction policy). `STEP_NOT_PERFORMABLE` and `PLAN_ENTRY_INVALID` sit in `RUNTIME_REASON_CATALOGUE`, outside `REASON_CATALOGUE`: the first is a `gap`, the second a plan defect and not a decline. `OVERLAY_HANDLER_INVALID` is a declaration halt outside both.
+3. **An element the report names that the product lacks is a `fail`.** Cause `absent`; a locator that matches more than one element still ends `needs-human` `STEP_UNGROUNDED`. This extends item 2 of the 2026-10-22 entry.
+4. **Assertions continue, interactions stop.** After a failed assertion the `expect_*`, `query` and `judge` steps still run; the first `goto`, `click`, `fill`, `request`, `read_message` or any step with an `effect`, and everything after it, is `not-run`.
+5. **Three vocabulary items reach steps the reports describe without literal text.** A role-only `expect_visible` inside a `within` scope, a closed `number` `pattern` for `expect_text`, and a `within.anchor_text` scope. No planner-written selectors and no forced actions.
+6. **A validation submit is a `click` with `effect: "validation"`.** It needs a dedicated role (the same gate as a write) and an earlier `fill` whose value appears verbatim in the case's manual steps; its requests are recorded; `ground --prefix` never submits.
+7. **Overlays are dismissed only by handlers the project declares.** `overlay_handlers` in `PRPs/auth/qa-seed.json` beside `channel_sources`, registered with `page.addLocatorHandler`, role-and-name or text locators only, every dismissal recorded in the case evidence, a handler with `effect: "write"` registered only for a dedicated role, a dismissal that leaves the guard-approved origin blocks the case `FAILED_NON_LOCAL_TARGET`, never a forced click. The constants are chosen, not measured: 25 firings per handler per page, a 3-second dismissal bound and 10 entries; the dogfood recalibrates them.
+8. **v4 ships as 0.48.0 and is measured on the same two byte-identical reports.** Target at least 90% executed per project and over both, with zero false passes; phase 8 reads it against the frozen table.
+
+**Reason:** Each item removes a reason for a person to do what the runner can do, or makes the remainder precise: a grounding miss is local to one step, a schema error means the planner misread the vocabulary; a closed cause turns "could not be performed" into something the planner can fix without leaking page text; reporting an absent element as a result keeps a product defect from reading as a planning gap; declared handlers are Playwright's documented mechanism and keep every dismissal visible and attributable.
+
+**Out of scope / not promoted:** any change to entries 105 and 106; the dogfood kit fixes (phase 8); the `uncertain` policy; planner-written selectors and forced actions.
+
+**Areas affected:** `plugins/relay/scripts/qa-run.mjs`; `plugins/relay/commands/relay-qa-run.md`; `plugins/relay/commands/relay-qa-seed.md`; `docs/api-reference.md`; `docs/domain/glossary.md`; `documentation/` (governance/decisions, reference/scripts, reference/commands, roadmap/status, changelog).
 
 ---
 

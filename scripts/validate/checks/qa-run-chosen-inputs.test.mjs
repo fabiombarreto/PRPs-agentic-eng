@@ -229,31 +229,36 @@ const MANUAL = 'Open the page and use the search.';
 /** @param {Record<string, any>} o */
 const exp = (o) => ({ action: 'expect_value', role: 'textbox', name: 'Busca', ...o });
 
-test('AC-11 an unmarked chosen literal is refused as an expectation, and an earlier chosen fill makes it expectable', () => {
+// vocabulary v4: an expectation whose literal has no source is a step gap (assertion), never an entry refusal.
+const NO_GAP = { gaps: [], truncateAt: null, runtime: [] };
+/** @param {number} at zero-based index of the expectation step */
+const assertionGap = (at) => ({ gaps: [{ at, kind: 'assertion' }], truncateAt: null, runtime: [] });
+
+test('AC-11 AC-1 an unmarked chosen literal is a step gap as an expectation, and an earlier chosen fill makes it expectable', () => {
   const flow = [GOTO, FILL, exp({ equals: 'Maria' })];
-  const refused = R.groundLocators(flow, [SNAP], MANUAL, null).refusal;
-  assert.equal(refused?.code, 'PLAN_ENTRY_INVALID');
-  assert.match(String(refused?.reason), /^step 3: expect_value equals must come from the report's own steps or be bound by a declared capture$/);
-  assert.equal(R.groundLocators(flow, [SNAP], MANUAL, null, [item()]).refusal, null);
+  const refused = R.groundLocators(flow, [SNAP], MANUAL, null);
+  assert.deepEqual(refused, assertionGap(2));
+  assert.deepEqual(R.precheckGroundedSteps(flow, [SNAP], MANUAL, null), { code: 'STEP_UNGROUNDED', reason: 'step 3: the step could not be grounded to exactly one element' });
+  assert.ok(!JSON.stringify(refused).includes('Maria'), 'a gap carries no literal');
+  assert.deepEqual(R.groundLocators(flow, [SNAP], MANUAL, null, [item()]), NO_GAP);
 });
 
 test('AC-11 a chosen fill counts only for a LATER step, only when the item names a fill, and equals needs the whole chosen value', () => {
   const early = [GOTO, exp({ equals: 'Maria' }), FILL];
-  assert.equal(R.groundLocators(early, [SNAP], MANUAL, null, [item({ step: 3 })]).refusal?.code, 'PLAN_ENTRY_INVALID');
-  assert.equal(R.groundLocators([GOTO, FILL, exp({ equals: 'Maria' })], [SNAP], MANUAL, null, [item({ step: 1 })]).refusal?.code, 'PLAN_ENTRY_INVALID', 'an item on a goto chooses nothing');
-  assert.equal(R.groundLocators([GOTO, FILL, exp({ equals: 'Mar' })], [SNAP], MANUAL, null, [item()]).refusal?.code, 'PLAN_ENTRY_INVALID');
-  assert.equal(R.groundLocators([GOTO, FILL, exp({ contains: 'Mar' })], [SNAP], MANUAL, null, [item()]).refusal, null, 'contains may use a part of the chosen value');
-  assert.equal(R.groundLocators([GOTO, FILL, exp({ equals: 'maria' })], [SNAP], MANUAL, null, [item()]).refusal, null, 'the comparison folds case like the report comparison');
-  assert.equal(R.groundLocators([GOTO, FILL, exp({ contains: 'Joana' })], [SNAP], MANUAL, null, [item()]).refusal?.code, 'PLAN_ENTRY_INVALID', 'a part of nothing');
+  assert.deepEqual(R.groundLocators(early, [SNAP], MANUAL, null, [item({ step: 3 })]), assertionGap(1));
+  assert.deepEqual(R.groundLocators([GOTO, FILL, exp({ equals: 'Maria' })], [SNAP], MANUAL, null, [item({ step: 1 })]), assertionGap(2), 'an item on a goto chooses nothing');
+  assert.deepEqual(R.groundLocators([GOTO, FILL, exp({ equals: 'Mar' })], [SNAP], MANUAL, null, [item()]), assertionGap(2));
+  assert.deepEqual(R.groundLocators([GOTO, FILL, exp({ contains: 'Mar' })], [SNAP], MANUAL, null, [item()]), NO_GAP, 'contains may use a part of the chosen value');
+  assert.deepEqual(R.groundLocators([GOTO, FILL, exp({ equals: 'maria' })], [SNAP], MANUAL, null, [item()]), NO_GAP, 'the comparison folds case like the report comparison');
+  assert.deepEqual(R.groundLocators([GOTO, FILL, exp({ contains: 'Joana' })], [SNAP], MANUAL, null, [item()]), assertionGap(2), 'a part of nothing');
 });
 
 test('AC-11 an expect_text contains may use the chosen value too, and not without the declaration', () => {
   const textFlow = [GOTO, FILL, { action: 'expect_text', text: 'Resultado', contains: 'Maria' }];
   const manual = `${MANUAL} See Resultado.`;
-  const refused = R.groundLocators(textFlow, [SNAP], manual, null).refusal;
-  assert.equal(refused?.code, 'PLAN_ENTRY_INVALID');
-  assert.match(String(refused?.reason), /^step 3: expect_text contains must come from the report's own steps, not from the snapshot$/);
-  assert.equal(R.groundLocators(textFlow, [SNAP], manual, null, [item()]).refusal, null);
+  assert.deepEqual(R.groundLocators(textFlow, [SNAP], manual, null), assertionGap(2));
+  // The text 'Resultado' is a word of the report, so the browser resolves it when the case runs.
+  assert.deepEqual(R.groundLocators(textFlow, [SNAP], manual, null, [item()]), { gaps: [], truncateAt: null, runtime: [2] });
 });
 
 test('AC-11 the chosen parameter is optional and grounding never throws on a hostile chosen_inputs', () => {
@@ -469,8 +474,11 @@ test('AC-11 AC-12 end to end: a write by a role that is not dedicated is blocked
   // AC-11: a literal a snapshot lists, folded for case, is accepted by the gate and may be expected afterwards;
   // the same plan without the declaration is refused at the expectation.
   assert.ok(!String(c[12].reason ?? '').includes('chosen_inputs') && c[12].reason_code !== 'PLAN_ENTRY_INVALID', show(12));
-  assert.deepEqual(at(13), ['needs-human', 'PLAN_ENTRY_INVALID'], show(13));
-  assert.match(c[13].reason, /^step 3: expect_value equals must come from/, show(13));
+  // vocabulary v4: the undeclared expectation is a step gap, not an entry refusal. The entry is not refused at plan
+  // time: its valid part goes on to the session stage (this fixture has no login script), so it ends blocked there.
+  assert.equal(c[13].outcome, 'blocked', show(13));
+  assert.ok(['SESSION_UNAVAILABLE', 'FAILED_PLAYWRIGHT_UNAVAILABLE'].includes(c[13].reason_code), show(13));
+  assert.ok(!/expect_value|chosen_inputs/.test(String(c[13].reason)), show(13));
 
   // No chosen literal, no snapshot name and no role name reaches results.json or any reason.
   const raw = /** @type {string} */ (r.raw);
@@ -521,8 +529,11 @@ test('AC-22 the run command carries one marked plan-entry example with chosen_in
   const route = e.steps.find((/** @type {any} */ s) => s.action === 'goto').path;
   const page = [snap(route, [{ kind: 'role', role: chosenStep.role, name: chosenStep.name, matches: 1 }, { kind: 'role', role: 'link', name: `Ver ${chosenStep.value} agora`, matches: 1 }])];
   assert.equal(R.chosenSnapshotRefusal(e.steps, e.chosen_inputs, page), null);
-  assert.equal(R.groundLocators(e.steps, page, '', e.role, e.chosen_inputs).refusal, null);
-  assert.equal(R.groundLocators(e.steps, page, '', e.role).refusal?.code, 'PLAN_ENTRY_INVALID', 'without the declaration the expectation is an unmarked chosen literal');
+  assert.deepEqual(R.groundLocators(e.steps, page, '', e.role, e.chosen_inputs).gaps, []);
+  const undeclared = R.groundLocators(e.steps, page, '', e.role);
+  assert.ok(undeclared.gaps.length >= 1, 'without the declaration the expectation is an unmarked chosen literal, a step gap');
+  assert.ok(undeclared.gaps.every((/** @type {any} */ g) => g.kind === 'assertion'), 'the gap is the expectation, never an interaction');
+  assert.equal(undeclared.truncateAt, null);
 });
 
 test('AC-22 the run command states the two sources, the 3-character floor, the 200-character reason and the dedicated flag', () => {

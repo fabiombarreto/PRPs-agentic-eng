@@ -365,15 +365,27 @@ snapshot").
 A locator step is also valid when its `name` or `text` appears in the case's manual
 steps: it then has no snapshot entry, and the runner resolves it when the case runs,
 passing on exactly one match and ending the case `needs-human` `STEP_UNGROUNDED` on none
-or several; a locator that is neither a snapshot entry nor a word of the report is
-`PLAN_ENTRY_INVALID`. Four optional keys reshape a locator and are always resolved when
+or several; a locator that is neither a snapshot entry nor a word of the report is a
+step gap (an assertion is skipped, an ungrounded `click` or `fill` truncates the rest of
+the case; each is recorded `human` with `STEP_UNGROUNDED`), not an entry refusal. Four optional keys reshape a locator and are always resolved when
 the case runs: `within` (a `role` plus `name` or `name_prefix` scope that must resolve to
 exactly one element, chained so the locator matches only inside it), `name_prefix`
 (a name matched by its start, for a name that embeds a live count), `label_text` (an input
 whose label is not associated with it: from the one element whose visible text equals the
 label, the runner walks up to the nearest ancestor that holds exactly one `input`,
 `textarea` or `select`) and `index` (the zero-based position among the elements of a
-`role` inside a `within` scope). See `plugins/relay/commands/relay-qa-run.md`.
+`role` inside a `within` scope). A `within` may instead be `{ anchor_text }`: the scope
+is the nearest ancestor of the one visible element carrying that text that holds an
+element of the step's role; it is refused on `fill` and `expect_value` and with a
+role-only target, and none or several anchors end the case `needs-human`
+`STEP_UNGROUNDED` (the reason never echoes the anchor text). An `expect_visible` with
+`within` and a `role` but no name passes when at least one element of that role inside
+the scope is visible to a person (none present fails with cause `absent`; present but none visible to a person fails
+without a cause); without
+`within` it is `PLAN_ENTRY_INVALID`. An `expect_text` may carry `pattern: "number"`
+(a name from the closed list `TEXT_PATTERN_NAMES`) instead of `contains`, never both. Project-declared overlay handlers (`overlay_handlers` in
+`PRPs/auth/qa-seed.json`) dismiss known overlays before an action and record each dismissal.
+See `plugins/relay/commands/relay-qa-run.md`.
 
 A browser step that is none of these three, `expect_requests`, counts the
 requests the page issues instead of reading an element. It takes no locator, is
@@ -413,11 +425,19 @@ whose value the planner chose because the report leaves it open, each with a `so
 least 3 characters found, whitespace collapsed and case ignored, in the name or text of
 an entry of a grounding snapshot of the run directory); a literal found nowhere is
 `PLAN_ENTRY_INVALID`, and a later `expect_value` or `expect_text` may expect a chosen
-value. `effect` is an optional step key with the single value `write`, valid on a
-`click`, `fill` or `request` step: a case that carries a marked step is blocked with
+value. `effect` is an optional step key with the values `write` (valid on a
+`click`, `fill` or `request` step) and `validation` (valid on a `click` only): a case that
+carries a step marked with either value is blocked with
 `ROLE_NOT_DEDICATED`, before any seed, session or request, unless the case's role has
 `"dedicated": true` in `PRPs/auth/login.config.json`, a flag the operator sets by hand
-and `/relay-auth-scripts` never writes. See `plugins/relay/commands/relay-qa-run.md`.
+and `/relay-auth-scripts` never writes. A `validation` click is the submit of a form
+with the report's own invalid value: it needs an earlier `fill` in the same case whose
+value (no `{{binding}}`, at least 3 characters) appears in the case's manual steps,
+whitespace collapsed and case ignored, else the entry is `PLAN_ENTRY_INVALID`. The
+requests the click issues are recorded as method, host and path only, in a capped list
+(`case-<n>.requests-<step>.json`), and a request to a host the local-only guard does not
+approve blocks the case `FAILED_NON_LOCAL_TARGET`. `ground --prefix` refuses any step
+that carries an `effect`. See `plugins/relay/commands/relay-qa-run.md`.
 
 A third plan-side declaration of `/relay-qa-run` is the `judge` step, for a visual,
 language or checklist judgment that the report's own steps ask for. Its `criterion`
@@ -438,6 +458,16 @@ after the case began, binds the first group of its regular expression to a varia
 case and registers the value for redaction, so it reaches no evidence file, reason or
 terminal line. A case that needs a message from a channel with no declared source is
 declined as before. See `plugins/relay/commands/relay-qa-run.md`.
+
+A fifth plan-side declaration is `overlay_handlers`, beside `channel_sources` in
+`PRPs/auth/qa-seed.json`: up to 10 entries, each an `id`, a `trigger` and a `dismiss` element
+(exact role and name, or exact text) and an optional `effect` of `write`. The runner registers
+each once per page, so the dismissal runs before a click or a fill (3-second click, no force);
+a `write` handler is skipped for a role not declared dedicated, an overlay that is not declared
+is never dismissed, and a dismissal that leaves the approved origin ends the case
+`FAILED_NON_LOCAL_TARGET`. A malformed declaration blocks every browser case
+`OVERLAY_HANDLER_INVALID`. The evidence `case-<index>.overlay.json` holds handler ids, step
+positions and result words only. See `plugins/relay/commands/relay-qa-run.md`.
 
 The preflight of `/relay-qa-run` is a read-only mode of `qa-run.mjs` that checks the
 environment before a run starts, with no network request: that Playwright resolves from
@@ -537,7 +567,15 @@ case is `blocked` `FAILED_NON_LOCAL_TARGET` with nothing asserted, and when it
 does not match it is ignored. A failing step's reason carries only a step
 position and the observed and expected counts. An action the validator accepts
 but the browser driver has no branch for ends `STEP_NOT_PERFORMABLE` through the
-driver's terminal branch and is never recorded as passed.
+driver's terminal branch and is never recorded as passed. A `STEP_NOT_PERFORMABLE`
+result for a failed `click` or `fill` carries a `cause` from a closed list
+(`covered`, `disabled`, `not_editable`, `absent`, `detached`, `other`) on the
+failed step record and the case result; it is derived from pre-checks and never
+read from a thrown error, and the reason is a fixed phrase. A positive assertion
+whose report-worded locator matches nothing is `fail` with cause `absent`, not
+`blocked`. The run-time-only codes `STEP_NOT_PERFORMABLE` (class `gap`) and
+`PLAN_ENTRY_INVALID` (class `plan-defect`) are classed in the exported
+`RUNTIME_REASON_CATALOGUE`, outside `REASON_CATALOGUE`.
 
 The evidence file is `evidence/case-<index>.requests-<step>.json`: the action,
 the step position, the method, the expected and observed counts, `truncated`,

@@ -1083,8 +1083,8 @@ async function guardTarget(baseUrl, root) {
 // ---------------------------------------------------------------------------
 
 /**
- * @typedef {{ index: number, action: string, result: string, evidence: string | null, kind?: string, scope_evidence?: string | null, judged_by?: string, judgment_evidence?: string }} StepRecord
- * @typedef {{ outcome: string, reason_code: string | null, reason: string | null, evidence: string[], steps?: StepRecord[], pending_judgment?: number[], record_stale?: string[] }} CaseResult
+ * @typedef {{ index: number, action: string, result: string, evidence: string | null, reason_code?: string | null, reason?: string, kind?: string, scope_evidence?: string | null, judged_by?: string, judgment_evidence?: string, cause?: string }} StepRecord
+ * @typedef {{ outcome: string, reason_code: string | null, reason: string | null, evidence: string[], steps?: StepRecord[], pending_judgment?: number[], record_stale?: string[], cause?: string }} CaseResult
  * @typedef {{ root: string, runDirAbs: string, runDirRel: string, table: RedactionTable, target: NonNullable<Target>, playwright: any, loginConfig: any, sessions: Map<string, any>, seeds: Map<string, any>, seedConfig: any, anonChecks: Map<string, any> }} RunCtx
  * @typedef {{ path: string | null, token: string | null, header?: string | null, valuePrefix?: string | null }} SessionInfo
  */
@@ -1097,6 +1097,79 @@ const blocked = (code, reason, evidence = []) => ({ outcome: 'blocked', reason_c
 /** @param {string} code @param {string} reason @returns {CaseResult} */
 const needsHuman = (code, reason) => ({ outcome: 'needs-human', reason_code: code, reason, evidence: [] });
 
+/** The closed list of causes a blocked action can carry. A cause is derived by pre-checks, never read from an error. */
+export const STEP_FAILURE_CAUSES = Object.freeze(['covered', 'disabled', 'not_editable', 'absent', 'detached', 'other']);
+/** The fixed phrase of each cause: letters and spaces only, so no page text or error can reach a reason. */
+export const STEP_CAUSE_PHRASES = Object.freeze({
+  covered: 'another element covered it at the action point',
+  disabled: 'it was disabled',
+  not_editable: 'it was not editable',
+  absent: 'it was not found on the page',
+  detached: 'it was detached from the page during the action',
+  other: 'no closed cause applies',
+});
+/** @param {number} n @param {string} action @param {string} cause @returns {string} */
+export function actionFailureReason(n, action, cause) {
+  const a = action === 'click' || action === 'fill' ? action : 'step';
+  const c = STEP_FAILURE_CAUSES.includes(cause) ? cause : 'other';
+  return `step ${n}: the ${a} target could not be acted on: ${STEP_CAUSE_PHRASES[c]}`;
+}
+/** @param {number} n @returns {string} */
+export function absentElementReason(n) {
+  return `step ${n}: the element the report names was not found on the page after the wait`;
+}
+/**
+ * Maps pre-check facts to the closed cause list. Pure; first match wins; an unknown fact (null) is `other`.
+ * @param {{ action?: string, count?: number | null, attached?: boolean, enabled?: boolean | null, editable?: boolean | null, covered?: boolean | null }} facts
+ * @returns {string}
+ */
+export function causeOf(facts) {
+  const { action, count, attached, enabled, editable, covered } = facts;
+  if (count === 0) return attached === true ? 'detached' : 'absent';
+  if (typeof count === 'number' && count > 1) return 'other';
+  if (enabled === false) return 'disabled';
+  if (action === 'fill' && editable === false) return 'not_editable';
+  if (action === 'click' && covered === true) return 'covered';
+  return 'other';
+}
+/**
+ * In-page hit-test at the center of an element. Self-contained: Playwright serializes it into the page.
+ * @param {any} el
+ * @returns {boolean | null}
+ */
+export function isCoveredAtActionPoint(el) {
+  if (typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center', inline: 'center' });
+  const r = el.getBoundingClientRect();
+  if (!(r.width > 0) || !(r.height > 0)) return null;
+  const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  if (hit === null || hit === undefined) return null;
+  return !(hit === el || el.contains(hit));
+}
+/**
+ * Gathers the pre-check facts of a failed click or fill and classifies them. Never calls an action and never
+ * reads, stores or returns a thrown error.
+ * @param {any} target @param {string} action @param {boolean} attached
+ * @returns {Promise<string>}
+ */
+export async function probeActionFailure(target, action, attached) {
+  const count = await Promise.resolve().then(() => target.count()).catch(() => 0);
+  const enabled = await Promise.resolve().then(() => target.isEnabled({ timeout: 1000 })).catch(() => null);
+  const editable = action === 'fill' ? await Promise.resolve().then(() => target.isEditable({ timeout: 1000 })).catch(() => null) : null;
+  const covered = action === 'click' ? await Promise.resolve().then(() => target.evaluate(isCoveredAtActionPoint)).catch(() => null) : null;
+  return causeOf({ action, count, attached, enabled, editable, covered });
+}
+/** @param {string} reason @param {string} [cause] @returns {CaseResult} */
+export const notPerformable = (reason, cause = 'other') => ({ ...blocked('STEP_NOT_PERFORMABLE', reason), cause: STEP_FAILURE_CAUSES.includes(cause) ? cause : 'other' });
+// These two run-time codes sit outside REASON_CATALOGUE: the command doc's code table (Phase 7) folds them in.
+export const RUNTIME_REASON_CATALOGUE = Object.freeze({
+  STEP_NOT_PERFORMABLE: Object.freeze({ disposition: 'blocked', class: 'gap', causes: STEP_FAILURE_CAUSES, reason: "a step's target could not be acted on; the cause is one word of the closed list" }),
+  PLAN_ENTRY_INVALID: Object.freeze({ disposition: 'needs-human', class: 'plan-defect', decline: false, reason: 'the plan entry is malformed (a schema error); it is a defect of the plan, not a decline of the case' }),
+});
+/** @param {string} code @returns {string | null} */
+export function runtimeReasonClassOf(code) {
+  return Object.hasOwn(RUNTIME_REASON_CATALOGUE, code) ? RUNTIME_REASON_CATALOGUE[code].class : null;
+}
+
 const HTTP_METHODS = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'];
 const isStr = (/** @type {any} */ v) => typeof v === 'string';
 const isObj = (/** @type {any} */ v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -1105,6 +1178,7 @@ const HTTP_ACTIONS = ['request', 'query'];
 const API_ORIGIN_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/;
 const BROWSER_ACTIONS = ['goto', 'click', 'fill', 'expect_visible', 'expect_text', 'expect_url', 'query', 'expect_value', 'expect_not_visible', 'expect_state', 'expect_requests', 'judge'];
 const API_HEADER_FORBIDDEN = ['host', 'content-length', 'cookie', 'transfer-encoding'];
+const GAP_INTERACTION_ACTIONS = Object.freeze(['click', 'fill']);
 const LOCATOR_ACTIONS = ['click', 'fill', 'expect_visible', 'expect_text', 'expect_value', 'expect_not_visible', 'expect_state'];
 const LOCATOR_ROLES = ['button', 'link', 'textbox', 'checkbox', 'radio', 'combobox', 'heading', 'tab', 'menuitem', 'option', 'switch', 'searchbox', 'spinbutton', 'slider', 'dialog', 'alert', 'status', 'row', 'cell', 'columnheader', 'listitem', 'img', 'navigation', 'region', 'table', 'menu', 'tabpanel'];
 
@@ -1121,6 +1195,21 @@ export const EXPECT_STATES = Object.freeze(['expanded', 'disabled', 'checked']);
 
 /** The optional step keys that scope or reshape a locator; a step that carries any of them is a scoped locator step. */
 export const SCOPED_LOCATOR_KEYS = Object.freeze(['within', 'name_prefix', 'label_text', 'index']);
+
+/** The closed list of text patterns an `expect_text` step may declare instead of a literal. */
+export const TEXT_PATTERN_NAMES = Object.freeze(['number']);
+
+/**
+ * Whether a text matches a named pattern. Pure and total: false for an unknown pattern or a non-string text.
+ * @param {any} name
+ * @param {any} text
+ * @returns {boolean}
+ */
+export function textMatchesPattern(name, text) {
+  if (typeof name !== 'string' || !TEXT_PATTERN_NAMES.includes(name) || typeof text !== 'string') return false;
+  if (name === 'number') return /[0-9]+/.test(text);
+  return false;
+}
 
 /** The kinds of judgment a `judge` step may ask for, the verdicts a judgment may record, and the limits of the texts (chosen, not measured). */
 export const JUDGE_KINDS = Object.freeze(['visual', 'language', 'checklist']);
@@ -1146,10 +1235,18 @@ const MESSAGE_TO_PATTERN = /^[^\s"'<>\\]{3,254}$/;
 /**
  * Validates the `within` object of a step: a supported `role` and exactly one of `name` or `name_prefix`, both
  * non-empty strings. Pure and total: it never throws and a reason names keys, never a value.
+ * With `opts.allowAnchor` the form `{ anchor_text }` (alone) is also valid and yields `{ anchorText }`.
  * @param {any} within
- * @returns {{ ok: true, scope: { role: string, name?: string, namePrefix?: string } } | { ok: false, why: string }}
+ * @param {{ allowAnchor?: boolean }} [opts]
+ * @returns {{ ok: true, scope: { role: string, name?: string, namePrefix?: string, anchorText?: string } } | { ok: false, why: string }}
  */
-export function scopeOf(within) {
+export function scopeOf(within, opts = {}) {
+  if (opts.allowAnchor === true && isObj(within) && within.anchor_text !== undefined) {
+    if (Object.keys(within).length !== 1 || !isStr(within.anchor_text) || within.anchor_text.trim() === '') {
+      return { ok: false, why: 'within takes anchor_text alone, or a role and a name or name_prefix' };
+    }
+    return { ok: true, scope: { anchorText: within.anchor_text } };
+  }
   if (!isObj(within) || Object.keys(within).some((k) => !['role', 'name', 'name_prefix'].includes(k))) {
     return { ok: false, why: 'within takes only a role and a name or name_prefix' };
   }
@@ -1163,16 +1260,16 @@ export function scopeOf(within) {
 /**
  * The locator form of a step that carries `within`, `name_prefix`, `label_text` or `index`. Pure and total.
  * @param {any} step an object that carries at least one of SCOPED_LOCATOR_KEYS
- * @returns {{ ok: false, why: string } | { ok: true, form: 'scoped', scope: null | { role: string, name?: string, namePrefix?: string }, target: { kind: 'role', role: string, name: string } | { kind: 'role-prefix', role: string, namePrefix: string } | { kind: 'text', text: string } | { kind: 'label', labelText: string } | { kind: 'nth', role: string, index: number } }}
+ * @returns {{ ok: false, why: string } | { ok: true, form: 'scoped', scope: null | { role?: string, name?: string, namePrefix?: string, anchorText?: string }, target: { kind: 'role-any', role: string } | { kind: 'role', role: string, name: string } | { kind: 'role-prefix', role: string, namePrefix: string } | { kind: 'text', text: string } | { kind: 'label', labelText: string } | { kind: 'nth', role: string, index: number } }}
  */
 function scopedLocatorOf(step) {
   /** @param {string} why @returns {{ ok: false, why: string }} */
   const bad = (why) => ({ ok: false, why });
   const named = (/** @type {any} */ v) => isStr(v) && v.trim() !== '';
   if (step.selector !== undefined) return bad('a step names one locator form: selector, role and name, or text');
-  /** @type {null | { role: string, name?: string, namePrefix?: string }} */ let scope = null;
+  /** @type {null | { role?: string, name?: string, namePrefix?: string, anchorText?: string }} */ let scope = null;
   if (step.within !== undefined) {
-    const s = scopeOf(step.within);
+    const s = scopeOf(step.within, { allowAnchor: true });
     if (!s.ok) return bad(s.why);
     scope = s.scope;
   }
@@ -1183,17 +1280,23 @@ function scopedLocatorOf(step) {
   const hasLabel = step.label_text !== undefined;
   const hasIndex = step.index !== undefined;
   if (hasText) {
+    if (scope !== null && scope.anchorText !== undefined) return bad('within anchor_text needs a role');
     if (hasRole || hasName || hasPrefix || hasLabel || hasIndex) return bad('a step names one locator form: role with name, name_prefix or index; text; or label_text');
     if (!named(step.text)) return bad('text must be a non-empty string');
     return { ok: true, form: 'scoped', scope, target: { kind: 'text', text: step.text } };
   }
   if (hasLabel) {
+    if (scope !== null && scope.anchorText !== undefined) return bad('within anchor_text needs a role');
     if (hasRole || hasName || hasPrefix || hasIndex) return bad('label_text names the whole locator: it takes no role, name, name_prefix or index');
     if (!named(step.label_text)) return bad('label_text must be a non-empty string');
     return { ok: true, form: 'scoped', scope, target: { kind: 'label', labelText: step.label_text } };
   }
   if (!hasRole) return bad('a step with within, name_prefix or index needs a role, a text or a label_text');
   if (!isStr(step.role) || !LOCATOR_ROLES.includes(step.role)) return bad('role must be one of the supported roles');
+  if (!hasName && !hasPrefix && !hasIndex && scope !== null) {
+    if (scope.anchorText !== undefined) return bad('a role without a name needs a role and name scope, not anchor_text');
+    return { ok: true, form: 'scoped', scope, target: { kind: 'role-any', role: step.role } };
+  }
   if ([hasName, hasPrefix, hasIndex].filter(Boolean).length !== 1) return bad('role takes exactly one of name, name_prefix or index');
   if (hasName) {
     if (!named(step.name)) return bad('name must be a non-empty string');
@@ -1330,11 +1433,15 @@ function stepRules(driver, s) {
     }
     return bad('not an object with a string action');
   }
-  // `effect` declares a step that changes state. Its one legal value is "write", and only a click, a fill or an
-  // http request can carry it; a reason names the key, never a value.
+  // `effect` declares a step that changes state. "write" can be carried by a click, a fill or an http request;
+  // "validation" (a form submit with the report's own invalid literal) by a click only. A reason names the key, never a value.
   if (s.effect !== undefined) {
-    if (s.effect !== 'write') return bad('effect must be "write" when present');
-    if (s.action !== 'click' && s.action !== 'fill' && s.action !== 'request') return bad('effect applies only to click, fill and request steps');
+    if (s.effect !== 'write' && s.effect !== 'validation') return bad('effect must be "write" or "validation" when present');
+    if (s.effect === 'validation') {
+      if (s.action !== 'click') return bad('effect "validation" applies only to click steps');
+    } else if (s.action !== 'click' && s.action !== 'fill' && s.action !== 'request') {
+      return bad('effect applies only to click, fill and request steps');
+    }
   }
   if (s.action === 'query') {
     if (s.session !== undefined) return bad('query takes no session key');
@@ -1372,11 +1479,19 @@ function stepRules(driver, s) {
   } else {
     if (s.session !== undefined) return bad(`${s.action} takes no session key; a request without the role's session is an http request step`);
     const loc = LOCATOR_ACTIONS.includes(s.action) ? locatorOf(s) : null;
+    if (s.pattern !== undefined) {
+      if (s.action !== 'expect_text') return bad('pattern is only for expect_text');
+      if (s.contains !== undefined) return bad('expect_text takes contains or pattern, not both');
+      if (!isStr(s.pattern) || !TEXT_PATTERN_NAMES.includes(s.pattern)) return bad('pattern must be one of the supported patterns');
+      if (loc === null) return bad('pattern needs a role and name, or a text, locator');
+    }
     if (loc !== null) {
       if (!loc.ok) return bad(`${s.action}: ${loc.why}`);
       if (loc.form === 'scoped' && loc.target.kind === 'label' && (s.action === 'expect_text' || s.action === 'expect_not_visible')) return bad(`${s.action} does not take label_text: it names an input`);
+      if (loc.form === 'scoped' && loc.target.kind === 'role-any' && s.action !== 'expect_visible') return bad(`${s.action} does not take a role without a name; only expect_visible does`);
+      if (loc.form === 'scoped' && loc.scope !== null && loc.scope.anchorText !== undefined && (s.action === 'fill' || s.action === 'expect_value')) return bad(`${s.action} does not take anchor_text`);
       if (s.action === 'fill' && !isStr(s.value)) return bad('fill needs a string value');
-      if (s.action === 'expect_text' && !isStr(s.contains)) return bad('expect_text needs a string contains');
+      if (s.action === 'expect_text' && s.pattern === undefined && !isStr(s.contains)) return bad('expect_text needs a string contains or a pattern');
       if (s.action === 'expect_value') {
         if (!isControlLocator(loc)) return bad('expect_value needs a role and a name');
         const comparisons = [s.equals, s.contains, s.not_empty].filter((v) => v !== undefined).length;
@@ -1509,6 +1624,17 @@ function stepVariables(step) {
  */
 export function firstWriteStep(steps) {
   return Array.isArray(steps) ? steps.findIndex((s) => isObj(s) && s.effect === 'write') : -1;
+}
+
+export const STEP_EFFECTS = Object.freeze(['write', 'validation']);
+
+/**
+ * The zero-based index of the first step carrying any legal `effect`, or -1. Pure and total.
+ * @param {any} steps
+ * @returns {number}
+ */
+export function firstEffectStep(steps) {
+  return Array.isArray(steps) ? steps.findIndex((s) => isObj(s) && STEP_EFFECTS.includes(s.effect)) : -1;
 }
 
 /**
@@ -1646,6 +1772,36 @@ export function validateJudgeCriteria(steps, manualText) {
 }
 
 /**
+ * A validation submit (a click with `effect: "validation"`) needs an earlier fill of the same case whose value is
+ * the report's own literal: no binding, at least CHOSEN_LITERAL_MIN characters, and verbatim in the case's manual
+ * steps once whitespace is collapsed and case is folded. Returns the first refusal or null. Pure and total; a
+ * reason names a step position, never a value.
+ * @param {any} steps
+ * @param {any} manualText
+ * @returns {{ code: string, reason: string } | null}
+ */
+export function validateValidationSubmits(steps, manualText) {
+  if (!Array.isArray(steps)) return null;
+  const flat = (/** @type {string} */ t) => t.replace(/\s+/g, ' ').trim().toLowerCase();
+  const report = isStr(manualText) ? flat(manualText) : null;
+  for (const [k, s] of steps.entries()) {
+    if (!isObj(s) || s.action !== 'click' || s.effect !== 'validation') continue;
+    const qualifies =
+      report !== null &&
+      steps.slice(0, k).some((f) => {
+        if (!isObj(f) || f.action !== 'fill' || !isStr(f.value)) return false;
+        if (f.value.match(VARIABLE_PATTERN) !== null) return false;
+        const literal = flat(f.value);
+        return literal.length >= CHOSEN_LITERAL_MIN && report.includes(literal);
+      });
+    if (!qualifies) {
+      return { code: 'PLAN_ENTRY_INVALID', reason: `step ${k + 1}: a validation submit needs an earlier fill step in the same case whose value appears verbatim in the case's manual steps` };
+    }
+  }
+  return null;
+}
+
+/**
  * Reads one channel's declaration from the `channel_sources` map of the seed file. Pure and total: no file or network access;
  * a reason is a fixed sentence and never echoes a declared url, path or key.
  * @param {any} sources the `channel_sources` value of the seed file (anything)
@@ -1685,6 +1841,160 @@ export function classifyChannelSource(sources, channel, root) {
   const rel = relative(resolve(root), abs);
   if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) return invalid('the sms path resolves outside the target root');
   return { ok: true, channel, kind: 'file', abs };
+}
+
+/** The most overlay handlers a seed file may declare. */
+export const OVERLAY_HANDLERS_MAX = 10;
+/** The shape of an overlay handler id. */
+export const OVERLAY_HANDLER_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/;
+/** The fixed sentence recorded for a write-effect handler that is not registered. */
+export const OVERLAY_WRITE_SKIP_REASON = 'a write-effect handler is not registered: the role is not declared dedicated';
+
+/**
+ * Reads the `overlay_handlers` declaration of the seed file. Pure and total: no file or network access; a reason is a
+ * fixed sentence naming an entry position or a key, and never echoes a declared id, locator word or value. A locator is
+ * the plain role-and-name or text form only. A write-effect handler is registered only when the role is dedicated.
+ * @param {any} declared the `overlay_handlers` value of the seed file (anything)
+ * @param {any} dedicated whether the case's role is declared dedicated (only the boolean true counts)
+ * @returns {{ ok: true, handlers: { id: string, trigger: any, dismiss: any, effect: 'write' | null }[], skipped: { id: string, reason: string }[] } | { ok: false, code: 'OVERLAY_HANDLER_INVALID', reason: string }}
+ */
+export function classifyOverlayHandlers(declared, dedicated) {
+  const invalid = (/** @type {string} */ reason) => ({ ok: /** @type {const} */ (false), code: /** @type {const} */ ('OVERLAY_HANDLER_INVALID'), reason });
+  if (declared === undefined) return { ok: true, handlers: [], skipped: [] };
+  if (!Array.isArray(declared)) return invalid('overlay_handlers must be an array');
+  if (declared.length > OVERLAY_HANDLERS_MAX) return invalid(`overlay_handlers allows at most ${OVERLAY_HANDLERS_MAX} entries`);
+  /** @param {any} loc */
+  const plainLocator = (loc) => {
+    if (!isObj(loc)) return null;
+    const keys = Object.keys(loc).sort().join(',');
+    if (keys !== 'name,role' && keys !== 'text') return null;
+    const found = locatorOf(loc);
+    if (found === null || !found.ok) return null;
+    if (found.form === 'role') return { role: found.role, name: found.name };
+    if (found.form === 'text') return { text: found.text };
+    return null;
+  };
+  /** @type {{ id: string, trigger: any, dismiss: any, effect: 'write' | null }[]} */ const handlers = [];
+  /** @type {{ id: string, reason: string }[]} */ const skipped = [];
+  /** @type {Set<string>} */ const seen = new Set();
+  for (const [i, entry] of declared.entries()) {
+    const at = (/** @type {string} */ why) => invalid(`overlay_handlers entry ${i + 1}: ${why}`);
+    if (!isObj(entry) || Object.keys(entry).some((k) => !['id', 'trigger', 'dismiss', 'effect'].includes(k))
+      || !Object.hasOwn(entry, 'id') || !Object.hasOwn(entry, 'trigger') || !Object.hasOwn(entry, 'dismiss')) {
+      return at('must be an object with id, trigger, dismiss and optionally effect');
+    }
+    if (!isStr(entry.id) || !OVERLAY_HANDLER_ID.test(entry.id)) {
+      return at('id must be 1 to 40 letters, digits, hyphens or underscores, starting with a letter or digit');
+    }
+    if (seen.has(entry.id)) return at('id repeats an earlier entry');
+    seen.add(entry.id);
+    const trigger = plainLocator(entry.trigger);
+    if (trigger === null) return at('trigger must name an element by role and name, or by text, and nothing else');
+    const dismiss = plainLocator(entry.dismiss);
+    if (dismiss === null) return at('dismiss must name an element by role and name, or by text, and nothing else');
+    if (Object.hasOwn(entry, 'effect') && entry.effect !== 'write') return at('effect must be "write" when present');
+    const effect = entry.effect === 'write' ? /** @type {const} */ ('write') : null;
+    if (effect === 'write' && dedicated !== true) {
+      skipped.push({ id: entry.id, reason: OVERLAY_WRITE_SKIP_REASON });
+      continue;
+    }
+    handlers.push({ id: entry.id, trigger, dismiss, effect });
+  }
+  return { ok: true, handlers, skipped };
+}
+
+/** The bound of one overlay dismissal click, in milliseconds. Chosen, not measured; the dogfood recalibrates it. */
+export const OVERLAY_DISMISS_TIMEOUT_MS = 3000;
+/** How many times one overlay handler may run on a page. Chosen, not measured. */
+export const OVERLAY_HANDLER_TIMES = 25;
+
+/**
+ * Whether a url is one a dismissal may leave the page on: the exemptions of the context route, or the approved
+ * origin on an allowed host. Pure and total.
+ * @param {any} rawUrl
+ * @param {any} target
+ * @returns {boolean}
+ */
+export function overlayUrlApproved(rawUrl, target) {
+  if (!isStr(rawUrl)) return false;
+  let u;
+  try {
+    u = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+  if (['data:', 'about:', 'blob:'].includes(u.protocol)) return true;
+  return u.origin === target.origin && target.guard.isAllowedHost(u.hostname, target.allowedHosts) === true;
+}
+
+/**
+ * The overlay evidence of one case, built key by key: handler ids, step positions and closed result words only.
+ * @param {any} registeredIds
+ * @param {any} skipped
+ * @param {any} firings
+ * @returns {{ action: 'overlay_handlers', registered: string[], skipped: { handler: string, reason: string }[], firings: { handler: string, step: number, result: string }[] }}
+ */
+export function summarizeOverlayWatch(registeredIds, skipped, firings) {
+  const list = (/** @type {any} */ v) => (Array.isArray(v) ? v : []);
+  return {
+    action: 'overlay_handlers',
+    registered: list(registeredIds).map((/** @type {any} */ id) => id),
+    skipped: list(skipped).map((/** @type {any} */ s) => ({ handler: s.handler ?? s.id, reason: s.reason })),
+    firings: list(firings).map((/** @type {any} */ f) => ({ handler: f.handler, step: f.step, result: f.result })),
+  };
+}
+
+/**
+ * Registers the declared overlay handlers once on a page. A handler runs only before an action that does an
+ * actionability check (a click or a fill), never on a goto or on the runner's own waits, and its runtime counts against
+ * that action's timeout. Returns null when the installed Playwright cannot register a handler. The unit reads no page
+ * text, locator word or error text and adds no launch, route or request.
+ * @param {any} page
+ * @param {{ id: string, trigger: any, dismiss: any }[]} handlers
+ * @param {any} target
+ * @returns {Promise<null | { setStep: (n: number) => void, firings: () => { handler: string, step: number, result: string }[], offOriginAt: () => number | null, registered: string[] }>}
+ */
+export async function registerOverlayHandlers(page, handlers, target) {
+  if (typeof page.addLocatorHandler !== 'function') return null;
+  let current = 0;
+  let inHandler = false;
+  /** @type {number | null} */ let offOrigin = null;
+  /** @type {{ handler: string, step: number, result: string }[]} */ const fired = [];
+  const build = (/** @type {any} */ loc) => (loc.role !== undefined ? page.getByRole(loc.role, { name: loc.name, exact: true }) : page.getByText(loc.text, { exact: true }));
+  for (const h of handlers) {
+    const dismiss = build(h.dismiss);
+    const run = async () => {
+      const stepNow = current;
+      inHandler = true;
+      try {
+        let result = 'dismissed';
+        try {
+          await dismiss.click({ timeout: OVERLAY_DISMISS_TIMEOUT_MS });
+        } catch {
+          result = 'dismiss_failed';
+        }
+        fired.push({ handler: h.id, step: stepNow, result });
+        if (!overlayUrlApproved(page.url(), target) && offOrigin === null) offOrigin = stepNow;
+      } finally {
+        inHandler = false;
+      }
+    };
+    await page.addLocatorHandler(build(h.trigger), run, { times: OVERLAY_HANDLER_TIMES });
+  }
+  page.on('request', (/** @type {any} */ req) => {
+    if (!inHandler) return;
+    try {
+      if (req.isNavigationRequest() && req.frame() === page.mainFrame() && !overlayUrlApproved(req.url(), target) && offOrigin === null) offOrigin = current;
+    } catch {
+      // a request that cannot be classified is left to the context route
+    }
+  });
+  return {
+    setStep: (n) => { current = n; },
+    firings: () => fired.map((f) => ({ handler: f.handler, step: f.step, result: f.result })),
+    offOriginAt: () => offOrigin,
+    registered: handlers.map((h) => h.id),
+  };
 }
 
 /**
@@ -1828,6 +2138,83 @@ function recordSteps(planSteps, ran, failedAt, evidenceFor) {
     result: i >= ran ? 'not-run' : i === failedAt ? 'failed' : 'passed',
     evidence: i < ran ? evidenceFor(i) : null,
   }));
+}
+
+/** The fixed sentence of a step that could not be grounded and so was not run. Never a locator, a value or page text. */
+export const STEP_GAP_REASON = 'the step could not be grounded to exactly one element, so it was not run; a person owes it';
+/** The fixed sentence of a step that follows an ungrounded interaction and so was not run. */
+export const STEP_TRUNCATED_REASON = 'not run after an ungrounded interaction; a person owes it';
+/** The fixed sentence of a step stopped because an assertion failed before it. Never step data. */
+export const STEP_NOT_RUN_AFTER_FAILURE_REASON = 'not run after a failed assertion; an interaction after a failure would act on a page in an unknown state';
+/** The actions that keep running after a failed assertion: assertions only, never an interaction. */
+export const ASSERTION_CONTINUES_ACTIONS = Object.freeze(['expect_visible', 'expect_text', 'expect_url', 'expect_value', 'expect_not_visible', 'expect_state', 'expect_requests', 'query', 'judge']);
+
+/**
+ * Whether a step still runs after an assertion has failed. Pure; an interaction, an unknown action
+ * and any step carrying an effect stop the case.
+ * @param {any} step @returns {boolean}
+ */
+export function continuesAfterFailure(step) {
+  return isObj(step) && ASSERTION_CONTINUES_ACTIONS.includes(step.action) && step.effect === undefined;
+}
+
+/**
+ * Marks every passed record whose index is in `failedIdx` as failed. Pure; returns the same array when nothing applies.
+ * @param {StepRecord[]} records @param {number[]} failedIdx @returns {StepRecord[]}
+ */
+export function markFailedSteps(records, failedIdx) {
+  const at = new Set(failedIdx.filter((j) => Number.isInteger(j) && j >= 0 && j < records.length && records[j].result === 'passed'));
+  if (at.size === 0) return records;
+  return records.map((rec, j) => (at.has(j) ? { ...rec, result: 'failed' } : rec));
+}
+
+/**
+ * Writes the fixed stop sentence on every not-run record from `stoppedAt` on. Pure; returns the same array when nothing applies.
+ * @param {StepRecord[]} records @param {number | null} stoppedAt @returns {StepRecord[]}
+ */
+export function overlayStoppedRecords(records, stoppedAt) {
+  if (!Number.isInteger(stoppedAt) || /** @type {number} */ (stoppedAt) < 0) return records;
+  return records.map((rec, j) => (j >= /** @type {number} */ (stoppedAt) && rec.result === 'not-run' ? { ...rec, reason_code: null, reason: STEP_NOT_RUN_AFTER_FAILURE_REASON } : rec));
+}
+
+/**
+ * Attaches a closed-list cause to the failed step record. Pure; returns the same array when nothing applies.
+ * @param {StepRecord[]} records @param {number} failedAt @param {string} cause @returns {StepRecord[]}
+ */
+export function attachStepCause(records, failedAt, cause) {
+  if (!STEP_FAILURE_CAUSES.includes(cause) || !Number.isInteger(failedAt) || failedAt < 0 || failedAt >= records.length) return records;
+  return records.map((rec, j) => (j === failedAt ? { ...rec, cause } : rec));
+}
+
+/**
+ * Rewrites the per-step records of a case that has step gaps: each gap step becomes `human` with `STEP_UNGROUNDED`,
+ * and each step after a truncating interaction gap becomes `human` with the truncation sentence. Pure; a record
+ * that is not touched is returned unchanged.
+ * @param {StepRecord[]} records
+ * @param {{ at: number, kind: string }[]} gaps
+ * @param {number | null} truncateAt
+ * @returns {StepRecord[]}
+ */
+export function overlayGapRecords(records, gaps, truncateAt) {
+  const gapAt = new Set(gaps.map((g) => g.at));
+  return records.map((rec, j) => {
+    if (gapAt.has(j)) return { ...rec, result: 'human', evidence: null, reason_code: 'STEP_UNGROUNDED', reason: STEP_GAP_REASON };
+    if (truncateAt !== null && j > truncateAt) return { ...rec, result: 'human', evidence: null, reason_code: null, reason: STEP_TRUNCATED_REASON };
+    return rec;
+  });
+}
+
+/**
+ * The case verdict once step gaps are known: a verdict that already ended the case (a failed or blocked step) is
+ * kept; otherwise a case with gaps is needs-human STEP_UNGROUNDED, and a case with none has no verdict yet.
+ * @param {CaseResult | null} verdict
+ * @param {{ at: number, kind: string }[]} gaps
+ * @returns {CaseResult | null}
+ */
+export function gapVerdict(verdict, gaps) {
+  if (verdict !== null) return verdict;
+  if (gaps.length === 0) return null;
+  return needsHuman('STEP_UNGROUNDED', REASON_CATALOGUE.STEP_UNGROUNDED.reason);
 }
 
 /**
@@ -2067,7 +2454,37 @@ export async function requireVisibleToPerson(target, n, opts = {}) {
   if (seen.status === 'rejected') {
     return { outcome: 'fail', reason_code: null, reason: `step ${n}: the target was present but not visible to a person (opacity or visibility hides it)`, evidence: [] };
   }
-  return blocked('STEP_NOT_PERFORMABLE', `step ${n}: the visibility of the target could not be read; nothing was asserted`);
+  return notPerformable(`step ${n}: the visibility of the target could not be read; nothing was asserted`);
+}
+
+/**
+ * Whether at least one element the locator matches is visible to a person (each candidate goes through
+ * `isVisibleToPerson`). Zero candidates are false; a read that throws propagates.
+ * @param {any} locator
+ * @returns {Promise<boolean>}
+ */
+export async function isAnyVisibleToPerson(locator) {
+  const count = await locator.count();
+  for (let k = 0; k < count; k++) {
+    if (await isVisibleToPerson(locator.nth(k))) return true;
+  }
+  return false;
+}
+
+/**
+ * The role-only presence check: like `requireVisibleToPerson`, over every candidate of the locator.
+ * @param {any} locator
+ * @param {number} n the 1-based step position
+ * @param {{ boundMs?: number, intervalMs?: number, sleep?: (ms: number) => Promise<void>, now?: () => number }} [opts] forwarded to `settleAssertion`
+ * @returns {Promise<CaseResult | null>}
+ */
+export async function requireAnyVisibleToPerson(locator, n, opts = {}) {
+  const seen = await settleAssertion(() => isAnyVisibleToPerson(locator), (visible) => visible === true, opts);
+  if (seen.status === 'accepted') return null;
+  if (seen.status === 'rejected') {
+    return { outcome: 'fail', reason_code: null, reason: `step ${n}: the target was present but not visible to a person (opacity or visibility hides it)`, evidence: [] };
+  }
+  return notPerformable(`step ${n}: the visibility of the target could not be read; nothing was asserted`);
 }
 
 /**
@@ -2232,8 +2649,64 @@ export function observeRequests(page, target) {
 // REQUEST-OBSERVATION-END
 
 /**
- * Plan-time grounding pre-check. Returns null when every locator step is acceptable, else the first
- * refusal. A reason names a step position, never a locator value. See `groundLocators`.
+ * Summarizes the requests a validation submit issued: method, host and path only, capped. Any request the
+ * local-only guard does not approve makes the whole window non-local. Pure and total.
+ * @param {any} window
+ * @returns {{ status: 'non-local' } | { status: 'recorded', observed: number, truncated: boolean, requests: { method: string, host: string, path: string }[] }}
+ */
+export function summarizeValidationWindow(window) {
+  const entries = Array.isArray(window) ? window : [];
+  if (entries.some((e) => isObj(e) && e.local !== true)) return { status: 'non-local' };
+  const kept = entries.filter((e) => isObj(e) && isStr(e.method) && isStr(e.host) && isStr(e.path));
+  return {
+    status: 'recorded',
+    observed: kept.length,
+    truncated: kept.length > EXPECT_REQUESTS_EVIDENCE_MAX,
+    requests: kept.slice(0, EXPECT_REQUESTS_EVIDENCE_MAX).map((e) => ({ method: e.method, host: e.host, path: e.path })),
+  };
+}
+
+/**
+ * Waits out the settle window after a validation click and writes the requests it issued to the step evidence.
+ * @param {any} ctx
+ * @param {any} kase
+ * @param {any[] | null} requestLog
+ * @param {number} windowStart
+ * @param {number} n
+ * @returns {Promise<{ evidence: string } | { result: any }>}
+ */
+async function recordValidationSubmit(ctx, kase, requestLog, windowStart, n) {
+  if (requestLog === null) {
+    return { result: notPerformable(`step ${n}: the request log is not available; the requests of the validation submit were not recorded`) };
+  }
+  const seen = await settleRequestWindow(requestLog, windowStart);
+  const summary = summarizeValidationWindow(seen);
+  if (summary.status === 'non-local') {
+    return { result: blocked('FAILED_NON_LOCAL_TARGET', `step ${n}: a request of the validation submit targeted a host the local-only guard does not approve; it was aborted`) };
+  }
+  try {
+    const evidence = writeEvidence(ctx, `case-${kase.index}.requests-${n}.json`, {
+      kind: 'json',
+      value: {
+        action: 'click',
+        effect: 'validation',
+        step: n,
+        observed: summary.observed,
+        truncated: summary.truncated,
+        requests: summary.requests.map((m) => ({ method: m.method, host: m.host, path: redactText(m.path, ctx.table).slice(0, 200) })),
+        result: 'recorded',
+      },
+    });
+    return { evidence };
+  } catch {
+    return { result: blocked('EVIDENCE_WRITE_FAILED', `step ${n}: the request evidence could not be written`) };
+  }
+}
+
+/**
+ * Plan-time grounding pre-check. Returns null when every locator step is grounded, else a step-gap notice for the
+ * first gap (a miss is a step gap, not an entry refusal). A reason names a step position, never a locator value.
+ * See `groundLocators`.
  * @param {any[]} steps
  * @param {any[]} snapshots
  * @param {any} manualText
@@ -2241,14 +2714,18 @@ export function observeRequests(page, target) {
  * @returns {{ code: string, reason: string } | null}
  */
 export function precheckGroundedSteps(steps, snapshots, manualText, role) {
-  return groundLocators(steps, snapshots, manualText, role).refusal;
+  const { gaps } = groundLocators(steps, snapshots, manualText, role);
+  if (gaps.length === 0) return null;
+  return { code: 'STEP_UNGROUNDED', reason: `step ${gaps[0].at + 1}: the step could not be grounded to exactly one element` };
 }
 
 /**
  * Plan-time grounding of every locator step, and which of them the browser resolves when the case runs. A
  * locator is grounded by a snapshot entry of the step's role and route with `matches` exactly 1 (as before) or by
  * the report's own words: its `name`, `text` or label appears in `manualText` once whitespace is collapsed and
- * case is ignored. A locator with neither source is refused `PLAN_ENTRY_INVALID`. `runtime` lists the zero-based
+ * case is ignored. A locator with neither source is a step gap (never an entry refusal): an assertion gap is skipped
+ * when the case runs, and an interaction gap (`click`, `fill`) truncates the case at that step (`truncateAt`,
+ * zero-based, else null); the steps after it are not walked. A gap carries no text. `runtime` lists the zero-based
  * indexes of the steps with no snapshot entry behind them (grounded only by the report's words) and of every
  * step that carries a scoped key, because a snapshot lists page-wide candidates only. A scoped step needs each
  * word it carries (scope, name, prefix, text or label) grounded the same way; `index` carries none. Pure.
@@ -2257,7 +2734,7 @@ export function precheckGroundedSteps(steps, snapshots, manualText, role) {
  * @param {any} manualText
  * @param {string | null} role
  * @param {any} [chosen] the entry's chosen_inputs; an expectation may match the value of an EARLIER chosen fill
- * @returns {{ refusal: { code: string, reason: string } | null, runtime: number[] }}
+ * @returns {{ gaps: { at: number, kind: 'assertion' | 'interaction' }[], truncateAt: number | null, runtime: number[] }}
  */
 export function groundLocators(steps, snapshots, manualText, role, chosen = []) {
   const wantRole = role === null ? 'anonymous' : role;
@@ -2270,13 +2747,31 @@ export function groundLocators(steps, snapshots, manualText, role, chosen = []) 
   const chosenHas = (/** @type {any} */ literal, /** @type {number} */ before, /** @type {boolean} */ whole) =>
     isStr(literal) && collapse(literal) !== '' && chosenFills.some((c) => c.at < before && (whole ? collapse(c.value) === collapse(literal) : collapse(c.value).includes(collapse(literal))));
   /** @type {number[]} */ const runtime = [];
-  /** @param {string} reason */
-  const refuse = (reason) => ({ refusal: { code: 'PLAN_ENTRY_INVALID', reason }, runtime });
+  /** @type {{ at: number, kind: 'assertion' | 'interaction' }[]} */ const gaps = [];
+  /** @type {number | null} */ let truncateAt = null;
+  /** @param {number} at @param {any} step */
+  const miss = (at, step) => {
+    const kind = GAP_INTERACTION_ACTIONS.includes(step.action) ? 'interaction' : 'assertion';
+    gaps.push({ at, kind });
+    if (kind === 'interaction') truncateAt = at;
+  };
   /** @type {string | null} */ let route = null;
-  for (const [i, step] of steps.entries()) {
-    const n = i + 1;
+  // The absence anchor as validateSteps tracks it (any positive assertion) and as it stands once gap steps are
+  // left out (a non-gap positive assertion only): an absence whose anchor exists only through gaps is a gap.
+  /** @type {string | null | undefined} */ let anyAnchor;
+  /** @type {string | null | undefined} */ let liveAnchor;
+  stepLoop: for (const [i, step] of steps.entries()) {
+    if (truncateAt !== null) break;
     if (!isObj(step)) continue;
     if (step.action === 'goto' || step.action === 'expect_url') route = routeKey(step.path);
+    if (step.action === 'goto') { anyAnchor = undefined; liveAnchor = undefined; }
+    const positive = POSITIVE_ASSERTION_ACTIONS.includes(step.action);
+    if (positive) anyAnchor = route;
+    if ((step.action === 'expect_not_visible' || step.action === 'expect_requests' && step.count === 0)
+      && anyAnchor !== undefined && anyAnchor === route && liveAnchor !== route) {
+      miss(i, step);
+      continue;
+    }
     if (step.action === 'judge' && step.within !== undefined) {
       const scoped = scopeOf(step.within);
       if (scoped.ok) {
@@ -2286,13 +2781,17 @@ export function groundLocators(steps, snapshots, manualText, role, chosen = []) 
         const listed = plain !== undefined && Array.isArray(plain.entries) && plain.entries.some((/** @type {any} */ e) => isObj(e) && e.matches === 1 && e.kind === 'role' && e.role === sc.role
           && (sc.name !== undefined ? e.name === sc.name : isStr(e.name) && e.name.startsWith(word)));
         if (!inReport(word) && !listed) {
-          return refuse(`step ${n}: the judge scope is neither a snapshot entry that matches exactly one element nor a word of the report's own steps`);
+          miss(i, step);
+          continue;
         }
       }
     }
     if (!LOCATOR_ACTIONS.includes(step.action)) continue;
     const loc = locatorOf(step);
-    if (loc === null || !loc.ok) continue;
+    if (loc === null || !loc.ok) {
+      if (positive) liveAnchor = route;
+      continue;
+    }
     // The snapshot is the one taken after exactly the case's own goto, click and fill steps before this
     // step when such a post-interaction snapshot exists; otherwise the first plain snapshot of the role
     // and route (a plain lookup never returns a post-interaction file, whatever the file order).
@@ -2302,15 +2801,15 @@ export function groundLocators(steps, snapshots, manualText, role, chosen = []) 
     const after = histKey === null ? undefined : candidates.find((s) => isPostInteractionSnapshot(s) && groundingPrefixKey(s.prefix) === histKey);
     const snap = after ?? candidates.find((s) => !isPostInteractionSnapshot(s));
     /** @type {any[]} */ const entries = snap !== undefined && Array.isArray(snap.entries) ? snap.entries.filter(isObj) : [];
-    const hint = after === undefined && candidates.some((s) => isPostInteractionSnapshot(s))
-      ? '; a post-interaction snapshot exists for this role and route, but the steps of this case before this one are not exactly its prefix'
-      : '';
     if (loc.form === 'scoped') {
       // A snapshot lists page-wide candidates only, so a scoped step is always resolved when the case runs; each
       // word it carries is still grounded by the report or by a snapshot entry that matches exactly one element.
       /** @type {{ word: string, listed: (e: any) => boolean }[]} */ const words = [];
       const sc = loc.scope;
-      if (sc !== null) {
+      if (sc !== null && sc.anchorText !== undefined) {
+        const anchorWord = sc.anchorText;
+        words.push({ word: anchorWord, listed: (/** @type {any} */ e) => e.kind === 'text' && e.text === anchorWord });
+      } else if (sc !== null) {
         words.push(sc.name !== undefined
           ? { word: sc.name, listed: (/** @type {any} */ e) => e.kind === 'role' && e.role === sc.role && e.name === sc.name }
           : { word: /** @type {string} */ (sc.namePrefix), listed: (/** @type {any} */ e) => e.kind === 'role' && e.role === sc.role && isStr(e.name) && e.name.startsWith(/** @type {string} */ (sc.namePrefix)) });
@@ -2322,18 +2821,16 @@ export function groundLocators(steps, snapshots, manualText, role, chosen = []) 
       else if (t.kind === 'label') words.push({ word: t.labelText, listed: (/** @type {any} */ e) => e.kind === 'text' && e.text === t.labelText });
       for (const w of words) {
         if (inReport(w.word) || entries.some((e) => e.matches === 1 && w.listed(e))) continue;
-        return refuse(`step ${n}: the scoped locator is neither a snapshot entry that matches exactly one element nor a word of the report's own steps${hint}`);
+        miss(i, step);
+        continue stepLoop;
       }
       runtime.push(i);
     } else {
       const entry = entries.find((e) => (loc.form === 'role' ? e.kind === 'role' && e.role === loc.role && e.name === loc.name : e.kind === 'text' && e.text === loc.text));
       const listed = entry !== undefined && entry.matches === 1;
       if (!listed && !inReport(loc.form === 'role' ? loc.name : loc.text)) {
-        if (snap === undefined) {
-          return refuse(`step ${n}: no plan-time snapshot covers this role and route; run the ground mode for the route before planning this step`);
-        }
-        if (entry === undefined) return refuse(`step ${n}: the locator is not a snapshot entry${hint}`);
-        return refuse(`step ${n}: the locator matched ${entry.matches} elements in the snapshot; a locator must match exactly one`);
+        miss(i, step);
+        continue;
       }
       if (!listed) {
         runtime.push(i);
@@ -2342,13 +2839,19 @@ export function groundLocators(steps, snapshots, manualText, role, chosen = []) 
         for (const h of hist) {
           if (h.step.action !== 'fill') continue;
           const ok = isStr(manualText) && isStr(h.step.value) && collapse(manualText).includes(collapse(h.step.value));
-          if (!ok) return refuse(`step ${h.at}: a fill value that a grounded prefix replays must come from the report's own steps`);
+          if (!ok) {
+            miss(i, step);
+            continue stepLoop;
+          }
         }
       }
     }
-    if (step.action === 'expect_text') {
+    if (step.action === 'expect_text' && step.pattern === undefined) {
       const ok = (isStr(manualText) && isStr(step.contains) && collapse(manualText).includes(collapse(step.contains))) || chosenHas(step.contains, i, false);
-      if (!ok) return refuse(`step ${n}: expect_text contains must come from the report's own steps, not from the snapshot`);
+      if (!ok) {
+        miss(i, step);
+        continue;
+      }
     }
     if (step.action === 'expect_value') {
       // A literal expectation comes from the report's own steps; a {{name}} binding is validated against the declared captures.
@@ -2356,11 +2859,16 @@ export function groundLocators(steps, snapshots, manualText, role, chosen = []) 
         const literal = step[key];
         if (!isStr(literal) || [...literal.matchAll(VARIABLE_PATTERN)].length > 0) continue;
         const ok = (isStr(manualText) && collapse(manualText).includes(collapse(literal))) || chosenHas(literal, i, key === 'equals');
-        if (!ok) return refuse(`step ${n}: expect_value ${key} must come from the report's own steps or be bound by a declared capture`);
+        if (!ok) {
+          miss(i, step);
+          continue stepLoop;
+        }
       }
     }
+    if (positive) liveAnchor = route;
   }
-  return { refusal: null, runtime };
+  const gapAt = new Set(gaps.map((g) => g.at));
+  return { gaps, truncateAt, runtime: runtime.filter((j) => !gapAt.has(j)) };
 }
 
 /**
@@ -2480,7 +2988,7 @@ export const REASON_CATALOGUE = Object.freeze({
   ROLE_NOT_DEDICATED: Object.freeze({
     disposition: 'blocked',
     class: 'gap',
-    reason: 'a write step names a role the kit does not declare dedicated; nothing was executed; the manual steps are reproduced verbatim',
+    reason: 'a write or validation step names a role the kit does not declare dedicated; nothing was executed; the manual steps are reproduced verbatim',
   }),
 });
 
@@ -3025,6 +3533,33 @@ export async function resolveScopeElement(page, scope) {
   return count === 1 ? { ok: true, locator } : { ok: false, count };
 }
 
+/** The ancestors-or-self of an element in document order. A fixed constant, never planner text. */
+export const ANCHOR_ANCESTORS_XPATH = 'xpath=ancestor-or-self::*';
+
+/**
+ * Resolves an `anchor_text` scope: the one visible element whose text equals the anchor, then its nearest
+ * ancestor that holds at least one element of `role`. Every failure is a value, never a throw.
+ * @param {any} page
+ * @param {{ anchorText: string }} scope
+ * @param {string} role
+ * @returns {Promise<{ ok: true, locator: any } | { ok: false, why: 'count' | 'hidden' | 'container', count: number }>}
+ */
+export async function resolveAnchorScope(page, scope, role) {
+  const anchor = page.getByText(scope.anchorText, { exact: true });
+  await anchor.first().waitFor({ state: 'attached', timeout: 10000 }).catch(() => {});
+  const found = await anchor.count().catch(() => 0);
+  if (found !== 1) return { ok: false, why: 'count', count: found };
+  if (!(await isVisibleToPerson(anchor).catch(() => false))) return { ok: false, why: 'hidden', count: 1 };
+  const chain = anchor.locator(ANCHOR_ANCESTORS_XPATH);
+  const depth = await chain.count().catch(() => 0);
+  for (let k = depth - 1; k >= 0; k--) {
+    const container = chain.nth(k);
+    const holds = await container.getByRole(role).count().catch(() => 0);
+    if (holds > 0) return { ok: true, locator: container };
+  }
+  return { ok: false, why: 'container', count: 1 };
+}
+
 /**
  * Builds the Playwright locator of an `ok` descriptor of `locatorOf`, with the locators that must each match
  * exactly one element before the target can be trusted (the scope, and the label element of `label_text`) and,
@@ -3033,14 +3568,19 @@ export async function resolveScopeElement(page, scope) {
  * arrives only in Playwright 1.64.
  * @param {any} page
  * @param {any} loc
+ * @param {any} [anchorBase] the container `resolveAnchorScope` resolved, required for an `anchor_text` scope
  * @returns {{ target: any, guards: { what: 'scope' | 'label', locator: any }[], indexed: null | { all: any, index: number } }}
  */
-export function buildLocator(page, loc) {
+export function buildLocator(page, loc, anchorBase = null) {
   if (loc.form === 'role') return { target: page.getByRole(loc.role, { name: loc.name, exact: true }), guards: [], indexed: null };
   if (loc.form === 'text') return { target: page.getByText(loc.text, { exact: true }), guards: [], indexed: null };
   /** @type {{ what: 'scope' | 'label', locator: any }[]} */ const guards = [];
   /** @type {any} */ let base = page;
-  if (loc.scope !== null) {
+  if (loc.scope !== null && loc.scope.anchorText !== undefined) {
+    if (anchorBase === null) throw new Error('an anchor_text scope is resolved before the locator is built');
+    base = anchorBase;
+    guards.push({ what: 'scope', locator: base });
+  } else if (loc.scope !== null) {
     base = scopeLocator(page, loc.scope);
     guards.push({ what: 'scope', locator: base });
   }
@@ -3053,6 +3593,7 @@ export function buildLocator(page, loc) {
     guards.push({ what: 'label', locator: labelElement });
     return { target: labelElement.locator(LABEL_CONTAINER_XPATH).locator(LABEL_CONTROL_CSS), guards, indexed: null };
   }
+  if (t.kind === 'role-any') return { target: base.getByRole(t.role), guards, indexed: null };
   const all = base.getByRole(t.role);
   return { target: all.nth(t.index), guards, indexed: { all, index: t.index } };
 }
@@ -3346,7 +3887,7 @@ async function runReadMessage(ctx, kase, step, n, startedMs, smsBaseline) {
     return { ok: false, result: src.code === 'EXTERNAL_CHANNEL' ? needsHuman(src.code, `step ${n}: ${src.reason}`) : blocked(src.code, `step ${n}: ${src.reason}`) };
   }
   if (!isStr(step.to) || !MESSAGE_TO_PATTERN.test(step.to)) {
-    return { ok: false, result: blocked('STEP_NOT_PERFORMABLE', `step ${n}: the recipient is not a plain address or number; nothing was requested`) };
+    return { ok: false, result: notPerformable(`step ${n}: the recipient is not a plain address or number; nothing was requested`) };
   }
   const read = src.kind === 'mailpit'
     ? await readMailValue(ctx, src.url, step.to, startedMs, step.extract.regex)
@@ -3468,7 +4009,21 @@ DRIVERS.http = async (ctx, kase, plan, session) => {
  * @returns {Promise<CaseResult | null>}
  */
 async function runLocatorStep(page, step, loc, n, recordComparison, runtime = false) {
-  const built = buildLocator(page, loc);
+  /** @type {any} */ let anchorBase = null;
+  if (loc.form === 'scoped' && loc.scope !== null && loc.scope.anchorText !== undefined) {
+    const resolved = await resolveAnchorScope(page, loc.scope, loc.target.role);
+    if (resolved.ok === false && resolved.why === 'count') {
+      return needsHuman('STEP_UNGROUNDED', `step ${n}: the anchor text matched ${resolved.count} elements at run time; an anchor must match exactly one, so nothing was asserted or acted on`);
+    }
+    if (resolved.ok === false && resolved.why === 'hidden') {
+      return needsHuman('STEP_UNGROUNDED', `step ${n}: the anchor text is not visible to a person, so nothing was asserted or acted on`);
+    }
+    if (resolved.ok === false) {
+      return needsHuman('STEP_UNGROUNDED', `step ${n}: no container of the anchor text holds an element of the role, so nothing was asserted or acted on`);
+    }
+    anchorBase = resolved.locator;
+  }
+  const built = buildLocator(page, loc, anchorBase);
   const target = built.target;
   // A scoped locator is never a snapshot entry, and a plain one that no entry grounds (`runtime`) is the report's
   // word. Both are resolved here: zero matches end the case needs-human instead of failing it.
@@ -3491,7 +4046,7 @@ async function runLocatorStep(page, step, loc, n, recordComparison, runtime = fa
     if (built.guards.length > 0 && built.guards[0].what === 'scope') {
       const shown = await settleAssertion(() => isVisibleToPerson(built.guards[0].locator), (visible) => visible === true);
       if (shown.status === 'rejected') return needsHuman('STEP_UNGROUNDED', `step ${n}: the scope is not visible to a person, so an absence inside it asserts nothing`);
-      if (shown.status === 'unreadable') return blocked('STEP_NOT_PERFORMABLE', `step ${n}: the visibility of the target could not be read; nothing was asserted`);
+      if (shown.status === 'unreadable') return notPerformable(`step ${n}: the visibility of the target could not be read; nothing was asserted`);
     }
     // An absence is decided on the live page, with no wait for the element to attach: a locator that
     // matches nothing is hidden. The anchor rule of validateSteps is what keeps that from being vacuous.
@@ -3502,7 +4057,14 @@ async function runLocatorStep(page, step, loc, n, recordComparison, runtime = fa
     const hidden = await settleAssertion(async () => !(await isVisibleToPerson(target)), (isHidden) => isHidden === true);
     if (hidden.status === 'accepted') return null;
     if (hidden.status === 'rejected') return { outcome: 'fail', reason_code: null, reason: `step ${n}: the element was still visible`, evidence: [] };
-    return blocked('STEP_NOT_PERFORMABLE', `step ${n}: the visibility of the target could not be read; nothing was asserted`);
+    return notPerformable(`step ${n}: the visibility of the target could not be read; nothing was asserted`);
+  }
+  if (loc.form === 'scoped' && loc.target.kind === 'role-any') {
+    // A role with no name inside the scope: several candidates are normal; one visible to a person is enough.
+    await target.first().waitFor({ state: 'attached', timeout: 10000 }).catch(() => {});
+    const present = await target.count().catch(() => 0);
+    if (present === 0) return { outcome: 'fail', reason_code: null, reason: absentElementReason(n), evidence: [], cause: 'absent' };
+    return requireAnyVisibleToPerson(target, n);
   }
   // The wait only gives the page time to render; the decision is the count.
   await target.first().waitFor({ state: 'attached', timeout: 10000 }).catch(() => {});
@@ -3512,16 +4074,17 @@ async function runLocatorStep(page, step, loc, n, recordComparison, runtime = fa
   }
   const expects = POSITIVE_ASSERTION_ACTIONS.includes(step.action);
   if (count === 0) {
+    if (expects) return { outcome: 'fail', reason_code: null, reason: absentElementReason(n), evidence: [], cause: 'absent' };
     if (atRunTime) return needsHuman('STEP_UNGROUNDED', `step ${n}: the locator matched no element at run time, so nothing was asserted or acted on`);
-    if (expects) return { outcome: 'fail', reason_code: null, reason: `step ${n}: the expected element was not found`, evidence: [] };
-    return blocked('STEP_NOT_PERFORMABLE', `step ${n}: the ${step.action} target could not be found or acted on`);
+    return notPerformable(actionFailureReason(n, step.action, 'absent'), 'absent');
   }
   if (step.action === 'click' || step.action === 'fill') {
     try {
       if (step.action === 'click') await target.click();
       else await target.fill(step.value);
     } catch {
-      return blocked('STEP_NOT_PERFORMABLE', `step ${n}: the ${step.action} target could not be found or acted on`);
+      const cause = await probeActionFailure(target, step.action, true);
+      return notPerformable(actionFailureReason(n, step.action, cause), cause);
     }
     return null;
   }
@@ -3534,10 +4097,10 @@ async function runLocatorStep(page, step, loc, n, recordComparison, runtime = fa
     // The value is read with the documented input reader and compared in place: it is never returned,
     // recorded or placed in a reason. An element with no value to read is a blocked case, never a fail.
     const kind = comparisonKindOf(step);
-    if (kind === null) return blocked('STEP_NOT_PERFORMABLE', `step ${n}: the expect_value comparison is not declared; nothing was asserted`);
+    if (kind === null) return notPerformable(`step ${n}: the expect_value comparison is not declared; nothing was asserted`);
     const settled = await settleAssertion(() => target.inputValue({ timeout: 1000 }), (v) => compareInputValue(step, v)?.passed === true);
     if (settled.status === 'unreadable') {
-      return blocked('STEP_NOT_PERFORMABLE', `step ${n}: the expect_value target holds no readable value; nothing was asserted`);
+      return notPerformable(`step ${n}: the expect_value target holds no readable value; nothing was asserted`);
     }
     const passed = settled.status === 'accepted';
     try {
@@ -3566,16 +4129,22 @@ async function runLocatorStep(page, step, loc, n, recordComparison, runtime = fa
     if (settled.status === 'rejected') {
       return { outcome: 'fail', reason_code: null, reason: `step ${n}: the ${step.state} state did not equal the declared value`, evidence: [] };
     }
-    return blocked('STEP_NOT_PERFORMABLE', `step ${n}: the ${step.state} state of the target could not be read; nothing was asserted`);
+    return notPerformable(`step ${n}: the ${step.state} state of the target could not be read; nothing was asserted`);
   }
   if (step.action === 'expect_text') {
+    if (isStr(step.pattern)) {
+      const read = await settleAssertion(() => target.innerText({ timeout: 1000 }), (t) => textMatchesPattern(step.pattern, t));
+      if (read.status === 'unreadable') return notPerformable(`step ${n}: the text of the target could not be read; nothing was asserted`);
+      if (read.status === 'rejected') return { outcome: 'fail', reason_code: null, reason: `step ${n}: the text did not match the declared pattern`, evidence: [] };
+      return requireVisibleToPerson(target, n);
+    }
     const text = await target.textContent({ timeout: 10000 }).catch(() => null);
     if (text === null || !text.includes(step.contains)) {
       return { outcome: 'fail', reason_code: null, reason: `step ${n}: the expected text was not present`, evidence: [] };
     }
     return requireVisibleToPerson(target, n);
   }
-  return blocked('STEP_NOT_PERFORMABLE', `step ${n}: the ${step.action} target could not be found or acted on`);
+  return notPerformable(actionFailureReason(n, step.action, 'other'));
 }
 
 DRIVERS.browser = async (ctx, kase, plan, session) => {
@@ -3589,8 +4158,11 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
   const smsBaseline = smsSource.ok && plan.steps.some((/** @type {any} */ s) => isObj(s) && s.action === 'read_message' && s.channel === 'sms') ? smsBaselineSize(smsSource.abs) : 0;
   const target = ctx.target;
   const runtimeSteps = Array.isArray(plan.runtime_steps) ? plan.runtime_steps : [];
+  /** @type {{ at: number, kind: string }[]} */ const gapSteps = Array.isArray(plan.gap_steps) ? plan.gap_steps : [];
+  const truncateAt = Number.isInteger(plan.truncate_at) ? plan.truncate_at : null;
+  const assertionGapAt = new Set(gapSteps.filter((g) => g.kind === 'assertion').map((g) => g.at));
   // A case that carries an expect_requests step logs the requests of its page and runs with service workers blocked.
-  const watchesRequests = plan.steps.some((/** @type {any} */ s) => isObj(s) && s.action === 'expect_requests');
+  const watchesRequests = plan.steps.some((/** @type {any} */ s) => isObj(s) && (s.action === 'expect_requests' || s.effect === 'validation'));
   /** @type {{ method: string, host: string, path: string, local: boolean }[] | null} */ let requestLog = null;
   let windowStart = 0;
   /** @type {any} */ let browser = null;
@@ -3619,12 +4191,36 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
     });
     const page = await context.newPage();
     page.setDefaultTimeout(10000);
+    const overlayHandlers = Array.isArray(plan.overlay_handlers) ? plan.overlay_handlers : [];
+    const overlaySkipped = Array.isArray(plan.overlay_skipped) ? plan.overlay_skipped : [];
+    const overlayWatch = overlayHandlers.length > 0 ? await registerOverlayHandlers(page, overlayHandlers, target) : null;
+    if (overlayHandlers.length > 0 && overlayWatch === null) return blocked('FAILED_PLAYWRIGHT_UNAVAILABLE', 'the installed Playwright cannot register overlay handlers (version 1.44 or newer is needed); nothing was executed');
     if (watchesRequests) requestLog = observeRequests(page, target);
     /** @type {CaseResult | null} */ let verdict = null;
+    /** @type {number[]} */ const failedIdx = [];
+    /** @type {Map<number, string>} */ const causeAt = new Map();
+    let stoppedAt = null;
+    // The only place that assigns the case verdict: the first one is kept; true only when a failed assertion lets the loop go on.
+    const settle = (/** @type {CaseResult} */ res, /** @type {number} */ at, /** @type {any} */ stepAt) => {
+      failedIdx.push(at);
+      if (isStr(res.cause)) causeAt.set(at, res.cause);
+      if (verdict === null) verdict = res;
+      return res.outcome === 'fail' && continuesAfterFailure(stepAt);
+    };
     let ranTo = -1;
+    let executedTo = -1;
     for (const [i, step] of plan.steps.entries()) {
       const n = i + 1;
       ranTo = i;
+      // A dismissal that left the approved origin ends the acting: no step acts after it.
+      if (overlayWatch !== null && overlayWatch.offOriginAt() !== null) { stoppedAt = i; ranTo = i - 1; break; }
+      // An ungrounded interaction ends the acting here; an ungrounded assertion is skipped without touching the page.
+      if (i === truncateAt) break;
+      if (assertionGapAt.has(i)) continue;
+      // Once an assertion has failed, an interaction would act on a page left in an unknown state: it and every later step stay not-run.
+      if (verdict !== null && !continuesAfterFailure(step)) { stoppedAt = i; ranTo = i - 1; break; }
+      if (overlayWatch !== null) overlayWatch.setStep(n);
+      executedTo = i;
       // The window of an expect_requests step opens where the case's last interaction starts, before its own requests.
       if (requestLog !== null && (step.action === 'goto' || step.action === 'click' || step.action === 'fill')) windowStart = requestLog.length;
       const lstep = LOCATOR_ACTIONS.includes(step.action) ? locatorOf(step) : null;
@@ -3644,21 +4240,29 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
           );
         }, runtimeSteps.includes(i));
         if (lr !== null) {
-          verdict = lr;
+          if (settle(lr, i, step)) continue;
           break;
+        }
+        if (step.action === 'click' && step.effect === 'validation') {
+          const rec = await recordValidationSubmit(ctx, kase, requestLog, windowStart, n);
+          if ('result' in rec) {
+            if (settle(rec.result, i, step)) continue;
+            break;
+          }
+          queryEvidence.set(i, rec.evidence);
         }
         continue;
       }
       if (step.action === 'goto') {
         const url = resolveStepUrl(step.path, target);
         if (url === null) {
-          verdict = blocked('FAILED_NON_LOCAL_TARGET', `step ${n}: the path leaves the guard-approved origin; nothing was requested`);
+          if (settle(blocked('FAILED_NON_LOCAL_TARGET', `step ${n}: the path leaves the guard-approved origin; nothing was requested`), i, step)) continue;
           break;
         }
         try {
           await page.goto(url);
         } catch {
-          verdict = blocked('TARGET_UNREACHABLE', `step ${n}: the page could not be loaded`);
+          if (settle(blocked('TARGET_UNREACHABLE', `step ${n}: the page could not be loaded`), i, step)) continue;
           break;
         }
       } else if (step.action === 'click' || step.action === 'fill') {
@@ -3667,14 +4271,23 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
           if (step.action === 'click') await page.click(step.selector);
           else await page.fill(step.selector, step.value);
         } catch {
-          verdict = blocked('STEP_NOT_PERFORMABLE', `step ${n}: the ${step.action} target could not be found or acted on`);
+          const cause = await probeActionFailure(page.locator(step.selector), step.action, false);
+          if (settle(notPerformable(actionFailureReason(n, step.action, cause), cause), i, step)) continue;
           break;
+        }
+        if (step.action === 'click' && step.effect === 'validation') {
+          const rec = await recordValidationSubmit(ctx, kase, requestLog, windowStart, n);
+          if ('result' in rec) {
+            if (settle(rec.result, i, step)) continue;
+            break;
+          }
+          queryEvidence.set(i, rec.evidence);
         }
       } else if (step.action === 'query') {
         const q = await runQueryStep(ctx, kase, step, n);
         if (!q.ok) {
           if (q.result.evidence.length > 0) queryEvidence.set(i, q.result.evidence[0]);
-          verdict = q.result;
+          if (settle(q.result, i, step)) continue;
           break;
         }
         queryEvidence.set(i, q.evidence);
@@ -3682,24 +4295,24 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
         const located = page.locator(step.selector).first();
         const ok = await located.waitFor({ state: 'visible', timeout: 10000 }).then(() => true, () => false);
         if (!ok) {
-          verdict = { outcome: 'fail', reason_code: null, reason: `step ${n}: the expected element was not visible`, evidence: [] };
+          if (settle({ outcome: 'fail', reason_code: null, reason: `step ${n}: the expected element was not visible`, evidence: [] }, i, step)) continue;
           break;
         }
         const seen = await requireVisibleToPerson(located, n);
         if (seen !== null) {
-          verdict = seen;
+          if (settle(seen, i, step)) continue;
           break;
         }
       } else if (step.action === 'expect_text') {
         const located = page.locator(step.selector).first();
         const text = await located.textContent({ timeout: 10000 }).catch(() => null);
         if (text === null || !text.includes(step.contains)) {
-          verdict = { outcome: 'fail', reason_code: null, reason: `step ${n}: the expected text was not present`, evidence: [] };
+          if (settle({ outcome: 'fail', reason_code: null, reason: `step ${n}: the expected text was not present`, evidence: [] }, i, step)) continue;
           break;
         }
         const seen = await requireVisibleToPerson(located, n);
         if (seen !== null) {
-          verdict = seen;
+          if (settle(seen, i, step)) continue;
           break;
         }
       } else if (step.action === 'expect_url') {
@@ -3707,19 +4320,19 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
         const have = new URL(page.url());
         const same = want.search === '' ? have.pathname === want.pathname : have.pathname + have.search === want.pathname + want.search;
         if (!same) {
-          verdict = { outcome: 'fail', reason_code: null, reason: `step ${n}: the page URL did not match the expected path`, evidence: [] };
+          if (settle({ outcome: 'fail', reason_code: null, reason: `step ${n}: the page URL did not match the expected path`, evidence: [] }, i, step)) continue;
           break;
         }
       } else if (step.action === 'expect_requests') {
         if (requestLog === null) {
-          verdict = blocked('STEP_NOT_PERFORMABLE', `step ${n}: the request log is not available; nothing was asserted`);
+          if (settle(notPerformable(`step ${n}: the request log is not available; nothing was asserted`), i, step)) continue;
           break;
         }
         // The wait comes first and the slice after it, so a request a handler issues once the click returned is counted.
         const seen = await settleRequestWindow(requestLog, windowStart);
         const decided = evaluateRequestWindow(seen, step);
         if (decided.status === 'non-local') {
-          verdict = blocked('FAILED_NON_LOCAL_TARGET', `step ${n}: a matching request targeted a host the local-only guard does not approve; it was aborted and nothing was asserted`);
+          if (settle(blocked('FAILED_NON_LOCAL_TARGET', `step ${n}: a matching request targeted a host the local-only guard does not approve; it was aborted and nothing was asserted`), i, step)) continue;
           break;
         }
         try {
@@ -3747,11 +4360,11 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
             }),
           );
         } catch {
-          verdict = blocked('EVIDENCE_WRITE_FAILED', `step ${n}: the request evidence could not be written`);
+          if (settle(blocked('EVIDENCE_WRITE_FAILED', `step ${n}: the request evidence could not be written`), i, step)) continue;
           break;
         }
         if (decided.status === 'failed') {
-          verdict = { outcome: 'fail', reason_code: null, reason: `step ${n}: the page issued ${decided.observed} matching request(s); ${step.count} were expected`, evidence: [] };
+          if (settle({ outcome: 'fail', reason_code: null, reason: `step ${n}: the page issued ${decided.observed} matching request(s); ${step.count} were expected`, evidence: [] }, i, step)) continue;
           break;
         }
       } else if (step.action === 'judge') {
@@ -3762,7 +4375,7 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
           const scoped = scopeOf(step.within);
           const found = scoped.ok ? await resolveScopeElement(page, scoped.scope) : { ok: false, count: 0 };
           if (!found.ok) {
-            verdict = needsHuman('STEP_UNGROUNDED', `step ${n}: the judge scope matched ${found.count} elements at run time; a scope must match exactly one, so nothing was captured or judged`);
+            if (settle(needsHuman('STEP_UNGROUNDED', `step ${n}: the judge scope matched ${found.count} elements at run time; a scope must match exactly one, so nothing was captured or judged`), i, step)) continue;
             break;
           }
           scopeElement = found.locator;
@@ -3785,7 +4398,7 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
             );
           }
         } catch {
-          verdict = blocked('EVIDENCE_WRITE_FAILED', `step ${n}: the judge capture could not be taken or written`);
+          if (settle(blocked('EVIDENCE_WRITE_FAILED', `step ${n}: the judge capture could not be taken or written`), i, step)) continue;
           break;
         }
         judgeKinds.set(i, step.kind);
@@ -3793,7 +4406,7 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
       } else if (step.action === 'read_message') {
         const read = await runReadMessage(ctx, kase, step, n, startedMs, smsBaseline);
         if (!read.ok) {
-          verdict = read.result;
+          if (settle(read.result, i, step)) continue;
           break;
         }
         queryEvidence.set(i, read.evidence);
@@ -3807,9 +4420,15 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
       } else {
         // Every action the validator accepts has a branch above (the locator forms left through continue), so an
         // accepted action with no handler can never be recorded as passed.
-        verdict = blocked('STEP_NOT_PERFORMABLE', `step ${n}: this step has no runtime handler; nothing was asserted`);
+        if (settle(notPerformable(`step ${n}: this step has no runtime handler; nothing was asserted`), i, step)) continue;
         break;
       }
+    }
+    // The guard is a hard failure: a dismissal that left the approved origin replaces any earlier result of the case.
+    if (overlayWatch !== null && overlayWatch.offOriginAt() !== null) {
+      const at = /** @type {number} */ (overlayWatch.offOriginAt());
+      failedIdx.push(at - 1);
+      verdict = blocked('FAILED_NON_LOCAL_TARGET', `step ${at}: an overlay dismissal left the guard-approved origin; nothing further was acted on`);
     }
     // Evidence after the last step: a full-page screenshot, or redacted text when the page text holds a secret.
     try {
@@ -3826,12 +4445,28 @@ DRIVERS.browser = async (ctx, kase, plan, session) => {
       }
     }
     // The final capture reflects the state after the last step that ran, so it is attributed to that step.
-    const recorded = recordSteps(plan.steps, ranTo + 1, verdict !== null ? ranTo : -1, (j) => queryEvidence.get(j) ?? (j === ranTo ? evidence[0] ?? null : null));
+    const recordedRaw = markFailedSteps(recordSteps(plan.steps, ranTo + 1, -1, (j) => queryEvidence.get(j) ?? (j === executedTo ? evidence[0] ?? null : null)), failedIdx);
+    // Gap records are applied only to indexes the loop reached: a verdict that ended the case first leaves later steps not-run.
+    const reachedGaps = gapSteps.filter((g) => g.at <= ranTo);
+    const causeRecorded = [...causeAt].reduce((recs, [at, cause]) => attachStepCause(recs, at, cause), recordedRaw);
+    const recorded = overlayStoppedRecords(overlayGapRecords(causeRecorded, reachedGaps, truncateAt !== null && ranTo >= truncateAt ? truncateAt : null), stoppedAt);
+    verdict = gapVerdict(verdict, gapSteps);
     // A captured judge step waits for a verdict only when no other step ended the case; otherwise it is moot.
     const stepsOut = recorded.map((rec, j) => (judgeKinds.has(j)
       ? { ...rec, result: verdict === null ? PENDING_JUDGMENT : 'not-judged', kind: judgeKinds.get(j), scope_evidence: judgeScope.get(j) ?? null }
       : rec));
-    const allEvidence = [...queryEvidence.values(), ...judgeScope.values(), ...evidence];
+    /** @type {string[]} */ const overlayEvidence = [];
+    if ((overlayWatch !== null && overlayWatch.firings().length > 0) || overlaySkipped.length > 0) {
+      try {
+        overlayEvidence.push(writeEvidence(ctx, `case-${kase.index}.overlay.json`, {
+          kind: 'json',
+          value: summarizeOverlayWatch(overlayWatch === null ? [] : overlayWatch.registered, overlaySkipped.map((/** @type {any} */ s) => ({ id: s.id, reason: s.reason })), overlayWatch === null ? [] : overlayWatch.firings()),
+        }));
+      } catch {
+        if (verdict === null || verdict.outcome !== 'blocked') return blocked('EVIDENCE_WRITE_FAILED', 'the overlay evidence could not be written');
+      }
+    }
+    const allEvidence = [...queryEvidence.values(), ...judgeScope.values(), ...overlayEvidence, ...evidence];
     if (verdict !== null) return { ...verdict, evidence: allEvidence, steps: stepsOut };
     if (pendingAt.length > 0) return { outcome: PENDING_JUDGMENT, reason_code: null, reason: null, evidence: allEvidence, steps: stepsOut, pending_judgment: pendingAt.map((j) => j + 1) };
     return { outcome: 'pass', reason_code: null, reason: null, evidence: allEvidence, steps: stepsOut };
@@ -4773,11 +5408,13 @@ async function executeCase(ctxOrNull, kase, planByIndex, target, makeCtx, root, 
   if (invalidChosen) return out(needsHuman(invalidChosen.code, invalidChosen.reason));
   const invalidJudge = validateJudgeCriteria(p.steps, kase.manual_steps_verbatim);
   if (invalidJudge) return out(needsHuman(invalidJudge.code, invalidJudge.reason));
-  const writeAt = firstWriteStep(p.steps);
-  if (writeAt !== -1) {
+  const invalidSubmit = validateValidationSubmits(p.steps, kase.manual_steps_verbatim);
+  if (invalidSubmit) return out(needsHuman(invalidSubmit.code, invalidSubmit.reason));
+  const effectAt = firstEffectStep(p.steps);
+  if (effectAt !== -1) {
     const kitConfig = ctxOrNull ? ctxOrNull.loginConfig : readJsonOrNull(join(root, 'PRPs', 'auth', 'login.config.json'));
     if (!isDedicatedRole(kitConfig, role)) {
-      return out(blocked('ROLE_NOT_DEDICATED', `step ${writeAt + 1}: ${REASON_CATALOGUE.ROLE_NOT_DEDICATED.reason}`));
+      return out(blocked('ROLE_NOT_DEDICATED', `step ${effectAt + 1}: ${REASON_CATALOGUE.ROLE_NOT_DEDICATED.reason}`));
     }
   }
   const hasQuery = p.steps.some((/** @type {any} */ s) => isObj(s) && s.action === 'query');
@@ -4802,10 +5439,13 @@ async function executeCase(ctxOrNull, kase, planByIndex, target, makeCtx, root, 
     }
   }
   /** @type {number[]} */ let runtimeSteps = [];
+  /** @type {{ at: number, kind: string }[]} */ let gapSteps = [];
+  /** @type {number | null} */ let truncateAt = null;
   if (driver === 'browser' && p.steps.some((/** @type {any} */ s) => isObj(s) && (LOCATOR_ACTIONS.includes(s.action) && locatorOf(s) !== null || s.action === 'judge' && s.within !== undefined))) {
     const grounded = groundLocators(p.steps, loadGroundingSnapshots(ctx.runDirAbs), kase.manual_steps_verbatim, role, p.chosen_inputs);
-    if (grounded.refusal !== null) return out(needsHuman(grounded.refusal.code, grounded.refusal.reason));
     runtimeSteps = grounded.runtime;
+    gapSteps = grounded.gaps;
+    truncateAt = grounded.truncateAt;
   }
   if (ctx.playwright === null) {
     return out(blocked('FAILED_PLAYWRIGHT_UNAVAILABLE', PLAYWRIGHT_UNAVAILABLE_REASON));
@@ -4831,6 +5471,13 @@ async function executeCase(ctxOrNull, kase, planByIndex, target, makeCtx, root, 
       const g = await ctx.target.guard.checkTarget(src.url, { root });
       if (!g.ok) return out(blocked('FAILED_NON_LOCAL_TARGET', `step ${i + 1}: the declared mail source is not local; nothing was requested`));
     }
+  }
+  // Declared overlay handlers are read and refused here, before any state, session or request; only a browser case reads them.
+  /** @type {any} */ let overlay = { ok: true, handlers: [], skipped: [] };
+  if (driver === 'browser') {
+    const kitForOverlay = ctxOrNull ? ctxOrNull.loginConfig : readJsonOrNull(join(root, 'PRPs', 'auth', 'login.config.json'));
+    overlay = classifyOverlayHandlers(seedConfig && isObj(seedConfig) ? seedConfig.overlay_handlers : undefined, isDedicatedRole(kitForOverlay, role));
+    if (!overlay.ok) return out(blocked(overlay.code, overlay.reason));
   }
   /** @type {any[]} */ let steps = p.steps;
   // A browser case for a role whose target authenticates every request cannot
@@ -4877,7 +5524,7 @@ async function executeCase(ctxOrNull, kase, planByIndex, target, makeCtx, root, 
   }
   const fn = DRIVERS[driver];
   if (!fn) return out(needsHuman('NO_ACTIVE_DRIVER', `no active driver handles ${JSON.stringify(driver)}`));
-  const ran = await fn(runCtx, kase, { ...p, steps, runtime_steps: runtimeSteps }, session);
+  const ran = await fn(runCtx, kase, { ...p, steps, runtime_steps: runtimeSteps, gap_steps: gapSteps, truncate_at: truncateAt, overlay_handlers: overlay.handlers, overlay_skipped: overlay.skipped }, session);
   // A driver that passed every step has all of them passed; a driver that ended the case early already recorded its steps.
   const withSteps = ran.outcome === 'pass' && ran.steps === undefined
     ? { ...ran, steps: recordSteps(p.steps, p.steps.length, -1, (j) => (driver === 'http' ? ran.evidence[j] ?? null : j === p.steps.length - 1 ? ran.evidence[0] ?? null : null)) }
@@ -5046,6 +5693,7 @@ async function runRun(args) {
         steps: Array.isArray(result.steps) ? result.steps : [],
         manual_steps_verbatim: keepSteps || pending ? c.manual_steps_verbatim : null,
         ...(pending ? { pending_judgment: result.pending_judgment } : {}),
+        ...(STEP_FAILURE_CAUSES.includes(result.cause) ? { cause: result.cause } : {}),
       });
     }
   } catch (err) {
@@ -5385,11 +6033,13 @@ function parseGroundArgs(argv) {
  * @param {any} page
  * @param {any[]} steps validated prefix steps (see parseGroundPrefix)
  * @param {NonNullable<Target>} target
+ * @param {{ setStep: (n: number) => void } | null} [watch] told the one-based step position before each step acts
  * @returns {Promise<{ ok: true } | { ok: false, reason: string }>}
  */
-export async function replayGroundingPrefix(page, steps, target) {
+export async function replayGroundingPrefix(page, steps, target, watch = null) {
   for (const [i, step] of steps.entries()) {
     const n = i + 1;
+    if (watch !== null && typeof watch.setStep === 'function') watch.setStep(n);
     if (step.action === 'goto') {
       const url = resolveStepUrl(step.path, target);
       if (url === null) return { ok: false, reason: `prefix step ${n}: the path leaves the guard-approved origin; nothing was requested` };
@@ -5498,6 +6148,10 @@ async function runGround(argv) {
     seedConfig: null,
     anonChecks: new Map(),
   };
+  // Declared overlay handlers are read and refused here, before any session or browser.
+  const groundSeed = readJsonOrNull(join(root, 'PRPs', 'auth', 'qa-seed.json'));
+  const groundOverlay = classifyOverlayHandlers(groundSeed && isObj(groundSeed) ? groundSeed.overlay_handlers : undefined, isDedicatedRole(ctx.loginConfig, role));
+  if (!groundOverlay.ok) throw new Halt(groundOverlay.code, groundOverlay.reason);
   /** @type {string | null} */ let storagePath = null;
   if (role !== null) {
     const roles = ctx.loginConfig && isObj(ctx.loginConfig.roles) ? ctx.loginConfig.roles : {};
@@ -5531,6 +6185,8 @@ async function runGround(argv) {
     });
     const page = await context.newPage();
     page.setDefaultTimeout(10000);
+    const groundWatch = groundOverlay.handlers.length > 0 ? await registerOverlayHandlers(page, groundOverlay.handlers, target) : null;
+    if (groundOverlay.handlers.length > 0 && groundWatch === null) throw new Halt('FAILED_PLAYWRIGHT_UNAVAILABLE', 'the installed Playwright cannot register overlay handlers (version 1.44 or newer is needed); nothing was written');
     try {
       const resp = await page.goto(url, { waitUntil: 'load', timeout: 15000 });
       if (resp !== null && resp.status() >= 500) throw new Error('server error');
@@ -5538,8 +6194,15 @@ async function runGround(argv) {
       throw new Halt('TARGET_UNREACHABLE', 'the route could not be loaded');
     }
     if (prefix !== null) {
-      const replayed = await replayGroundingPrefix(page, prefix, target);
+      const replayed = await replayGroundingPrefix(page, prefix, target, groundWatch);
       if (!replayed.ok) throw new Halt('GROUND_PREFIX_FAILED', replayed.reason);
+    }
+    if (groundWatch !== null) {
+      if (groundWatch.offOriginAt() !== null) throw new Halt('FAILED_NON_LOCAL_TARGET', 'an overlay dismissal left the guard-approved origin; nothing was written');
+      groundWatch.setStep(prefix === null ? 0 : prefix.length);
+      // A trial hover runs Playwright's actionability checks without acting, which is what runs the handlers: a load-time overlay is dismissed before the snapshot.
+      await page.locator('body').hover({ trial: true, timeout: 3000 }).catch(() => {});
+      if (groundWatch.offOriginAt() !== null) throw new Halt('FAILED_NON_LOCAL_TARGET', 'an overlay dismissal left the guard-approved origin; nothing was written');
     }
     const settled = await waitForStableSnapshot(() => page.locator('body').ariaSnapshot());
     if (settled.status === 'unavailable') throw new Halt('GROUND_SNAPSHOT_UNAVAILABLE', 'the installed Playwright cannot produce an accessibility snapshot');
@@ -5583,6 +6246,10 @@ async function runGround(argv) {
     } catch {
       throw new Halt('EVIDENCE_WRITE_FAILED', 'the snapshot could not be written');
     }
+    if (groundWatch !== null) {
+      for (const f of groundWatch.firings()) process.stdout.write(`OVERLAY_DISMISSED: ${f.handler} step ${f.step} ${f.result}\n`);
+    }
+    for (const sk of groundOverlay.skipped) process.stdout.write(`OVERLAY_HANDLER_SKIPPED: ${sk.id}\n`);
     process.stdout.write(`GROUNDED: ${fwd(relative(runDirAbs, dest))} entries=${kept.length} withheld=${withheld}\n`);
     return 0;
   } finally {
