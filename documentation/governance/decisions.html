@@ -137,6 +137,7 @@
         <li><a href="#visual-tooling-provisioning">Provisioning the visual tooling in every new plugin cache: registered backlog item (F10)</a></li>
         <li><a href="#separate-from-upstream">Separating relay from the upstream Wirasm repository: registered backlog item</a></li>
         <li><a href="#qa-runner-impossible-only-needs-human">The QA runner&#39;s needs-human means only what no AI agent can execute alone (vocabulary v3)</a></li>
+        <li><a href="#provider-prompt-cache-evaluation">Explicit provider prompt caching for plugin execution: registered evaluation</a></li>
         <li><a href="#qa-runner-vocabulary-v4">The QA runner degrades by step and names every failure (vocabulary v4)</a></li>
       </ol>
 
@@ -1043,7 +1044,15 @@
         <dt>Reason</dt><dd>Each item removes a reason for a person to do what the runner can do, or makes the remainder measurable. The class split turns &ldquo;human by nature&rdquo; from a label into a count; judgment stays with the session that can see the capture and the script stays deterministic, local and credential-free; declared local sources and dedicated roles keep every outward effect on a stand-in the operator controls. Registering them at the cut records the shape once, before the dogfood measures it.</dd>
       </div>
 
-      <h3 id="qa-runner-vocabulary-v4">107. The QA runner degrades by step and names every failure: vocabulary v4</h3>
+      <h3 id="provider-prompt-cache-evaluation">107. Explicit provider prompt caching for plugin execution: registered evaluation</h3>
+      <div class="kv">
+        <dt>Date</dt><dd>2026-10-25</dd>
+        <dt>Context</dt><dd>A relay run is dominated by model calls, and every <code>Task</code> dispatch re-reads the same large, stable material (agent definition, methodology, plan, PRD, rubric and template files) before doing any work; retries repeat it. The Anthropic API&#39;s prompt cache makes a repeated prefix cheaper and faster within a time-to-live. relay does not call the API itself: Claude Code issues every request and places the cache breakpoints, so a plugin controls only the order and stability of what each agent reads and the settings the operator runs with. The one direct-API surface here is <code>npm run eval</code>. No relay consumer records cache-token counts today.</dd>
+        <dt>Decision</dt><dd>An evaluation is registered, not started. It ends in adopt (a PRD), document only, or no change, and must settle: which caching levers exist and who can reach them, a baseline of cache-read, cache-write and uncached tokens per agent role from real runs, prompt-order changes relay controls, the TTL against the loop&#39;s rhythm, explicit breakpoints in <code>npm run eval</code>, cache-token fields in <code>usage-metrics.mjs</code>, and the overlap with the deterministic-scripts and code-review entries.</dd>
+        <dt>Reason</dt><dd>The writer/reviewer loop with bounded retries produces exactly the repeated, stable prefixes caching rewards, but relay sits one layer above the API. Requiring a measured baseline before any outcome avoids restructuring agent prompts on an assumed saving.</dd>
+      </div>
+
+      <h3 id="qa-runner-vocabulary-v4">108. The QA runner degrades by step and names every failure: vocabulary v4</h3>
       <div class="kv">
         <dt>Date</dt><dd>2026-10-25</dd>
         <dt>Context</dt><dd>The 0.47.0 dogfood of <code>/relay-qa-run</code> executed 31 of the 87 non-impossible objective steps (35.6%) of the two reference reports against a 90% target, and the lost steps were mostly not impossible: one mis-grounded step forfeited a whole case, an error message was reachable only after a validation submit, controls had no accessible name, known overlays covered the page and a product defect stopped a case at its first failing assertion. Phases 1 to 6 of <code>qa-runner-vocabulary-v4</code> are implemented in the 0.48.0 release and this entry registers them together; phase 8, the counted dogfood, measures them.</dd>

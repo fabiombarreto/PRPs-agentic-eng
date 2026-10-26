@@ -298,7 +298,7 @@
       <p>In <code>docs/</code> at the plugin repo root:</p>
 
       <ul>
-        <li><code>decisions.md</code> — 107 recorded decisions (see <a href="../governance/decisions.html">Decisions</a>)</li>
+        <li><code>decisions.md</code> — 108 recorded decisions (see <a href="../governance/decisions.html">Decisions</a>)</li>
         <li><code>anti-patterns.md</code> — 17 forbidden patterns (see <a href="../governance/anti-patterns.html">Anti-patterns</a>)</li>
         <li><code>decision-gate.md</code> — the mandatory control mechanism</li>
         <li><code>context/architecture.md</code>, <code>conventions.md</code>, <code>constraints.md</code>, <code>integrations.md</code>, <code>methodology.md</code></li>
@@ -593,6 +593,29 @@
       <div class="callout callout--note">
         <div class="callout__title">Registered, not scheduled</div>
         <p>Recorded in <code>docs/decisions.md</code> (2026-10-09, "Separating relay from the upstream Wirasm repository"). Not implemented and not yet placed in a numbered project phase. The 2026-04-19 reference-only entry stays operative, and <code>plugins/prp-core/</code> stays on disk, until a dedicated PRD is authored via <code>/relay-prd</code> and approved.</p>
+      </div>
+
+      <h3 id="planned-provider-prompt-cache">Planned: evaluate explicit provider prompt caching <span class="badge badge--pending">planned</span></h3>
+
+      <p>Every <code>Task</code> dispatch in a relay run re-reads the same large, stable material before it does any work: the agent definition, <code>methodology.md</code>, the plan, the source PRD, and the rubric and template files. A <code>CHANGES_REQUESTED</code> retry repeats almost the same prefix. The Anthropic API&rsquo;s prompt cache makes a repeated prefix cheaper and faster within a time-to-live, which is the shape relay&rsquo;s writer/reviewer loop produces.</p>
+
+      <p>relay does not call the API itself: Claude Code issues every request and places the cache breakpoints. A plugin can only control the order and stability of what each agent reads, and recommend session settings to the operator. The one direct-API surface in this repository is <code>npm run eval</code>. A registered evaluation measures whether any of these levers moves the numbers, and ends in adopt (through a PRD), document only, or no change.</p>
+
+      <p>The evaluation must settle:</p>
+
+      <div class="kv">
+        <dt>Levers</dt><dd>What Claude Code caches automatically, whether <code>Task</code> subagents and retries share a cached prefix, which settings change caching or its TTL, and whether a plugin or only the operator can reach them. Verified against the installed version, not assumed.</dd>
+        <dt>Baseline</dt><dd>Cache-read, cache-write and uncached input tokens, and wall time, per agent role and phase, from real runs of relay and at least one target project. No outcome without it.</dd>
+        <dt>Prompt order</dt><dd>Whether reading stable material first and variable material (the diff, the verdict, timestamps) last raises the hit rate, with every agent&rsquo;s contract and rubric unchanged.</dd>
+        <dt>TTL</dt><dd>Whether the gaps between dispatches that share a prefix fit the default TTL, and whether a longer TTL pays for its higher write cost at relay&rsquo;s retry rates.</dd>
+        <dt>Direct API</dt><dd>Explicit breakpoints on the fixed reviewer prompts of <code>npm run eval</code>, as the lowest-risk first adoption.</dd>
+        <dt>Measurement</dt><dd>Cache-token fields in <code>usage-metrics.mjs</code>, within its 1% token budget, so the comparison is repeatable.</dd>
+        <dt>Overlap</dt><dd>Which savings belong to the deterministic-scripts and code-review work (less work) and which to caching (cheaper work that stays).</dd>
+      </div>
+
+      <div class="callout callout--note">
+        <div class="callout__title">Registered, not scheduled</div>
+        <p>Recorded in <code>docs/decisions.md</code> (2026-10-25, "Using the provider's explicit prompt cache to speed up plugin execution"). Not implemented and not yet placed in a numbered project phase. No agent's reading order, plugin setting or metrics field changes for caching until the evaluation records its outcome and, for adopt, a PRD is approved via <code>/relay-prd</code>.</p>
       </div>
 
       <h3 id="shipped-manual-qa-runner">Shipped: manual-QA runner and local test-auth kit <span class="badge badge--done">shipped</span></h3>

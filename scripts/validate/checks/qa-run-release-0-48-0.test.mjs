@@ -1,6 +1,6 @@
 // @ts-check
 // PRPs/prds/qa-runner-vocabulary-v4.prd.md AC-15 The command document carries a marked, validating example for every new vocabulary item, the overlay declaration, the per-step/cause/continuation rules and the run-time codes table
-// PRPs/prds/qa-runner-vocabulary-v4.prd.md AC-18 Release cut 0.48.0 (the in-tree part: minor bump, changelog block that claims no installation, decision entry 107 in both mirrors; the install is the operator's step and is not testable in this tree)
+// PRPs/prds/qa-runner-vocabulary-v4.prd.md AC-18 Release cut 0.48.0 (the in-tree part: minor bump, changelog block that claims no installation, decision entry 108 in both mirrors; the install is the operator's step and is not testable in this tree)
 // PRPs/prds/qa-runner-vocabulary-v4.prd.md AC-17 Suite stays green (covered by the corpus run and validate-registry.test.mjs themselves; nothing is asserted here)
 /**
  * Phase 7 (release 0.48.0) of qa-runner-vocabulary-v4: the observables the existing release tests
@@ -10,7 +10,7 @@
  * Source plan: PRPs/plans/completed/qa-runner-vocabulary-v4-phase-7-release.plan.md
  *
  * Over the REAL files (read from disk, never edited), text plus the runner's own pure exports. Live properties are
- * derived from the runner and the manifest; history properties name the 0.48.0 section and decision 107 by their own
+ * derived from the runner and the manifest; history properties name the 0.48.0 section and decision 108 by their own
  * ids, which a later cut does not edit.
  *
  * Run: node --test "scripts/validate/**\/*.test.mjs"
@@ -186,7 +186,7 @@ test('AC-18 the 0.48.0 changelog section makes no claim that the release is inst
   assert.equal(/\binstalled\b/i.test(text), false, 'the 0.48.0 section claims an installation');
 });
 
-test('AC-18 decision 107 is registered once in docs/decisions.md with its fields and mirrored in decisions.html with an index row', () => {
+test('AC-18 decision 108 is registered once in docs/decisions.md with its fields and mirrored in decisions.html with an index row', () => {
   const heads = [...DECISIONS_MD.matchAll(/^## \[(\d{4}-\d{2}-\d{2})\] (The QA runner degrades by step and names every failure.*)$/gm)];
   assert.equal(heads.length, 1, `exactly one vocabulary v4 entry is required, found ${heads.length}`);
   assert.equal(heads[0][1], '2026-10-25');
@@ -200,14 +200,14 @@ test('AC-18 decision 107 is registered once in docs/decisions.md with its fields
   assert.equal(items.length, 8, `the Decision list must hold eight items, found ${items.length}`);
   assert.equal(/\bis installed\b|\bwas installed\b|\bhas been installed\b/i.test(entry), false, 'the entry claims an installation');
 
-  // The mirror: one h3 numbered 107, one index row, a Date/Context/Decision/Reason block.
+  // The mirror: one h3 numbered 108, one index row, a Date/Context/Decision/Reason block.
   const total = DECISIONS_MD.split('\n').filter((l) => /^## \[\d{4}-\d{2}-\d{2}\]/.test(l)).length;
   assert.equal((DECISIONS_HTML.match(/<h3 id="/g) || []).length, total, 'decisions.html does not mirror every markdown entry');
   const h3 = DECISIONS_HTML.indexOf('<h3 id="qa-runner-vocabulary-v4">');
-  assert.ok(h3 !== -1, 'the decision 107 heading is missing from decisions.html');
-  assert.ok(DECISIONS_HTML.slice(h3).startsWith('<h3 id="qa-runner-vocabulary-v4">107. '), 'the decisions.html entry is not numbered 107');
+  assert.ok(h3 !== -1, 'the decision 108 heading is missing from decisions.html');
+  assert.ok(DECISIONS_HTML.slice(h3).startsWith('<h3 id="qa-runner-vocabulary-v4">108. '), 'the decisions.html entry is not numbered 108');
   assert.ok(DECISIONS_HTML.includes('<li><a href="#qa-runner-vocabulary-v4">'), 'the decisions.html index row is missing');
   const page = DECISIONS_HTML.slice(h3, DECISIONS_HTML.indexOf('<h2 id="how-to-add">', h3));
-  for (const s of ['<dt>Date</dt><dd>2026-10-25</dd>', '<dt>Context</dt>', '<dt>Decision</dt>', '<dt>Reason</dt>', 'OVERLAY_HANDLER_INVALID', 'overlay_handlers']) assert.ok(page.includes(s), `decisions.html entry 107 lacks ${s}`);
+  for (const s of ['<dt>Date</dt><dd>2026-10-25</dd>', '<dt>Context</dt>', '<dt>Decision</dt>', '<dt>Reason</dt>', 'OVERLAY_HANDLER_INVALID', 'overlay_handlers']) assert.ok(page.includes(s), `decisions.html entry 108 lacks ${s}`);
   assert.equal(((page.match(/<ol>[\s\S]*?<\/ol>/) || [''])[0].match(/<li>/g) || []).length, 8, 'the html Decision list must hold eight items');
 });

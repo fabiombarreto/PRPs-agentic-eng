@@ -45,6 +45,13 @@
       <h3 id="v0-48-0-added">Added</h3>
 
       <ul>
+        <li><strong><a href="roadmap/status.html#planned-provider-prompt-cache">Phase status &mdash; Planned: evaluate explicit provider prompt caching</a></strong>
+          &mdash; registers an evaluation of whether the Anthropic API&rsquo;s prompt cache can make relay runs faster
+          and cheaper, given that Claude Code, not the plugin, places the cache breakpoints. Lists the seven questions
+          it must settle and its three possible outcomes. Backed by the 2026-10-25 entry in
+          <code>docs/decisions.md</code>. Nothing is implemented.</li>
+        <li><strong><a href="governance/decisions.html#provider-prompt-cache-evaluation">Decisions &mdash; entry 107</a></strong>
+          &mdash; mirrors the same 2026-10-25 decision on the site.</li>
         <li><strong>Per-step grounding gaps</strong> &mdash; a step the runner cannot ground is recorded
           <code>human</code> with <code>STEP_UNGROUNDED</code> and the rest of the case runs; an ungrounded
           <code>click</code>, <code>fill</code> or <code>goto</code> ends the run of the case there and the later steps
@@ -83,8 +90,8 @@
         <li><strong>Reference documents</strong> &mdash; <code>docs/api-reference.md</code> names the new exports and
           keys, and the glossary says a role-only presence step with no element present fails with cause
           <code>absent</code>.</li>
-        <li><strong>Decision entry 107</strong> &mdash; <code>governance/decisions.html</code> mirrors the new entry;
-          <code>roadmap/status.html</code> counts 107 decisions and lists the feature;
+        <li><strong>Decision entry 108</strong> &mdash; <code>governance/decisions.html</code> mirrors the new entry;
+          <code>roadmap/status.html</code> counts 108 decisions and lists the feature;
           <code>reference/scripts.html</code> and <code>reference/commands.html</code> describe the v4 behavior.</li>
         <li><strong><code>README.md</code></strong> &mdash; the live version prose names 0.48.0.</li>
         <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
