@@ -2554,6 +2554,31 @@ Until a PRD is authored via `/relay-prd` and approved, the 2026-04-19 entry stay
 
 ---
 
+## [2026-10-25] Using the provider's explicit prompt cache to speed up plugin execution is a registered evaluation
+
+**Context:** A relay run is dominated by model calls: `/relay-execute` drives, per phase, a writer and a reviewer for the plan, the implementation, the tests and the docs, and every `Task` dispatch starts a subagent that re-reads the same large, stable material before it does any work. That material is its agent definition, `docs/context/methodology.md`, the plan, the source PRD, and the rubric and template files under `plugins/relay/resources/`. Retries repeat it: a `CHANGES_REQUESTED` verdict re-dispatches the writer with almost the same prefix, and `code-reviewer` re-reads the same plan on every attempt. The Anthropic API offers prompt caching, where a request marks a stable prefix with a `cache_control` breakpoint and later requests that share that prefix read it at a fraction of the input-token cost and latency, within a time-to-live (TTL). relay does not call the API itself: it is prompt and configuration, and Claude Code issues every request and decides where the cache breakpoints go. A plugin's markdown therefore cannot place an explicit breakpoint; what it controls is the order and stability of what each agent reads, and the session settings the operator runs with. The one place in this repository that calls the API directly is `npm run eval` (`scripts/eval.mjs` running `promptfoo` with `ANTHROPIC_API_KEY`), where an explicit breakpoint can be set. No relay consumer reads cache usage today: `scripts/efficiency.mjs` and `plugins/relay/scripts/usage-metrics.mjs` record no cache-read or cache-write token counts. The operator asked (2026-10-25) to check whether the provider's explicit cache can make plugin execution faster.
+
+**Decision:** An **evaluation** of explicit provider prompt caching for relay is registered. It is NOT started. It ends in exactly one of three outcomes, recorded as a new entry in this file: **adopt** (a PRD changes prompt structure, settings guidance or tooling to raise cache hits), **document only** (an operator-facing recommendation, no plugin change), or **no change** (the evaluation shows no lever relay controls moves the numbers). The evaluation MUST settle:
+
+1. **Which levers exist.** An inventory, verified against the installed Claude Code version rather than assumed: what Claude Code caches automatically (system prompt, tool definitions, conversation history, subagent prompts), whether a subagent dispatched through `Task` can share a cached prefix with a sibling or a retry, which settings or environment variables change caching or its TTL, and whether any of them is reachable from a plugin (plugin settings, hooks, agent frontmatter) or only from the operator's session. A lever that only the operator can set becomes documentation, never a silent requirement.
+2. **Baseline measurement.** Cache-read, cache-write and uncached input tokens per agent role and per phase, taken from the session transcripts of real runs (relay and at least one target project, since relay is not representative, see the 2026-08-05 efficiency entries), plus wall time per dispatch. Without this baseline no outcome is recorded.
+3. **Prompt-order changes relay controls.** Whether reordering what an agent reads (stable material first: agent definition, methodology, rubric, template; variable material last: the attempt's diff, the verdict being answered, timestamps) raises the hit rate, and which agents gain most. Any reorder keeps every agent's contract and rubric unchanged; it changes when content is read, not what is read.
+4. **TTL against the loop's rhythm.** Whether the gaps between dispatches that share a prefix (writer to reviewer to writer on a retry, or phase to phase in `/relay-execute`) fit inside the default TTL, and whether a longer TTL pays for its higher write cost at relay's retry rates.
+5. **The direct-API surface.** Whether `npm run eval` should set explicit breakpoints on its fixed reviewer prompts, as the lowest-risk first adoption, and how promptfoo exposes that.
+6. **Measurement contract.** Whether `usage-metrics.mjs` gains cache-token fields, under the 2026-08-14 1% token budget and its "the agent triggers, the clock supplies" rule, so the before/after comparison is repeatable rather than a one-off reading.
+7. **Overlap with registered work.** The 2026-09-17 deterministic-scripts entry and the 2026-09-21 code-review outcome both cut tokens by removing work; caching cuts the cost of work that stays. The outcome states which savings each one claims, so neither is credited with the other's.
+
+**Reason:** Repeated, stable prefixes are the shape prompt caching rewards, and relay's writer/reviewer loop with bounded retries produces them on every phase. But relay sits one layer above the API, so the honest question is not "turn on the explicit cache" but which of the levers that Claude Code exposes relay or the operator can actually move, and by how much. Registering it as a measured evaluation, with a baseline required before any outcome, avoids restructuring agent prompts on an assumed saving.
+
+**Out of scope until the evaluation's outcome entry is recorded (and, for adopt, a PRD is approved):**
+- Reordering any agent's or command's reading order for caching purposes.
+- Adding cache-related settings, hooks or environment requirements to the plugin.
+- Changing the field contract of `usage-metrics.mjs` or `efficiency.mjs`.
+
+**Areas affected (when eventually decided):** `plugins/relay/agents/` (reading order), `plugins/relay/commands/relay-execute.md`, `relay-implement.md`, `relay-plan.md` (dispatch inputs); `plugins/relay/scripts/usage-metrics.mjs` and `scripts/efficiency.mjs` (cache-token fields); `scripts/eval.mjs` and `promptfooconfig.yaml`; `docs/context/architecture.md`; `documentation/` (governance/decisions, roadmap/status, changelog).
+
+---
+
 <!-- Template for future entries:
 
 ## [YYYY-MM-DD] Title of the decision
