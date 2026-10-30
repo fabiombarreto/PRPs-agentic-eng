@@ -47,6 +47,12 @@ worktree path is invalid (then HALT).
 HALT with a clear error if the worktree path does not exist or is not
 a directory.
 
+Record `target_root` as the current working directory: the artifact root, where every
+`PRPs/…` path below resolves (`${CLAUDE_PLUGIN_ROOT}/resources/repository-topology.md`, section
+"The code root of a phase, and where artifacts go"). The worktree path is the code root only:
+the suite runs there, and nothing under the worktree's own `PRPs/` is read or written. Invoked from
+inside the worktree itself, the two coincide and the behavior is unchanged.
+
 ---
 
 ## Phase 0 — methodology.md self-skip gate
@@ -77,7 +83,7 @@ Before the loop starts:
 1. **worktree exists and is a git worktree** — `git -C <worktree> rev-parse --git-dir` succeeds
 2. **`.claude/settings.json` exists in the worktree** — if not, HALT with a message naming `/relay-worktree` Step B.0, which propagates the file from the repository root at worktree-creation time. The file is gitignored, so `git worktree add` never carries it in, and re-running the context-builder skill does not populate a worktree — it writes to the project root. Re-create the worktree (or copy the file in by hand) rather than re-running the skill; run the skill only when the repository root itself has no `settings.json`.
 3. **methodology.md exists** — read `tdd` for downstream reporting
-4. **PRPs/ exists or can be created** — `mkdir -p <worktree>/PRPs/reports/<feature>/attempts`
+4. **PRPs/ exists or can be created** — `mkdir -p <target_root>/PRPs/reports/<feature>/attempts`
 5. **No pending uncommitted changes in the worktree** — if there are, note them in the final summary but proceed (the user may be iterating manually)
 
 If any of 1–4 fails, HALT and report what's missing.
@@ -113,6 +119,7 @@ that includes:
 
 ```
 worktree: <absolute path>
+target_root: <absolute path of the artifact root>
 attempt: <N>
 run_id: <uuid>
 time_remaining_ms: <deadline_ts - now>
@@ -191,7 +198,7 @@ treat it as oscillation.
 
 After the loop exits (any outcome), produce:
 
-1. **A run-level file** at `<worktree>/PRPs/reports/<feature>/run.json`, **written by this command, never by the `test-runner` agent** (the agent's write surface is `attempts/<attempt>/record.json` only, and its own five verdict tokens are attempt-level; an attempt-shaped record with `outcome: "PASSED"` in this path is a defect, not an alias for `GREEN`). If the file already exists carrying an attempt-level shape, overwrite it wholesale with the run-level shape below rather than merging:
+1. **A run-level file** at `<target_root>/PRPs/reports/<feature>/run.json`, **written by this command, never by the `test-runner` agent** (the agent's write surface is `attempts/<attempt>/record.json` only, and its own five verdict tokens are attempt-level; an attempt-shaped record with `outcome: "PASSED"` in this path is a defect, not an alias for `GREEN`). If the file already exists carrying an attempt-level shape, overwrite it wholesale with the run-level shape below rather than merging:
    ```json
    {
      "run_id": "...",
@@ -213,9 +220,11 @@ After the loop exits (any outcome), produce:
        "attempt_2_suite_ms": ...,
        ...
      },
-     "tdd_mode": true|false
+     "tdd_mode": true|false,
+     "secrets_redacted": { "count": <sum>, "categories": { "env_names": <sum>, "url_values": <sum>, "regex_matches": <sum> } }
    }
    ```
+   `secrets_redacted` sums, over every attempt, the counts the redaction filter printed for that attempt's `stdout.log` and `junit.xml` (the `test-runner` verdict carries them). `generate-final-report.mjs` renders it as the report's "Secrets redaction" section. A count of `0` is informative and is still written.
 
 2. **A terse human summary** printed to the user, regardless of outcome:
    - Outcome line with color-coded status
@@ -234,7 +243,7 @@ latest run's review state) but silently destroys the previous phase's
 record in a multi-phase `/relay-execute`. So whenever a phase number is
 known — the invoking plan's `-phase-<N>-` filename segment, or the
 orchestrator's current row — ALSO write a byte-identical copy to
-`<worktree>/PRPs/reports/<feature>/phase-<N>/run.json`, and record that
+`<target_root>/PRPs/reports/<feature>/phase-<N>/run.json`, and record that
 same `<N>` in the `phase` field of both. The feature-level file keeps
 its existing meaning and every existing consumer keeps working
 unchanged; the archive is additive. When no phase number is derivable

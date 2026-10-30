@@ -30,6 +30,42 @@ not always: a member may hold its relay context in a wrapper directory whose git
 repository lives one level below. The contract expresses both rather than
 assuming they coincide.
 
+### The code root of a phase, and where artifacts go
+
+A phase also has a **`code_root`**: the checkout it edits. It is the phase's
+worktree, `<repo_root>/.worktrees/<feature>/`, when `/relay-worktree` created
+or re-used one, and `repo_root` itself when the run fell back to the current
+working directory (`FALLBACK_CWD`, `--no-worktree`). It holds the code, the
+tests and the `docs/` edits of the feature. A single-repo project with no
+topology has exactly one member, so its `repo_root` is `project_root` and its
+`code_root` is `<project_root>/.worktrees/<feature>/`.
+
+The artifact plane never moves with it. These rules hold for every command and
+agent, with or without a topology:
+
+- **Every `PRPs/…` path resolves against `project_root`** (the `target_root`
+  the command was invoked with): PRDs, plans, review logs, per-attempt diffs,
+  test-run records, `run.json`, suite manifests, docs-sync manifests, halt files
+  and `orchestrator-run.json`. Nothing under `<code_root>/PRPs/` is written by a
+  pipeline step.
+- **Code edits, `git diff`, validation commands and test runs happen in
+  `code_root`.** An agent that receives `code_root` uses it for those and
+  `target_root` for every `PRPs/…` read or write; an agent invoked without
+  `code_root` (a standalone, worktree-less invocation) uses `target_root` for
+  both, exactly as before.
+- **A worktree cut from `HEAD` does not contain the run's uncommitted PRD or
+  plan, and needs neither.** Agents receive those by absolute path under
+  `project_root`. Their absence from the worktree is never a reason to skip the
+  worktree.
+- **The orchestrator never changes its working directory into a worktree.** It
+  passes `code_root` instead, so a relative `PRPs/…` path in an adopted
+  protocol still lands in `project_root`.
+
+At the end of a run the code is uncommitted in `code_root`, where
+`/relay-commit` commits it, and the artifacts are uncommitted under
+`project_root/PRPs/`. Each lives in exactly one place; nothing is copied
+between the two and there is nothing to reconcile.
+
 ---
 
 ## Declaration, never detection

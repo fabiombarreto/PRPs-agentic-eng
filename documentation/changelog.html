@@ -32,6 +32,109 @@
 
       <p>Nothing yet.</p>
 
+      <h2 id="v0-49-0">0.49.0 &#8212; 2026-10-30</h2>
+
+      <p>Fixes for the defects that unattended benchmark runs of <code>/relay-execute</code> on 0.47.0 exposed (Claude
+        Agent SDK, <code>bypassPermissions</code>, no human present, the generated deny list in force). On a project
+        declaring <code>tdd: true</code>, relay on Haiku halted every time, at the test writer or at R-X, while vanilla
+        Claude Code on Haiku completed the same tasks. Relay on Sonnet got past the same points only by improvising and
+        by shortening the protocol. The changes below are listed one by one, because the benchmark compares this
+        release against 0.47.0. Decision entry 109 records the diagnosis. 0.48.0 changed only the QA runner, so it
+        carries none of these fixes. <code>npm run validate</code> still runs 28 checks.</p>
+
+      <h3 id="v0-49-0-added">Added</h3>
+
+      <ul>
+        <li><strong>Test-first suite snapshot</strong> &mdash; <code>/relay-execute</code> Step A.3.5.3 records a
+          <code>git write-tree</code> of the worktree right after a test-first suite is approved, and that tree is the
+          phase&rsquo;s diff base. The approved tests no longer enter the Implementer&rsquo;s diff as created files, while
+          an Implementer edit to one of them still fails R-X. On 0.47.0 this halted every test-first phase at code
+          review.</li>
+        <li><strong>Stage ledger</strong> &mdash; <code>/relay-execute</code> lists the ten stages of a phase and the
+          duties that live inside each adopted command (docs sync, D8, <code>run.json</code>, snapshots). It logs
+          <code>docs_sync</code>, <code>d8</code> and <code>snapshot</code> entries, and before the success summary it runs
+          the new <code>scripts/orchestrator-ledger.mjs</code>, which writes the <code>deviations</code> it finds into
+          <code>orchestrator-run.json</code>. The summary prints them, whether or not the run announced them.</li>
+        <li><strong>Plan-validation repair</strong> &mdash; when a plan&rsquo;s own validation command cannot pass against
+          a correct implementation, the implementer reports a <code>plan_validation_defect</code>. <code>/relay-implement</code>
+          verifies the evidence and returns <code>PLAN_VALIDATION_DEFECT</code> without spending a retry.
+          <code>/relay-execute</code> Step A.4.2 then has <code>plan-writer</code> revise only the cited commands to DRAFT,
+          <code>plan-reviewer</code> re-approves them, and the implementation resumes. At most one repair per phase; a
+          second defect halts <code>FAILED_PLAN_VALIDATION_DEFECT</code>. On 0.47.0 the run reopened the APPROVED plan by
+          hand.</li>
+        <li><strong><code>R-COH-VALIDATE-PATTERN-UNGROUNDED</code> condition (c)</strong> &mdash; a literal that code
+          the plan does not change produces (a route with its mount prefix, a schema key, a settings or module path, a
+          name) must be grounded by a cited <code>file:line</code> the reviewer reads, by the PRD&rsquo;s interface
+          contract, or by deriving the value at run time. No new rubric row.</li>
+        <li><strong><code>scripts/redact-output.mjs</code></strong> &mdash; redacts captured test output (Layers 1 and 2
+          of the redaction policy, with the QA runner&rsquo;s table) straight into the attempt directory and reports the
+          counts per category. <code>run.json</code> now carries <code>secrets_redacted</code>.</li>
+        <li><strong><code>code_root</code></strong> &mdash; <code>repository-topology.md</code> defines the checkout a
+          phase edits. Every command and agent that touches code accepts it, and it defaults to <code>target_root</code>,
+          so standalone use is unchanged.</li>
+        <li><strong>Decision entry 109</strong> in <code>docs/decisions.md</code> and
+          <a href="governance/decisions.html#benchmark-run-defects">Decisions</a>.</li>
+      </ul>
+
+      <h3 id="v0-49-0-changed">Changed</h3>
+
+      <ul>
+        <li><strong><code>test-writer</code> never aborts on production rows</strong> &mdash; hard constraint 1 told
+          test-first mode to abort when the plan lists non-test files, contradicting the agent&rsquo;s own Phase 0. Every
+          test-first plan lists them, so 0.47.0 halted unattended runs there.</li>
+        <li><strong>The code reviewer receives a git base</strong> &mdash; <code>/relay-implement</code> passed the
+          captured patch&rsquo;s file path as <code>diff_target</code>. Git read it as a pathspec and returned an empty
+          changed-file set, so R-S1 and R-X passed by vacuity. It now passes <code>&lt;base_commit&gt;</code>, as
+          <code>/relay-code-review</code> already did.</li>
+        <li><strong>R-X&rsquo;s equivalence step reads the working tree</strong> &mdash; <code>code-reviewer</code> ran
+          <code>executable-content-hash.mjs</code> with <code>--head HEAD</code>. The work is never committed, so a
+          modified test was compared with itself and cleared. It now runs with
+          <code>--repo &lt;code_root&gt; --head WORKTREE</code>.</li>
+        <li><strong>One artifact plane</strong> &mdash; <code>test-runner</code>, <code>/relay-test</code>,
+          <code>/relay-test-review</code>, <code>post-green-reviewer</code>, the test-output schema and the docs-sync
+          manifest now write under the project root&rsquo;s <code>PRPs/</code>, not the worktree&rsquo;s. Code, tests and
+          <code>docs/</code> stay in the worktree. Nothing is duplicated, the summary says where each lives, and
+          <code>/relay-pr</code>&rsquo;s test-review gate finds the <code>run.json</code> it used to skip silently.</li>
+        <li><strong>Worktree and protocol shortcuts are deviations</strong> &mdash; <code>FALLBACK_CWD</code> only for a
+          <code>/relay-worktree</code> failure; the orchestrator never changes directory into the worktree; hard rules 13
+          to 15 of <code>/relay-execute</code> forbid dispatching a stage&rsquo;s agents in place of its command, editing an
+          APPROVED plan, and scratch files outside the two roots.</li>
+        <li><strong>No scratch files</strong> &mdash; the implementer writes only files a task names, and its ad-hoc
+          checks run inline. The test runner never stages raw output; JUnit XML goes into the attempt directory and is
+          redacted in place.</li>
+        <li><strong><a href="reference/settings-allowlist.html#worktree-cleanup">Settings allowlist</a></strong>
+          &mdash; the <code>Bash(rm -rf .worktrees/*)</code> allow rule is removed. The invariant
+          <code>Bash(rm -rf *)</code> deny is evaluated first, so the rule never took effect. Allow rules are added for
+          the two new scripts.</li>
+        <li><strong>Refused research dispatch</strong> &mdash; <code>plan-writer</code> and <code>prd-writer</code>
+          record <code>research-&hellip; not started</code> as an explicit degradation (for example
+          <code>research-web</code> with web tools disabled) instead of treating it as unparseable output.</li>
+        <li><strong>Test-after adopts <code>/relay-write-test</code></strong> &mdash; its P2 accepted only an APPROVED
+          plan, but in test-after D8 has already flipped the plan to IMPLEMENTED and moved it to
+          <code>completed/</code>. No orchestrated test-after phase could pass it; 0.47.0 runs got past it only by
+          dispatching <code>test-writer</code> directly. P2 now accepts IMPLEMENTED with <code>tdd: false</code>, and
+          <code>/relay-execute</code> follows the moved plan. Found by this release&rsquo;s own validation run.</li>
+        <li><strong><code>/relay-plan</code> accepts revisions</strong> &mdash; P4 is skipped when
+          <code>prior_feedback</code> is supplied, and <code>plan_path</code> is forwarded for the plan-validation
+          repair.</li>
+        <li><strong><a href="reference/test-output-schema.html#observability-layout">Test output schema</a></strong>
+          &mdash; the observability layout is rooted at the project root&rsquo;s <code>PRPs/</code>.</li>
+        <li><strong><a href="reference/scripts.html">Scripts</a></strong> &mdash; documents <code>redact-output.mjs</code>
+          and <code>orchestrator-ledger.mjs</code>; <code>roadmap/status.html</code> counts 109 decisions.</li>
+        <li><strong>Pinned-text tests</strong> &mdash; the <code>test-auth-minted-session</code> AC-13 hash pins of
+          <code>code-reviewer.md</code> and <code>relay-implement.md</code>, and the canonical R-X section of the
+          formatting-preflight test, which pinned <code>--head HEAD</code> itself, now carry this release&rsquo;s text.
+          The 0.48.0 release test no longer assumes decision 108 is the last entry. The pending
+          <code>hybrid-code-review</code> Phase 5 measurement should name the plugin version it ran on: from 0.49.0
+          on, R-X and R-S1 can no longer pass by vacuity.</li>
+        <li><strong><code>README.md</code></strong> &mdash; the live version prose names 0.49.0.</li>
+        <li><strong><code>plugins/relay/.claude-plugin/plugin.json</code></strong>
+          &mdash; version bumped <code>0.48.0</code> &rarr; <code>0.49.0</code> to
+          match this release; users running <code>/plugin</code> after pulling
+          this version will get a fresh <code>relay/0.49.0/</code> cache directory
+          with all newly-shipped commands and agents registered.</li>
+      </ul>
+
       <h2 id="v0-48-0">0.48.0 &#8212; 2026-10-25</h2>
 
       <p>Vocabulary v4: step-level resilience for the QA runner. The 0.47.0 dogfood executed 31 of the 87

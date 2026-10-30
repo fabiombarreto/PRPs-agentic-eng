@@ -1115,10 +1115,38 @@ APPROVED with both defects intact.
   and states the fix: search the byte-exact authored form
   (`grep -q '\*\*Recall-oriented\.\*\*'`), or add `-i` and match on a
   case-insensitive stem.
+- **(c) Literal produced by code the plan does not change.** In scope
+  when a command asserts the presence or value of a fixed identifier
+  that the RUNNING system derives from existing code no task in this
+  plan modifies: a route or URL path (including any mount prefix the
+  router is registered under), an OpenAPI or schema key, a settings or
+  module path, an app, table or queue name, a CLI subcommand. Such a
+  literal is a claim about code the plan never shows, so neither (a)
+  nor (b) can see it. Observed: a Level 3 asserted
+  `'/events/{event_id}/registrations' in paths` against an OpenAPI
+  schema whose keys carry the `/api` prefix of the project's URL
+  configuration; the plan was approved, the correct implementation
+  failed Level 3, and the run reopened its APPROVED plan by hand.
+  FAILS unless the plan grounds the literal by ONE of:
+  - (i) a `## Patterns to Mirror` or `## Mandatory Reading` entry
+    citing the `file:line` that determines it (for a route: the line
+    that mounts the router, with its prefix), and the literal is
+    consistent with that line — `Read` the cited file to confirm,
+    never take the citation's word for it; OR
+  - (ii) the literal is copied byte-exact from the source PRD's
+    interface contract, and the PRD states the full form (prefix
+    included); OR
+  - (iii) the command derives the value at run time (reads the router
+    or settings object it checks) instead of hardcoding it.
+
+  `reason` quotes the command, names the unproven literal and the file
+  that would ground it, and states the fix.
 - A command in scope fails this check if EITHER (a) or (b) applies. A
-  single plan can fail both; name both in `reason` when so.
+  single plan can fail both; name both in `reason` when so. Condition
+  (c) fails the row on its own in exactly the same way; name it
+  alongside (a) or (b) when more than one applies.
 - PASS iff every in-scope command is either grounded per (a) or
-  byte-consistent per (b). A plan with zero in-scope commands passes
+  byte-consistent per (b), and grounded per (c). A plan with zero in-scope commands passes
   this row trivially →
   `{ "id": "R-COH-VALIDATE-PATTERN-UNGROUNDED", "passed": true }`.
 
@@ -1147,6 +1175,13 @@ plan does not describe authoring, and can false-positive when the
 searched text legitimately originates outside the plan. It is a
 plan-authoring-time gate, not the final safety net; the real
 enforcement remains the Implementer actually running the command.
+Condition (c) narrows the gap without new tools: it does not search
+the tree, it `Read`s the one file the plan itself cites as the
+literal's source. A literal with no such citation fails (c) rather
+than being trusted. When a defect still slips through, the Implementer
+reports it as a `plan_validation_defect` and `/relay-execute`'s
+plan-validation repair (its Step A.4.2) routes it back through this
+check, instead of the run editing the APPROVED plan by hand.
 
 ### Bounded K=5 LLM judgment pass
 

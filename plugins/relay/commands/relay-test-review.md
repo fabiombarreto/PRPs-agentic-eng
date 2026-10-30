@@ -43,6 +43,12 @@ active; result usually `PROCEED` unless preconditions fail.
 HALT with a clear error if the worktree path does not exist or is not
 a git worktree.
 
+Record `target_root` as the current working directory: the artifact root, where every
+`PRPs/…` path below resolves (`${CLAUDE_PLUGIN_ROOT}/resources/repository-topology.md`, section
+"The code root of a phase, and where artifacts go"). The worktree path is the code root only:
+the suite runs there, and nothing under the worktree's own `PRPs/` is read or written. Invoked from
+inside the worktree itself, the two coincide and the behavior is unchanged.
+
 ---
 
 ## Preconditions
@@ -51,7 +57,7 @@ Before invoking the agent:
 
 1. **Worktree is a git worktree** — `git -C <worktree> rev-parse --git-dir` succeeds.
 2. **Base branch resolves** — `git -C <worktree> rev-parse --verify <base>` succeeds.
-3. **run.json exists** at `<worktree>/PRPs/reports/<feature>/run.json`. If missing, HALT with "No run.json found. Run `/relay-test` first."
+3. **run.json exists** at `<target_root>/PRPs/reports/<feature>/run.json`. If missing, HALT with "No run.json found. Run `/relay-test` first."
 4. **run.json outcome is `GREEN`** — read the file, check `outcome` field. If any other value (e.g., `FAILED_AFTER_N_RETRIES`, `FAILED_OSCILLATION`), HALT with the actual outcome reported: "post-green review requires a GREEN outcome; got `<outcome>`. Either re-run `/relay-test` until it passes, or fix the underlying failure."
 
 If any precondition fails, HALT — do not invoke the agent.
@@ -65,10 +71,11 @@ prompt including:
 
 ```
 worktree: <absolute path>
-run_json_path: <worktree>/PRPs/reports/<feature>/run.json
+target_root: <absolute path of the artifact root>
+run_json_path: <target_root>/PRPs/reports/<feature>/run.json
 base_branch: <resolved base>
 run_id: <from run.json>
-suite_manifest_path: <worktree>/PRPs/reports/<feature>/test-suite.diff
+suite_manifest_path: <target_root>/PRPs/reports/<feature>/test-suite.diff
 ```
 
 `<feature>` is the same value already resolved above for
@@ -92,7 +99,7 @@ base, classifies concerns, and returns a JSON verdict inside a fenced
 ## Dispatch on verdict
 
 **APPROVED** → write the verdict to
-`<worktree>/PRPs/reports/<feature>/test-review.json` with an
+`<target_root>/PRPs/reports/<feature>/test-review.json` with an
 additional `reviewed_at` timestamp. Print a terse user-facing summary:
 
 ```
@@ -103,7 +110,7 @@ Notes: <any notes the agent surfaced>
 ```
 
 **CHANGES_REQUESTED** → write the verdict to
-`<worktree>/PRPs/reports/<feature>/test-review.json` (same field
+`<target_root>/PRPs/reports/<feature>/test-review.json` (same field
 shape). Print:
 
 ```
@@ -127,7 +134,7 @@ the agent's message.
 ## Write the review record
 
 Regardless of verdict, produce
-`<worktree>/PRPs/reports/<feature>/test-review.json`:
+`<target_root>/PRPs/reports/<feature>/test-review.json`:
 
 ```json
 {

@@ -46,6 +46,7 @@ The `/relay-approve` command passes:
 
 - **`pr`**: the merged PR number or URL.
 - **`target_root`**: absolute path to the target project's root.
+- **`code_root`** (optional absolute path): the checkout that carries the code being documented, normally the feature worktree at implement time. When supplied, read every `<target_root>/docs/…` path and `<target_root>/CLAUDE.md` in this contract as `<code_root>/docs/…` and `<code_root>/CLAUDE.md`,. Every `PRPs/…` path (manifest, jsonl, `orchestrator-run.json`) stays under `target_root`. Absent (the post-merge `/relay-approve` dispatch), `code_root` is `target_root`.
 - **`feature`** (optional string): the feature slug; when supplied,
   used directly for every `PRPs/reports/<feature>/...` path in this
   contract; skip the orchestrator-run.json read for this value

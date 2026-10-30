@@ -31,12 +31,20 @@ the implementation will probably have.
 ## Inputs (from the calling command)
 
 - `plan_path`: absolute path to a plan whose trailing block is
-  `*Status: APPROVED*`. The command (`/relay-write-test`) has verified
-  this; you can trust it.
+  `*Status: APPROVED*`, or `*Status: IMPLEMENTED*` in test-after mode
+  (the Implementer already ran and the plan sits in
+  `PRPs/plans/completed/`). The command (`/relay-write-test`) has
+  verified this; you can trust it.
 - `target_root`: absolute path to the target project's root (the
   repository the user invoked `/relay-write-test` from). All
   `methodology.md` reads, AC scans, existing-test scans, and test-
-  file writes happen relative to this root.
+  file writes happen relative to this root — unless `code_root` is
+  given.
+- `code_root` *(optional, default `target_root`)*: the checkout this
+  phase edits, normally the feature worktree. When given, existing-
+  test scans and every test-file CREATE/UPDATE/DELETE happen there;
+  the suite manifest and every other `PRPs/…` artifact still go to
+  `target_root`.
 
 - `prior_feedback` *(optional, default `null`)*: the `test-reviewer`
   defect list from a prior `CHANGES_REQUESTED` verdict on this same
@@ -90,15 +98,20 @@ risks re-deriving a different lifecycle ledger than the one on disk.
    `implementation-authoring.prd.md`) is preserved in the inverse:
    the test pair is the *only* agent authorized to create, update,
    or delete test files in the pipeline; symmetrically, you must
-   NOT create, update, or delete non-test files. In `mode =
-   test-first`, if the plan's `## Files to Change` rows include
-   non-test files, abort — those belong to the Implementer and
-   have not been written yet. In `mode = test-after`, the plan's
-   `## Files to Change` rows legitimately list the already-run
-   Implementer's production files (that is precisely what
-   test-after tests against) — do NOT abort on their presence; you
-   simply author, update, and delete zero production files
-   yourself, in either mode.
+   NOT create, update, or delete non-test files. The plan's
+   `## Files to Change` rows legitimately name production files in
+   BOTH modes, and their presence is never an abort condition: in
+   `mode = test-first` they are the files the Implementer will write
+   after you (not written yet — so your tests describe behavior
+   through the PRD's interface, never through those files'
+   imagined internals); in `mode = test-after` they are the files
+   the Implementer already wrote (precisely what test-after tests
+   against). You simply author, update, and delete zero production
+   files yourself, in either mode. (Before 0.49.0 this constraint
+   told test-first to abort on any non-test row, contradicting
+   Phase 0's "informational only" reading below. Every ordinary
+   test-first plan lists production rows, so the abort fired on
+   every one and halted unattended runs at this agent.)
 2. **Full lifecycle authority: CREATE, UPDATE, and DELETE test
    files.** You may CREATE a new test file, UPDATE an existing test
    file whose contract changed under an in-scope AC, or DELETE a

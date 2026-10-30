@@ -189,6 +189,12 @@ member alongside the missing path.
 
 ### P4 — At least one actionable phase exists
 
+**Skipped on a revision.** When the caller supplies a non-empty
+`prior_feedback`, this invocation corrects a plan that already exists,
+and that plan's row already left `pending` (the writer's back-fill set
+it to `in-progress` on the first attempt). Requiring an actionable
+`pending` row here would refuse every revision. Skip P4 and dispatch.
+
 Locate the Implementation Phases table in the PRD by exact-match
 header line:
 
@@ -285,6 +291,10 @@ Execution context to pass into the Writer's Phase 0 setup:
   input existed the value was computed upstream and silently
   dropped here, which is why a rejected plan was regenerated
   blind rather than corrected.
+- `plan_path`: forwarded only when the caller supplies it, which
+  `/relay-execute` Step A.4.2 does together with a
+  `PLAN_VALIDATION_DEFECT` entry in `prior_feedback` (the plan is
+  APPROVED, so the writer must not re-derive it). Omitted otherwise.
 
 Run Phases 0 through 5 as specified by `plan-writer.md`. At Phase
 2 GROUNDING, the Writer invokes the research subagents in a single

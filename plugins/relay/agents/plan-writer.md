@@ -53,6 +53,9 @@ task, and exit cleanly when there is nothing to plan.
   non-empty, you are being re-invoked to CORRECT an existing DRAFT,
   not to author a new one — see `## Targeted revision mode` below,
   which overrides the default full-protocol path.
+- `plan_path` *(optional; supplied only with a `PLAN_VALIDATION_DEFECT`
+  entry in `prior_feedback`)*: the absolute path of the APPROVED plan
+  to correct — see "The one revision of an APPROVED plan" below.
 
 **Description mode (Phase B dispatch → enters at Phase 0.B):**
 
@@ -104,6 +107,22 @@ attempts (the condition `/relay-execute` names
 5. **Re-emit the trailing block unchanged** — `*Generated: <original
    date>*` and `*Status: DRAFT*`. You never emit `APPROVED`; the
    reviewer owns the flip, exactly as on the first attempt.
+
+**The one revision of an APPROVED plan.** When `prior_feedback` holds a
+`PLAN_VALIDATION_DEFECT` entry, `/relay-execute`'s plan-validation
+repair is asking you to correct a plan that is already APPROVED and
+already implemented: the Implementer showed that one of its validation
+commands cannot pass against a correct implementation. Locate the plan
+by the supplied `plan_path` (it is not a DRAFT, so do not re-derive
+it). Correct only the cited command(s) — in `## Validation Commands`
+and in any task `**VALIDATE**:` that repeats them — using the
+`observed` output and `prd_refs` in the entry, and ground the
+corrected literal per Step 4.4.quinquies. Change nothing else, not
+even a task. Then replace the trailing `*Approved: …*` and
+`*Status: APPROVED*` lines with `*Status: DRAFT*`, keeping
+`*Generated: …*`. The plan reviewer re-runs its full rubric and owns
+the next flip. This is the only case in which you edit a plan that is
+not a DRAFT, and only `/relay-execute` Step A.4.2 sends this entry.
 
 Then proceed directly to Phase 5 (handoff). Phase 5.1's PRD back-fill is
 a no-op on a revision — row N was already flipped to `in-progress` by
@@ -539,6 +558,16 @@ subagent. Handle each independently:
 - If the return is unparseable: surface as
   "research agent returned unparseable output — Patterns to Mirror
   treated as partial" and continue (do NOT halt).
+- If the dispatch itself is refused or errors — no JSON block at all,
+  because the agent could not start (for example `research-web`
+  declares only `WebSearch` and `WebFetch`, and an environment that
+  disables both leaves it with zero tools, so Claude Code refuses to
+  spawn it) — do not treat it as unparseable output. Record
+  `degradation_reason: "research-{web|codebase|design} not started:
+  <the dispatch error, one line>"`, add the Risks entry
+  ("research-{…} not started — {reason}; grounding from that source
+  is absent, not partial"), and continue with the other sources. Do
+  not retry the dispatch and do not halt.
 
 No user dialogue. The plan-writer never asks the user to refine
 research scope.
@@ -1173,6 +1202,18 @@ This binds hardest on a plan carrying the Step 4.4.quater deferral
 note: those tasks have no test coverage by scope decision, so the
 `**VALIDATE**` is the only thing standing between a declared change and
 a broken one.
+
+**Ground every literal that existing code produces.** When a command
+asserts a route or URL path, a schema key, a settings or module path,
+or an app, table or queue name that code this plan does not change
+determines, cite the `file:line` that determines it in `## Patterns to
+Mirror` or `## Mandatory Reading` and copy the literal from it, prefix
+included. A route is registered under whatever prefix the project's
+URL configuration mounts its router at, and that prefix is the part
+most often missed. Prefer a command that derives the value at run time
+(reads the router it checks) over one that hardcodes it.
+`plan-reviewer` fails an ungrounded literal under
+`R-COH-VALIDATE-PATTERN-UNGROUNDED` condition (c).
 
 ### Step 4.4.quater — Test-pair deferral note (emit by default)
 

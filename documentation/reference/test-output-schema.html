@@ -133,7 +133,9 @@
 
       <h2 id="observability-layout">Observability directory layout (component C4)</h2>
 
-      <pre><code class="language-bash">&lt;worktree&gt;/PRPs/reports/&lt;feature&gt;/
+      <p>The directory sits under the project root&rsquo;s <code>PRPs/</code>, not the worktree&rsquo;s: the worktree holds only code, tests and <code>docs/</code> (0.49.0; releases before it wrote this tree inside the worktree).</p>
+
+      <pre><code class="language-bash">&lt;target_root&gt;/PRPs/reports/&lt;feature&gt;/
 ├── run.json                    # B4 session state
 ├── test-review.json            # B5 verdict
 ├── final-report.md             # B6 PR-embeddable markdown

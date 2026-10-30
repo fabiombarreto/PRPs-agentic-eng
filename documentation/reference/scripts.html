@@ -303,6 +303,39 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/usage-metrics.mjs query [--root &lt;dir&gt;] 
 
       <p>One JSON report on stdout. Exit 0 whenever a report was produced, including when every path was flagged: the verdict lives in the report. Exit 2 on a usage or internal error.</p>
 
+      <p>The code reviewer calls it with <code>--repo &lt;code_root&gt; --head WORKTREE</code>. The work under review is never committed, so <code>--head HEAD</code> would compare the base with itself and clear a modified test; releases before 0.49.0 made that call.</p>
+
+      <h2 id="redact-output">redact-output.mjs <span class="badge badge--done">shipped</span></h2>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/scripts/redact-output.mjs</code></dd>
+        <dt>Purpose</dt><dd>Applies Layers 1 and 2 of the redaction policy to captured test output before it is written, so the raw output never touches disk. It reuses the QA runner&rsquo;s redaction table, so the two consumers of the policy cannot drift apart, and reports how many values it replaced per category.</dd>
+        <dt>Invoked by</dt><dd>The <code>test-runner</code> agent, for every attempt&rsquo;s <code>stdout.log</code> and, in place, its <code>junit.xml</code>.</dd>
+        <dt>Runtime</dt><dd>Node.js &ge; 18. No dependencies.</dd>
+      </div>
+
+      <h3 id="redact-output-usage">Usage</h3>
+
+      <pre><code class="language-bash">&lt;test command&gt; 2&gt;&amp;1 | node ${CLAUDE_PLUGIN_ROOT}/scripts/redact-output.mjs --out &lt;file&gt; [--root &lt;dir&gt;]
+node ${CLAUDE_PLUGIN_ROOT}/scripts/redact-output.mjs --in &lt;file&gt; --out &lt;file&gt; [--root &lt;dir&gt;]</code></pre>
+
+      <p><code>--root</code> is the artifact root holding <code>PRPs/redaction-extensions.txt</code>. One JSON line on stdout, <code>{"out", "secrets_redacted": {"count", "categories": {"env_names", "url_values", "regex_matches"}}}</code>, the shape <code>run.json</code> and the final report use. Exit 0 when the redacted file was written; exit 2 on a usage or I/O error, with nothing written.</p>
+
+      <h2 id="orchestrator-ledger">orchestrator-ledger.mjs <span class="badge badge--done">shipped</span></h2>
+
+      <div class="kv">
+        <dt>Path</dt><dd><code>plugins/relay/scripts/orchestrator-ledger.mjs</code></dd>
+        <dt>Purpose</dt><dd>Checks <code>/relay-execute</code>&rsquo;s stage ledger. For every phase a run completed, it derives the stages the protocol required from <code>tdd</code>, <code>test_frameworks</code> and <code>docs_sync</code> and from the run log itself, and lists each one that is missing or inconsistent. A stage the run skipped is reported whether or not the run&rsquo;s own summary mentioned it.</dd>
+        <dt>Invoked by</dt><dd><code>/relay-execute</code>, before its success summary, with <code>--write</code>, which stores the <code>deviations</code> array in <code>orchestrator-run.json</code>.</dd>
+        <dt>Runtime</dt><dd>Node.js &ge; 18. No dependencies.</dd>
+      </div>
+
+      <h3 id="orchestrator-ledger-usage">Usage</h3>
+
+      <pre><code class="language-bash">node ${CLAUDE_PLUGIN_ROOT}/scripts/orchestrator-ledger.mjs --run &lt;orchestrator-run.json&gt; --methodology &lt;methodology.md&gt; [--write]</code></pre>
+
+      <p>One JSON report on stdout, <code>{"ok", "phases_checked", "flags", "deviations": [{"phase", "stage", "problem"}]}</code>. Exit 0 whenever a report was produced, including when it lists deviations. Exit 2 on a usage, read or parse error.</p>
+
       <h2 id="extension-pattern">How new scripts join the plugin</h2>
 
       <p>If a future stage needs a new helper script (e.g., a coverage-differ, a mutation-tester wrapper), it should follow the same pattern:</p>

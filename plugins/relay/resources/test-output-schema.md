@@ -195,7 +195,7 @@ convention, not a hardcoded expectation.
 ## Observability directory layout (component C4)
 
 Every Test Runner session writes artifacts under
-`<worktree>/PRPs/reports/<feature>/` in the following canonical
+`<target_root>/PRPs/reports/<feature>/` in the following canonical
 structure:
 
 ```
@@ -234,7 +234,7 @@ Canonical invocation:
 
 ```
 node ${CLAUDE_PLUGIN_ROOT}/scripts/generate-final-report.mjs \
-    <worktree>/PRPs/reports/<feature>/ [--out <path>]
+    <target_root>/PRPs/reports/<feature>/ [--out <path>]
 ```
 
 Reads every file listed above; produces `final-report.md` in the same

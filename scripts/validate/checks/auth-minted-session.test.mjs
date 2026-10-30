@@ -678,11 +678,15 @@ test('a minted session whose role marker is absent halts FAILED_PROBE_WRONG_ACCO
 
 test('the code-review loop files and capture.mjs are byte-identical to their pre-feature content', () => {
   // sha256 of each file at base tree 09926778dc0a8295d77ae72b47c1968f5d30d96d, CRLF normalized to LF.
+  // Re-pinned for relay 0.49.0: code-reviewer.md and relay-implement.md changed on purpose
+  // (`docs/decisions.md` [2026-10-27] "Benchmark-run defects fixed at the surface that produced
+  // them": R-X's diff base, equivalence head and code_root). The minted mechanism still reaches
+  // none of the four files; code-reviewer-semantic.md and capture.mjs keep their original pins.
   /** @type {[string[], string][]} */
   const pinned = [
-    [['agents', 'code-reviewer.md'], '0a16ae2314431898c7faba74d69bbc5c2ab09e765229b96534d3bd6f9c9ea669'],
+    [['agents', 'code-reviewer.md'], 'ac1520aed96cfef784b15ef6136ca20368b2b3710d796624e0a868a4dbbd90b3'],
     [['agents', 'code-reviewer-semantic.md'], 'd6a60f551d18c206be16c7cc944b533c2d5cbf50d4a040e02083faed4b528b1e'],
-    [['commands', 'relay-implement.md'], '2cd7ccd70884a45ce97db4c826fe634ec5019c7a4f2b345710653d1836cac4be'],
+    [['commands', 'relay-implement.md'], '386abb745732c74fef9d2e48ea64c680783aa3525d9204d7746385df33e6c67b'],
     [['scripts', 'visual', 'capture.mjs'], 'de9298b556df7789ede97233162ee9eec18d77e3c4e8eb63b7a4b063f274c178'],
   ];
   for (const [rel, sha] of pinned) {

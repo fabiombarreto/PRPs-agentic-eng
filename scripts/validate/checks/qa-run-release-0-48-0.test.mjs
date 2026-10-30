@@ -191,8 +191,12 @@ test('AC-18 decision 108 is registered once in docs/decisions.md with its fields
   assert.equal(heads.length, 1, `exactly one vocabulary v4 entry is required, found ${heads.length}`);
   assert.equal(heads[0][1], '2026-10-25');
   const start = /** @type {number} */ (heads[0].index);
+  // The entry ends at the next dated heading, or at the template marker when it is the last entry. Slicing to
+  // the marker alone stopped working once a later entry (109, 2026-10-27) followed this one.
+  const next = DECISIONS_MD.slice(start + 1).search(/^## \[\d{4}-\d{2}-\d{2}\]/m);
   const marker = DECISIONS_MD.indexOf('<!-- Template for future entries:', start);
-  const raw = DECISIONS_MD.slice(start, marker === -1 ? undefined : marker);
+  const end = next !== -1 ? start + 1 + next : marker === -1 ? undefined : marker;
+  const raw = DECISIONS_MD.slice(start, end);
   const entry = collapse(raw);
   for (const label of ['**Context:**', '**Decision:**', '**Reason:**', '**Areas affected:**']) assert.ok(entry.includes(label), `the entry lacks ${label}`);
   for (const token of ['STEP_NOT_PERFORMABLE', 'PLAN_ENTRY_INVALID', 'OVERLAY_HANDLER_INVALID', 'overlay_handlers', 'anchor_text', 'effect: "validation"', 'chosen, not measured', '0.48.0']) assert.ok(entry.includes(token), `the entry does not state ${token}`);
