@@ -68,6 +68,8 @@ If the argument is non-empty but does not resolve to an existing readable file, 
 
 Record `plan_path` as the resolved absolute path. Record `target_root` as the current working directory (the repository from which the user invoked the command).
 
+Record `code_root`: the value an invoker supplied (`/relay-execute` passes the phase's worktree), otherwise `target_root`. Every git operation, formatter run, implementer edit, validation command and code review of this command runs in `code_root` (`git -C <code_root> …`). Every `PRPs/…` path in this file — `artifact_root`, the jsonl logs, `halt.json`, the docs-sync manifest, the plan and the PRD — resolves against `target_root`. The rules are those of `${CLAUDE_PLUGIN_ROOT}/resources/repository-topology.md`, section "The code root of a phase, and where artifacts go". A standalone invocation from inside a worktree has `code_root == target_root` and behaves exactly as before.
+
 **PRD-less detection (flat filename):** Inspect the plan's basename before attempting the canonical pattern parse.
 
 - If the basename matches `<slug>.plan.md` — that is, it does NOT contain the literal substring `-phase-` followed by one or more digits followed by `-` — then:
@@ -202,7 +204,7 @@ is a soft, recorded outcome.
      step 5 — never silently, never a HALT.
 
 2. **Collect the canonical test-glob file set currently in the
-   working tree.** Run, via `Bash`:
+   working tree.** Run, via `Bash`, in `code_root`:
    `git ls-files --cached --others --exclude-standard -- '**/test_*.py' '**/tests/**/*.py' '**/*.test.ts' '**/*.test.tsx' '**/*.spec.ts' '**/*.spec.tsx' '**/*.test.js' '**/*.spec.js' '**/*_test.go' '**/tests/**/*.rb' '**/*_spec.rb' '**/__tests__/**' '**/*.test.rs' '**/*_test.rs' '**/*.test.jsx' '**/*.test.mjs' '**/*.test.cjs' '**/spec/**'`
    — the SAME pathspec set `code-reviewer.md`'s R-X rule itself
    inspects (`plugins/relay/agents/code-reviewer.md:377-383`),
@@ -218,7 +220,7 @@ is a soft, recorded outcome.
 
 3. **Invoke, scoped to that file set ONLY.** When `formatter_cmd` is
    non-null and step 2's file set is non-empty, run
-   `Bash("<formatter_cmd> <file_1> <file_2> ...")` — the literal
+   `Bash("<formatter_cmd> <file_1> <file_2> ...")`, with `code_root` as the working directory — the literal
    paths from step 2 appended as trailing arguments, never a glob and
    never the whole repo (mirrors `/relay-write-test`'s A.4.3 scoped-
    invocation discipline, `relay-write-test.md:260-272`, PRD Risk R1).
@@ -266,7 +268,7 @@ The supplied value may be a **tree object** rather than a commit. That is safe b
 3. Fallback: `git remote show origin 2>/dev/null | grep 'HEAD branch' | awk '{print $NF}'`.
 4. Last resort: `main`.
 
-Record `base_branch`. Then compute `base_commit = git merge-base HEAD <base_branch>`. If `git merge-base` exits non-zero (no common ancestor — typically a detached HEAD or unrelated histories), HALT with:
+Record `base_branch`. Then compute `base_commit = git -C <code_root> merge-base HEAD <base_branch>`. If `git merge-base` exits non-zero (no common ancestor — typically a detached HEAD or unrelated histories), HALT with:
 
 > Cannot derive base-commit: `git merge-base HEAD <base_branch>`
 > exited non-zero. /relay-implement needs a base-commit against
@@ -365,6 +367,7 @@ Task(subagent_type="implementer",
        prior_feedback: <last_reviewer_feedback when non-empty; null otherwise>,
        advisories: <open_advisories when non-empty; key omitted entirely otherwise>,
        base_commit: <base_commit>,
+       code_root: <code_root>,
      })
 ```
 
@@ -374,18 +377,24 @@ When open_advisories is empty, the advisories key is OMITTED from the payload en
 
 The implementer reads the plan, executes its Step-by-Step Tasks via `Edit`/`Write` directly in the working tree, runs the plan's Validation Commands Levels 1–3 after all tasks complete (D6 — aggregate validation), and returns one of two verdicts:
 
-- **`IMPLEMENTATION_COMPLETE`** with `{files_changed: [...], validation: {level_1: PASS|FAIL, level_2: PASS|FAIL, level_3: PASS|FAIL}, validation_outputs: [...]}`.
+- **`IMPLEMENTATION_COMPLETE`** with `{files_changed: [...], validation: {level_1: PASS|FAIL, level_2: PASS|FAIL, level_3: PASS|FAIL}, validation_outputs: [...]}`, plus an optional `plan_validation_defect: {level, command, observed, prd_refs, reason}` when a Level failed because the plan's own command cannot pass against a correct implementation (see `implementer.md`, "Plan validation defects").
 - **`TEST_CONTRACT_DISPUTE`** with `{disputed_tests: [...], prd_refs: [...], claim: "...", proposed_resolution: "..."}`.
 
 After every attempt regardless of verdict:
 
-1. Run `git add -A` (the implementer uses `Edit`/`Write` and may leave files unstaged; the diff against `<base_commit>` would otherwise miss those files).
-2. Run `git diff <base_commit>` and write the result to `<artifact_root><attempt>/diff.patch` (creating parent directories as needed).
+1. Run `git -C <code_root> add -A` (the implementer uses `Edit`/`Write` and may leave files unstaged; the diff against `<base_commit>` would otherwise miss those files).
+2. Run `git -C <code_root> diff <base_commit>` and write the result to `<artifact_root><attempt>/diff.patch` (creating parent directories as needed).
 3. Parse the diff to extract `files_changed_by_attempt[attempt] = set(<paths>)`.
 4. Write `<artifact_root><attempt>/record.json` with `{attempt: <attempt>, verdict: "<IMPLEMENTATION_COMPLETE | TEST_CONTRACT_DISPUTE>", files_changed: [...], validation?: {...}, dispute_evidence?: {...}, base_commit: <base_commit>}`.
 
 Branch on the verdict:
 
+- `IMPLEMENTATION_COMPLETE` carrying a `plan_validation_defect` → check it before anything else. The claim is accepted only when all of these hold: the cited `command` appears verbatim in the plan's `## Validation Commands` or in a task's `**VALIDATE**:` line; `observed` is the command's real output from this attempt (it is in `validation_outputs`); every `prd_refs` entry resolves to an AC or interface-contract line of the source PRD; and every other Level reported PASS. When it holds, write `<artifact_root>../halt.json` with `{outcome: "PLAN_VALIDATION_DEFECT", plan_validation_defect, attempt, attempt_history}` and return `PLAN_VALIDATION_DEFECT` without dispatching the code reviewer. No retry is spent and nothing is reverted. An invoker that owns a plan-repair path (`/relay-execute` Step A.4.2) continues from it. A standalone invocation HALTs with:
+  > PLAN_VALIDATION_DEFECT. The implementation is in the working tree and every other
+  > Level passed, but the plan's validation command `<command>` cannot pass against it:
+  > `<reason>`. The plan is unchanged. Re-run /relay-plan <prd_path> (it revises the plan
+  > to DRAFT with this defect as feedback), then /relay-plan-review, then /relay-implement.
+  When the check does not hold, ignore the field and proceed to Phase A.3 as an ordinary `IMPLEMENTATION_COMPLETE`. The code reviewer then judges the failing Level under R-L1–R-L3 as usual.
 - `IMPLEMENTATION_COMPLETE` → proceed to Phase A.3 (code-reviewer dispatch in standard mode).
 - `TEST_CONTRACT_DISPUTE` → increment `disputes_used`, re-run pre-flight check 4 (dispute cap) once before proceeding, then proceed to Phase A.3 (code-reviewer dispatch in arbitration mode).
 
@@ -409,11 +418,14 @@ Task(subagent_type="code-reviewer",
        target_root: <target_root>,
        mode: "standard",
        attempt: <attempt>,
-       diff_target: "<artifact_root><attempt>/diff.patch",
+       diff_target: <base_commit>,
+       code_root: <code_root>,
        review_started_at: <the instant captured immediately above>,
        deadline_ts: <deadline_ts>,
      })
 ```
+
+`diff_target` is the BASE the reviewer diffs the working tree of `code_root` against, never the path of the captured patch. `code-reviewer` runs `git diff --name-only <diff_target>` with it, and a file path given there is read by git as a pathspec of an untracked file: the changed-file set comes back empty, and R-S1 and R-X pass by vacuity. Before 0.49.0 this dispatch passed `<artifact_root><attempt>/diff.patch`, which is that defect. `/relay-code-review` already passed `<base_commit>`. The captured `diff.patch` stays the per-attempt audit artifact.
 
 `deadline_ts` (the wall-clock deadline computed in Phase A.0 as
 `deadline_ts = now() + max_implement_minutes minutes`) lets
@@ -444,7 +456,8 @@ Task(subagent_type="code-reviewer",
        mode: "arbitration",
        attempt: <attempt>,
        dispute_payload: <implementer's structured TEST_CONTRACT_DISPUTE evidence>,
-       diff_target: "<artifact_root><attempt>/diff.patch",
+       diff_target: <base_commit>,
+       code_root: <code_root>,
        review_started_at: <the instant captured immediately above>,
      })
 ```
@@ -566,6 +579,7 @@ Triggered exactly once when Phase A.3 standard-mode returns APPROVED — never o
    Task(subagent_type="docs-updater",
         prompt={
           target_root: <target_root>,
+          code_root: <code_root>,
           feature: <feature>,
           prd_path: "PRPs/prds/<feature>.prd.md",   # PRD mode only (is_prd_less == false); key omitted entirely in PRD-less mode
           diff_source: "patch",
@@ -583,12 +597,18 @@ Triggered exactly once when Phase A.3 standard-mode returns APPROVED — never o
    Task(subagent_type="docs-reviewer",
         prompt={
           target_root: <target_root>,
+          code_root: <code_root>,
           feature: <feature>,
           prd_path: "PRPs/prds/<feature>.prd.md",   # PRD mode only (is_prd_less == false); key omitted entirely in PRD-less mode
           non_interactive: true,
           review_started_at: <the instant captured immediately above>,
         })
    ```
+
+   `code_root` carries the `docs/` edits: the docs pair edits and reads
+   `docs/` there, the same checkout as the code it documents, while
+   `docs-update.md` and `docs-review.jsonl` go to
+   `target_root/PRPs/reports/<feature>/` with every other artifact.
 
    `pr` is intentionally omitted — there is no PR yet at implement time.
    `feature` (and, in PRD mode, `prd_path`) are passed EXPLICITLY instead

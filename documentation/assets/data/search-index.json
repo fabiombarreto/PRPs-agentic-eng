@@ -135,7 +135,7 @@
     "title": "Scripts",
     "path": "reference/scripts.html",
     "category": "Reference",
-    "excerpt": "Helper scripts written in Node.js with zero npm dependencies: normalize-test-output, generate-final-report, qa-run, qa-query, qa-seed, auth-kit-secrecy, auth-local-guard, usage-metrics and executable-content-hash. qa-run grounds against the settled page, classifies every case, registers session values by source above a floor and proves its run-evidence ignore."
+    "excerpt": "Helper scripts written in Node.js with zero npm dependencies: normalize-test-output, generate-final-report, qa-run, qa-query, qa-seed, auth-kit-secrecy, auth-local-guard, usage-metrics, executable-content-hash, redact-output and orchestrator-ledger. qa-run grounds against the settled page, classifies every case, registers session values by source above a floor and proves its run-evidence ignore."
   },
   {
     "title": "Validation checks",

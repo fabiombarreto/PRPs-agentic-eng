@@ -50,7 +50,8 @@ Emit the evidence block before running anything, per
 
 The `/relay-test` command invokes you with a prompt containing:
 
-- `worktree`: absolute path to the target project worktree
+- `worktree`: absolute path to the target project worktree — the code root: the suite runs here
+- `target_root`: absolute path of the artifact root that holds `PRPs/`; every artifact you write goes under `<target_root>/PRPs/reports/<feature>/` (defaults to `worktree` when absent)
 - `attempt`: current attempt number (1-based)
 - `run_id`: UUID shared across all attempts in this session
 - `tier`: `unit | integration | e2e` when layered execution is active; otherwise absent (single-tier flat run)
@@ -115,7 +116,7 @@ node --test \
     [test-globs]
 ```
 
-- `<attempt-dir>` is `<worktree>/PRPs/reports/<feature>/attempts/<attempt>/`.
+- `<attempt-dir>` is `<target_root>/PRPs/reports/<feature>/attempts/<attempt>/`.
 - The `junit` reporter writes the JUnit XML that the normalizer consumes
   in Step 4 (pass `--junit <attempt-dir>/junit.xml`); the `spec` reporter
   to `stdout` is what gets captured (and redacted) into `stdout.log`.
@@ -130,21 +131,43 @@ node --test \
   `${CLAUDE_PLUGIN_ROOT}/resources/test-output-schema.md` for how the normalizer parses the
   resulting XML.
 
-Capture stdout and stderr to a combined log. Apply redaction before
-persisting — env var values matching patterns from
-`${CLAUDE_PLUGIN_ROOT}/resources/redaction-policy.md` (in the relay plugin repo) PLUS any
-entries from `<worktree>/PRPs/redaction-extensions.txt` MUST be
-replaced with `[REDACTED]` (or `[REDACTED_URL]` for connection-string
-env vars) BEFORE the log is written to disk. Never write raw output
-that could contain secret values.
-
-Write the redacted log to:
+**Capture through the redaction filter — raw output never touches disk.**
+Values selected by `${CLAUDE_PLUGIN_ROOT}/resources/redaction-policy.md` (Layer 1) and by
+`<target_root>/PRPs/redaction-extensions.txt` (Layer 2) must be replaced
+before anything is written. Do it with the shipped filter, never by hand,
+and never by staging the raw output anywhere first — not in `/tmp`, not
+in a scratch directory. A staged raw copy is an unredacted artifact, and
+relay's own generated deny list (`Bash(rm -rf *)`) will not let you
+delete it afterwards. Run the suite from `<worktree>`, piping the
+combined output straight into the filter:
 
 ```
-<worktree>/PRPs/reports/<feature>/attempts/<attempt>/stdout.log
+set -o pipefail
+cd <worktree> && <test command> 2>&1 | node ${CLAUDE_PLUGIN_ROOT}/scripts/redact-output.mjs \
+    --root <target_root> \
+    --out <target_root>/PRPs/reports/<feature>/attempts/<attempt>/stdout.log
 ```
 
-where `<feature>` is inferred from the current branch name (`feature/<name>` → `<name>`) or passed explicitly via the prompt.
+With `pipefail` the exit status is the suite's when the suite fails, and
+the filter's (2) only when it could not write. The filter prints one JSON line,
+`{"out", "secrets_redacted": {"count", "categories"}}`. Keep
+`secrets_redacted` for the verdict, so the command can record it in
+`run.json` and the final report can show what was hidden. Read the redacted
+`stdout.log`, never the raw stream, when you classify failures.
+
+**JUnit XML goes straight into the attempt directory and is redacted in
+place** before the normalizer or anything else reads it. Point the
+framework's JUnit output at `<attempt-dir>/junit.xml` (pytest
+`--junitxml=<attempt-dir>/junit.xml`, node:test as above, the Playwright
+and Vitest JUnit reporters' output-file option), then run:
+
+```
+node ${CLAUDE_PLUGIN_ROOT}/scripts/redact-output.mjs --root <target_root> \
+    --in <attempt-dir>/junit.xml --out <attempt-dir>/junit.xml
+```
+
+where `<attempt-dir>` is `<target_root>/PRPs/reports/<feature>/attempts/<attempt>/`
+and `<feature>` is inferred from the current branch name (`feature/<name>` → `<name>`) or passed explicitly via the prompt.
 
 ### Step 4 — Normalize the output
 
@@ -167,7 +190,7 @@ target has it without extra prerequisites.)
 Capture the normalized JSON; write it to:
 
 ```
-<worktree>/PRPs/reports/<feature>/attempts/<attempt>/record.json
+<target_root>/PRPs/reports/<feature>/attempts/<attempt>/record.json
 ```
 
 If the normalizer fails (missing JUnit XML, malformed), emit
@@ -211,13 +234,16 @@ for test-weakening. Leave all default failures as `legitimate`.
 Annotate each failure in-place in the record: write a merged record
 with `category` populated for every failure, replacing the `null`
 from the normalizer. Persist the merged record to
-`<worktree>/PRPs/reports/<feature>/attempts/<attempt>/record.json`
+`<target_root>/PRPs/reports/<feature>/attempts/<attempt>/record.json`
 (overwrite the normalizer's output).
 
 ### Step 6 — Return verdict
 
 Return one of the following JSON payloads as your final message,
-inside a fenced `json` block so the command can parse it:
+inside a fenced `json` block so the command can parse it. Every payload
+that ran the suite also carries `"secrets_redacted": {"count",
+"categories"}`, the sum of what the Step 3 filter printed for this
+attempt's `stdout.log` and `junit.xml`:
 
 **GREEN** — all tests passed or all failures were flaky-retry-resolved:
 ```json
@@ -317,7 +343,7 @@ the attempt itself exceeded a reasonable per-attempt budget:
   in Step 6 (`GREEN`, `RETRY_NEEDED`, `RETRY_FLAKY`, `ABORT_INFRA`,
   `ABORT_TIME`); a per-attempt normalizer status such as `PASSED` may
   appear INSIDE `record.json`, never as a `run.json` `outcome`.
-- **Never write outside `<worktree>/PRPs/reports/`.** All artifacts go
+- **Never write outside `<target_root>/PRPs/reports/`.** All artifacts go
   there. Under `.claude/` is forbidden (anti-pattern).
 - **Never emit raw stdout into the verdict.** The verdict is small
   structured JSON. Raw output lives in `stdout.log` (already

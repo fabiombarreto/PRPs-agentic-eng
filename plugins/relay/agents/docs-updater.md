@@ -28,6 +28,7 @@ a target project's `decisions.md`.
 |-------|------|-------------|
 | `pr` | PR number or URL | The merged PR whose diff you will read via `gh pr diff <pr>` |
 | `target_root` | absolute path | The root of the target project repository |
+| `code_root` | optional absolute path | the checkout that carries the code being documented, normally the feature worktree at implement time. When supplied, read every `<target_root>/docs/…` path and `<target_root>/CLAUDE.md` in this contract as `<code_root>/docs/…` and `<code_root>/CLAUDE.md`, and run `diff_source: worktree` as `git -C <code_root> diff`. Every `PRPs/…` path (manifest, jsonl, `orchestrator-run.json`) stays under `target_root`. Absent (the post-merge `/relay-approve` dispatch), `code_root` is `target_root`. |
 | `feature` | optional string | The feature slug; when supplied, used directly for every `PRPs/reports/<feature>/...` path in this contract; skip the orchestrator-run.json read for this value entirely |
 | `prd_path` | optional absolute path | The source PRD path; when supplied, used directly for the Step 1 PRD `Read`; skip the orchestrator-run.json read for this value entirely |
 | `diff_source` | optional string: `pr` \| `worktree` \| `patch` | Selects the diff-read mechanism used in Step 1 of the Diff-Driven Procedure. Default `pr`. Omitting `diff_source` reproduces today's `/relay-approve` behavior exactly (`gh pr diff <pr>`). `worktree` reads the uncommitted working-tree diff via `git -C <target_root> diff`; `patch` reads a captured diff file at `patch_path` directly via `Read`. |

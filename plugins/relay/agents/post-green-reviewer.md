@@ -50,7 +50,8 @@ Emit the evidence block before acting:
 
 ## Inputs (from the calling command)
 
-- `worktree`: absolute path to the target project worktree
+- `worktree`: absolute path to the target project worktree — the code under review
+- `target_root`: absolute path of the artifact root that holds `PRPs/` (defaults to `worktree` when absent)
 - `run_json_path`: absolute path to `PRPs/reports/<feature>/run.json` from the `/relay-test` run that produced GREEN
 - `base_branch`: the ref to compare against (default `main`; command resolves it first)
 - `run_id`: the run being reviewed (matches `run.json.run_id`)
@@ -339,7 +340,7 @@ same fallback posture as 3a/3b.
 
 Attempt to read baseline coverage from, in order:
 
-1. `<worktree>/PRPs/reports/coverage-baseline.json` — a file the team may commit with `{ "lines_pct": 78.4, "branches_pct": 65.1 }`. If present, treat as baseline.
+1. `<target_root>/PRPs/reports/coverage-baseline.json` — a file the team may commit with `{ "lines_pct": 78.4, "branches_pct": 65.1 }`. If present, treat as baseline.
 2. Otherwise, baseline is unavailable.
 
 Read current coverage from the final attempt's record in

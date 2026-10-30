@@ -122,14 +122,23 @@ arbitrary node invocations. The universal allowlist includes:
 
 - `Bash(node */plugins/relay/scripts/normalize-test-output.mjs *)` — normalize JUnit XML (B2)
 - `Bash(node */plugins/relay/scripts/generate-final-report.mjs *)` — produce final-report.md (B6)
+- `Bash(node */plugins/relay/scripts/redact-output.mjs *)` — redact captured test output before it is written (Test Runner)
+- `Bash(node */plugins/relay/scripts/orchestrator-ledger.mjs *)` — check `/relay-execute`'s stage ledger (Final output surface)
 
 The `*` before `/plugins/` tolerates the variable prefix that
 resolves `${CLAUDE_PLUGIN_ROOT}`. A bare `Bash(node *)` is NOT
 emitted — it would be verb-terminal-wildcard and defeat the purpose.
 
-### Worktree cleanup (scoped)
+### No `rm -rf` allow rule
 
-- `Bash(rm -rf .worktrees/*)` — **only inside the `.worktrees/` folder**
+None is emitted. Claude Code evaluates `deny` before `allow`, so the
+invariant `Bash(rm -rf *)` deny below matches every `rm -rf` command,
+scoped or not. Releases before 0.49.0 emitted an `allow` rule,
+`Bash(rm -rf .worktrees/*)`, that could therefore never take effect.
+Relay steps are designed so that nothing needs deleting: worktrees are
+removed with `git worktree remove` by `/relay-approve`, test output is
+redacted straight into the attempt directory, and agents write no
+scratch files (`implementer` hard constraint 10).
 
 ---
 
@@ -152,7 +161,7 @@ Hardcoded. Emitted in every generated `settings.json` regardless of stack.
 - `Bash(rm -rf /*)`
 - `Bash(rm -rf ~*)`
 - `Bash(rm -rf ..*)`
-- `Bash(rm -rf *)` — bare pattern; only the scoped `.worktrees/` form allowed above
+- `Bash(rm -rf *)` — bare pattern; it matches every `rm -rf`, which is why no `rm -rf` allow rule exists
 
 ### Privilege escalation
 

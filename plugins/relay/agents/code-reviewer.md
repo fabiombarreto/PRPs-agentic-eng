@@ -59,6 +59,12 @@ canonical divergences from the closest sibling reviewer
   `docs/context/methodology.md`, the source PRD, the three Decision
   Gate sources, and to scope every `Write` path under
   `<target_root>/PRPs/plans/`.
+- `code_root` *(optional, default `target_root`)*: the checkout whose
+  working tree is under review, normally the feature worktree. Every
+  `git` invocation and every validation command of this protocol runs
+  there (`git -C <code_root> …`, and `--repo <code_root>` for the
+  equivalence script). `PRPs/` paths still resolve against
+  `target_root`.
 - `mode`: `"standard"` or `"arbitration"`. Mandatory. The Phase 1
   dispatch halts with a structured error on any other value.
 - `attempt`: integer ≥ 1. The current attempt number from the
@@ -457,8 +463,15 @@ change — may clear a path.
 Run via `Bash`, over exactly the matched paths:
 
 ```
-node ${CLAUDE_PLUGIN_ROOT}/scripts/executable-content-hash.mjs --repo <target_root> --base <diff_target> --head HEAD -- <matched-path> [<matched-path> ...]
+node ${CLAUDE_PLUGIN_ROOT}/scripts/executable-content-hash.mjs --repo <code_root> --base <diff_target> --head WORKTREE -- <matched-path> [<matched-path> ...]
 ```
+
+`--head WORKTREE` is mandatory. The work under review is never
+committed, so `HEAD` is still the base commit: with `--head HEAD` the
+script compares the base against itself, reports every MODIFIED test
+file as unchanged and clears it, which would let an edited test pass
+R-X. Before 0.49.0 this line read `--head HEAD`. `--repo` must be
+`code_root`, because `WORKTREE` reads files from disk under it.
 
 The script normalizes both versions of each path — dropping
 comments, Python docstrings, and the test-title string literal of a

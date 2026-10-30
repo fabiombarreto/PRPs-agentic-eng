@@ -59,6 +59,12 @@ readable file, fall through to P1 below.
 Record `suite_path` as the resolved absolute path. Record
 `target_root` as the current working directory.
 
+Record `code_root`: the value an invoker supplied (`/relay-execute` passes
+the phase's worktree), otherwise `target_root`. Test files live in, and
+run from, `code_root`; every `PRPs/…` path stays under `target_root`
+(`${CLAUDE_PLUGIN_ROOT}/resources/repository-topology.md`, section "The code
+root of a phase, and where artifacts go").
+
 ---
 
 ## Preconditions
@@ -153,6 +159,7 @@ Task(
   prompt={
     "suite_path": <resolved absolute suite_path>,
     "target_root": <cwd>,
+    "code_root": <code_root>,
     "review_started_at": <the instant captured immediately above>
   }
 )

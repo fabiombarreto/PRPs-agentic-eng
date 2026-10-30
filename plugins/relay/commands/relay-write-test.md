@@ -60,6 +60,12 @@ Record `plan_path` as the resolved absolute path. Record
 `target_root` as the current working directory (the repository
 from which the user invoked the command).
 
+Record `code_root`: the value an invoker supplied (`/relay-execute` passes
+the phase's worktree), otherwise `target_root`. Test files live in, and
+run from, `code_root`; every `PRPs/…` path stays under `target_root`
+(`${CLAUDE_PLUGIN_ROOT}/resources/repository-topology.md`, section "The code
+root of a phase, and where artifacts go").
+
 ---
 
 ## Preconditions
@@ -75,14 +81,26 @@ If `plan_path` does not point at an existing readable file:
 > The path did not resolve to an existing readable file.
 > Usage: /relay-write-test PRPs/plans/<feature>-phase-<N>-<slug>.plan.md
 
-### P2 — Plan ends with `*Status: APPROVED*`
+### P2 — Plan ends with `*Status: APPROVED*` (or `*Status: IMPLEMENTED*` in test-after)
 
 `Read` the plan. Inspect its trailing status line (the last
 non-empty line of the file).
 
 - If it equals `*Status: APPROVED*` → proceed.
-- If it equals `*Status: DRAFT*` (or any other non-APPROVED
-  status, or has no status line):
+- If it equals `*Status: IMPLEMENTED*` → read `tdd:` from
+  `<target_root>/docs/context/methodology.md` now. With `tdd: false`
+  (test-after) proceed: test-after runs after the Implementer by
+  definition, so `/relay-implement`'s D8 mutations have already
+  flipped the plan to IMPLEMENTED and moved it to
+  `PRPs/plans/completed/`, and that is the plan this command is
+  meant to receive. With `tdd: true` (test-first) HALT with the
+  message below: a test-first suite cannot be authored after the
+  Implementer ran. (Before 0.49.0 this precondition accepted only
+  APPROVED, which no test-after invocation from `/relay-execute`
+  could satisfy; runs that got past it did so by dispatching
+  `test-writer` directly and skipping this command.)
+- If it equals `*Status: DRAFT*` (or any other status, or has no
+  status line):
 
   HALT with:
 
@@ -193,6 +211,7 @@ Execution context to pass into the Writer's Phase 0 setup:
 
 - `plan_path`: the resolved absolute path verified by P1–P4.
 - `target_root`: the cwd.
+- `code_root`: the value recorded in Parse arguments.
 - `prior_feedback`: the reviewer defect list from a prior
   `CHANGES_REQUESTED` verdict, in the canonical
   `list<{rubric_id, reason}>` shape (the same shape
@@ -263,7 +282,8 @@ When `formatter_cmd` is non-null, run
 `Bash("<formatter_cmd> <touched_file_1> <touched_file_2> ...")` —
 the literal touched-file paths from A.4.1 appended as trailing
 arguments, never a glob and never the whole repo (PRD Risk R1).
-Capture stdout, stderr, and exit code via `BashOutput`.
+Run it with `code_root` as the working directory, where the test
+files are. Capture stdout, stderr, and exit code via `BashOutput`.
 
 - Exit code 0 → outcome = "formatted" (best-effort capture of
   which files the tool itself reports changed, falling back to the

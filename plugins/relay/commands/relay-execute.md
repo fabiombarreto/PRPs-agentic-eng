@@ -15,6 +15,27 @@ Validate the PRD path argument, run preconditions, then enter a multi-phase orch
 
 You are autonomous. You do not prompt the user. You do not re-implement any logic from the dispatched commands. You do not loop `/relay-implement` — that command's own internal loop already exhausted its budget before its HALT propagates here.
 
+**Two roots, fixed for the whole run.** `target_root` (the directory you were invoked from) holds every `PRPs/…` artifact. `code_root` is the phase's worktree once Phase A.3.3 creates it (the cwd on `FALLBACK_CWD` or `--no-worktree`). Pass `code_root` to every adopted command and dispatched agent; never `cd` into the worktree. The rules are defined once in `${CLAUDE_PLUGIN_ROOT}/resources/repository-topology.md`, section "The code root of a phase, and where artifacts go". In particular, the worktree not containing this run's uncommitted PRD or plan is expected and is never a reason to skip it.
+
+### The stage ledger (every phase, in order)
+
+Each stage below is a protocol you adopt, and each one appends at least one `orchestrator_run_log` entry with its `stage` name. Several duties live INSIDE an adopted command rather than in this file. Dispatching that command's agents yourself instead of adopting its protocol silently drops them. That is the most common way a run deviates from this protocol, so they are listed here:
+
+| # | `stage` | Adopted protocol | Duties that live inside it |
+|---|---------|------------------|----------------------------|
+| 1 | `plan` | `/relay-plan` then `/relay-plan-review` (Phase A.3) | PRD row back-fill; plan hashes; `review.jsonl` |
+| 2 | `worktree` | `/relay-worktree` (Phase A.3.3) | bootstrap log; `settings.json` copy; `worktree-bases.json` |
+| 3 | `tdd` | `/relay-write-test` then `/relay-test-write-review` (Phase A.3.5, test-first only) | formatter pass; manifest flip; the suite snapshot of Step A.3.5.3 |
+| 4 | `implement` | `/relay-implement` (Phase A.4) | P5 formatting preflight; per-attempt `diff.patch` and `record.json`; code review; visual gate |
+| 5 | `docs_sync` | `/relay-implement`'s own docs-sync step (its section titled "Phase A.3.5 — Docs-sync dispatch", not this file's Phase A.3.5) | `docs-update.md`; `docs-review.jsonl` |
+| 6 | `d8` | `/relay-implement`'s D8 mutations (its Phase A.4) | plan flip; plan move to `completed/`; row `implemented` |
+| 7 | `test_after` | `/relay-write-test` then `/relay-test-write-review` (Phase A.4.5, test-after only) | as in row 3 |
+| 8 | `test` | `/relay-test` (Phase A.5.2) | `run.json` written by the command, never the agent |
+| 9 | `test_review` | `/relay-test-review` (Phase A.5.3) | `test-review.json`; row `tested` |
+| 10 | `snapshot` | Step A.6.0.5 | `phase_diff_bases` entry |
+
+A stage that does not apply is still logged, with the skip outcome its section names (`skipped_no_framework`, `deferred_to_test_after`, `not_applicable`, …). Before the success summary, the Final output surface runs `${CLAUDE_PLUGIN_ROOT}/scripts/orchestrator-ledger.mjs` over `orchestrator-run.json`. Any stage it finds missing or inconsistent with `docs/context/methodology.md` is recorded as a deviation and printed in the summary. That check is deterministic, so a shortcut you announce and a shortcut you forget are recorded the same way.
+
 See:
 - `${CLAUDE_PLUGIN_ROOT}/commands/relay-plan.md` — adopted inline in Phase A.3; owns plan-writer protocol.
 - `${CLAUDE_PLUGIN_ROOT}/commands/relay-plan-review.md` — adopted inline in Phase A.3; CHANGES_REQUESTED triggers plan-review retry loop bounded by `max_plan_review_retries`.
@@ -247,6 +268,9 @@ Set the budget caps and counters:
 - `phases_completed = []` — list of phase numbers that reached `complete` this session
 - `last_plan_review_failing_ids = null` — set of failing rubric item IDs from the previous plan-review attempt; used by stuck-loop detection in Step A.3.2. Reset to `null` at the start of each phase iteration (Phase A.1).
 - `phase_diff_bases = {}` — map from phase number to that phase's end-state tree object, written by Step A.6.0.5 at each phase close-out and read by Step A.4.1 to supply the NEXT phase's diff base. Empty at the start of a run.
+- `suite_diff_bases = {}` — map from phase number to the tree object Step A.3.5.3 records right after a test-first suite is approved. For THAT phase it takes precedence over `phase_diff_bases` in Step A.4.1, so the approved suite is part of the base and never part of the Implementer's diff. Empty at the start of a run; seeded from an existing `orchestrator-run.json` for this feature when one is on disk, so a resumed phase keeps it.
+- `plan_validation_repairs = {}` — map from phase number to the number of plan-validation repairs Step A.4.2 has run for it. `max_plan_validation_repairs = 1` (0 forbidden).
+- `code_root` — unset until Phase A.3.3 resolves it.
 
 Read the source PRD's Implementation Phases table in full for the initial snapshot. Hold this snapshot for Phase A.1's first iteration.
 
@@ -313,7 +337,11 @@ Write `PRPs/reports/<feature>/orchestrator-run.json` with the final summary:
   "phases_completed": <phases_completed>,
   "worktree_attempted": <boolean | null>,
   "worktree_succeeded": <boolean | null>,
-  "fallback_reason": "<string | null>"
+  "fallback_reason": "<string | null>",
+  "phase_diff_bases": <phase_diff_bases>,
+  "suite_diff_bases": <suite_diff_bases>,
+  "plan_validation_repairs": <plan_validation_repairs>,
+  "deviations": <the ledger check's deviations array; see the Final output surface>
 }
 ```
 
@@ -370,7 +398,8 @@ Runs only when `resume_mode` is non-null (set by Phase A.1's resumable visual-ap
 - `artifact_root = PRPs/reports/<feature>/phase-<N>/attempts/` — `relay-implement.md`'s own canonical-pattern formula.
 - `completed_target = PRPs/plans/completed/<basename of plan_path>.plan.md`.
 - `no_docs_flag = false`, `no_visual_flag = false` — neither flag has a forwarding mechanism from `/relay-execute`'s own `$ARGUMENTS` into an adopted `/relay-implement` protocol, resumed or not; both are always `false` in every `/relay-execute`-driven adoption.
-- `supplied diff base`: when `phase_diff_bases` holds an entry for the highest-numbered phase completed before this one, pass that tree object, exactly as Step A.4.1 does — a resumed phase must not silently lose the base its original session recorded and fall back to a `merge-base` derivation. When the map is empty — the first phase of a run — pass nothing.
+- `supplied diff base`: resolved exactly as Step A.4.1 does — `suite_diff_bases[current_phase_N]` first, else the entry of `phase_diff_bases` for the highest-numbered phase completed before this one. A resumed phase must not silently lose the base its original session recorded and fall back to a `merge-base` derivation, so read both maps from this feature's `orchestrator-run.json` when this session holds no entry. When neither map has one — the first phase of a run, not test-first — pass nothing.
+- `code_root` — `<repo_root>/.worktrees/<feature>/` when the original session's `worktree` log entry for this phase reads `CREATED`, otherwise `target_root`.
 
 **Branch on `resume_mode`:**
 
@@ -527,7 +556,7 @@ If `no_worktree_flag = true`: skip this phase entirely. Append to `orchestrator_
 ```json
 {"phase": <N>, "stage": "worktree", "outcome": "skipped_no_worktree_flag", "worktree_attempted": false}
 ```
-Proceed directly to Phase A.3.5.
+Set `code_root = target_root`. Proceed directly to Phase A.3.5.
 
 #### Step A.3.3.1 — Adopt /relay-worktree role
 
@@ -548,7 +577,7 @@ Append to `orchestrator_run_log`:
 {"phase": <N>, "stage": "worktree", "outcome": "CREATED", "repo": "<repo or null>", "worktree_path": "<repo_root>/.worktrees/<feature>/", "worktree_attempted": true, "worktree_succeeded": true, "fallback_reason": null}
 ```
 
-Proceed to Phase A.3.5. All subsequent stages (A.3.5 TDD, A.4 implement, A.5 test) operate with the worktree context established in A.3.3.
+Set `code_root = <repo_root>/.worktrees/<feature>/` (absolute). Proceed to Phase A.3.5. Every later stage of this phase (A.3.5 TDD, A.4 implement, A.4.5 test-after, A.5 test) receives `code_root` for its code edits, diffs, validation commands and test runs, and keeps `target_root` for every `PRPs/…` path. Do not change your working directory.
 
 **On failure (non-zero exit / /relay-worktree returns a named HALT code):**
 
@@ -561,7 +590,9 @@ Append to `orchestrator_run_log`:
 {"phase": <N>, "stage": "worktree", "outcome": "FALLBACK_CWD", "worktree_attempted": true, "worktree_succeeded": false, "fallback_reason": "<exit-code or error message>"}
 ```
 
-Continue to Phase A.3.5. The pipeline does NOT halt on worktree-creation failure — only on downstream stage failure (per D8 of relay-worktree.prd.md).
+Set `code_root = target_root` (the cwd). Continue to Phase A.3.5. The pipeline does NOT halt on worktree-creation failure — only on downstream stage failure (per D8 of relay-worktree.prd.md).
+
+`FALLBACK_CWD` is recorded ONLY when `/relay-worktree` itself returned non-zero. Skipping the step by judgment (for example because the worktree would not contain the run's uncommitted plan) is not a fallback. It is a deviation, and the stage ledger check reports it as one.
 
 ### Phase A.3.5 — Per-phase TDD sub-flow (test-write-review retry loop)
 
@@ -621,6 +652,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-write-test.md` and execute its full p
 
 - `plan_path`: `current_plan_path`
 - `target_root`: the cwd
+- `code_root`: `code_root` (the test files are written there; the suite manifest goes to `target_root`)
 - `prior_feedback`: null on first attempt; the captured B8 JSONL line on retry attempts (orchestrator-side feedback channel)
 
 The Writer either:
@@ -653,16 +685,31 @@ Record the suite path as `current_suite_path`.
 
 #### Step A.3.5.2 — Adopt /relay-test-write-review role
 
-Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-test-write-review.md` and execute its full protocol inline against `current_suite_path`.
+Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-test-write-review.md` and execute its full protocol inline against `current_suite_path`, passing `code_root` (the reviewer's dynamic RED check runs there).
 
 **On APPROVED:**
 
-Append to `orchestrator_run_log`:
+Run Step A.3.5.3 below, then append to `orchestrator_run_log`:
 ```json
-{"phase": <N>, "stage": "tdd", "outcome": "APPROVED", "suite_path": "<current_suite_path>"}
+{"phase": <N>, "stage": "tdd", "outcome": "APPROVED", "suite_path": "<current_suite_path>", "suite_diff_base": "<tree object id, or null when Step A.3.5.3 soft-failed>"}
 ```
 
-Proceed to Phase A.4. The implementer's contract for this phase is now the B8-APPROVED suite — R-X strict guarantees no test-file edits in the implementer's diff.
+Proceed to Phase A.4. The implementer's contract for this phase is now the B8-APPROVED suite. Because Step A.3.5.3 makes that suite part of the diff base, R-X sees only what the Implementer changes: an edit to an approved test still shows as a modified test file and fails R-X, while the approved files themselves never appear as "created".
+
+#### Step A.3.5.3 — Suite snapshot (test-first diff base)
+
+The approved suite sits uncommitted in `code_root`, and relay never commits before review. Without this step `/relay-implement` would derive its base with `merge-base`, the approved test files would enter the Implementer's diff as created files, and R-X, which never clears a created test file, would fail every attempt with no retry able to clear it.
+
+Run, in `code_root`:
+
+```
+git add -A
+git write-tree
+```
+
+Record the printed object id in `suite_diff_bases`, keyed by `current_phase_N`. This is the same operation, with the same invariants, as Step A.6.0.5. It creates no commit and modifies no file content, and its tree is consumed with the single-argument `git diff <tree>` form only.
+
+**Soft-fail.** If `git write-tree` exits non-zero, record no entry and log `suite_diff_base: null`. Step A.4.1 then falls back to its ordinary base, and an R-X failure on an approved test path is reported as the known consequence rather than retried.
 
 **On CHANGES_REQUESTED:**
 
@@ -706,7 +753,13 @@ Else: re-adopt `/relay-write-test` role passing `prior_feedback = <captured defe
 
 Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-implement.md` and execute its full protocol inline against `current_plan_path`. Pass context:
 
-- `supplied diff base`: when `phase_diff_bases` holds an entry for the highest-numbered phase completed before this one, pass that tree object — the adopted protocol's `P6` uses it verbatim as `base_commit` and performs no `merge-base` derivation. When the map is empty — the first phase of a run — pass nothing, and `P6`'s own four-step chain applies unchanged. The command's own D8 post-approval mutations run as part of its internal Phase A.4:
+- `code_root`: `code_root` (implementer edits, per-attempt `git diff`, validation commands and the code review all run there; every `PRPs/…` path stays under `target_root`).
+- `supplied diff base`, in priority order:
+  1. `suite_diff_bases[current_phase_N]`, when Step A.3.5.3 recorded one for this phase (test-first). It already contains everything earlier phases produced plus the approved suite.
+  2. Otherwise, when `phase_diff_bases` holds an entry for the highest-numbered phase completed before this one, that tree object.
+  3. Otherwise pass nothing, and `P6`'s own four-step chain applies unchanged.
+
+  The adopted protocol's `P6` uses a supplied value verbatim as `base_commit` and performs no `merge-base` derivation. The command's own D8 post-approval mutations run as part of its internal Phase A.4:
 - Mutation a: plan trailing-block flip `*Status: APPROVED*` → `*Status: IMPLEMENTED*`
 - Mutation b: plan move to `PRPs/plans/completed/<basename>.plan.md`
 - Mutation c: source PRD row flip `in-progress → implemented`
@@ -715,12 +768,18 @@ The row does NOT reach `complete` here. This command carries the remaining two t
 
 **On success path (APPROVED rubric + D8 mutations succeeded):**
 
-Append to `orchestrator_run_log`:
+Append to `orchestrator_run_log`, in this order — the `docs_sync` outcome is the value of the adopted protocol's own `Docs:` summary line (`APPROVED`, `BUDGET_EXCEEDED`, `SKIPPED (--no-docs)` or `SKIPPED (docs_sync: false)`):
 ```json
 {"phase": <N>, "stage": "implement", "outcome": "APPROVED"}
+{"phase": <N>, "stage": "docs_sync", "outcome": "<docs_sync_outcome>"}
+{"phase": <N>, "stage": "d8", "outcome": "APPLIED"}
 ```
 
+D8 Mutation b moved the plan, so set `current_plan_path = PRPs/plans/completed/<basename>.plan.md` before anything else reads it. The plan now ends with `*Status: IMPLEMENTED*`, which is exactly what `/relay-write-test`'s P2 accepts in test-after.
+
 Proceed to Phase A.4.5 (test-after sub-flow; a no-op unless this phase deferred to test-after at Step A.3.5.0).
+
+**On `PLAN_VALIDATION_DEFECT` from /relay-implement:** go to Step A.4.2. This outcome is not a failure of the implementation, and it spends none of `/relay-implement`'s retries.
 
 **On `AWAITING_VISUAL_APPROVAL` from /relay-implement (new — checked BEFORE the generic "on any OTHER HALT" branch below; this is a deliberate pause, not a failure):**
 
@@ -777,6 +836,20 @@ Surface `/relay-implement`'s halt message verbatim. HALT the orchestrator (AC-3)
 > Do NOT re-run /relay-execute until the underlying cause is resolved —
 > /relay-implement's internal loop already exhausted its budget.
 
+#### Step A.4.2 — Plan-validation repair (the only sanctioned way an APPROVED plan changes)
+
+`/relay-implement` returns `PLAN_VALIDATION_DEFECT` when the Implementer finished every task and reported that one of the plan's own validation commands cannot pass against a correct implementation — for example a route assertion that omits the router's mount prefix. The command checks the claim's evidence before it returns this outcome, and it does not dispatch the code reviewer. The implementation stays uncommitted in `code_root`.
+
+You never edit an APPROVED plan yourself, and you never flip its status by hand. The repair goes through the same writer/reviewer pair that approved the plan:
+
+1. **Budget.** If `plan_validation_repairs[N] >= max_plan_validation_repairs`, write `orchestrator-halt.json` with `outcome: "FAILED_PLAN_VALIDATION_DEFECT"`, `phase_N`, `halting_stage: "implement"`, the defect payload and `orchestrator_run_log`, then HALT. A second defect in the same phase means the plan needs a human. Otherwise increment the counter and append:
+   ```json
+   {"phase": <N>, "stage": "plan_repair", "outcome": "STARTED", "defect": "<level and command, verbatim>"}
+   ```
+2. **Writer.** Re-adopt `/relay-plan` exactly as Step A.3.1's retry path does, with `plan_path = current_plan_path` and `prior_feedback = [{rubric_id: "PLAN_VALIDATION_DEFECT", reason: <the defect's level, command, observed output and evidence, verbatim>}]`. `plan-writer`'s targeted revision mode corrects only the cited command(s) and re-emits `*Status: DRAFT*`. This is the one case where it revises an APPROVED plan.
+3. **Reviewer.** Run Step A.3.2's plan-review loop unchanged, with its own `max_plan_review_retries` budget and stuck-loop detection. Its HALT codes apply as they do on first authoring.
+4. **Re-implement.** On APPROVED, append `{"phase": <N>, "stage": "plan_repair", "outcome": "APPROVED"}` and return to Step A.4.1 with the same supplied diff base. `/relay-implement` starts a fresh attempt budget, seeded the way Phase A.2.5's rejected-visual resume seeds it: `last_reviewer_feedback = [{rubric_id: "PLAN_VALIDATION_DEFECT", reason: "The plan's validation commands were corrected and re-approved; the implementation from the previous attempt is still in the working tree. Re-run the Validation Commands and change code only where they now fail."}]`. The Implementer therefore enters its targeted revision mode, finds its earlier work in `code_root`, and does not redo the tasks.
+
 ### Phase A.4.5 — Per-phase test-after sub-flow (test-after ordering only)
 
 Runs the test writer/reviewer pair AFTER the Implementer + Code Review, but ONLY
@@ -804,7 +877,8 @@ Set `tdd_review_attempts = 0`.
 #### Step A.4.5.1 — Adopt /relay-write-test role (test-after)
 
 Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-write-test.md` and execute its full
-protocol inline against `current_plan_path` (same adoption as Step A.3.5.1; the
+protocol inline against `current_plan_path` (same adoption as Step A.3.5.1,
+`code_root` included; the
 command and Writer derive `mode = test-after` from `tdd: false` themselves). The
 Writer produces a DRAFT `PRPs/reports/<feature>/test-suite.diff` — including any
 lifecycle-ledger entries for updated/retired tests — → continue to Step A.4.5.2;
@@ -906,7 +980,7 @@ Proceed to Phase A.6.
 
 #### Step A.5.2 — Adopt /relay-test role
 
-Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-test.md` and execute its full protocol inline.
+Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-test.md` and execute its full protocol inline, with `<worktree-path>` = `code_root` and `--feature <feature>`. The command's `target_root` is this command's `target_root`, so `run.json` and every attempt record land under `target_root/PRPs/reports/<feature>/`, where `/relay-test-review` and `/relay-pr` read them. Do not dispatch the `test-runner` agent yourself: the command, not the agent, writes `run.json`, applies the redaction filter and runs the auto-correction loop.
 
 **On GREEN:**
 
@@ -940,7 +1014,7 @@ Surface `/relay-test`'s halt details verbatim. HALT the orchestrator (AC-4).
 
 #### Step A.5.3 — Adopt /relay-test-review role
 
-Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-test-review.md` and execute its full protocol inline.
+Read `${CLAUDE_PLUGIN_ROOT}/commands/relay-test-review.md` and execute its full protocol inline, with `<worktree-path>` = `code_root` and `--feature <feature>`; it reads `run.json` and the suite manifest from `target_root/PRPs/reports/<feature>/`.
 
 **On APPROVED:**
 
@@ -1006,7 +1080,7 @@ Before recording the completion entry below, snapshot the worktree so the NEXT
 phase is reviewed against this phase's end state rather than against the base
 commit every phase shares.
 
-Run, in the worktree:
+Run, in `code_root`:
 
 ```
 git add -A
@@ -1014,7 +1088,13 @@ git write-tree
 ```
 
 Record the object id `git write-tree` prints in `phase_diff_bases`, keyed by
-`current_phase_N`.
+`current_phase_N`, and append
+`{"phase": <N>, "stage": "snapshot", "outcome": "RECORDED", "tree": "<object id>"}`
+to `orchestrator_run_log` (`"outcome": "SOFT_FAILED"` with no `tree` on the
+soft-fail path below). On `FALLBACK_CWD` or `--no-worktree`, `code_root` is the
+user's own checkout and `git add -A` updates its index. That is still the
+specified step, not a reason to skip it: the index change is the price of a
+reproducible diff base, and nothing is committed.
 
 **Why this does not breach any invariant.** `git write-tree` writes a tree
 object to the object store and `git add -A` updates the index. Neither modifies
@@ -1086,6 +1166,8 @@ Write / overwrite `PRPs/reports/<feature>/orchestrator-run.json` with the full l
   "worktree_succeeded": <boolean | null>,
   "fallback_reason": "<string | null>",
   "phase_diff_bases": <phase_diff_bases>,
+  "suite_diff_bases": <suite_diff_bases>,
+  "plan_validation_repairs": <plan_validation_repairs>,
   "lane_durations_ms": {},
   "total_duration_ms": null
 }
@@ -1112,16 +1194,28 @@ Loop back to Phase A.1 (re-read the Implementation Phases table; phases whose `D
 
 ### Success path (all phases complete)
 
-When Phase A.1 finds no more actionable rows and `phases_completed` is non-empty, emit verbatim per PRD AC-1:
+When Phase A.1 finds no more actionable rows and `phases_completed` is non-empty, first run the stage-ledger check over the file Phase A.1 just wrote, from `target_root`:
+
+```
+node ${CLAUDE_PLUGIN_ROOT}/scripts/orchestrator-ledger.mjs --run PRPs/reports/<feature>/orchestrator-run.json --methodology <context_root>/docs/context/methodology.md --write
+```
+
+It re-derives, for every phase this session completed, which stages of the stage ledger had to run from the methodology flags (`tdd`, `test_frameworks`, `docs_sync`) and from the log itself, and writes the `deviations` array into `orchestrator-run.json`. It exits 0 whenever it produced a report; the verdict is in the report, not the exit code. If the script cannot run, write `"deviations": null` and say so in the summary — never `[]`, which would claim a check that did not happen.
+
+Then emit verbatim per PRD AC-1:
 
 > ✅ All phases complete for `PRPs/prds/<feature>.prd.md`.
 > Phases completed: <list of phase numbers in order>.
 > Plans archived at PRPs/plans/completed/.
 > Orchestrator audit log at PRPs/reports/<feature>/orchestrator-run.json.
-> Working tree in .worktrees/<feature>/ carries uncommitted implementation changes.
+> Code, tests and docs: uncommitted in `<code_root>` (the feature worktree, or the current checkout on a fallback).
+> PRD, plans and reports: uncommitted under `PRPs/` in `<target_root>`. Each artifact lives in exactly one of the two places.
+> Protocol deviations: <"none" | one line per deviation, `phase <N> · <stage> · <problem>`>.
 > Next step (Pillar 3): review the changes, run any manual tests, then:
 >   1. /relay:relay-commit <feature>  — commit locally (reversible; no push)
 >   2. /relay:relay-pr <feature>      — push branch + open PR
+
+Announcing a deviation in prose does not replace this line. The line comes from the script, so a deviation you did not notice is reported too.
 
 **Gated visual-fidelity rollup line (Figma Implementation Track Phase
 7).** Immediately after the "Orchestrator audit log at ..." line
@@ -1166,7 +1260,7 @@ On any HALT path (one of `FAILED_PLAN_REVIEW_BUDGET_EXCEEDED`, `FAILED_ORCHESTRA
 
 4. **Never prompt the user.** Past the interactivity boundary (`docs/context/architecture.md` §Interactivity boundary). HALTs are surfaced verbatim and the command exits.
 
-5. **Never re-run `/relay-implement` after a HALT.** `/relay-implement`'s internal loop already exhausted its budget. The orchestrator surfaces the halt and exits. Manual recovery is required before re-invoking. **Exception:** the `AWAITING_VISUAL_APPROVAL` pause is not a failure — Phase A.1's resumable visual-approval check and Phase A.2.5's resume short-circuit are the SANCTIONED mechanism for resuming that specific phase's adopted `/relay-implement` protocol after a human records a decision via `/relay-visual-approve`; every other HALT code is unaffected by this exception.
+5. **Never re-run `/relay-implement` after a HALT.** `/relay-implement`'s internal loop already exhausted its budget. The orchestrator surfaces the halt and exits. Manual recovery is required before re-invoking. **Exception:** the `AWAITING_VISUAL_APPROVAL` pause is not a failure — Phase A.1's resumable visual-approval check and Phase A.2.5's resume short-circuit are the SANCTIONED mechanism for resuming that specific phase's adopted `/relay-implement` protocol after a human records a decision via `/relay-visual-approve`; every other HALT code is unaffected by this exception. `PLAN_VALIDATION_DEFECT` is not a HALT either: it is a returned outcome whose only sanctioned continuation is Step A.4.2.
 
 6. **Never skip the Decision Gate evidence block.** The command-level Decision Gate (above) is the first user-facing output per AC-14.
 
@@ -1182,12 +1276,20 @@ On any HALT path (one of `FAILED_PLAN_REVIEW_BUDGET_EXCEEDED`, `FAILED_ORCHESTRA
 
 12. **The only source-PRD writes this command makes are the two row-status flips of Phase A.4.9 — `implemented → tested` (Step A.5.3) and `implemented`|`tested` → `complete` (Step A.6.0) — each touching exactly one `Status` cell of the current phase's row.** Every other PRD mutation belongs to someone else: `pending → in-progress` is `plan-writer`'s Step 5.1 back-fill, and `in-progress → implemented` is `/relay-implement`'s D8 Mutation c. The orchestrator never edits any other cell, any other row, or any other section of the PRD, and never `Write`-rewrites the file. Splitting row ownership this way is deliberate — `/relay-test` and `/relay-test-review` are plan- and feature-scoped and know neither `N` nor `prd_path`, so the orchestrator is the only component positioned to record the last two transitions (`docs/decisions.md`, 2026-08-05).
 
+13. **Adopt each stage's command protocol; never dispatch its agents in its place.** The command-owned duties of the stage-ledger table (per-attempt diffs, the docs sync, D8, `run.json`, manifest flips, snapshots) exist only inside those protocols. A run that dispatches `implementer`, `code-reviewer`, `test-writer`, `test-runner` or any other pipeline agent directly has skipped them, and the ledger check records each one as a deviation.
+
+14. **Never edit an APPROVED plan, and never flip a plan's status by hand.** A plan whose own validation command cannot pass is repaired only through Step A.4.2: the plan writer revises it to DRAFT and the plan reviewer re-approves it.
+
+15. **Never write pipeline scratch files outside `code_root` and `target_root/PRPs/`, and never plan a step that needs `rm -rf`.** Relay's own generated deny list forbids `Bash(rm -rf *)`, so a scratch directory under `/tmp` cannot be cleaned up and outlives the run. Ad-hoc checks run as inline commands whose output you read from the command itself (`… 2>&1 | tail -n 20`), never redirected into a file (`> /tmp/out.txt`) to read back later; captured test output goes through the redaction filter straight into the attempt directory.
+
 ---
 
 ## What you do NOT do
 
 - **Re-implementing plan-writer logic** — the orchestrator adopts `/relay-plan` inline via Read; it does not paste or summarize plan-writer's step bodies.
 - **Running the plan rubric inline** — the orchestrator adopts `/relay-plan-review` inline via Read; it does not evaluate R1–R8 or R-COH-* rubric items itself.
+- **Condensing the protocol** — dispatching the pipeline agents directly instead of adopting the commands that own them (hard rule 13). If the protocol is long, read each command when its stage starts; do not replace it with a summary of what you expect it to say.
+- **Skipping the worktree by judgment** — `FALLBACK_CWD` is only for a `/relay-worktree` failure (Step A.3.3.2).
 - **Committing working-tree changes or creating a PR** — permanently out of scope (see hard rule 11 and `docs/decisions.md` 2026-05-18). Pillar 3 (`/relay-pr`) owns commit and PR creation exclusively. The success message points to `/relay-pr` as the next manual step.
 - **Auto-recovering from `/relay-implement` HALT** — the orchestrator surfaces the halt and exits. Manual intervention is required.
 - **Auto-recovering from `/relay-test-review` CHANGES_REQUESTED** — HALT with `FAILED_TEST_REVIEW_REJECTED`; no auto-correction path. B5 exists precisely to gate human review.

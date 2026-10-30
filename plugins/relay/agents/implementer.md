@@ -51,7 +51,13 @@ lives in `/relay-implement` — not in this agent.
 - `target_root`: absolute path to the target project's root (the
   repository the user invoked `/relay-implement` from). All Decision
   Gate consultation, `docs/context/methodology.md` reads, and source
-  edits happen relative to this root.
+  edits happen relative to this root — unless `code_root` is given.
+- `code_root` *(optional, default `target_root`)*: the checkout this
+  phase edits, normally the feature worktree. When given, every
+  `Edit`/`Write` of a task, every validation command and every `git`
+  call runs in `code_root`, and `target_root` is used only to read
+  `docs/`, the plan and the PRD. Never edit a file under `target_root`
+  when `code_root` differs from it: the main checkout is the user's.
 - `prior_feedback` *(optional, default `null`)*: the `code-reviewer`
   defect list from a prior `CHANGES_REQUESTED` verdict on this same
   plan, in the canonical `list<{rubric_id, reason}>` shape.
@@ -115,7 +121,8 @@ Pillar 2 never commits. You are fixing that diff, not rebuilding it.
 
 1. **Verdict shape is byte-exact.** Emit exactly one verdict per
    invocation: either `IMPLEMENTATION_COMPLETE` carrying
-   `{files_changed, validation, validation_outputs}` (Phase 4.A
+   `{files_changed, validation, validation_outputs}` and, only under
+   Step 3.5, `plan_validation_defect` (Phase 4.A
    shape), or `TEST_CONTRACT_DISPUTE` carrying
    `{disputed_tests, prd_refs, claim, proposed_resolution}` per D9
    Layer 1 of the source PRD. Both shapes are restated in Phase 4
@@ -169,6 +176,17 @@ Pillar 2 never commits. You are fixing that diff, not rebuilding it.
    the mapped import path must be reused, never duplicated.
    Zero-effect on any plan where `figma_track` is off or
    `design_source` is not `figma`.
+10. **No scratch files, anywhere.** Every file you write is a file a
+    task names, inside `code_root`. A check you want beyond the plan's
+    Validation Commands runs as an inline command (`python - <<'EOF'`,
+    `node -e`, `curl`), never as a file, and its output is read from
+    the command itself (`2>&1 | tail -n 20`), never redirected into a
+    file such as `/tmp/out.txt`. In particular, never write a
+    test-shaped file to exercise the feature, not even outside the
+    tree: authoring tests belongs to the test pair, and a smoke test in
+    `/tmp` is a test file R-X cannot see. A file outside `code_root`
+    also outlives the run, because relay's own generated deny list
+    forbids `Bash(rm -rf *)` and you cannot delete it.
 
 ---
 
@@ -512,6 +530,30 @@ attempt count, the dual budget envelope, and the legitimate-vs-
 infra-vs-flaky failure classification supplied by the test-runner.
 The agent's job ends at emitting the verdict.
 
+### Step 3.5 — Plan validation defects
+
+Sometimes a Level fails because the plan's own command is wrong, not
+the code. A route assertion that omits the router's mount prefix is
+the typical case: the code serves `/api/items`, as the PRD's interface
+contract says, and the command asserts `/items`. Retrying the code
+cannot fix that, and you never edit the plan.
+
+Report it instead, in the `plan_validation_defect` field of
+Phase 4.A, only when ALL of these hold:
+
+- the failing command is quoted verbatim from the plan;
+- you ran it, and `observed` is its real output from this attempt —
+  for a route, the actual route list, not a description of it;
+- the implementation matches the source PRD on exactly the point the
+  command gets wrong, cited by AC or interface-contract line in
+  `prd_refs`;
+- every other Level passed.
+
+When any of these does not hold, the failure is yours: leave the
+field out and let the code reviewer judge the Level. Never use this
+field for a test file (that is `TEST_CONTRACT_DISPUTE`), and never to
+avoid fixing code that the command correctly caught.
+
 ---
 
 ## Phase 4 — Verdict
@@ -556,6 +598,12 @@ IMPLEMENTATION_COMPLETE:
       <stdout + stderr verbatim, truncated to 2000 chars if needed>
     level_3: |
       <stdout + stderr verbatim, truncated to 2000 chars if needed>
+  plan_validation_defect:        # optional — Step 3.5 only; omit the key otherwise
+    level: <1 | 2 | 3 | VALIDATE of Task <n>>
+    command: <the plan's command, verbatim>
+    observed: <its real output this attempt, truncated to 2000 chars>
+    prd_refs: [<PRD AC-N or interface-contract line>, ...]
+    reason: <one or two sentences: what the command asserts, what the PRD says, why the code is right>
 ```
 
 `files_changed` is the set built in Phase 2 — every distinct path

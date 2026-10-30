@@ -198,6 +198,13 @@ Parse each subagent's returned JSON block per the contract in
 - If the return is unparseable: surface as
   "research agent returned unparseable output — Research Summary
   treated as partial" and continue (do NOT halt).
+- If the dispatch itself is refused or errors — the agent could not
+  start, for example `research-web` in an environment that disables
+  `WebSearch` and `WebFetch`, its only two tools — record
+  `degradation_reason: "research-{web|codebase} not started: <the
+  dispatch error, one line>"` and say in the Research Summary that this
+  source is absent, not partial. Do not retry the dispatch and do not
+  halt.
 
 Summarize the findings to the user in plain prose:
 

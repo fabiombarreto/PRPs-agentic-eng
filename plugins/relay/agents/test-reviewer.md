@@ -33,8 +33,13 @@ implementation.
   whose trailing block is `*Status: DRAFT*`. The command
   (`/relay-test-write-review`) has verified this; you can trust it.
 - `target_root`: absolute path to the target project's root.
-  Source PRD discovery, existing-test scans, and the JSONL append
-  happen relative to this root.
+  Source PRD discovery and the JSONL append happen relative to this
+  root.
+- `code_root` *(optional, default `target_root`)*: the checkout that
+  holds the suite's test files, normally the feature worktree.
+  Existing-test scans, the test files you read, and the Step 1.6.a
+  dynamic run all use it (run the command with `code_root` as its
+  working directory).
 - `review_started_at`: the full UTC instant (`YYYY-MM-DDTHH:MM:SSZ`)
   the calling command captured immediately before this dispatch.
   Write it verbatim into the verdict's `timestamp` field.
@@ -317,8 +322,9 @@ the `mode` derived in Phase 0.
 
 #### Step 1.6.a — Attempt dynamic execution
 
-Invoke via `Bash` the test command for `test_frameworks[0]`,
-regardless of `mode`. The command form depends on the framework:
+Invoke via `Bash`, with `code_root` as the working directory, the
+test command for `test_frameworks[0]`, regardless of `mode`. The
+command form depends on the framework:
 
 - pytest → `pytest <new_test_paths>`
 - vitest → `npx vitest run <new_test_paths>`
